@@ -1,0 +1,661 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		07A2AB012E6AF6030049598E /* ETOS LLM Studio Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 07A2AB002E6AF6030049598E /* ETOS LLM Studio Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		07A2AB022E6AF6030049598E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 07A2AAF42E6AF6030049598E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 07A2AAFF2E6AF6030049598E;
+			remoteInfo = "ETOS LLM Studio Watch App";
+		};
+		07A2AB102E6AF6050049598E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 07A2AAF42E6AF6030049598E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 07A2AAFF2E6AF6030049598E;
+			remoteInfo = "ETOS LLM Studio Watch App";
+		};
+		07A2AB1A2E6AF6050049598E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 07A2AAF42E6AF6030049598E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 07A2AAFF2E6AF6030049598E;
+			remoteInfo = "ETOS LLM Studio Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		07A2AB262E6AF6060049598E /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				07A2AB012E6AF6030049598E /* ETOS LLM Studio Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		07A2AAFA2E6AF6030049598E /* ETOS LLM Studio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ETOS LLM Studio.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		07A2AB002E6AF6030049598E /* ETOS LLM Studio Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ETOS LLM Studio Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		07A2AB0F2E6AF6050049598E /* ETOS LLM Studio Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		07A2AB192E6AF6050049598E /* ETOS LLM Studio Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		07A2AB042E6AF6030049598E /* ETOS LLM Studio Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "ETOS LLM Studio Watch App";
+			sourceTree = "<group>";
+		};
+		07A2AB122E6AF6050049598E /* ETOS LLM Studio Watch AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "ETOS LLM Studio Watch AppTests";
+			sourceTree = "<group>";
+		};
+		07A2AB1C2E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "ETOS LLM Studio Watch AppUITests";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		07A2AAFD2E6AF6030049598E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07A2AB0C2E6AF6050049598E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07A2AB162E6AF6050049598E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		07A2AAF32E6AF6030049598E = {
+			isa = PBXGroup;
+			children = (
+				07A2AB042E6AF6030049598E /* ETOS LLM Studio Watch App */,
+				07A2AB122E6AF6050049598E /* ETOS LLM Studio Watch AppTests */,
+				07A2AB1C2E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */,
+				07A2AAFB2E6AF6030049598E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		07A2AAFB2E6AF6030049598E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				07A2AAFA2E6AF6030049598E /* ETOS LLM Studio.app */,
+				07A2AB002E6AF6030049598E /* ETOS LLM Studio Watch App.app */,
+				07A2AB0F2E6AF6050049598E /* ETOS LLM Studio Watch AppTests.xctest */,
+				07A2AB192E6AF6050049598E /* ETOS LLM Studio Watch AppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		07A2AAF92E6AF6030049598E /* ETOS LLM Studio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07A2AB272E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio" */;
+			buildPhases = (
+				07A2AAF82E6AF6030049598E /* Resources */,
+				07A2AB262E6AF6060049598E /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				07A2AB032E6AF6030049598E /* PBXTargetDependency */,
+			);
+			name = "ETOS LLM Studio";
+			packageProductDependencies = (
+			);
+			productName = "ETOS LLM Studio";
+			productReference = 07A2AAFA2E6AF6030049598E /* ETOS LLM Studio.app */;
+			productType = "com.apple.product-type.application.watchapp2-container";
+		};
+		07A2AAFF2E6AF6030049598E /* ETOS LLM Studio Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07A2AB232E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio Watch App" */;
+			buildPhases = (
+				07A2AAFC2E6AF6030049598E /* Sources */,
+				07A2AAFD2E6AF6030049598E /* Frameworks */,
+				07A2AAFE2E6AF6030049598E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				07A2AB042E6AF6030049598E /* ETOS LLM Studio Watch App */,
+			);
+			name = "ETOS LLM Studio Watch App";
+			packageProductDependencies = (
+			);
+			productName = "ETOS LLM Studio Watch App";
+			productReference = 07A2AB002E6AF6030049598E /* ETOS LLM Studio Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		07A2AB0E2E6AF6050049598E /* ETOS LLM Studio Watch AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07A2AB2A2E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio Watch AppTests" */;
+			buildPhases = (
+				07A2AB0B2E6AF6050049598E /* Sources */,
+				07A2AB0C2E6AF6050049598E /* Frameworks */,
+				07A2AB0D2E6AF6050049598E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				07A2AB112E6AF6050049598E /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				07A2AB122E6AF6050049598E /* ETOS LLM Studio Watch AppTests */,
+			);
+			name = "ETOS LLM Studio Watch AppTests";
+			packageProductDependencies = (
+			);
+			productName = "ETOS LLM Studio Watch AppTests";
+			productReference = 07A2AB0F2E6AF6050049598E /* ETOS LLM Studio Watch AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		07A2AB182E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07A2AB2D2E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio Watch AppUITests" */;
+			buildPhases = (
+				07A2AB152E6AF6050049598E /* Sources */,
+				07A2AB162E6AF6050049598E /* Frameworks */,
+				07A2AB172E6AF6050049598E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				07A2AB1B2E6AF6050049598E /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				07A2AB1C2E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */,
+			);
+			name = "ETOS LLM Studio Watch AppUITests";
+			packageProductDependencies = (
+			);
+			productName = "ETOS LLM Studio Watch AppUITests";
+			productReference = 07A2AB192E6AF6050049598E /* ETOS LLM Studio Watch AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		07A2AAF42E6AF6030049598E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					07A2AAF92E6AF6030049598E = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					07A2AAFF2E6AF6030049598E = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					07A2AB0E2E6AF6050049598E = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 07A2AAFF2E6AF6030049598E;
+					};
+					07A2AB182E6AF6050049598E = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 07A2AAFF2E6AF6030049598E;
+					};
+				};
+			};
+			buildConfigurationList = 07A2AAF72E6AF6030049598E /* Build configuration list for PBXProject "ETOS LLM Studio" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 07A2AAF32E6AF6030049598E;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 07A2AAFB2E6AF6030049598E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				07A2AAF92E6AF6030049598E /* ETOS LLM Studio */,
+				07A2AAFF2E6AF6030049598E /* ETOS LLM Studio Watch App */,
+				07A2AB0E2E6AF6050049598E /* ETOS LLM Studio Watch AppTests */,
+				07A2AB182E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		07A2AAF82E6AF6030049598E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07A2AAFE2E6AF6030049598E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07A2AB0D2E6AF6050049598E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07A2AB172E6AF6050049598E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		07A2AAFC2E6AF6030049598E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07A2AB0B2E6AF6050049598E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07A2AB152E6AF6050049598E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		07A2AB032E6AF6030049598E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 07A2AAFF2E6AF6030049598E /* ETOS LLM Studio Watch App */;
+			targetProxy = 07A2AB022E6AF6030049598E /* PBXContainerItemProxy */;
+		};
+		07A2AB112E6AF6050049598E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 07A2AAFF2E6AF6030049598E /* ETOS LLM Studio Watch App */;
+			targetProxy = 07A2AB102E6AF6050049598E /* PBXContainerItemProxy */;
+		};
+		07A2AB1B2E6AF6050049598E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 07A2AAFF2E6AF6030049598E /* ETOS LLM Studio Watch App */;
+			targetProxy = 07A2AB1A2E6AF6050049598E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		07A2AB212E6AF6060049598E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		07A2AB222E6AF6060049598E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		07A2AB242E6AF6060049598E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		07A2AB252E6AF6060049598E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Release;
+		};
+		07A2AB282E6AF6060049598E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		07A2AB292E6AF6060049598E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		07A2AB2B2E6AF6060049598E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ETOS LLM Studio Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ETOS LLM Studio Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		07A2AB2C2E6AF6060049598E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ETOS LLM Studio Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ETOS LLM Studio Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Release;
+		};
+		07A2AB2E2E6AF6060049598E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "ETOS LLM Studio Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		07A2AB2F2E6AF6060049598E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "ETOS LLM Studio Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		07A2AAF72E6AF6030049598E /* Build configuration list for PBXProject "ETOS LLM Studio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07A2AB212E6AF6060049598E /* Debug */,
+				07A2AB222E6AF6060049598E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		07A2AB232E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07A2AB242E6AF6060049598E /* Debug */,
+				07A2AB252E6AF6060049598E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		07A2AB272E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07A2AB282E6AF6060049598E /* Debug */,
+				07A2AB292E6AF6060049598E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		07A2AB2A2E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio Watch AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07A2AB2B2E6AF6060049598E /* Debug */,
+				07A2AB2C2E6AF6060049598E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		07A2AB2D2E6AF6060049598E /* Build configuration list for PBXNativeTarget "ETOS LLM Studio Watch AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07A2AB2E2E6AF6060049598E /* Debug */,
+				07A2AB2F2E6AF6060049598E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 07A2AAF42E6AF6030049598E /* Project object */;
+}
