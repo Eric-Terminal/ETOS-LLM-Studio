@@ -1,0 +1,78 @@
+# Xcode
+.DS_Store
+*/**/.DS_Store
+*.swp
+*~.nib
+
+# Build products
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+
+# Swift Package Manager
+.swiftpm
+.build/
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/
+
+# AppCode
+.idea/
+
+# User-specific files
+*.xcuserstate
+*.xcuserdatad/
+
+# App-specific files
+*.app
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift
+*.swiftdoc
+*.swiftmodule
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Local development files
+.localized
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# User data (chat sessions and messages)
+ChatSessions/
+*.json
+AppConfig.json
+
+# API keys and sensitive configs
+# *Config*.json
+*config*.json
+*secret*
+*private*

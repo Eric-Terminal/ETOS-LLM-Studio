@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		07A2AB012E6AF6030049598E /* ETOS LLM Studio Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 07A2AB002E6AF6030049598E /* ETOS LLM Studio Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		07EE468B2E6B74FC0057802E /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 07EE468A2E6B74FC0057802E /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,16 +62,6 @@
 			path = "ETOS LLM Studio Watch App";
 			sourceTree = "<group>";
 		};
-		07A2AB122E6AF6050049598E /* ETOS LLM Studio Watch AppTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "ETOS LLM Studio Watch AppTests";
-			sourceTree = "<group>";
-		};
-		07A2AB1C2E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "ETOS LLM Studio Watch AppUITests";
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -78,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07EE468B2E6B74FC0057802E /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,8 +94,6 @@
 			isa = PBXGroup;
 			children = (
 				07A2AB042E6AF6030049598E /* ETOS LLM Studio Watch App */,
-				07A2AB122E6AF6050049598E /* ETOS LLM Studio Watch AppTests */,
-				07A2AB1C2E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */,
 				07A2AAFB2E6AF6030049598E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -158,6 +148,7 @@
 			);
 			name = "ETOS LLM Studio Watch App";
 			packageProductDependencies = (
+				07EE468A2E6B74FC0057802E /* MarkdownUI */,
 			);
 			productName = "ETOS LLM Studio Watch App";
 			productReference = 07A2AB002E6AF6030049598E /* ETOS LLM Studio Watch App.app */;
@@ -175,9 +166,6 @@
 			);
 			dependencies = (
 				07A2AB112E6AF6050049598E /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				07A2AB122E6AF6050049598E /* ETOS LLM Studio Watch AppTests */,
 			);
 			name = "ETOS LLM Studio Watch AppTests";
 			packageProductDependencies = (
@@ -198,9 +186,6 @@
 			);
 			dependencies = (
 				07A2AB1B2E6AF6050049598E /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				07A2AB1C2E6AF6050049598E /* ETOS LLM Studio Watch AppUITests */,
 			);
 			name = "ETOS LLM Studio Watch AppUITests";
 			packageProductDependencies = (
@@ -244,6 +229,9 @@
 			);
 			mainGroup = 07A2AAF32E6AF6030049598E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				07EE46892E6B749B0057802E /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 07A2AAFB2E6AF6030049598E /* Products */;
 			projectDirPath = "";
@@ -452,6 +440,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
@@ -469,7 +458,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+				WATCHOS_DEPLOYMENT_TARGET = 11.3;
 			};
 			name = Debug;
 		};
@@ -480,6 +469,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
@@ -498,7 +488,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+				WATCHOS_DEPLOYMENT_TARGET = 11.3;
 			};
 			name = Release;
 		};
@@ -506,9 +496,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 114514;
+				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -520,9 +511,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 114514;
+				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -538,15 +530,18 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio-Watch-AppTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
+				TARGETED_DEVICE_FAMILY = "1,4";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ETOS LLM Studio Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ETOS LLM Studio Watch App";
-				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+				WATCHOS_DEPLOYMENT_TARGET = 11.2;
 			};
 			name = Debug;
 		};
@@ -557,16 +552,19 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.etos.ETOS-LLM-Studio-Watch-AppTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
+				TARGETED_DEVICE_FAMILY = "1,4";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ETOS LLM Studio Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ETOS LLM Studio Watch App";
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+				WATCHOS_DEPLOYMENT_TARGET = 11.2;
 			};
 			name = Release;
 		};
@@ -656,6 +654,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		07EE46892E6B749B0057802E /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		07EE468A2E6B74FC0057802E /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07EE46892E6B749B0057802E /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 07A2AAF42E6AF6030049598E /* Project object */;
 }
