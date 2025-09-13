@@ -13,7 +13,6 @@
 import SwiftUI
 import MarkdownUI
 import WatchKit
-import Network // 引入底层网络框架
 
 // MARK: - 数据结构定义
 // ============================================================================
@@ -43,7 +42,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     var reasoningContent: String?
     var isLoading: Bool = false
 
-    // 自定义CodingKeys，将isFromUser映射到role
+    // 自定义编码键，用于JSON序列化
     enum CodingKeys: String, CodingKey {
         case id, role, content, reasoningContent, isLoading
     }
@@ -132,10 +131,16 @@ struct ChatSession: Identifiable, Codable, Hashable {
 struct GenericAPIResponse: Codable {
     struct Choice: Codable {
         struct Message: Codable {
-            let content: String          // 消息内容
+            let content: String?          // 消息内容
             let reasoning_content: String?  // 思考过程内容
         }
-        let message: Message
+        // 在流式响应中，message 字段可能不存在，而是一个 delta 字段
+        struct Delta: Codable {
+            let content: String?
+            let reasoning_content: String?
+        }
+        let message: Message?
+        let delta: Delta?
     }
     let choices: [Choice]  // 响应选择列表
 }
@@ -177,7 +182,6 @@ struct ContentView: View {
     
     @State private var messages: [ChatMessage] = []      // 当前会话的聊天消息列表
     @State private var userInput: String = ""           // 用户输入文本
-    @State private var isLoading: Bool = false          // 加载状态指示器
     @State private var showDeleteMessageConfirm: Bool = false // 控制删除消息确认弹窗
     @State private var messageToDelete: ChatMessage?          // 待删除的消息
     @State private var messageToEdit: ChatMessage?            // 待编辑的消息
@@ -194,6 +198,7 @@ struct ContentView: View {
     @AppStorage("aiTopP") private var aiTopP: Double = 1.0 // AI的top_p参数
     @AppStorage("systemPrompt") private var systemPrompt: String = "" // 自定义系统提示词
     @AppStorage("maxChatHistory") private var maxChatHistory: Int = 0 // 最大上下文消息数，0为不限制
+    @AppStorage("enableStreaming") private var enableStreaming: Bool = false // 流式输出开关
     
     @State private var selectedModel: AIModelConfig     // 当前选中的AI模型
     
@@ -206,6 +211,8 @@ struct ContentView: View {
     @State private var chatSessions: [ChatSession] = [] // 所有聊天会话列表
     @State private var currentSession: ChatSession?     // 当前激活的聊天会话
 
+    // MARK: - 初始化
+    
     init() {
         print("🚀 [App] ContentView 正在初始化...")
         // 从 AppConfig.json 加载配置
@@ -253,6 +260,8 @@ struct ContentView: View {
         print("  - 当前会话已设置为新的临时会话。")
     }
 
+    // MARK: - 视图主体
+    
     var body: some View {
         ZStack {
             // 如果启用了背景，则显示背景图片
@@ -360,6 +369,7 @@ struct ContentView: View {
                         aiTopP: $aiTopP,
                         systemPrompt: $systemPrompt,
                         maxChatHistory: $maxChatHistory,
+                        enableStreaming: $enableStreaming, // 传递绑定
                         enableMarkdown: $enableMarkdown,
                         enableBackground: $enableBackground,
                         backgroundBlur: $backgroundBlur,
@@ -409,6 +419,7 @@ struct ContentView: View {
 }
 
     // MARK: - 视图组件
+    // ============================================================================
     
     /// 输入气泡视图，作为列表的一部分
     /// 包含设置按钮、文本输入框和发送按钮
@@ -427,7 +438,7 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .disabled(userInput.isEmpty || isLoading)
+            .disabled(userInput.isEmpty || (messages.last?.isLoading ?? false))
         }
         .padding(10)
         .background(enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial)) // 根据设置决定背景效果
@@ -437,6 +448,9 @@ struct ContentView: View {
     }
 
     // MARK: - 消息处理函数
+    // ============================================================================
+    
+    // MARK: - 主要消息流程
     
     /// 发送消息到AI API
     /// 处理用户输入、构建API请求并处理响应
@@ -449,25 +463,37 @@ struct ContentView: View {
     /// 5. 更新消息列表和保存状态
     func sendMessage() {
         print("✉️ [API] sendMessage 被调用。")
+        let userMessageContent = userInput
+        userInput = "" // 立即清空输入框
+        
+        Task {
+            await sendAndProcessMessage(content: userMessageContent)
+        }
+    }
+
+    private func sendAndProcessMessage(content: String) async {
         let currentConfig = selectedModel
-        let userMessage = ChatMessage(id: UUID(), role: "user", content: userInput)
-        messages.append(userMessage)
-        print("  - 用户消息已添加到列表: \"\(userMessage.content)\"")
+        let userMessage = ChatMessage(id: UUID(), role: "user", content: content)
         
-        // 创建一个临时的加载消息并添加到列表中
-        let loadingMessage = ChatMessage(id: UUID(), role: "assistant", content: "", isLoading: true)
-        messages.append(loadingMessage)
+        // 创建一个唯一的ID给即将创建的加载消息
+        let loadingMessageID = UUID()
         
-        userInput = ""
-        isLoading = true // 保留isLoading以禁用输入框
-        startExtendedSession() // 开始屏幕常亮会话
+        await MainActor.run {
+            messages.append(userMessage)
+            // 添加一个带isLoading标记的占位消息
+            let loadingMessage = ChatMessage(id: loadingMessageID, role: "assistant", content: "", isLoading: true)
+            messages.append(loadingMessage)
+            print("  - 用户消息已添加到列表: \"\(userMessage.content)\"")
+            print("  - 添加了AI加载占位符。")
+            startExtendedSession()
+        }
         
         // 如果是新对话的第一条消息，更新会话名称并将其持久化
         if var session = currentSession, session.isTemporary {
             let messageCountWithoutLoading = messages.filter { !$0.isLoading }.count
             if messageCountWithoutLoading == 1 {
-                session.name = String(userMessage.content.prefix(20)) // 使用消息前20个字符作为标题
-                session.isTemporary = false // 标记为非临时
+                session.name = String(userMessage.content.prefix(20))
+                session.isTemporary = false
                 currentSession = session
                 if let index = chatSessions.firstIndex(where: { $0.id == session.id }) {
                     chatSessions[index] = session
@@ -477,169 +503,268 @@ struct ContentView: View {
             }
         }
         
-        // 保存除加载气泡外的所有消息
-        saveMessages(messages.filter { !$0.isLoading }, for: currentSession!.id)
+        saveMessages(messages, for: currentSession!.id)
 
         guard let url = URL(string: currentConfig.apiURL) else {
-            addErrorMessage("错误: API URL 无效"); return
+            await MainActor.run { addErrorMessage("错误: API URL 无效") }; return
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 300 // 设置超时时间为 300 秒
+        request.timeoutInterval = 300
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // 从密钥数组中随机选择一个
         if let randomApiKey = currentConfig.apiKeys.randomElement() {
             request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
-            print("  - 使用随机选择的 API Key。")
         } else {
-            print("  - ⚠️ 警告: 模型 '\(currentConfig.name)' 没有配置有效的 API Key。")
-            addErrorMessage("错误: 模型没有配置API Key"); return
+            await MainActor.run { addErrorMessage("错误: 模型没有配置API Key") }; return
         }
         
         var finalPayload = currentConfig.basePayload
-        // 动态注入 temperature 和 top_p 参数
         finalPayload["temperature"] = aiTemperature
         finalPayload["top_p"] = aiTopP
+        if enableStreaming {
+            finalPayload["stream"] = true // 仅在开启时添加 stream 参数
+        }
         
-        // 准备发送给API的消息列表
         var apiMessages: [[String: String]] = []
-        
-        // 组合系统提示词和话题提示词
         let globalPrompt = systemPrompt
         let topicPrompt = currentSession?.topicPrompt ?? ""
-        
         var combinedPrompt = ""
-
         let hasGlobalPrompt = !globalPrompt.isEmpty
         let hasTopicPrompt = !topicPrompt.isEmpty
 
         if hasGlobalPrompt && hasTopicPrompt {
-            // 两者都存在，使用Markdown格式组合
             combinedPrompt = "# 全局指令\n\(globalPrompt)\n\n---\n\n# 当前话题指令\n\(topicPrompt)"
-        } else if hasGlobalPrompt {
-            // 只有全局提示词
-            combinedPrompt = globalPrompt
-        } else if hasTopicPrompt {
-            // 只有话题提示词
-            combinedPrompt = topicPrompt
+        } else {
+            combinedPrompt = hasGlobalPrompt ? globalPrompt : topicPrompt
         }
 
-        // 如果最终的组合提示词不为空，则将其作为第一条消息注入
         if !combinedPrompt.isEmpty {
             apiMessages.append(["role": "system", "content": combinedPrompt])
         }
         
-        // 添加当前对话历史
+        // 在发送到API前，过滤掉isLoading的消息
         var chatHistoryToSend = messages.filter { !$0.isLoading && $0.role != "error" }
-        
-        // 如果设置了最大历史记录数，则截取最新的消息
         if maxChatHistory > 0 && chatHistoryToSend.count > maxChatHistory {
             chatHistoryToSend = Array(chatHistoryToSend.suffix(maxChatHistory))
-            print("  - 上下文已截断，仅发送最近的 \(maxChatHistory) 条消息。")
         }
         
-        // 获取增强提示词
         let enhancedPrompt = currentSession?.enhancedPrompt ?? ""
-        
         var chatHistory = chatHistoryToSend.map { ["role": $0.role, "content": $0.content] }
         
-        // 如果增强提示词不为空，并且聊天历史中至少有一条消息，则注入提示词
-        if !enhancedPrompt.isEmpty, let lastUserMessage = chatHistory.last(where: { $0["role"] == "user" }) {
-            // 找到最后一条用户消息的索引
-            if let lastUserMessageIndex = chatHistory.lastIndex(where: { $0["role"] == "user" }) {
-                // 构建XML标签
-                let instructionXML = """
-                <instruction>
-                这是一个自动填充的instruction，除非用户要求否则不要在回复内容提及此instruction，默默执行遵守就好，否则会影响用户的回复体验。\n\n---\n\n
-                \(enhancedPrompt)
-                </instruction>
-                """
-                // 拼接内容
-                let originalContent = lastUserMessage["content"] ?? ""
-                let newContent = "\(originalContent)\n\n\(instructionXML)"
-                
-                // 更新消息内容
-                chatHistory[lastUserMessageIndex]["content"] = newContent
-                print("  - 增强提示词已注入到最后一条用户消息中。")
-            }
+        if !enhancedPrompt.isEmpty, let lastUserMessageIndex = chatHistory.lastIndex(where: { $0["role"] == "user" }) {
+            let instructionXML = "<instruction>\n这是一个自动填充的instruction，除非用户要求否则不要在回复内容提及此instruction，默默执行遵守就好，否则会影响用户的回复体验。\n\n---\n\n\(enhancedPrompt)\n</instruction>"
+            let originalContent = chatHistory[lastUserMessageIndex]["content"] ?? ""
+            chatHistory[lastUserMessageIndex]["content"] = "\(originalContent)\n\n\(instructionXML)"
         }
         
         apiMessages.append(contentsOf: chatHistory)
-        
         finalPayload["messages"] = apiMessages
-        
-        print("  - 准备发送 API 请求...")
-        print("    - URL: \(currentConfig.apiURL)")
-        print("    - 模型: \(currentConfig.name)")
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: .prettyPrinted)
-            // 用于调试：打印完整的请求体JSON
-            if let bodyString = String(data: request.httpBody!, encoding: .utf8) {
-                print("    - 完整的请求体 (Payload):\n---\n\(bodyString)\n---")
+            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
+                print("  - 完整的请求体 (Raw Request Body):\n---\n\(jsonString)\n---")
             }
         } catch {
-            addErrorMessage("错误: 无法构建请求体JSON - \(error.localizedDescription)"); return
+            await MainActor.run { addErrorMessage("错误: 无法构建请求体JSON - \(error.localizedDescription)") }; return
         }
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            DispatchQueue.main.async {
-                print("  - 收到 API 响应。")
-                isLoading = false
-                stopExtendedSession() // 结束屏幕常亮会话
-                // 移除加载占位符
-                messages.removeAll { $0.isLoading }
+        if enableStreaming {
+            await handleStreamedResponse(request: request, loadingMessageID: loadingMessageID)
+        } else {
+            await handleStandardResponse(request: request, loadingMessageID: loadingMessageID)
+        }
+    }
+
+    // MARK: - API响应处理
+    
+    private func handleStandardResponse(request: URLRequest, loadingMessageID: UUID) async {
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("    - 完整的响应体 (Raw Response):\n---\n\(responseString)\n---")
+            }
+            
+            let apiResponse = try JSONDecoder().decode(GenericAPIResponse.self, from: data)
+            if let messagePayload = apiResponse.choices.first?.message {
+                let rawContent = messagePayload.content ?? ""
+                let reasoningFromAPI = messagePayload.reasoning_content
                 
-                if let error = error {
-                    print("    - ❌ 网络错误: \(error.localizedDescription)")
-                    addErrorMessage("网络错误: \(error.localizedDescription)"); return
-                }
-                guard let data = data else {
-                    print("    - ❌ 错误: 未收到数据")
-                    addErrorMessage("错误: 未收到数据"); return
-                }
+                var finalContent = ""
+                var finalReasoning = reasoningFromAPI ?? ""
                 
-                // 用于调试：打印完整的响应体JSON
-                if let responseString = String(data: data, encoding: .utf8) {
-                    print("    - 完整的响应体 (Raw Response):\n---\n\(responseString)\n---")
-                }
+                let startTagRegex = try! NSRegularExpression(pattern: "<(thought|thinking|think)>(.*?)</\\1>", options: [.dotMatchesLineSeparators])
+                let nsRange = NSRange(rawContent.startIndex..<rawContent.endIndex, in: rawContent)
                 
-                do {
-                    let apiResponse = try JSONDecoder().decode(GenericAPIResponse.self, from: data)
-                    if let messagePayload = apiResponse.choices.first?.message {
-                        // 解析并分离思考过程
-                        let (finalContent, extractedReasoning) = parseContentForReasoning(messagePayload.content)
-                        
-                        // 优先使用独立的reasoning_content字段，如果不存在，则使用从content中提取的
-                        let reasoning = messagePayload.reasoning_content ?? extractedReasoning
-                        
-                        let aiMessage = ChatMessage(id: UUID(), role: "assistant", content: finalContent, reasoningContent: reasoning)
-                        messages.append(aiMessage)
-                        print("    - ✅ 成功解析并添加 AI 消息。")
-                        saveMessages(messages, for: currentSession!.id)
-                    } else {
-                        print("    - ❌ 错误: API返回数据格式不正确")
-                        addErrorMessage("错误: API返回数据格式不正确")
+                var lastMatchEnd = 0
+                startTagRegex.enumerateMatches(in: rawContent, options: [], range: nsRange) { (match, _, _) in
+                    guard let match = match else { return }
+                    
+                    let fullMatchRange = Range(match.range(at: 0), in: rawContent)!
+                    let contentBeforeMatch = String(rawContent[rawContent.index(rawContent.startIndex, offsetBy: lastMatchEnd)..<fullMatchRange.lowerBound])
+                    finalContent += contentBeforeMatch
+                    
+                    if let reasoningRange = Range(match.range(at: 2), in: rawContent) {
+                        finalReasoning += (finalReasoning.isEmpty ? "" : "\n\n") + String(rawContent[reasoningRange])
                     }
-                } catch {
-                    print("    - ❌ JSON解析失败: \(error)")
-                    if let str = String(data: data, encoding: .utf8) { addErrorMessage("JSON解析失败.\n返回: \(str)") } else { addErrorMessage("JSON解析失败") }
+                    
+                    lastMatchEnd = fullMatchRange.upperBound.utf16Offset(in: rawContent)
+                }
+                
+                let remainingContent = String(rawContent[rawContent.index(rawContent.startIndex, offsetBy: lastMatchEnd)...])
+                finalContent += remainingContent
+                
+                let aiMessage = ChatMessage(id: loadingMessageID, role: "assistant", content: finalContent.trimmingCharacters(in: .whitespacesAndNewlines), reasoningContent: finalReasoning.isEmpty ? nil : finalReasoning, isLoading: false)
+                
+                await MainActor.run {
+                    if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                        messages[index] = aiMessage
+                    }
+                    if let sessionID = currentSession?.id {
+                        saveMessages(messages, for: sessionID)
+                    }
+                }
+            } else {
+                throw URLError(.badServerResponse)
+            }
+        } catch {
+            let errorMessage = "网络或解析错误: \(error.localizedDescription)"
+            if let httpBody = request.httpBody, let str = String(data: httpBody, encoding: .utf8) {
+                await MainActor.run { addErrorMessage("JSON解析失败.\n请求体: \(str)") }
+            } else {
+                await MainActor.run { addErrorMessage(errorMessage) }
+            }
+        }
+        
+        await MainActor.run {
+            stopExtendedSession()
+        }
+    }
+
+    private func handleStreamedResponse(request: URLRequest, loadingMessageID: UUID) async {
+        var isInsideReasoningBlock = false
+        let startTagRegex = try! NSRegularExpression(pattern: "<(thought|thinking|think)>")
+        let endTagRegex = try! NSRegularExpression(pattern: "</(thought|thinking|think)>")
+        
+        var textBuffer = ""
+
+        do {
+            let (bytes, _) = try await URLSession.shared.bytes(for: request)
+            
+            for try await line in bytes.lines {
+                if line.hasPrefix("data:"), let data = line.dropFirst(5).data(using: .utf8) {
+                    if line.contains("[DONE]") { break }
+
+                    if let chunkString = String(data: data, encoding: .utf8) {
+                        print("    - 流式响应块 (Stream Chunk):\n---\n\(chunkString)\n---")
+                    }
+                    
+                    guard let chunk = try? JSONDecoder().decode(GenericAPIResponse.self, from: data),
+                          let delta = chunk.choices.first?.delta else {
+                        continue
+                    }
+                    
+                    textBuffer += delta.content ?? ""
+                    let apiReasoningChunk = delta.reasoning_content ?? ""
+
+                    var contentToUpdate = ""
+                    var reasoningToUpdate = apiReasoningChunk
+                    
+                    while true {
+                        let bufferRange = NSRange(location: 0, length: textBuffer.utf16.count)
+                        
+                        if isInsideReasoningBlock {
+                            if let match = endTagRegex.firstMatch(in: textBuffer, options: [], range: bufferRange) {
+                                let range = Range(match.range, in: textBuffer)!
+                                reasoningToUpdate += textBuffer[..<range.lowerBound]
+                                textBuffer = String(textBuffer[range.upperBound...])
+                                isInsideReasoningBlock = false
+                                continue
+                            }
+                        } else {
+                            if let match = startTagRegex.firstMatch(in: textBuffer, options: [], range: bufferRange) {
+                                let range = Range(match.range, in: textBuffer)!
+                                contentToUpdate += textBuffer[..<range.lowerBound]
+                                textBuffer = String(textBuffer[range.upperBound...])
+                                isInsideReasoningBlock = true
+                                continue
+                            }
+                        }
+                        break
+                    }
+
+                    if !contentToUpdate.isEmpty || !reasoningToUpdate.isEmpty {
+                        await MainActor.run {
+                            if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                                // 只有当收到第一块“实际内容”时，才关闭加载状态
+                                // 这样可以确保在仅有reasoning输出时，loading动画仍然持续
+                                if messages[index].isLoading, !contentToUpdate.isEmpty {
+                                    messages[index].isLoading = false
+                                }
+                                messages[index].content += contentToUpdate
+                                if !reasoningToUpdate.isEmpty {
+                                    if messages[index].reasoningContent == nil {
+                                        messages[index].reasoningContent = reasoningToUpdate
+                                    } else {
+                                        messages[index].reasoningContent? += reasoningToUpdate
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }.resume()
+        } catch {
+            await MainActor.run {
+                addErrorMessage("流式传输错误: \(error.localizedDescription)")
+            }
+        }
+        
+        // 流结束后，处理缓冲区中所有剩余的内容
+        if !textBuffer.isEmpty {
+            await MainActor.run {
+                if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                    if isInsideReasoningBlock {
+                        if messages[index].reasoningContent == nil { messages[index].reasoningContent = textBuffer }
+                        else { messages[index].reasoningContent? += textBuffer }
+                    } else {
+                        messages[index].content += textBuffer
+                    }
+                }
+            }
+        }
+
+        // 最终清理和保存
+        await MainActor.run {
+            if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                messages[index].isLoading = false
+            }
+            
+            stopExtendedSession()
+            if let sessionID = currentSession?.id {
+                saveMessages(messages, for: sessionID)
+            }
+        }
     }
+    
+    // MARK: - 消息与会话操作
     
     /// 添加错误消息到聊天记录
     /// - Parameter content: 错误消息内容
     func addErrorMessage(_ content: String) {
-        // 在显示错误前，确保移除了加载指示器
-        messages.removeAll { $0.isLoading }
+        // 在显示错误前，找到并替换加载指示器
+        if let loadingIndex = messages.lastIndex(where: { $0.isLoading }) {
+            let errorMessage = ChatMessage(id: messages[loadingIndex].id, role: "error", content: content, isLoading: false)
+            messages[loadingIndex] = errorMessage
+        } else {
+            // 如果没有找到加载指示器（异常情况），则直接添加
+            let errorMessage = ChatMessage(id: UUID(), role: "error", content: content)
+            messages.append(errorMessage)
+        }
         
-        let errorMessage = ChatMessage(id: UUID(), role: "error", content: content)
-        messages.append(errorMessage)
-        isLoading = false
         if let sessionID = currentSession?.id {
             saveMessages(messages, for: sessionID)
         }
@@ -756,11 +881,11 @@ struct ContentView: View {
     func canRetry(message: ChatMessage) -> Bool {
         guard let lastMessage = messages.last else { return false }
         
-        // 场景A: 最后一条是AI回复 -> 最后两条都可以重试
-        if lastMessage.role == "assistant" {
+        // 场景A: 最后一条是AI回复或错误提示 -> 最后两条都可以重试
+        if lastMessage.role == "assistant" || lastMessage.role == "error" {
             guard messages.count >= 2 else { return false }
             let secondLastMessage = messages[messages.count - 2]
-            // 必须是用户提问 + AI回答的组合
+            // 必须是用户提问 + AI回答/错误的组合
             guard secondLastMessage.role == "user" else { return false }
             return message.id == lastMessage.id || message.id == secondLastMessage.id
         }
@@ -783,8 +908,8 @@ struct ContentView: View {
         
         var userQuery = ""
         
-        // 如果最后一条是AI回复，则移除用户和AI的两条消息
-        if lastMessage.role == "assistant" && messages.count >= 2 && messages[messages.count - 2].role == "user" {
+        // 如果最后一条是AI回复或错误，则移除用户和AI/错误的两条消息
+        if (lastMessage.role == "assistant" || lastMessage.role == "error") && messages.count >= 2 && messages[messages.count - 2].role == "user" {
             userQuery = messages[messages.count - 2].content
             messages.removeLast(2)
         }
@@ -796,38 +921,14 @@ struct ContentView: View {
         
         // 如果找到了有效的用户问题，则重新发送
         if !userQuery.isEmpty {
-            self.userInput = userQuery
-            self.sendMessage()
-        }
-    }
-    private func parseContentForReasoning(_ rawContent: String) -> (content: String, reasoning: String?) {
-    /// 解析 content 字符串，提取被  或 <thinking>...</thinking>
-        let pattern = "<(thought|thinking)>(.*?)</\\1>"
-        
-        do {
-            let regex = try NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators])
-            let nsRange = NSRange(rawContent.startIndex..<rawContent.endIndex, in: rawContent)
-            
-            if let match = regex.firstMatch(in: rawContent, options: [], range: nsRange) {
-                // 提取思考内容 (第二个捕获组)
-                let reasoningRange = match.range(at: 2)
-                let reasoning = (rawContent as NSString).substring(with: reasoningRange).trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                // 从原始内容中移除思考标签块
-                let cleanedContent = regex.stringByReplacingMatches(in: rawContent, options: [], range: nsRange, withTemplate: "").trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                print("  - 成功从 content 中提取并分离了思考过程。")
-                return (cleanedContent, reasoning)
+            Task {
+                await sendAndProcessMessage(content: userQuery)
             }
-        } catch {
-            print("  - ⚠️ 正则表达式创建失败: \(error.localizedDescription)")
         }
-        
-        // 如果没有匹配项或发生错误，返回原始内容
-        return (rawContent, nil)
     }
     
-    // MARK: 屏幕常亮管理
+    // MARK: - 屏幕常亮管理
+    // ============================================================================
     
     /// 启动一个 watchOS 延长运行时间的会话，以在等待AI响应时保持屏幕常亮
     private func startExtendedSession() {
@@ -851,6 +952,7 @@ struct ContentView: View {
     }
    
    // MARK: - 导出函数
+   // ============================================================================
    
     /// 通过网络将指定的会话导出到目标IP地址
     /// - Parameters:
@@ -924,6 +1026,8 @@ struct ContentView: View {
 // MARK: - 辅助视图
 // ============================================================================
 
+// MARK: - 编辑消息视图 
+
 /// 用于编辑单条消息内容的视图
 struct EditMessageView: View {
     @Binding var message: ChatMessage
@@ -968,6 +1072,8 @@ struct EditMessageView: View {
     }
 }
 
+// MARK: - 聊天气泡视图 
+
 /// 聊天消息气泡组件
 /// 显示单条聊天消息，支持AI思考过程的展开/折叠功能
 /// watchOS兼容版本，使用Button替代DisclosureGroup
@@ -994,42 +1100,56 @@ struct ChatBubble: View {
                     .background(enableBackground ? Color.blue.opacity(0.7) : Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(12)
+            } else if message.role == "error" {
+                // 错误消息
+                Text(message.content)
+                    .padding(10)
+                    .background(enableBackground ? Color.red.opacity(0.7) : Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                Spacer()
             } else {
                 // AI消息或加载指示器：左对齐
-                if message.isLoading {
-                    // 如果是加载消息，显示一个ProgressView
-                    ProgressView()
-                        .padding(10)
-                        .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
-                        .cornerRadius(12)
-                } else {
-                    // 正常的AI消息
-                    VStack(alignment: .leading, spacing: 5) {
-                        if let reasoning = message.reasoningContent, !reasoning.isEmpty {
-                            Button(action: { withAnimation { isReasoningExpanded.toggle() } }) {
-                                Label("显示思考过程", systemImage: isReasoningExpanded ? "lightbulb.slash.fill" : "lightbulb.fill")
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.bottom, 4)
-
-                            if isReasoningExpanded {
-                                Text(reasoning)
-                                    .font(.footnote)
-                                    .foregroundColor(.secondary)
-                                    .padding(10)
-                                    .background(enableBackground ? Color.black.opacity(0.2) : Color(white: 0.15))
-                                    .cornerRadius(12)
-                                    .transition(.opacity)
-                            }
+                VStack(alignment: .leading, spacing: 5) {
+                    // 思考过程：只要有reasoningContent就显示灯泡
+                    if let reasoning = message.reasoningContent, !reasoning.isEmpty {
+                        Button(action: { withAnimation { isReasoningExpanded.toggle() } }) {
+                            Label("显示思考过程", systemImage: isReasoningExpanded ? "lightbulb.slash.fill" : "lightbulb.fill")
+                                .font(.caption)
                         }
-                        
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 4)
+
+                        if isReasoningExpanded {
+                            Text(reasoning)
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                                .padding(10)
+                                .background(enableBackground ? Color.black.opacity(0.2) : Color(white: 0.15))
+                                .cornerRadius(12)
+                                .transition(.opacity)
+                        }
+                    }
+                    
+                    // 消息内容：只要有content就显示
+                    if !message.content.isEmpty {
                         renderContent(message.content)
-                            .padding(10)
-                            .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
-                            .cornerRadius(12)
+                    }
+
+                    // 加载指示器：当isLoading为true时显示
+                    if message.isLoading {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("正在思考...")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
+                .padding(10)
+                .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
+                .cornerRadius(12)
                 Spacer()
             }
         }
@@ -1052,6 +1172,8 @@ struct ChatBubble: View {
     }
 }
 
+// MARK: - 设置视图 
+
 /// 设置视图
 /// 提供模型选择和多会话管理功能
 ///
@@ -1070,6 +1192,7 @@ struct SettingsView: View {
     @Binding var aiTopP: Double
     @Binding var systemPrompt: String
     @Binding var maxChatHistory: Int
+    @Binding var enableStreaming: Bool // 接收绑定
     @Binding var enableMarkdown: Bool
     @Binding var enableBackground: Bool
     @Binding var backgroundBlur: Double
@@ -1082,7 +1205,6 @@ struct SettingsView: View {
     let exportAction: (ChatSession) -> Void // 新增：导出操作
     
     @Environment(\.dismiss) var dismiss
-    @State private var showBranchOptions: Bool = false // 用于分支选项
     
     var body: some View {
         NavigationStack {
@@ -1102,6 +1224,7 @@ struct SettingsView: View {
                             aiTopP: $aiTopP,
                             systemPrompt: $systemPrompt,
                             maxChatHistory: $maxChatHistory,
+                            enableStreaming: $enableStreaming,
                             // 传递当前会话的绑定，以便修改话题提示词
                             currentSession: $currentSession
                         )) {
@@ -1168,29 +1291,11 @@ struct SettingsView: View {
             .toolbar {
                 Button("完成") { dismiss() }
             }
-            // 分支选项对话框
-            .confirmationDialog("创建分支", isPresented: $showBranchOptions, titleVisibility: .visible) {
-                Button("仅分支提示词") {
-                    if let session = currentSession {
-                        branchAction(session, false)
-                        dismiss()
-                    }
-                }
-                Button("分支提示词和对话记录") {
-                    if let session = currentSession {
-                        branchAction(session, true)
-                        dismiss()
-                    }
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                if let session = currentSession {
-                    Text("从“\(session.name)”创建新的分支对话。")
-                }
-            }
         }
     }
 }
+
+// MARK: - 会话管理视图
 
 /// 会话历史列表视图
 /// 在一个独立的页面显示所有历史会话，并处理选择和删除操作
@@ -1357,6 +1462,8 @@ struct SessionListView: View {
     }
 }
 
+// MARK: - 背景选择器视图 
+
 /// 背景图片选择器视图
 /// 以网格形式展示所有可选的背景图片，并允许用户点击选择
 ///
@@ -1395,6 +1502,8 @@ struct BackgroundPickerView: View {
     }
 }
 
+// MARK: - 高级模型设置视图 
+
 /// 高级模型设置视图
 /// 提供 Temperature, Top P, 和 System Prompt 的调整功能
 ///
@@ -1407,6 +1516,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var aiTopP: Double
     @Binding var systemPrompt: String // 全局系统提示词
     @Binding var maxChatHistory: Int
+    @Binding var enableStreaming: Bool
     @Binding var currentSession: ChatSession? // 当前会话
     
     // 用于TextField的Formatter，确保只输入数字
@@ -1443,6 +1553,10 @@ struct ModelAdvancedSettingsView: View {
                 .lineLimit(5...10)
             }
             
+            Section(header: Text("输出设置")) {
+                Toggle("流式输出", isOn: $enableStreaming)
+            }
+            
             Section(header: Text("参数调整")) {
                 VStack(alignment: .leading) {
                     Text("模型温度 (Temperature): \(String(format: "%.2f", aiTemperature))")
@@ -1475,7 +1589,8 @@ struct ModelAdvancedSettingsView: View {
     }
 }
 
-// MARK: - 消息二级菜单
+// MARK: - 操作菜单
+// ============================================================================
 
 struct MessageActionsView: View {
     let message: ChatMessage
@@ -1523,8 +1638,6 @@ struct MessageActionsView: View {
     }
 }
 
-
-// MARK: - 会话二级菜单
 
 struct SessionActionsView: View {
     let session: ChatSession
@@ -1585,7 +1698,8 @@ struct SessionActionsView: View {
     }
 }
 
-// MARK: - 数据持久化辅助函数
+// MARK: - 数据持久化
+// ============================================================================
 
 /// 获取用于存储聊天记录的目录URL
 /// - Returns: 存储目录的URL路径
@@ -1618,7 +1732,7 @@ func saveChatSessions(_ sessions: [ChatSession]) {
     }
 }
 
-/// 加载所有聊天会話的列表
+/// 加载所有聊天会话的列表
 func loadChatSessions() -> [ChatSession] {
     let fileURL = getChatsDirectory().appendingPathComponent("sessions.json")
     print("💾 [Persistence] 准备加载会话列表...")
@@ -1670,7 +1784,7 @@ func loadMessages(for sessionID: UUID) -> [ChatMessage] {
     }
 }
 
-// MARK: - 导出视图
+// MARK: - 导出功能
 // ============================================================================
 
 /// 导出状态枚举
