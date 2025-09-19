@@ -32,19 +32,20 @@ struct AIModelConfig: Identifiable, Hashable {
 ///
 /// 角色类型说明:
 /// - user: 用户发送的消息
-/// - assistant: AI回复的消息
+/// - assistant: AI回复的消息 (可能包含思考过程)
 /// - system: 系统提示消息
 /// - error: 错误提示消息
 struct ChatMessage: Identifiable, Codable, Equatable {
     var id: UUID
     var role: String // "user", "assistant", "system", "error"
     var content: String
-    var reasoningContent: String?
+    var reasoning: String? = nil      // 新增：AI的思考过程，仅用于 assistant 角色
     var isLoading: Bool = false
+    var isReasoningExpanded: Bool? = nil // 新增：用于控制思考过程的展开状态
 
     // 自定义编码键，用于JSON序列化
     enum CodingKeys: String, CodingKey {
-        case id, role, content, reasoningContent, isLoading
+        case id, role, content, reasoning, isLoading, isReasoningExpanded
     }
 
     // 自定义解码器
@@ -53,8 +54,9 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         id = try container.decode(UUID.self, forKey: .id)
         role = try container.decode(String.self, forKey: .role)
         content = try container.decode(String.self, forKey: .content)
-        reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
+        reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
         isLoading = try container.decodeIfPresent(Bool.self, forKey: .isLoading) ?? false
+        isReasoningExpanded = try container.decodeIfPresent(Bool.self, forKey: .isReasoningExpanded)
     }
 
     // 自定义编码器
@@ -63,29 +65,31 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         try container.encode(id, forKey: .id)
         try container.encode(role, forKey: .role)
         try container.encode(content, forKey: .content)
-        // 仅当reasoningContent有值时才编码
-        try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
-        // 仅当isLoading为true时才编码
+        try container.encodeIfPresent(reasoning, forKey: .reasoning)
+        // 只有在值为 true 时才编码 isLoading，以保持JSON文件整洁
         if isLoading {
             try container.encode(isLoading, forKey: .isLoading)
         }
+        try container.encodeIfPresent(isReasoningExpanded, forKey: .isReasoningExpanded)
     }
     
-    // 为了方便其他代码调用而增加的便利初始化器
-    init(id: UUID, role: String, content: String, reasoningContent: String? = nil, isLoading: Bool = false) {
+    // 便利初始化器
+    init(id: UUID, role: String, content: String, reasoning: String? = nil, isLoading: Bool = false, isReasoningExpanded: Bool? = nil) {
         self.id = id
         self.role = role
         self.content = content
-        self.reasoningContent = reasoningContent
+        self.reasoning = reasoning
         self.isLoading = isLoading
+        self.isReasoningExpanded = isReasoningExpanded
     }
 }
+
 
 /// 用于导出的聊天消息数据结构（移除了UUID）
 struct ExportableChatMessage: Codable {
     var role: String
     var content: String
-    var reasoningContent: String?
+    var reasoning: String? // 也为导出添加思考过程
 }
 
 /// 用于导出提示词的结构
@@ -180,7 +184,9 @@ struct ContentView: View {
     
     // MARK: - 状态属性
     
-    @State private var messages: [ChatMessage] = []      // 当前会话的聊天消息列表
+    @State private var messages: [ChatMessage] = []      // 当前会话中*显示*的聊天消息列表
+    @State private var allMessagesForSession: [ChatMessage] = [] // 当前会话的*所有*聊天消息
+    @State private var isHistoryFullyLoaded: Bool = false // 标记是否所有历史记录都已加载
     @State private var userInput: String = ""           // 用户输入文本
     @State private var showDeleteMessageConfirm: Bool = false // 控制删除消息确认弹窗
     @State private var messageToDelete: ChatMessage?          // 待删除的消息
@@ -199,6 +205,7 @@ struct ContentView: View {
     @AppStorage("systemPrompt") private var systemPrompt: String = "" // 自定义系统提示词
     @AppStorage("maxChatHistory") private var maxChatHistory: Int = 0 // 最大上下文消息数，0为不限制
     @AppStorage("enableStreaming") private var enableStreaming: Bool = false // 流式输出开关
+    @AppStorage("lazyLoadMessageCount") private var lazyLoadMessageCount: Int = 10 // 懒加载消息数，0为不限制
     
     @State private var selectedModel: AIModelConfig     // 当前选中的AI模型
     
@@ -255,7 +262,9 @@ struct ContentView: View {
         // 初始化状态，并将新创建的会话设为当前会话
         _chatSessions = State(initialValue: loadedSessions)
         _currentSession = State(initialValue: newSession)
-        _messages = State(initialValue: []) // 新会话总是从空消息列表开始
+        // 新会话总是从空消息列表开始
+        _allMessagesForSession = State(initialValue: [])
+        _messages = State(initialValue: [])
         print("  - 初始化完成。当前共有 \(loadedSessions.count) 个会话（包含临时）。")
         print("  - 当前会话已设置为新的临时会话。")
     }
@@ -278,145 +287,165 @@ struct ContentView: View {
                 ScrollViewReader { proxy in
                     // 使用List替代ScrollView以获得原生的滑动删除功能
                     List {
-                    // 添加一个隐形的Spacer，当内容不足一屏时，它会自动撑开，
-                    // 将所有实际内容（消息和输入框）推到底部。
-                    Spacer().listRowBackground(Color.clear)
+                        // 如果历史记录未完全加载，并且确实有剩余消息，则显示加载按钮
+                        let remainingCount = allMessagesForSession.count - messages.count
+                        if !isHistoryFullyLoaded && remainingCount > 0 {
+                            Button(action: {
+                                withAnimation {
+                                    messages = allMessagesForSession
+                                    isHistoryFullyLoaded = true
+                                }
+                            }) {
+                                Label("显示剩余 \(remainingCount) 条记录", systemImage: "arrow.up.circle")
+                            }
+                            .buttonStyle(.bordered)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
+                        }
+                        
+                        // 添加一个隐形的Spacer，当内容不足一屏时，它会自动撑开，
+                        // 将所有实际内容（消息和输入框）推到底部。
+                        Spacer().listRowBackground(Color.clear)
 
-                    ForEach(messages) { message in
-                        ChatBubble(message: message, enableMarkdown: enableMarkdown, enableBackground: enableBackground)
-                            .id(message.id) // 确保每个消息都有唯一ID以便滚动
+                        ForEach($messages) { $message in
+                            ChatBubble(message: $message, enableMarkdown: enableMarkdown, enableBackground: enableBackground)
+                                .id(message.id) // 确保每个消息都有唯一ID以便滚动
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                                .swipeActions(edge: .leading) { // 右滑出现菜单
+                                    NavigationLink {
+                                        // 导航到新的消息操作二级菜单
+                                        MessageActionsView(
+                                            message: message,
+                                            canRetry: canRetry(message: message),
+                                            onEdit: {
+                                                messageToEdit = message
+                                                activeSheet = .editMessage
+                                            },
+                                            onRetry: {
+                                                retryLastMessage()
+                                            },
+                                            onDelete: {
+                                                messageToDelete = message
+                                                showDeleteMessageConfirm = true
+                                            }
+                                        )
+                                    } label: {
+                                        Label("更多", systemImage: "ellipsis.circle.fill")
+                                    }
+                                    .tint(.gray)
+                                }
+                        }
+                        
+                        // 将输入区域作为列表的最后一个元素
+                        inputBubble
+                            .id("inputBubble") // 为输入区域设置一个固定ID
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
-                            .swipeActions(edge: .leading) { // 右滑出现菜单
-                                NavigationLink {
-                                    // 导航到新的消息操作二级菜单
-                                    MessageActionsView(
-                                        message: message,
-                                        canRetry: canRetry(message: message),
-                                        onEdit: {
-                                            messageToEdit = message
-                                            activeSheet = .editMessage
-                                        },
-                                        onRetry: {
-                                            retryLastMessage()
-                                        },
-                                        onDelete: {
-                                            messageToDelete = message
-                                            showDeleteMessageConfirm = true
-                                        }
-                                    )
-                                } label: {
-                                    Label("更多", systemImage: "ellipsis.circle.fill")
-                                }
-                                .tint(.gray)
+                    }
+                    .listStyle(.plain)
+                    .background(Color.clear) // 使List背景透明以显示下层视图
+                    // 当消息数量变化时，自动滚动到底部的输入框
+                    .onChange(of: messages.count) {
+                        withAnimation {
+                            // 滚动到固定的输入区域ID
+                            proxy.scrollTo("inputBubble", anchor: .bottom)
+                        }
+                    }
+                    // 消息删除确认对话框
+                    .confirmationDialog("确认删除", isPresented: $showDeleteMessageConfirm, titleVisibility: .visible) {
+                        Button("删除消息", role: .destructive) {
+                            if let message = messageToDelete, let index = messages.firstIndex(where: { $0.id == message.id }) {
+                                deleteMessage(at: IndexSet(integer: index))
                             }
+                            messageToDelete = nil
+                        }
+                        Button("取消", role: .cancel) {
+                            messageToDelete = nil
+                        }
+                    } message: {
+                        Text("您确定要删除这条消息吗？此操作无法撤销。")
+                    }
+                }
+                // 统一的 Sheet 模态视图管理器
+                .sheet(item: $activeSheet) { item in
+                    switch item {
+                    case .editMessage:
+                        if let messageToEdit = messageToEdit,
+                           let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == messageToEdit.id }) {
+                            
+                            let messageBinding = $allMessagesForSession[messageIndex]
+                            
+                            EditMessageView(message: messageBinding, onSave: { updatedMessage in
+                                // 在回调中保存整个消息数组
+                                if let sessionID = currentSession?.id {
+                                    saveMessages(allMessagesForSession, for: sessionID)
+                                    updateDisplayedMessages() // 更新显示的消息
+                                    print("💾 [Persistence] 消息编辑已保存。")
+                                }
+                            })
+                        }
+                    case .settings:
+                        SettingsView(
+                            selectedModel: $selectedModel,
+                            allModels: modelConfigs,
+                            sessions: $chatSessions,
+                            currentSession: $currentSession,
+                            aiTemperature: $aiTemperature,
+                            aiTopP: $aiTopP,
+                            systemPrompt: $systemPrompt,
+                            maxChatHistory: $maxChatHistory,
+                            lazyLoadMessageCount: $lazyLoadMessageCount, // 传递绑定
+                            enableStreaming: $enableStreaming, // 传递绑定
+                            enableMarkdown: $enableMarkdown,
+                            enableBackground: $enableBackground,
+                            backgroundBlur: $backgroundBlur,
+                            backgroundOpacity: $backgroundOpacity,
+                            allBackgrounds: backgroundImages,
+                            currentBackgroundImage: $currentBackgroundImage,
+                            enableAutoRotateBackground: $enableAutoRotateBackground,
+                            deleteAction: deleteSession,
+                            branchAction: branchSession,
+                            exportAction: { session in
+                                activeSheet = .export(session)
+                            },
+                            deleteLastMessageAction: deleteLastMessage // 新增：传递删除最后一条消息的操作
+                        )
+                    case .export(let session):
+                        ExportView(
+                            session: session,
+                            onExport: exportSessionViaNetwork
+                        )
+                    }
+                }
+            }
+            .onChange(of: selectedModel.name) {
+                // 当模型选择变化时，保存新的模型名称
+                selectedModelName = selectedModel.name
+            }
+            .onChange(of: activeSheet) {
+                // 当 sheet 关闭时 (activeSheet 变为 nil)，执行原 onDismiss 的逻辑
+                if activeSheet == nil {
+                    // 当设置面板关闭时，保存可能已更改的会话（例如话题提示词）
+                    if let session = currentSession, !session.isTemporary {
+                        if let index = chatSessions.firstIndex(where: { $0.id == session.id }) {
+                            chatSessions[index] = session
+                            saveChatSessions(chatSessions)
+                            print("💾 [Persistence] 设置面板关闭，已更新并保存当前会话的变更。")
+                        }
                     }
                     
-                    // 将输入区域作为列表的最后一个元素
-                    inputBubble
-                        .id("inputBubble") // 为输入区域设置一个固定ID
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                }
-                .listStyle(.plain)
-                .background(Color.clear) // 使List背景透明以显示下层视图
-                // 当消息数量变化时，自动滚动到底部的输入框
-                .onChange(of: messages.count) {
-                    withAnimation {
-                        // 滚动到固定的输入区域ID
-                        proxy.scrollTo("inputBubble", anchor: .bottom)
+                    // 根据当前选中的会话重新加载消息
+                    if let session = currentSession {
+                        loadAndDisplayMessages(for: session)
+                    } else {
+                        allMessagesForSession = []
+                        updateDisplayedMessages()
                     }
-                }
-                // 消息删除确认对话框
-                .confirmationDialog("确认删除", isPresented: $showDeleteMessageConfirm, titleVisibility: .visible) {
-                    Button("删除消息", role: .destructive) {
-                        if let message = messageToDelete, let index = messages.firstIndex(where: { $0.id == message.id }) {
-                            deleteMessage(at: IndexSet(integer: index))
-                        }
-                        messageToDelete = nil
-                    }
-                    Button("取消", role: .cancel) {
-                        messageToDelete = nil
-                    }
-                } message: {
-                    Text("您确定要删除这条消息吗？此操作无法撤销。")
-                }
-            }
-            // 统一的 Sheet 模态视图管理器
-            .sheet(item: $activeSheet) { item in
-                switch item {
-                case .editMessage:
-                    if let messageToEdit = messageToEdit,
-                       let messageIndex = messages.firstIndex(where: { $0.id == messageToEdit.id }) {
-                        
-                        let messageBinding = $messages[messageIndex]
-                        
-                        EditMessageView(message: messageBinding, onSave: { updatedMessage in
-                            // 在回调中保存整个消息数组
-                            if let sessionID = currentSession?.id {
-                                saveMessages(messages, for: sessionID)
-                                print("💾 [Persistence] 消息编辑已保存。")
-                            }
-                        })
-                    }
-                case .settings:
-                    SettingsView(
-                        selectedModel: $selectedModel,
-                        allModels: modelConfigs,
-                        sessions: $chatSessions,
-                        currentSession: $currentSession,
-                        aiTemperature: $aiTemperature,
-                        aiTopP: $aiTopP,
-                        systemPrompt: $systemPrompt,
-                        maxChatHistory: $maxChatHistory,
-                        enableStreaming: $enableStreaming, // 传递绑定
-                        enableMarkdown: $enableMarkdown,
-                        enableBackground: $enableBackground,
-                        backgroundBlur: $backgroundBlur,
-                        backgroundOpacity: $backgroundOpacity,
-                        allBackgrounds: backgroundImages,
-                        currentBackgroundImage: $currentBackgroundImage,
-                        enableAutoRotateBackground: $enableAutoRotateBackground,
-                        deleteAction: deleteSession,
-                        branchAction: branchSession,
-                        exportAction: { session in
-                            activeSheet = .export(session)
-                        }
-                    )
-                case .export(let session):
-                    ExportView(
-                        session: session,
-                        onExport: exportSessionViaNetwork
-                    )
-                }
-            }
-        }
-        .onChange(of: selectedModel.name) {
-            // 当模型选择变化时，保存新的模型名称
-            selectedModelName = selectedModel.name
-        }
-        .onChange(of: activeSheet) {
-            // 当 sheet 关闭时 (activeSheet 变为 nil)，执行原 onDismiss 的逻辑
-            if activeSheet == nil {
-                // 当设置面板关闭时，保存可能已更改的会话（例如话题提示词）
-                if let session = currentSession, !session.isTemporary {
-                    if let index = chatSessions.firstIndex(where: { $0.id == session.id }) {
-                        chatSessions[index] = session
-                        saveChatSessions(chatSessions)
-                        print("💾 [Persistence] 设置面板关闭，已更新并保存当前会话的变更。")
-                    }
-                }
-                
-                // 根据当前选中的会话重新加载消息
-                if let session = currentSession {
-                    messages = loadMessages(for: session.id)
-                } else {
-                    messages = [] // 如果没有会话，则清空消息
                 }
             }
         }
     }
-}
 
     // MARK: - 视图组件
     // ============================================================================
@@ -438,7 +467,7 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .disabled(userInput.isEmpty || (messages.last?.isLoading ?? false))
+            .disabled(userInput.isEmpty || (allMessagesForSession.last?.isLoading ?? false))
         }
         .padding(10)
         .background(enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial)) // 根据设置决定背景效果
@@ -479,10 +508,11 @@ struct ContentView: View {
         let loadingMessageID = UUID()
         
         await MainActor.run {
-            messages.append(userMessage)
+            allMessagesForSession.append(userMessage)
             // 添加一个带isLoading标记的占位消息
             let loadingMessage = ChatMessage(id: loadingMessageID, role: "assistant", content: "", isLoading: true)
-            messages.append(loadingMessage)
+            allMessagesForSession.append(loadingMessage)
+            updateDisplayedMessages() // 更新UI
             print("  - 用户消息已添加到列表: \"\(userMessage.content)\"")
             print("  - 添加了AI加载占位符。")
             startExtendedSession()
@@ -490,7 +520,7 @@ struct ContentView: View {
         
         // 如果是新对话的第一条消息，更新会话名称并将其持久化
         if var session = currentSession, session.isTemporary {
-            let messageCountWithoutLoading = messages.filter { !$0.isLoading }.count
+            let messageCountWithoutLoading = allMessagesForSession.filter { !$0.isLoading }.count
             if messageCountWithoutLoading == 1 {
                 session.name = String(userMessage.content.prefix(20))
                 session.isTemporary = false
@@ -503,7 +533,7 @@ struct ContentView: View {
             }
         }
         
-        saveMessages(messages, for: currentSession!.id)
+        saveMessages(allMessagesForSession, for: currentSession!.id)
 
         guard let url = URL(string: currentConfig.apiURL) else {
             await MainActor.run { addErrorMessage("错误: API URL 无效") }; return
@@ -544,8 +574,8 @@ struct ContentView: View {
             apiMessages.append(["role": "system", "content": combinedPrompt])
         }
         
-        // 在发送到API前，过滤掉isLoading的消息
-        var chatHistoryToSend = messages.filter { !$0.isLoading && $0.role != "error" }
+        // 在发送到API前，过滤掉isLoading的消息和error消息
+        var chatHistoryToSend = allMessagesForSession.filter { !$0.isLoading && $0.role != "error" }
         if maxChatHistory > 0 && chatHistoryToSend.count > maxChatHistory {
             chatHistoryToSend = Array(chatHistoryToSend.suffix(maxChatHistory))
         }
@@ -581,11 +611,13 @@ struct ContentView: View {
     // MARK: - API响应处理
     
     private func handleStandardResponse(request: URLRequest, loadingMessageID: UUID) async {
+        var responseString: String?
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
+            responseString = String(data: data, encoding: .utf8)
             
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("    - 完整的响应体 (Raw Response):\n---\n\(responseString)\n---")
+            if let responseStr = responseString {
+                print("    - 完整的响应体 (Raw Response):\n---\n\(responseStr)\n---")
             }
             
             let apiResponse = try JSONDecoder().decode(GenericAPIResponse.self, from: data)
@@ -617,14 +649,21 @@ struct ContentView: View {
                 let remainingContent = String(rawContent[rawContent.index(rawContent.startIndex, offsetBy: lastMatchEnd)...])
                 finalContent += remainingContent
                 
-                let aiMessage = ChatMessage(id: loadingMessageID, role: "assistant", content: finalContent.trimmingCharacters(in: .whitespacesAndNewlines), reasoningContent: finalReasoning.isEmpty ? nil : finalReasoning, isLoading: false)
-                
                 await MainActor.run {
-                    if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-                        messages[index] = aiMessage
-                    }
-                    if let sessionID = currentSession?.id {
-                        saveMessages(messages, for: sessionID)
+                    if let index = allMessagesForSession.firstIndex(where: { $0.id == loadingMessageID }) {
+                        // 直接更新现有的 assistant 消息，而不是删除再添加
+                        allMessagesForSession[index].isLoading = false
+                        allMessagesForSession[index].content = finalContent.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !finalReasoning.isEmpty {
+                            allMessagesForSession[index].reasoning = finalReasoning
+                            allMessagesForSession[index].isReasoningExpanded = false // 默认折叠
+                        }
+                        
+                        updateDisplayedMessages()
+                        
+                        if let sessionID = currentSession?.id {
+                            saveMessages(allMessagesForSession, for: sessionID)
+                        }
                     }
                 }
             } else {
@@ -632,8 +671,8 @@ struct ContentView: View {
             }
         } catch {
             let errorMessage = "网络或解析错误: \(error.localizedDescription)"
-            if let httpBody = request.httpBody, let str = String(data: httpBody, encoding: .utf8) {
-                await MainActor.run { addErrorMessage("JSON解析失败.\n请求体: \(str)") }
+            if let responseStr = responseString, !responseStr.isEmpty {
+                await MainActor.run { addErrorMessage("API响应解析失败。\n响应体: \(responseStr)") }
             } else {
                 await MainActor.run { addErrorMessage(errorMessage) }
             }
@@ -683,6 +722,9 @@ struct ContentView: View {
                                 textBuffer = String(textBuffer[range.upperBound...])
                                 isInsideReasoningBlock = false
                                 continue
+                            } else {
+                                reasoningToUpdate += textBuffer
+                                textBuffer = ""
                             }
                         } else {
                             if let match = startTagRegex.firstMatch(in: textBuffer, options: [], range: bufferRange) {
@@ -691,28 +733,36 @@ struct ContentView: View {
                                 textBuffer = String(textBuffer[range.upperBound...])
                                 isInsideReasoningBlock = true
                                 continue
+                            } else {
+                                contentToUpdate += textBuffer
+                                textBuffer = ""
                             }
                         }
                         break
                     }
 
-                    if !contentToUpdate.isEmpty || !reasoningToUpdate.isEmpty {
-                        await MainActor.run {
-                            if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-                                // 只有当收到第一块“实际内容”时，才关闭加载状态
-                                // 这样可以确保在仅有reasoning输出时，loading动画仍然持续
-                                if messages[index].isLoading, !contentToUpdate.isEmpty {
-                                    messages[index].isLoading = false
-                                }
-                                messages[index].content += contentToUpdate
-                                if !reasoningToUpdate.isEmpty {
-                                    if messages[index].reasoningContent == nil {
-                                        messages[index].reasoningContent = reasoningToUpdate
-                                    } else {
-                                        messages[index].reasoningContent? += reasoningToUpdate
-                                    }
-                                }
+                    await MainActor.run {
+                        // 所有更新都针对同一个 assistant 消息
+                        if let index = allMessagesForSession.firstIndex(where: { $0.id == loadingMessageID }) {
+                            // 首次收到响应时，将 isLoading 设为 false
+                            if allMessagesForSession[index].isLoading {
+                                allMessagesForSession[index].isLoading = false
                             }
+                            
+                            if !reasoningToUpdate.isEmpty {
+                                // 如果 reasoning 字段是第一次被创建，则初始化
+                                if allMessagesForSession[index].reasoning == nil {
+                                    allMessagesForSession[index].reasoning = ""
+                                    allMessagesForSession[index].isReasoningExpanded = false // 默认折叠
+                                }
+                                allMessagesForSession[index].reasoning! += reasoningToUpdate
+                            }
+
+                            if !contentToUpdate.isEmpty {
+                                allMessagesForSession[index].content += contentToUpdate
+                            }
+                            
+                            updateDisplayedMessages()
                         }
                     }
                 }
@@ -723,29 +773,32 @@ struct ContentView: View {
             }
         }
         
-        // 流结束后，处理缓冲区中所有剩余的内容
+        // 处理流结束后缓冲区中可能剩余的内容
         if !textBuffer.isEmpty {
             await MainActor.run {
-                if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                if let index = allMessagesForSession.firstIndex(where: { $0.id == loadingMessageID }) {
                     if isInsideReasoningBlock {
-                        if messages[index].reasoningContent == nil { messages[index].reasoningContent = textBuffer }
-                        else { messages[index].reasoningContent? += textBuffer }
+                        if allMessagesForSession[index].reasoning == nil {
+                           allMessagesForSession[index].reasoning = ""
+                           allMessagesForSession[index].isReasoningExpanded = false
+                        }
+                        allMessagesForSession[index].reasoning! += textBuffer
                     } else {
-                        messages[index].content += textBuffer
+                        allMessagesForSession[index].content += textBuffer
                     }
                 }
             }
         }
 
-        // 最终清理和保存
         await MainActor.run {
-            if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-                messages[index].isLoading = false
+            if let index = allMessagesForSession.firstIndex(where: { $0.id == loadingMessageID }) {
+                allMessagesForSession[index].isLoading = false
             }
             
+            updateDisplayedMessages()
             stopExtendedSession()
             if let sessionID = currentSession?.id {
-                saveMessages(messages, for: sessionID)
+                saveMessages(allMessagesForSession, for: sessionID)
             }
         }
     }
@@ -756,26 +809,30 @@ struct ContentView: View {
     /// - Parameter content: 错误消息内容
     func addErrorMessage(_ content: String) {
         // 在显示错误前，找到并替换加载指示器
-        if let loadingIndex = messages.lastIndex(where: { $0.isLoading }) {
-            let errorMessage = ChatMessage(id: messages[loadingIndex].id, role: "error", content: content, isLoading: false)
-            messages[loadingIndex] = errorMessage
+        if let loadingIndex = allMessagesForSession.lastIndex(where: { $0.isLoading }) {
+            let errorMessage = ChatMessage(id: allMessagesForSession[loadingIndex].id, role: "error", content: content, isLoading: false)
+            allMessagesForSession[loadingIndex] = errorMessage
         } else {
             // 如果没有找到加载指示器（异常情况），则直接添加
             let errorMessage = ChatMessage(id: UUID(), role: "error", content: content)
-            messages.append(errorMessage)
+            allMessagesForSession.append(errorMessage)
         }
         
+        updateDisplayedMessages()
+        
         if let sessionID = currentSession?.id {
-            saveMessages(messages, for: sessionID)
+            saveMessages(allMessagesForSession, for: sessionID)
         }
     }
     
     /// 删除指定位置的消息
     /// - Parameter offsets: 要删除的消息索引集合
     func deleteMessage(at offsets: IndexSet) {
-        messages.remove(atOffsets: offsets)
-        // 删除后立即保存到本地文件
-        saveMessages(messages, for: currentSession!.id)
+        let idsToDelete = offsets.map { messages[$0].id }
+        allMessagesForSession.removeAll { idsToDelete.contains($0.id) }
+        
+        updateDisplayedMessages()
+        saveMessages(allMessagesForSession, for: currentSession!.id)
     }
     
     /// 删除指定位置的会话
@@ -870,6 +927,19 @@ struct ContentView: View {
         // 在SessionListView中，我们会调用 dismiss()
         // onSessionSelected(newSession) // 这行代码现在由 SessionListView 的 onSessionSelected 回调处理
     }
+
+   /// 删除指定会话的最后一条消息
+   func deleteLastMessage(for session: ChatSession) {
+       print("🗑️ [Message] 准备删除会话“\(session.name)”的最后一条消息...")
+       var messages = loadMessages(for: session.id)
+       if !messages.isEmpty {
+           messages.removeLast()
+           saveMessages(messages, for: session.id)
+           print("  - ✅ 最后一条消息已删除并保存。")
+       } else {
+           print("  - ⚠️ 会话中没有消息可删除。")
+       }
+   }
     
     /// 判断是否应该为某条消息显示"重试"按钮
     /// - Parameter message: 要检查的消息
@@ -879,21 +949,10 @@ struct ContentView: View {
     /// - 最后一条是AI回复: 可以重试最后两条消息
     /// - 最后一条是用户提问: 可以重试最后一条消息
     func canRetry(message: ChatMessage) -> Bool {
-        guard let lastMessage = messages.last else { return false }
-        
-        // 场景A: 最后一条是AI回复或错误提示 -> 最后两条都可以重试
-        if lastMessage.role == "assistant" || lastMessage.role == "error" {
-            guard messages.count >= 2 else { return false }
-            let secondLastMessage = messages[messages.count - 2]
-            // 必须是用户提问 + AI回答/错误的组合
-            guard secondLastMessage.role == "user" else { return false }
-            return message.id == lastMessage.id || message.id == secondLastMessage.id
-        }
-        // 场景B: 最后一条是用户提问 (例如AI未应答时退出) -> 只有这条可以重试
-        else if lastMessage.role == "user" {
+        // 检查完整消息历史
+        if let lastMessage = allMessagesForSession.last(where: { ["assistant", "user", "error"].contains($0.role) }) {
             return message.id == lastMessage.id
         }
-        
         return false
     }
 
@@ -904,26 +963,21 @@ struct ContentView: View {
     /// - 重新发送用户问题
     /// - 触发新的AI回复
     func retryLastMessage() {
-        guard let lastMessage = messages.last else { return }
+        // 从完整历史中从后向前查找最后一条用户消息
+        guard let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == "user" }) else { return }
         
-        var userQuery = ""
+        let lastUserMessage = allMessagesForSession[lastUserMessageIndex]
+        let userQuery = lastUserMessage.content
         
-        // 如果最后一条是AI回复或错误，则移除用户和AI/错误的两条消息
-        if (lastMessage.role == "assistant" || lastMessage.role == "error") && messages.count >= 2 && messages[messages.count - 2].role == "user" {
-            userQuery = messages[messages.count - 2].content
-            messages.removeLast(2)
-        }
-        // 如果最后一条是用户提问，则只移除用户消息
-        else if lastMessage.role == "user" {
-            userQuery = lastMessage.content
-            messages.removeLast()
-        }
+        // 从这条用户消息开始之后的所有消息（包括它自己）
+        allMessagesForSession.removeSubrange(lastUserMessageIndex...)
         
-        // 如果找到了有效的用户问题，则重新发送
-        if !userQuery.isEmpty {
-            Task {
-                await sendAndProcessMessage(content: userQuery)
-            }
+        // 更新显示的消息
+        updateDisplayedMessages()
+        
+        // 重新发送该用户消息
+        Task {
+            await sendAndProcessMessage(content: userQuery)
         }
     }
     
@@ -967,7 +1021,7 @@ struct ContentView: View {
         // 1. 准备数据
         let messagesToExport = loadMessages(for: session.id)
         let exportableMessages = messagesToExport.map {
-            ExportableChatMessage(role: $0.role, content: $0.content, reasoningContent: $0.reasoningContent)
+            ExportableChatMessage(role: $0.role, content: $0.content, reasoning: $0.reasoning)
         }
         let promptsToExport = ExportPrompts(
             globalSystemPrompt: self.systemPrompt.isEmpty ? nil : self.systemPrompt,
@@ -1019,6 +1073,42 @@ struct ContentView: View {
             }
         }.resume()
     }
+    
+    // MARK: - 懒加载辅助函数
+    // ============================================================================
+    
+    /// 根据懒加载设置更新当前显示的 `messages` 数组
+    private func updateDisplayedMessages() {
+        // 在从主数据源刷新UI之前，先将UI上的状态变更（如展开/折叠）同步回主数据源
+        // 这样可以防止在流式输出等频繁刷新操作中丢失用户的交互状态
+        for message in messages {
+            // 仅处理那些具有 isReasoningExpanded 属性的消息
+            if message.isReasoningExpanded != nil {
+                // 在主数据源中查找对应的消息
+                if let index = allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
+                    // 如果UI状态与数据源状态不一致，则更新数据源
+                    if allMessagesForSession[index].isReasoningExpanded != message.isReasoningExpanded {
+                        allMessagesForSession[index].isReasoningExpanded = message.isReasoningExpanded
+                    }
+                }
+            }
+        }
+        
+        let lazyCount = lazyLoadMessageCount
+        if lazyCount > 0 && allMessagesForSession.count > lazyCount {
+            messages = Array(allMessagesForSession.suffix(lazyCount))
+            isHistoryFullyLoaded = false
+        } else {
+            messages = allMessagesForSession
+            isHistoryFullyLoaded = true
+        }
+    }
+
+    /// 加载指定会话的完整消息并根据设置更新显示
+    private func loadAndDisplayMessages(for session: ChatSession) {
+        allMessagesForSession = loadMessages(for: session.id)
+        updateDisplayedMessages()
+    }
 }
 
 
@@ -1035,31 +1125,40 @@ struct EditMessageView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var newContent: String
+    @State private var newReasoning: String
 
     // 自定义初始化器，用于从绑定中设置初始状态
     init(message: Binding<ChatMessage>, onSave: @escaping (ChatMessage) -> Void) {
         _message = message
         self.onSave = onSave
         _newContent = State(initialValue: message.wrappedValue.content)
+        _newReasoning = State(initialValue: message.wrappedValue.reasoning ?? "")
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // 使用 TextField 并设置 axis 为 .vertical 来允许多行输入
-                TextField("编辑消息", text: $newContent, axis: .vertical)
-                    .lineLimit(5...15) // 限制显示的行数范围
-                    .textFieldStyle(.plain)
-                    .padding()
-
+            Form {
+                Section(header: Text("回复内容")) {
+                    TextField("编辑消息", text: $newContent, axis: .vertical)
+                        .lineLimit(5...15)
+                }
+                
+                if message.role == "assistant" {
+                    Section(header: Text("思考过程 (可选)")) {
+                        TextField("编辑思考过程", text: $newReasoning, axis: .vertical)
+                            .lineLimit(5...10)
+                    }
+                }
+                
                 Button("保存") {
                     message.content = newContent
+                    // 只有当 reasoning 不为空时才保存，否则设为 nil
+                    message.reasoning = newReasoning.isEmpty ? nil : newReasoning
                     onSave(message) // 调用回调来触发保存
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             }
-            .padding()
             .navigationTitle("编辑消息")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1083,17 +1182,13 @@ struct EditMessageView: View {
 /// - 可展开的思考过程显示
 /// - Markdown内容渲染支持
 struct ChatBubble: View {
-    let message: ChatMessage  // 要显示的消息
-    let enableMarkdown: Bool  // 是否启用Markdown渲染
-    let enableBackground: Bool // 是否启用背景
-    
-    // 每个气泡独立管理自己的思考过程展开状态
-    @State private var isReasoningExpanded: Bool = false
-    
+    @Binding var message: ChatMessage
+    let enableMarkdown: Bool
+    let enableBackground: Bool
+
     var body: some View {
         HStack {
             if message.role == "user" {
-                // 用户消息：右对齐，蓝色背景
                 Spacer()
                 renderContent(message.content)
                     .padding(10)
@@ -1101,49 +1196,56 @@ struct ChatBubble: View {
                     .foregroundColor(.white)
                     .cornerRadius(12)
             } else if message.role == "error" {
-                // 错误消息
                 Text(message.content)
                     .padding(10)
                     .background(enableBackground ? Color.red.opacity(0.7) : Color.red)
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 Spacer()
-            } else {
-                // AI消息或加载指示器：左对齐
-                VStack(alignment: .leading, spacing: 5) {
-                    // 思考过程：只要有reasoningContent就显示灯泡
-                    if let reasoning = message.reasoningContent, !reasoning.isEmpty {
-                        Button(action: { withAnimation { isReasoningExpanded.toggle() } }) {
-                            Label("显示思考过程", systemImage: isReasoningExpanded ? "lightbulb.slash.fill" : "lightbulb.fill")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.bottom, 4)
-
-                        if isReasoningExpanded {
-                            Text(reasoning)
-                                .font(.footnote)
+            } else { // assistant
+                VStack(alignment: .leading, spacing: 8) {
+                    // 如果有思考过程，则显示可折叠区域
+                    if let reasoning = message.reasoning, !reasoning.isEmpty {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Button(action: {
+                                withAnimation {
+                                    message.isReasoningExpanded?.toggle()
+                                }
+                            }) {
+                                HStack {
+                                    Text("思考过程")
+                                        .font(.footnote)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Image(systemName: message.isReasoningExpanded == true ? "chevron.down" : "chevron.right")
+                                        .font(.caption)
+                                }
                                 .foregroundColor(.secondary)
-                                .padding(10)
-                                .background(enableBackground ? Color.black.opacity(0.2) : Color(white: 0.15))
-                                .cornerRadius(12)
-                                .transition(.opacity)
+                            }
+                            .buttonStyle(.plain)
+
+                            if message.isReasoningExpanded == true {
+                                Text(reasoning)
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.bottom, message.isReasoningExpanded == true ? 5 : 0)
+                        
+                        // 如果有回复内容，则添加分割线
+                        if !message.content.isEmpty {
+                           Divider().background(Color.gray)
                         }
                     }
                     
-                    // 消息内容：只要有content就显示
                     if !message.content.isEmpty {
                         renderContent(message.content)
                     }
-
-                    // 加载指示器：当isLoading为true时显示
+                    
                     if message.isLoading {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("正在思考...")
-                                .font(.body)
-                                .foregroundColor(.secondary)
+                        HStack(spacing: 4) {
+                            ProgressView().controlSize(.small)
+                            Text("正在思考...").font(.caption).foregroundColor(.secondary)
                         }
                     }
                 }
@@ -1157,11 +1259,6 @@ struct ChatBubble: View {
         .padding(.vertical, 4)
     }
 
-    /// 根据设置动态渲染内容
-    /// - Parameter content: 要渲染的文本内容
-    /// - Returns: 渲染后的视图
-    ///
-    /// 根据enableMarkdown设置决定使用Markdown渲染还是普通文本
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
         if enableMarkdown {
@@ -1192,6 +1289,7 @@ struct SettingsView: View {
     @Binding var aiTopP: Double
     @Binding var systemPrompt: String
     @Binding var maxChatHistory: Int
+    @Binding var lazyLoadMessageCount: Int // 新增绑定
     @Binding var enableStreaming: Bool // 接收绑定
     @Binding var enableMarkdown: Bool
     @Binding var enableBackground: Bool
@@ -1203,7 +1301,8 @@ struct SettingsView: View {
     let deleteAction: (IndexSet) -> Void
     let branchAction: (ChatSession, Bool) -> Void
     let exportAction: (ChatSession) -> Void // 新增：导出操作
-    
+   let deleteLastMessageAction: (ChatSession) -> Void // 新增：删除最后一条消息的操作
+
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
@@ -1224,6 +1323,7 @@ struct SettingsView: View {
                             aiTopP: $aiTopP,
                             systemPrompt: $systemPrompt,
                             maxChatHistory: $maxChatHistory,
+                            lazyLoadMessageCount: $lazyLoadMessageCount, // 传递绑定
                             enableStreaming: $enableStreaming,
                             // 传递当前会话的绑定，以便修改话题提示词
                             currentSession: $currentSession
@@ -1241,6 +1341,7 @@ struct SettingsView: View {
                         deleteAction: deleteAction,
                         branchAction: branchAction,
                         exportAction: exportAction, // 传递导出操作
+                        deleteLastMessageAction: deleteLastMessageAction, // 新增：传递操作
                         onSessionSelected: { selectedSession in
                             currentSession = selectedSession
                             dismiss()
@@ -1355,6 +1456,7 @@ struct SessionListView: View {
     let deleteAction: (IndexSet) -> Void
     let branchAction: (ChatSession, Bool) -> Void
     let exportAction: (ChatSession) -> Void // 新增：接收导出操作
+   let deleteLastMessageAction: (ChatSession) -> Void // 新增：接收删除最后一条消息的操作
     let onSessionSelected: (ChatSession) -> Void
     
     // 用于删除确认的状态
@@ -1398,7 +1500,10 @@ struct SessionListView: View {
                             onExport: {
                                 exportAction(session)
                                 // 导出后不需要关闭此页面，由ContentView管理sheet
-                            }
+                            },
+                           onDeleteLastMessage: {
+                               deleteLastMessageAction(session)
+                           }
                         )
                     } label: {
                         Label("更多", systemImage: "ellipsis.circle.fill")
@@ -1516,6 +1621,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var aiTopP: Double
     @Binding var systemPrompt: String // 全局系统提示词
     @Binding var maxChatHistory: Int
+    @Binding var lazyLoadMessageCount: Int // 新增绑定
     @Binding var enableStreaming: Bool
     @Binding var currentSession: ChatSession? // 当前会话
     
@@ -1584,6 +1690,16 @@ struct ModelAdvancedSettingsView: View {
                         .frame(width: 60) // 限制输入框的最大宽度
                 }
             }
+            
+            Section(header: Text("性能设置"), footer: Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")) {
+                HStack {
+                    Text("懒加载消息数")
+                    Spacer()
+                    TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                }
+            }
         }
         .navigationTitle("高级模型设置")
     }
@@ -1632,6 +1748,16 @@ struct MessageActionsView: View {
                     Label("删除消息", systemImage: "trash.fill")
                 }
             }
+            
+            Section(header: Text("详细信息")) {
+                VStack(alignment: .leading) {
+                    Text("消息 ID")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(message.id.uuidString)
+                        .font(.caption2)
+                }
+            }
         }
         .navigationTitle("操作")
         .navigationBarTitleDisplayMode(.inline)
@@ -1648,8 +1774,10 @@ struct SessionActionsView: View {
     @Binding var showDeleteSessionConfirm: Bool
     @Binding var sessions: [ChatSession]
     let onExport: () -> Void // 新增：导出闭包
-    
+   let onDeleteLastMessage: () -> Void // 新增：删除最后一条消息的闭包
+
     @Environment(\.dismiss) var dismiss
+    @State private var messageCount: Int = 0
 
     var body: some View {
         Form {
@@ -1679,6 +1807,16 @@ struct SessionActionsView: View {
                     Label("通过网络导出", systemImage: "wifi")
                 }
             }
+
+           Section {
+               // 新增：删除最后一条消息按钮
+               Button(role: .destructive) {
+                   onDeleteLastMessage()
+                   dismiss()
+               } label: {
+                   Label("删除最后一条消息", systemImage: "delete.backward.fill")
+               }
+           }
             
             Section {
                 // 删除按钮
@@ -1692,9 +1830,32 @@ struct SessionActionsView: View {
                     Label("删除会话", systemImage: "trash.fill")
                 }
             }
+            
+            Section(header: Text("详细信息")) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("会话 ID")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(session.id.uuidString)
+                        .font(.caption2)
+                }
+                
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("消息总数")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(messageCount) 条")
+                        .font(.caption2)
+                }
+            }
         }
         .navigationTitle(session.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            // 当视图出现时，加载消息并计算数量
+            let messages = loadMessages(for: session.id)
+            self.messageCount = messages.count
+        }
     }
 }
 

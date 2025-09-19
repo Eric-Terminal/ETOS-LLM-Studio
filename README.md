@@ -4,7 +4,7 @@
 [![Platform](https://img.shields.io/badge/Platform-watchOS-blue.svg)](https://developer.apple.com/watchos/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-一个专为 Apple Watch 设计的 AI 聊天应用，支持与多种大语言模型进行交互。
+一个专为 Apple Watch 设计的、功能强大且高度可定制的 AI 聊天应用。
 
 ---
 
@@ -29,44 +29,44 @@
 <details>
 <summary><strong>核心聊天体验</strong></summary>
 
-- 🎯 **Apple Watch 原生应用**: 专为手表界面优化，提供流畅体验。
-- 🤖 **多模型支持**: 可配置并轻松切换多个 AI 模型端点。
-- 💬 **智能聊天**: 支持上下文对话和 AI 思考过程显示。
-- 📝 **Markdown 渲染**: 消息支持 Markdown 格式，排版更美观。
-- ✏️ **消息编辑功能**: 可以编辑已发送的消息。
-- 🔁 **对话重试功能**: 支持重新发送失败的请求。
+- 🎯 **Apple Watch 原生应用**: 专为 watchOS 优化，提供流畅、美观的交互体验。
+- 🤖 **多模型支持**: 可配置并轻松切换多个 AI 模型，甚至支持同一模型的多个 API Key 轮询。
+- 💬 **智能聊天**: 支持上下文对话、流式输出和 AI 思考过程显示。
+- 📝 **Markdown 渲染**: 消息支持 Markdown 格式，代码、列表等排版更美观。
+- ✏️ **消息编辑功能**: 可以随时编辑已发送的消息或 AI 的回复。
+- 🔁 **对话重试功能**: 一键重新生成 AI 的最后一次回复。
 
 </details>
 
 <details>
-<summary><strong>会话管理</strong></summary>
+<summary><strong>强大的会话管理</strong></summary>
 
-- 💾 **会话管理**: 支持创建和管理多个独立的聊天会话。
-- 🌿 **会话分支功能**: 可以从现有会话的任意节点创建新分支，方便对比探索。
-- 📤 **网络导出功能**: 支持将会话以 JSON 格式导出到电脑。
-- 💾 **高效数据存储**: 优化的对话记录保存格式，节省空间。
+- 💾 **多会话管理**: 支持创建、保存和管理多个独立的聊天会话。
+- 🌿 **会话分支**: 可以从现有会话的任意节点创建新分支，方便进行对比和探索性提问。
+- 📤 **网络导出**: 支持将会话以 JSON 格式通过本地网络导出到电脑，便于存档和分析。
+- ⚡ **懒加载机制**: 对话过长时，自动懒加载历史消息，保证应用启动和滚动的流畅性。
 
 </details>
 
 <details>
 <summary><strong>高度可定制化</strong></summary>
 
-- 🎨 **个性化主题**: 可自定义背景图片和显示效果（模糊度、透明度）。
-- 🔄 **自动背景轮换**: 支持随机切换背景图片。
-- ⚙️ **高级参数调节**: 支持调节温度、核采样等核心模型参数。
-- 📋 **三层提示词系统**: 全局系统提示词 + 话题提示词 + 增强提示词，实现精细控制。
+- 🎨 **个性化主题**: 可自定义聊天背景图片，并调整模糊度、透明度等视觉效果。
+- 🔄 **自动背景轮换**: 支持每次启动时随机切换背景图片。
+- ⚙️ **高级参数调节**: 支持调节 Temperature、Top P 等核心模型参数。
+- 📋 **三层提示词系统**: 通过“全局系统提示词” + “话题提示词” + “增强提示词”的组合，实现对 AI 行为的精细化、分层化控制。
 
 </details>
 
 ## 🛠️ 技术栈
 
-- **SwiftUI**: 用户界面框架
-- **MarkdownUI**: Markdown 渲染库
-- **URLSession**: 网络请求
-- **FileManager**: 本地数据存储
-- **UserDefaults**: 应用设置存储
-- **Codable**: JSON 序列化和反序列化
-- **Python**: 配套导出接收服务器
+- **SwiftUI**: 声明式用户界面框架。
+- **MarkdownUI**: 用于在 SwiftUI 中渲染 Markdown 文本的库。
+- **URLSession**: 处理与 AI 后端的网络请求，支持标准及流式响应。
+- **FileManager**: 在本地文档目录中持久化存储聊天会话和消息。
+- **UserDefaults & AppStorage**: 存储用户偏好和应用设置。
+- **Codable**: 用于 JSON 数据的序列化和反序列化。
+- **Python**: 提供一个简单的配套服务器，用于接收网络导出的数据。
 
 ## 🚀 快速开始
 
@@ -86,18 +86,24 @@
     ```
 
 2.  **配置 API 设置**
-    编辑 `ETOS LLM Studio Watch App/AppConfig.json` 文件，配置你的 AI 模型 API：
+    在 Xcode 项目中找到并编辑 `ETOS LLM Studio Watch App/AppConfig.json` 文件，配置你的 AI 模型 API。 
+    
+    **重要**: `apiKeys` 字段现在是一个数组，你可以填入一个或多个 API 密钥。应用会在每次请求时随机选择一个使用，这对于使用多个免费额度或备用密钥非常有用。
+
     ```json
     {
-      "backgroundImages": ["Background1", "Background2", "Background3"],
-      "modelConfigs": [
+      "backgrounds": ["Background1", "Background2", "Background3"],
+      "models": [
         {
           "name": "你的模型名称",
-          "apiKey": "你的API密钥",
+          "apiKeys": [
+            "你的API密钥_1",
+            "你的API密钥_2"
+          ],
           "apiURL": "API端点URL",
           "basePayload": {
-            "model": "模型名称",
-            "max_tokens": 2048
+            "model": "模型ID",
+            "max_tokens": 4096
           }
         }
       ]
@@ -105,36 +111,36 @@
     ```
 
 3.  **添加背景图片**
-    在 Xcode 中，将你的背景图片添加到 `Assets.xcassets` 中，并确保其名称与 `AppConfig.json` 中的 `backgroundImages` 列表对应。
+    在 Xcode 中，将你的背景图片拖拽到 `Assets.xcassets` 文件夹中，并确保其名称与 `AppConfig.json` 中的 `backgrounds` 列表对应。
 
 4.  **编译运行**
-    在 Xcode 中选择 `ETOS LLM Studio Watch App` 目标，连接你的 Apple Watch，然后点击运行。
+    在 Xcode 中选择 `ETOS LLM Studio Watch App` 作为目标，连接你的 Apple Watch，然后点击“运行”按钮。
 
 ## 📱 使用说明
 
-1.  **开始新对话**: 在设置中点击"开启新对话"。
+1.  **开始新对话**: 在设置中点击“开启新对话”。
 2.  **切换模型**: 在设置中选择不同的 AI 模型。
-3.  **查看历史**: 可查看和管理历史会话。
-4.  **编辑消息**: 左滑消息可进行编辑操作。
-5.  **显示思考过程**: 点击"显示思考过程"查看 AI 推理。
-6.  **调节参数**: 在高级设置中调节各种模型参数。
-7.  **创建分支**: 从现有会话创建新的分支对话。
-8.  **导出会话**: 通过网络将会话导出到电脑。
-9.  **重试对话**: 网络错误时可重新发送失败的请求。
+3.  **查看历史**: 在设置中进入“历史会话”，可以查看、切换、删除或编辑所有会话。
+4.  **消息操作**: 右滑任意一条消息，可以调出“更多”菜单，进行编辑、重试或删除操作。
+5.  **显示思考过程**: 在 AI 的回复气泡中，如果包含思考过程，可以点击展开/折叠。
+6.  **调节参数**: 在“设置” -> “高级设置”中，可以调节模型参数和三层提示词。
+7.  **创建分支**: 在“历史会话”列表中，右滑一个会话，选择“创建分支”。
+8.  **导出会话**: 在“历史会话”列表中，右滑一个会话，选择“通过网络导出”。
 
 ## 📤 网络导出功能
 
-项目提供了一个 Python 服务器程序用于接收网络导出的聊天数据。
+项目提供了一个 Python 脚本作为本地服务器，用于接收从手表端导出的聊天数据。
 
 #### 使用方法
 
 1.  **启动接收服务器**
+    在你的 Mac 终端中，进入项目根目录，运行以下命令：
     ```bash
-    # 在项目根目录下运行
     python3 local_post_listener.py
     ```
 
-2.  **服务器会显示以下信息**
+2.  **查看服务器地址**
+    服务器启动后，会显示类似如下的信息：
     ```
     ============================================================
     Python POST 监听服务器已准备就绪 
@@ -150,28 +156,26 @@
     ```
 
 3.  **在手表应用中导出**
-    - 进入设置 -> 历史会话
-    - 选择要导出的会话
-    - 点击"通过网络导出"
-    - 输入服务器显示的 IP:Port 地址
-    - 点击发送
+    - 进入“设置” -> “历史会话”。
+    - 右滑你想要导出的会话，选择“更多” -> “通过网络导出”。
+    - 在导出界面输入服务器显示的 `IP:Port` 地址。
+    - 点击“发送到电脑”。
 
 #### 服务器功能
 
-- ✅ 监听指定的本地端口
-- ✅ 接收 POST 请求并解析 JSON 数据
-- ✅ 在控制台美观地显示接收到的数据
-- ✅ 自动保存到带时间戳的 JSON 文件
-- ✅ 支持中文字符显示
-- ✅ 自动检测局域网 IP 地址
+- ✅ 监听指定的本地端口。
+- ✅ 接收 POST 请求并解析 JSON 数据。
+- ✅ 在控制台美观地显示接收到的提示词和聊天历史。
+- ✅ 自动将接收到的数据保存到带时间戳的 JSON 文件中。
+- ✅ 自动检测并显示本机的局域网 IP 地址。
 
 <details>
 <summary><strong>配套 Python 接收服务器源码 (local_post_listener.py)</strong></summary>
 
 ```python
-# ============================================================================
+# ============================================================================ 
 # local_post_listener.py
-# ============================================================================
+# ============================================================================ 
 # 一个简单的HTTP服务器，用于接收来自ETOS LLM Studio Watch App的网络导出数据。
 #
 # 功能:
@@ -186,7 +190,7 @@
 # 3. 脚本会显示您电脑的局域网IP地址和监听的端口。
 # 4. 在手表App的导出界面，输入显示的 IP:Port 地址。
 # 5. 点击发送，数据就会被此脚本接收和保存。
-# ============================================================================
+# ============================================================================ 
 
 import http.server
 import socketserver
@@ -294,7 +298,7 @@ def run_server():
     """
     启动HTTP服务器。
     """
-    with socketserver.TCPServer(("", PORT), ChatExportHandler) as httpd:
+    with socketserver.TCPServer(('', PORT), ChatExportHandler) as httpd:
         ip_address = get_local_ip()
         
         print("="*60)
@@ -316,19 +320,24 @@ if __name__ == "__main__":
 
 #### 保存的文件格式
 
-导出的数据包含完整的会话信息：
+导出的数据包含完整的提示词和聊天历史：
 ```json
 {
   "prompts": {
-    "globalSystemPrompt": "全局系统提示词",
-    "topicPrompt": "话题提示词", 
-    "enhancedPrompt": "增强提示词"
+    "globalSystemPrompt": "这是全局系统提示词 (如果设置了)",
+    "topicPrompt": "这是当前话题的提示词 (如果设置了)", 
+    "enhancedPrompt": "这是增强提示词 (如果设置了)"
   },
   "history": [
     {
       "role": "user",
-      "content": "用户消息内容",
-      "reasoningContent": "AI思考过程（可选）"
+      "content": "用户发出的第一条消息。",
+      "reasoning": null
+    },
+    {
+      "role": "assistant",
+      "content": "AI 的回复内容。",
+      "reasoning": "AI 的思考过程 (如果存在)。"
     }
   ]
 }
@@ -338,34 +347,51 @@ if __name__ == "__main__":
 
 ### AppConfig.json 结构
 
+应用的所有关键配置都集中在 `AppConfig.json` 文件中。
+
 ```json
 {
-  "backgroundImages": ["Background1", "Background2", "Background3"],
-  "modelConfigs": [
+  "backgrounds": ["Background1", "Background2", "Background3"],
+  "models": [
     {
       "name": "模型显示名称",
-      "apiKey": "API密钥（支持字符串或字符串数组）",
+      "apiKeys": ["密钥1", "密钥2"],
       "apiURL": "API端点URL",
       "basePayload": {
-        "model": "模型名称",
-        "max_tokens": 2048
+        "model": "模型ID",
+        "max_tokens": 4096
       }
     }
   ]
 }
 ```
 
-### 支持的 API 格式
+### API 响应格式
 
-应用支持标准的 OpenAI API 格式，但也可以配置其他兼容的 API 端点。响应格式应为：
+应用兼容标准的 OpenAI API 格式。对于流式响应，它会解析 `delta` 字段；对于标准响应，它会解析 `message` 字段。同时，为了支持“思考过程”显示，应用会额外查找 `reasoning_content` 字段。
 
+**标准响应示例:** 
 ```json
 {
   "choices": [
     {
       "message": {
-        "content": "回复内容",
-        "reasoning_content": "思考过程（可选）"
+        "content": "这是AI的回复内容。",
+        "reasoning_content": "这是AI的思考过程，可以为空。"
+      }
+    }
+  ]
+}
+```
+
+**流式响应 `data` 块示例:** 
+```json
+{
+  "choices": [
+    {
+      "delta": {
+        "content": "部分回复内容",
+        "reasoning_content": "部分思考过程内容"
       }
     }
   ]
@@ -377,12 +403,13 @@ if __name__ == "__main__":
 - **背景图片**: 支持自定义背景图片，可设置自动轮换或手动选择。
 - **视觉效果**: 可调整背景图片的模糊度 (0-25) 和透明度 (0.1-1.0)。
 - **显示选项**: 启用/禁用 Markdown 渲染。
-- **模型参数**: 支持调节温度、核采样等高级参数。
+- **模型参数**: 支持调节 Temperature (0.0-2.0) 和 Top P (0.0-1.0)。
 - **提示词系统**:
-  - **全局系统提示词**：应用级别的通用指令。
-  - **话题提示词**：针对特定会话的定制指令。
-  - **增强提示词**：附加在用户消息后的增强指令。
-- **上下文管理**: 设置最大上下文消息数量。
+  - **全局系统提示词**：应用级别的通用指令，对所有会话生效。
+  - **话题提示词**：针对特定会话的定制指令，仅对当前会话生效。
+  - **增强提示词**：附加在用户最新一条消息末尾的指令，用于临时增强或改变AI行为。
+- **上下文管理**: 设置发送到模型的最近消息数量（0为不限制）。
+- **性能设置**: 设置懒加载的消息数量，优化长对话性能（0为不限制）。
 
 ## ✍️ 开发故事与心路历程
 
@@ -433,12 +460,12 @@ if __name__ == "__main__":
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目采用 MIT 许可证 - 查看 [LICENSE.txt](LICENSE.txt) 文件了解详情。
 
 ## 🙏 致谢
 
-- [Swift Markdown UI](https://github.com/gonzalezreal/swift-markdown-ui) - 优秀的 Markdown 渲染库
-- Apple Developer Documentation - 提供了丰富的开发资源
+- [Swift Markdown UI](https://github.com/gonzalezreal/swift-markdown-ui) - 优秀的 Markdown 渲染库。
+- Apple Developer Documentation - 提供了丰富的开发资源。
 
 ## 📞 联系信息
 
