@@ -58,6 +58,9 @@ struct SettingsView: View {
                             Text(config.name).tag(config)
                         }
                     }
+                    .onChange(of: selectedModel) {
+                        dismiss()
+                    }
                     
                     if currentSession != nil {
                         NavigationLink(destination: ModelAdvancedSettingsView(

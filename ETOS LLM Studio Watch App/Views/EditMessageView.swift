@@ -44,12 +44,14 @@ struct EditMessageView: View {
                 Section(header: Text("回复内容")) {
                     TextField("编辑消息", text: $newContent, axis: .vertical)
                         .lineLimit(5...15)
+                        .listRowBackground(Color.clear)
                 }
                 
                 if message.role == "assistant" {
                     Section(header: Text("思考过程 (可选)")) {
                         TextField("编辑思考过程", text: $newReasoning, axis: .vertical)
                             .lineLimit(5...10)
+                            .listRowBackground(Color.clear)
                     }
                 }
                 
@@ -60,6 +62,7 @@ struct EditMessageView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .listRowBackground(Color.clear)
             }
             .navigationTitle("编辑消息")
             .toolbar {

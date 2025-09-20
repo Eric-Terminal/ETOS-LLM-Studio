@@ -29,10 +29,13 @@ class ChatViewModel: ObservableObject {
     
     @Published var chatSessions: [ChatSession] = []
     @Published var currentSession: ChatSession? {
-        didSet {
+        didSet(oldSession) {
             // 当会话切换时，加载对应的消息
-            if let session = currentSession {
-                loadAndDisplayMessages(for: session)
+            // 只有在会话ID实际发生变化时才重新加载，防止因修改会话名称等操作导致不必要的重载
+            if currentSession?.id != oldSession?.id {
+                if let session = currentSession {
+                    loadAndDisplayMessages(for: session)
+                }
             }
         }
     }
@@ -161,7 +164,7 @@ class ChatViewModel: ObservableObject {
     }
     
     func branchSession(from sourceSession: ChatSession, copyMessages: Bool) {
-        let newSession = ChatSession(id: UUID(), name: "Branch: \(sourceSession.name)", topicPrompt: sourceSession.topicPrompt, enhancedPrompt: sourceSession.enhancedPrompt, isTemporary: false)
+        let newSession = ChatSession(id: UUID(), name: "分支: \(sourceSession.name)", topicPrompt: sourceSession.topicPrompt, enhancedPrompt: sourceSession.enhancedPrompt, isTemporary: false)
         if copyMessages {
             let sourceMessages = loadMessages(for: sourceSession.id)
             if !sourceMessages.isEmpty { saveMessages(sourceMessages, for: newSession.id) }
@@ -226,6 +229,10 @@ class ChatViewModel: ObservableObject {
         if let sessionID = currentSession?.id {
             saveMessages(allMessagesForSession, for: sessionID)
         }
+    }
+    
+    func forceSaveSessions() {
+        saveChatSessions(chatSessions)
     }
     
     func canRetry(message: ChatMessage) -> Bool {
@@ -351,7 +358,7 @@ class ChatViewModel: ObservableObject {
         let topicPrompt = currentSession?.topicPrompt ?? ""
         var combinedPrompt = ""
         if !globalPrompt.isEmpty && !topicPrompt.isEmpty {
-            combinedPrompt = "# Global Instructions\n\(globalPrompt)\n\n---\n\n# Current Topic Instructions\n\(topicPrompt)"
+            combinedPrompt = "# 全局指令\n\(globalPrompt)\n\n---\n\n# 当前话题指令\n\(topicPrompt)"
         } else {
             combinedPrompt = globalPrompt.isEmpty ? topicPrompt : globalPrompt
         }
@@ -369,7 +376,7 @@ class ChatViewModel: ObservableObject {
         var chatHistory = chatHistoryToSend.map { ["role": $0.role, "content": $0.content] }
         
         if !enhancedPrompt.isEmpty, let lastUserMessageIndex = chatHistory.lastIndex(where: { $0["role"] == "user" }) {
-            let instructionXML = "<instruction>\n\(enhancedPrompt)\n</instruction>"
+            let instructionXML = "<instruction>\n这是一个自动填充的instruction，除非用户要求否则不要在回复内容提及此instruction，默默执行遵守就好，否则会影响用户的回复体验。\n\n---\n\n\(enhancedPrompt)\n</instruction>"
             let originalContent = chatHistory[lastUserMessageIndex]["content"] ?? ""
             chatHistory[lastUserMessageIndex]["content"] = "\(originalContent)\n\n\(instructionXML)"
         }
@@ -379,6 +386,9 @@ class ChatViewModel: ObservableObject {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: .prettyPrinted)
+            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
+                print("  - 完整的请求体 (Raw Request Body):\n---\n\(jsonString)\n---")
+            }
         } catch {
             addErrorMessage("Error: Could not build request JSON - \(error.localizedDescription)")
             return
@@ -409,7 +419,7 @@ class ChatViewModel: ObservableObject {
                 var finalContent = ""
                 var finalReasoning = reasoningFromAPI ?? ""
                 
-                let startTagRegex = try! NSRegularExpression(pattern: "<(thought|thinking|think)>(.*?)</\1>", options: [.dotMatchesLineSeparators])
+                let startTagRegex = try! NSRegularExpression(pattern: "<(thought|thinking|think)>(.*?)</\\1>", options: [.dotMatchesLineSeparators])
                 let nsRange = NSRange(rawContent.startIndex..<rawContent.endIndex, in: rawContent)
                 
                 var lastMatchEnd = 0
@@ -590,12 +600,4 @@ class ChatViewModel: ObservableObject {
         extendedSession?.invalidate()
         extendedSession = nil
     }
-}
-}
-}
-}
-}
-}
-}
-
 }

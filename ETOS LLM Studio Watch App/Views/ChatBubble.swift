@@ -103,7 +103,7 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 5) {
             Button(action: {
                 withAnimation {
-                    message.isReasoningExpanded?.toggle()
+                    message.isReasoningExpanded = !(message.isReasoningExpanded ?? false)
                 }
             }) {
                 HStack {

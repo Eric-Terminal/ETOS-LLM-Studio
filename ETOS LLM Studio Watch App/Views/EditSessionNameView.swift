@@ -50,7 +50,6 @@ struct EditSessionNameView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
-            .padding()
             .navigationTitle("编辑话题")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

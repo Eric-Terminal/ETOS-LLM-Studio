@@ -76,7 +76,9 @@ struct ContentView: View {
                                             onDelete: {
                                                 viewModel.messageToDelete = message
                                                 viewModel.showDeleteMessageConfirm = true
-                                            }
+                                            },
+                                            messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
+                                            totalMessages: viewModel.allMessagesForSession.count
                                         )
                                     } label: {
                                         Label("更多", systemImage: "ellipsis.circle.fill")
@@ -152,7 +154,7 @@ struct ContentView: View {
                                 viewModel.activeSheet = .export(session)
                             },
                             deleteLastMessageAction: viewModel.deleteLastMessage,
-                            saveSessionsAction: viewModel.saveCurrentSessionDetails
+                            saveSessionsAction: viewModel.forceSaveSessions
                         )
                     case .export(let session):
                         ExportView(
