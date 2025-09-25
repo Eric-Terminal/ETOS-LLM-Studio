@@ -8,7 +8,7 @@
 
 ## 🎥 演示视频
 
-[![点击观看演示视频](assets/screenshots/screenshot-01.png)](assets/etos-llm-studio-demo.mp4)
+[点击此处观看演示视频 (Click to watch demo video)](assets/etos-llm-studio-demo.mp4)
 
 ## 📸 截图 (Screenshots)
 
