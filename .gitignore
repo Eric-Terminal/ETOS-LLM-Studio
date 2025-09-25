@@ -68,11 +68,13 @@ pids
 
 # User data (chat sessions and messages)
 ChatSessions/
-*.json
 AppConfig.json
 
 # API keys and sensitive configs
 # *Config*.json
-*config*.json
 *secret*
 *private*
+
+# Private Assets
+ETOS LLM Studio Watch App/Assets.xcassets/AppIcon.appiconset/*.png
+ETOS LLM Studio Watch App/Assets.xcassets/Background*.imageset/

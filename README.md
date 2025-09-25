@@ -6,9 +6,27 @@
 
 一个专为 Apple Watch 设计的、功能强大且高度可定制的 AI 聊天应用。
 
+## 🎥 演示视频
+
+<video controls width="300">
+  <source src="assets/etos-llm-studio-demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+## 📸 截图 (Screenshots)
+
+| | |
+|:---:|:---:|
+| <img src="assets/screenshots/screenshot-01.png" width="300"> | <img src="assets/screenshots/screenshot-02.png" width="300"> |
+| <img src="assets/screenshots/screenshot-03.png" width="300"> | <img src="assets/screenshots/screenshot-04.png" width="300"> |
+| <img src="assets/screenshots/screenshot-05.png" width="300"> | <img src="assets/screenshots/screenshot-06.png" width="300"> |
+| <img src="assets/screenshots/screenshot-07.png" width="300"> | <img src="assets/screenshots/screenshot-08.png" width="300"> |
+
 ---
 
 ## 目录
+- [🎥 演示视频](#-演示视频)
+- [📸 截图 (Screenshots)](#-截图-screenshots)
 - [✨ 功能特性](#-功能特性)
 - [🛠️ 技术栈](#️-技术栈)
 - [🚀 快速开始](#-快速开始)
@@ -111,7 +129,12 @@
     ```
 
 3.  **添加背景图片**
-    在 Xcode 中，将你的背景图片拖拽到 `Assets.xcassets` 文件夹中，并确保其名称与 `AppConfig.json` 中的 `backgrounds` 列表对应。
+    本项目使用 Xcode 的资源目录 (Assets.xcassets) 来管理背景图。添加您自己的背景图最简单的方法是：
+    1.  在 Xcode 的左侧文件导航器中，找到并点击 `ETOS LLM Studio Watch App` -> `Assets.xcassets`。
+    2.  在打开的资源列表中，右键点击空白处，选择 `New Image Set`。
+    3.  将这个新创建的 `Image Set` 重命名，使其与您在 `AppConfig.json` 的 `backgroundImages` 数组中定义的名字一致（例如，`Background4`）。
+    4.  将您的图片文件（如 `my_background.png`）拖拽到刚刚创建的 Image Set 的 `1x`、`2x` 或 `3x` 空位中。
+    5.  重复此步骤以添加更多背景图。
 
 4.  **编译运行**
     在 Xcode 中选择 `ETOS LLM Studio Watch App` 作为目标，连接你的 Apple Watch，然后点击“运行”按钮。

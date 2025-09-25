@@ -1,0 +1,39 @@
+{
+  "backgroundImages": [
+    "Background1",
+    "Background2",
+    "Background3"
+  ],
+  "modelConfigs": [
+    {
+      "name": "DeepSeek V3.1 No Thinking",
+      "apiKey": "REPLACE_WITH_YOUR_API_KEY",
+      "apiURL": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "basePayload": {
+        "model": "deepseek-ai/deepseek-v3.1",
+        "chat_template_kwargs": {
+          "thinking": false
+        }
+      }
+    },
+    {
+      "name": "GEMINI 2.5 PRO",
+      "apiKey": [
+        "REPLACE_WITH_YOUR_GEMINI_API_KEY_1",
+        "REPLACE_WITH_YOUR_GEMINI_API_KEY_2"
+      ],
+      "apiURL": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "basePayload": {
+        "model": "gemini-2.5-pro",
+        "extra_body": {
+        "google": {
+           "thinking_config": {
+             "include_thoughts": true,
+             "thinkingBudget": 128
+            }
+          }
+        }
+      }
+    }
+  ]
+}
