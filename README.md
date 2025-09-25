@@ -8,7 +8,7 @@
 
 ## 🎥 演示视频
 
-<video src="https://github.com/user-attachments/assets/65b7e0d7-a593-4007-973e-f3ae1f3d5f98" controls="controls" muted="muted" style="max-width: 100%;"></video>
+<video src="https://github.com/Eric-Terminal/ETOS-LLM-Studio/releases/download/v1.0-assets/ETOS.LLM.Studio.mp4" controls="controls" muted="muted" style="max-width: 100%;"></video>
 
 ## 📸 截图 (Screenshots)
 
