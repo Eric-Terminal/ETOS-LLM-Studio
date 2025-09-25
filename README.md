@@ -8,7 +8,7 @@
 
 ## 🎥 演示视频
 
-<video src="https://github.com/Eric-Terminal/ETOS-LLM-Studio/releases/download/v1.0-assets/ETOS.LLM.Studio.mp4" controls="controls" muted="muted" style="max-width: 100%;"></video>
+<video src="https://private-user-images.githubusercontent.com/121368508/493718773-557021ed-fe65-4ece-a300-dbfb2a7b0f45.mp4?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTg3NzgyNDMsIm5iZiI6MTc1ODc3Nzk0MywicGF0aCI6Ii8xMjEzNjg1MDgvNDkzNzE4NzczLTU1NzAyMWVkLWZlNjUtNGVjZS1hMzAwLWRiZmIyYTdiMGY0NS5tcDQ_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjUwOTI1JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI1MDkyNVQwNTI1NDNaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT0xNzMyYTgyYzgwNjA3NzNkNDExMDI2ODI3NzQ5NDk1ODZkNDUyYzg2YjY5MWQ2NjFhMDVmZTIyOTNiZjIxY2ZiJlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCJ9.SAxneOrVjRJ1VdjKyJmZiavayKqOz5nUdMdFuS8PxGE" controls="controls" muted="muted" style="max-width: 100%;"></video>
 
 ## 📸 截图 (Screenshots)
 
