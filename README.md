@@ -8,10 +8,7 @@
 
 ## 🎥 演示视频
 
-<video controls width="300">
-  <source src="assets/etos-llm-studio-demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+[![点击观看演示视频](assets/screenshots/screenshot-01.png)](assets/etos-llm-studio-demo.mp4)
 
 ## 📸 截图 (Screenshots)
 
