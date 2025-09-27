@@ -17,6 +17,8 @@ struct ContentView: View {
     // MARK: - 状态对象
     
     @StateObject private var viewModel = ChatViewModel()
+    @State private var isAtBottom = true
+    @State private var showScrollToBottomButton = false
     
     // MARK: - 视图主体
     
@@ -35,96 +37,12 @@ struct ContentView: View {
             // 主导航
             NavigationStack {
                 ScrollViewReader { proxy in
-                    List {
-                        // 懒加载按钮
-                        let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
-                        if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
-                            Button(action: {
-                                withAnimation {
-                                    viewModel.messages = viewModel.allMessagesForSession
-                                    viewModel.isHistoryFullyLoaded = true
-                                }
-                            }) {
-                                Label("显示剩余 \(remainingCount) 条记录", systemImage: "arrow.up.circle")
-                            }
-                            .buttonStyle(.bordered)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
-                        }
-                        
-                        // 用于将内容推到底部的占位符
-                        Spacer().listRowBackground(Color.clear)
+                    ZStack(alignment: .bottom) {
+                        chatList(proxy: proxy)
 
-                        // 消息列表
-                        ForEach($viewModel.messages) { $message in
-                            ChatBubble(message: $message, 
-                                       enableMarkdown: viewModel.enableMarkdown, 
-                                       enableBackground: viewModel.enableBackground,
-                                       enableLiquidGlass: viewModel.enableLiquidGlass) // Pass down the toggle
-                                .id(message.id)
-                                .listRowInsets(EdgeInsets())
-                                .listRowBackground(Color.clear)
-                                .swipeActions(edge: .leading) {
-                                    NavigationLink {
-                                        MessageActionsView(
-                                            message: message,
-                                            canRetry: viewModel.canRetry(message: message),
-                                            onEdit: {
-                                                viewModel.messageToEdit = message
-                                                viewModel.activeSheet = .editMessage
-                                            },
-                                            onRetry: {
-                                                viewModel.retryLastMessage()
-                                            },
-                                            onDelete: {
-                                                viewModel.messageToDelete = message
-                                                viewModel.showDeleteMessageConfirm = true
-                                            },
-                                            messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
-                                            totalMessages: viewModel.allMessagesForSession.count
-                                        )
-                                    } label: {
-                                        Label("更多", systemImage: "ellipsis.circle.fill")
-                                    }
-                                    .tint(.gray)
-                                }
+                        if showScrollToBottomButton {
+                            scrollToBottomButton(proxy: proxy)
                         }
-                        
-                        // 输入区域
-                        inputBubble
-                            .id("inputBubble")
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                    }
-                    .listStyle(.plain)
-                    .background(Color.clear)
-                    .toolbar { // 使用标准的 Toolbar
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button(action: { viewModel.activeSheet = .settings }) {
-                                Image(systemName: "gearshape.fill")
-                            }
-                            .buttonStyle(.plain)
-                            .padding(8)
-                            .glassEffect(in: Circle())
-                        }
-                    }
-                    .onChange(of: viewModel.messages.count) {
-                        withAnimation {
-                            proxy.scrollTo("inputBubble", anchor: .bottom)
-                        }
-                    }
-                    .confirmationDialog("确认删除", isPresented: $viewModel.showDeleteMessageConfirm, titleVisibility: .visible) {
-                        Button("删除消息", role: .destructive) {
-                            if let message = viewModel.messageToDelete, let index = viewModel.messages.firstIndex(where: { $0.id == message.id }) {
-                                viewModel.deleteMessage(at: IndexSet(integer: index))
-                            }
-                            viewModel.messageToDelete = nil
-                        }
-                        Button("取消", role: .cancel) {
-                            viewModel.messageToDelete = nil
-                        }
-                    } message: {
-                        Text("您确定要删除这条消息吗？此操作无法撤销。")
                     }
                 }
                 .sheet(item: $viewModel.activeSheet) { item in
@@ -195,6 +113,129 @@ struct ContentView: View {
     }
     
     // MARK: - 视图组件
+    
+    private func chatList(proxy: ScrollViewProxy) -> some View {
+        List {
+            if viewModel.messages.isEmpty {
+                Spacer()
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+            
+            // 懒加载按钮
+            let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
+            if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
+                Button(action: {
+                    withAnimation {
+                        viewModel.messages = viewModel.allMessagesForSession
+                        viewModel.isHistoryFullyLoaded = true
+                    }
+                }) {
+                    Label("显示剩余 \(remainingCount) 条记录", systemImage: "arrow.up.circle")
+                }
+                .buttonStyle(.bordered)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
+            }
+
+            // 消息列表
+            ForEach($viewModel.messages) { $message in
+                ChatBubble(message: $message,
+                           enableMarkdown: viewModel.enableMarkdown,
+                           enableBackground: viewModel.enableBackground,
+                           enableLiquidGlass: viewModel.enableLiquidGlass) // Pass down the toggle
+                    .id(message.id)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .swipeActions(edge: .leading) {
+                        NavigationLink {
+                            MessageActionsView(
+                                message: message,
+                                canRetry: viewModel.canRetry(message: message),
+                                onEdit: {
+                                    viewModel.messageToEdit = message
+                                    viewModel.activeSheet = .editMessage
+                                },
+                                onRetry: {
+                                    viewModel.retryLastMessage()
+                                },
+                                onDelete: {
+                                    viewModel.messageToDelete = message
+                                    viewModel.showDeleteMessageConfirm = true
+                                },
+                                messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
+                                totalMessages: viewModel.allMessagesForSession.count
+                            )
+                        } label: {
+                            Label("更多", systemImage: "ellipsis.circle.fill")
+                        }
+                        .tint(.gray)
+                    }
+            }
+            
+            // 输入区域
+            inputBubble
+                .id("inputBubble")
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .onAppear {
+                    isAtBottom = true
+                    showScrollToBottomButton = false
+                }
+                .onDisappear {
+                    isAtBottom = false
+                    showScrollToBottomButton = true
+                }
+        }
+        .listStyle(.plain)
+        .background(Color.clear)
+        .toolbar { // 使用标准的 Toolbar
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: { viewModel.activeSheet = .settings }) {
+                    Image(systemName: "gearshape.fill")
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .glassEffect(in: Circle())
+            }
+        }
+        .onChange(of: viewModel.messages.count) {
+            if isAtBottom {
+                withAnimation {
+                    proxy.scrollTo("inputBubble", anchor: .bottom)
+                }
+            }
+        }
+        .confirmationDialog("确认删除", isPresented: $viewModel.showDeleteMessageConfirm, titleVisibility: .visible) {
+            Button("删除消息", role: .destructive) {
+                if let message = viewModel.messageToDelete, let index = viewModel.messages.firstIndex(where: { $0.id == message.id }) {
+                    viewModel.deleteMessage(at: IndexSet(integer: index))
+                }
+                viewModel.messageToDelete = nil
+            }
+            Button("取消", role: .cancel) {
+                viewModel.messageToDelete = nil
+            }
+        } message: {
+            Text("您确定要删除这条消息吗？此操作无法撤销。")
+        }
+    }
+    
+    private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
+        Button(action: {
+            withAnimation {
+                proxy.scrollTo("inputBubble", anchor: .bottom)
+            }
+        }) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.body)
+                .padding(8)
+                .glassEffect(in: Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 10)
+        .transition(.scale.combined(with: .opacity))
+    }
     
     private var inputBubble: some View {
         let content = HStack(spacing: 12) {
