@@ -10,6 +10,9 @@
 // ============================================================================
 
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persistence")
 
 // MARK: - 目录管理
 
@@ -19,7 +22,7 @@ func getChatsDirectory() -> URL {
     let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
     let chatsDirectory = paths[0].appendingPathComponent("ChatSessions")
     if !FileManager.default.fileExists(atPath: chatsDirectory.path) {
-        print("💾 [Persistence] 聊天记录目录不存在，正在创建: \(chatsDirectory.path)")
+        logger.info("Chat history directory does not exist, creating: \(chatsDirectory.path)")
         try? FileManager.default.createDirectory(at: chatsDirectory, withIntermediateDirectories: true)
     }
     return chatsDirectory
@@ -33,32 +36,29 @@ func saveChatSessions(_ sessions: [ChatSession]) {
     let sessionsToSave = sessions.filter { !$0.isTemporary }
     
     let fileURL = getChatsDirectory().appendingPathComponent("sessions.json")
-    print("💾 [Persistence] 准备保存会话列表...")
-    print("  - 目标路径: \(fileURL.path)")
-    print("  - 将要保存 \(sessionsToSave.count) 个会话。")
+    logger.info("Saving \(sessionsToSave.count) sessions to \(fileURL.path)")
 
     do {
         let data = try JSONEncoder().encode(sessionsToSave)
         try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
-        print("  - ✅ 会话列表保存成功。")
+        logger.info("Session list saved successfully.")
     } catch {
-        print("  - ❌ 保存会话列表失败: \(error.localizedDescription)")
+        logger.error("Failed to save session list: \(error.localizedDescription)")
     }
 }
 
 /// 加载所有聊天会话的列表
 func loadChatSessions() -> [ChatSession] {
     let fileURL = getChatsDirectory().appendingPathComponent("sessions.json")
-    print("💾 [Persistence] 准备加载会话列表...")
-    print("  - 目标路径: \(fileURL.path)")
+    logger.info("Loading session list from \(fileURL.path)")
 
     do {
         let data = try Data(contentsOf: fileURL)
         let loadedSessions = try JSONDecoder().decode([ChatSession].self, from: data)
-        print("  - ✅ 成功加载了 \(loadedSessions.count) 个会话。")
+        logger.info("Successfully loaded \(loadedSessions.count) sessions.")
         return loadedSessions
     } catch {
-        print("  - ⚠️ 加载会话列表失败: \(error.localizedDescription)。将返回空列表。")
+        logger.warning("Failed to load session list, returning empty list: \(error.localizedDescription)")
         return []
     }
 }
@@ -68,34 +68,29 @@ func loadChatSessions() -> [ChatSession] {
 /// 保存指定会话的聊天消息
 func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
     let fileURL = getChatsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
-    print("💾 [Persistence] 准备保存消息...")
-    print("  - 会话ID: \(sessionID.uuidString)")
-    print("  - 目标路径: \(fileURL.path)")
-    print("  - 将要保存 \(messages.count) 条消息。")
+    logger.info("Saving \(messages.count) messages for session \(sessionID.uuidString) to \(fileURL.path)")
 
     do {
         let data = try JSONEncoder().encode(messages)
         try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
-        print("  - ✅ 消息保存成功。")
+        logger.info("Messages saved successfully for session \(sessionID.uuidString).")
     } catch {
-        print("  - ❌ 保存消息失败: \(error.localizedDescription)")
+        logger.error("Failed to save messages for session \(sessionID.uuidString): \(error.localizedDescription)")
     }
 }
 
 /// 加载指定会话的聊天消息
 func loadMessages(for sessionID: UUID) -> [ChatMessage] {
     let fileURL = getChatsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
-    print("💾 [Persistence] 准备加载消息...")
-    print("  - 会话ID: \(sessionID.uuidString)")
-    print("  - 目标路径: \(fileURL.path)")
+    logger.info("Loading messages for session \(sessionID.uuidString) from \(fileURL.path)")
 
     do {
         let data = try Data(contentsOf: fileURL)
         let loadedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
-        print("  - ✅ 成功加载了 \(loadedMessages.count) 条消息。")
+        logger.info("Successfully loaded \(loadedMessages.count) messages for session \(sessionID.uuidString).")
         return loadedMessages
     } catch {
-        print("  - ⚠️ 加载消息失败: \(error.localizedDescription)。将返回空列表。")
+        logger.warning("Failed to load messages for session \(sessionID.uuidString), returning empty list: \(error.localizedDescription)")
         return []
     }
 }

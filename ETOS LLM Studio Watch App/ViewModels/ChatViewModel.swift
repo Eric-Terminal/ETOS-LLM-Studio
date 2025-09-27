@@ -12,6 +12,9 @@
 import Foundation
 import SwiftUI
 import WatchKit
+import os.log
+
+private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
 @MainActor
 class ChatViewModel: ObservableObject {
@@ -71,7 +74,7 @@ class ChatViewModel: ObservableObject {
     // MARK: - 初始化
     
     init() {
-        print("🚀 [ViewModel] ChatViewModel is initializing...")
+        logger.info("🚀 [ViewModel] ChatViewModel is initializing...")
         let loadedConfig = ConfigLoader.load()
         self.modelConfigs = loadedConfig.models
         self.backgroundImages = loadedConfig.backgrounds
@@ -79,12 +82,12 @@ class ChatViewModel: ObservableObject {
         let savedModelName = UserDefaults.standard.string(forKey: "selectedModelName")
         let initialModel = self.modelConfigs.first { $0.name == savedModelName } ?? self.modelConfigs.first!
         self.selectedModel = initialModel
-        print("  - Initial model set to: \(initialModel.name)")
+        logger.info("  - Initial model set to: \(initialModel.name)")
         
         if enableAutoRotateBackground {
-            let availableBackgrounds = self.backgroundImages.filter { $0 != currentBackgroundImage }
+            let availableBackgrounds = self.backgroundImages.filter { $0 != self.currentBackgroundImage }
             currentBackgroundImage = availableBackgrounds.randomElement() ?? self.backgroundImages.randomElement() ?? "Background1"
-            print("  - Auto-rotating background. New background: \(currentBackgroundImage)")
+            logger.info("  - Auto-rotating background. New background: \(self.currentBackgroundImage)")
         }
         
         var loadedSessions = loadChatSessions()
@@ -95,7 +98,7 @@ class ChatViewModel: ObservableObject {
         self.currentSession = newSession
         self.allMessagesForSession = []
         updateDisplayedMessages()
-        print("  - ViewModel initialized with \(self.chatSessions.count) sessions.")
+        logger.info("  - ViewModel initialized with \(self.chatSessions.count) sessions.")
     }
     
     // MARK: - 公开方法 (视图操作)
@@ -103,7 +106,7 @@ class ChatViewModel: ObservableObject {
     // MARK: 消息流
     
     func sendMessage() {
-        print("✉️ [API] sendMessage called.")
+        logger.info("✉️ [API] sendMessage called.")
         let userMessageContent = userInput
         guard !userMessageContent.isEmpty else { return }
         userInput = ""
@@ -255,9 +258,9 @@ class ChatViewModel: ObservableObject {
     // MARK: 导出
     
     func exportSessionViaNetwork(session: ChatSession, ipAddress: String, completion: @escaping (ExportStatus) -> Void) {
-        print("🚀 [Export] 准备通过网络导出...")
-        print("  - 目标会话: \(session.name) (\(session.id.uuidString))")
-        print("  - 目标地址: \(ipAddress)")
+        logger.info("🚀 [Export] 准备通过网络导出...")
+        logger.info("  - 目标会话: \(session.name) (\(session.id.uuidString))")
+        logger.info("  - 目标地址: \(ipAddress)")
 
         let messagesToExport = loadMessages(for: session.id)
         let exportableMessages = messagesToExport.map {
@@ -273,13 +276,13 @@ class ChatViewModel: ObservableObject {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
         guard let jsonData = try? encoder.encode(fullExportData) else {
-            print("  - ❌ 错误: 无法将消息编码为JSON。")
+            logger.error("  - ❌ 错误: 无法将消息编码为JSON。")
             completion(.failed("无法编码JSON"))
             return
         }
 
         guard let url = URL(string: "http://\(ipAddress)") else {
-            print("  - ❌ 错误: 无效的IP地址格式。")
+            logger.error("  - ❌ 错误: 无效的IP地址格式。")
             completion(.failed("无效的IP地址格式"))
             return
         }
@@ -293,19 +296,19 @@ class ChatViewModel: ObservableObject {
         URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    print("  - ❌ 网络错误: \(error.localizedDescription)")
+                    logger.error("  - ❌ 网络错误: \(error.localizedDescription)")
                     completion(.failed("网络错误: \(error.localizedDescription)"))
                     return
                 }
                 
                 guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
                     let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                    print("  - ❌ 服务器错误: 状态码 \(statusCode)")
+                    logger.error("  - ❌ 服务器错误: 状态码 \(statusCode)")
                     completion(.failed("服务器错误: 状态码 \(statusCode)"))
                     return
                 }
                 
-                print("  - ✅ 导出成功！")
+                logger.info("  - ✅ 导出成功！")
                 completion(.success)
             }
         }.resume()
@@ -397,7 +400,7 @@ class ChatViewModel: ObservableObject {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: .prettyPrinted)
             if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
-                print("  - 完整的请求体 (Raw Request Body):\n---\n\(jsonString)\n---")
+                logger.debug("  - 完整的请求体 (Raw Request Body):\n---\n\(jsonString)\n---")
             }
         } catch {
             addErrorMessage("Error: Could not build request JSON - \(error.localizedDescription)")
@@ -418,7 +421,7 @@ class ChatViewModel: ObservableObject {
             responseString = String(data: data, encoding: .utf8)
             
             if let responseStr = responseString {
-                print("    - 完整的响应体 (Raw Response):\n---\n\(responseStr)\n---")
+                logger.debug("    - 完整的响应体 (Raw Response):\n---\n\(responseStr)\n---")
             }
             
             let apiResponse = try JSONDecoder().decode(GenericAPIResponse.self, from: data)
@@ -498,7 +501,7 @@ class ChatViewModel: ObservableObject {
                     if line.contains("[DONE]") { break }
 
                     if let chunkString = String(data: data, encoding: .utf8) {
-                        print("    - 流式响应块 (Stream Chunk):\n---\n\(chunkString)\n---")
+                        logger.debug("    - 流式响应块 (Stream Chunk):\n---\n\(chunkString)\n---")
                     }
                     
                     guard let chunk = try? JSONDecoder().decode(GenericAPIResponse.self, from: data),

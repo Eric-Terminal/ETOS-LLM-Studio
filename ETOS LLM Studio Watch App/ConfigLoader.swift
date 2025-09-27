@@ -9,6 +9,9 @@
 // ============================================================================ 
 
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConfigLoader")
 
 // MARK: - Codable 数据结构
 
@@ -109,41 +112,42 @@ private enum JSONValue: Codable, Hashable {
 // MARK: - ConfigLoader 类
 
 /// 配置加载器类
-class ConfigLoader {
-    
+struct ConfigLoader {
     /// 从应用的 Bundle 中加载 AppConfig.json 文件
     static func load() -> (models: [AIModelConfig], backgrounds: [String]) {
-        print("⚙️ [ConfigLoader] 开始加载应用配置...")
-        
+        logger.info("Loading application configuration...")
+
         guard let url = Bundle.main.url(forResource: "AppConfig", withExtension: "json") else {
-            fatalError("错误: 在应用资源包中找不到 AppConfig.json 文件。请确保该文件已添加到项目中。")
+            logger.critical("FATAL ERROR: AppConfig.json not found in bundle.")
+            fatalError("FATAL ERROR: AppConfig.json not found in bundle.")
         }
-        print("  - 找到了配置文件: \(url.path)")
+
+        logger.info("Found configuration file at: \(url.path)")
 
         do {
             let data = try Data(contentsOf: url)
             
             if let jsonString = String(data: data, encoding: .utf8) {
-                print("  - 原始 JSON 内容:\n---\n\(jsonString)\n---")
+                logger.debug("Raw JSON content:\n---\n\(jsonString)\n---")
             }
             
-            let decoder = JSONDecoder()
-            let configData = try decoder.decode(AppConfigData.self, from: data)
+            let appConfig = try JSONDecoder().decode(AppConfigData.self, from: data)
             
-            print("  - 成功加载了 \(configData.modelConfigs.count) 个模型配置:")
-            for model in configData.modelConfigs { print("    - 模型: \(model.name)") }
-            print("  - 成功加载了 \(configData.backgroundImages.count) 个背景图片: \(configData.backgroundImages.joined(separator: ", "))")
+            let finalModels = appConfig.modelConfigs.map { $0.toAIModelConfig() }
 
-            let models = configData.modelConfigs.map { $0.toAIModelConfig() }
+            logger.info("Successfully loaded \(finalModels.count) model configurations.")
+            for model in finalModels { logger.info("  - Model: \(model.name)") }
+            logger.info("Successfully loaded \(appConfig.backgroundImages.count) background images.")
+            logger.info("Application configuration loaded successfully.")
             
-            print("✅ [ConfigLoader] 应用配置加载完成。")
-            return (models, configData.backgroundImages)
+            return (finalModels, appConfig.backgroundImages)
+
         } catch {
-            print("❌ [ConfigLoader] 致命错误: 加载或解析 AppConfig.json 文件失败: \(error)")
+            logger.critical("FATAL ERROR: Failed to load or parse AppConfig.json: \(error.localizedDescription)")
             if let decodingError = error as? DecodingError {
-                print("  - 解码错误详情: \(decodingError)")
+                logger.error("Decoding error details: \(String(describing: decodingError))")
             }
-            fatalError("错误: 加载或解析 AppConfig.json 文件失败: \(error)")
+            fatalError("Failed to decode AppConfig.json: \(error.localizedDescription)")
         }
     }
 }
