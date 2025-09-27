@@ -57,6 +57,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 10
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "Background1"
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
+    @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     
     // MARK: - 公开属性
     
@@ -236,10 +237,19 @@ class ChatViewModel: ObservableObject {
     }
     
     func canRetry(message: ChatMessage) -> Bool {
-        if let lastMessage = allMessagesForSession.last(where: { ["assistant", "user", "error"].contains($0.role) }) {
-            return message.id == lastMessage.id
+        // Find the index of the last message from the user.
+        guard let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == "user" }) else {
+            // If there are no user messages, nothing can be retried.
+            return false
         }
-        return false
+        
+        // Find the index of the current message.
+        guard let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == message.id }) else {
+            return false
+        }
+        
+        // The retry button should appear on the last user message and all messages after it.
+        return messageIndex >= lastUserMessageIndex
     }
     
     // MARK: 导出

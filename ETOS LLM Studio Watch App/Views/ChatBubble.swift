@@ -20,6 +20,7 @@ struct ChatBubble: View {
     @Binding var message: ChatMessage
     let enableMarkdown: Bool
     let enableBackground: Bool
+    let enableLiquidGlass: Bool
 
     // MARK: - 视图主体
     
@@ -42,24 +43,45 @@ struct ChatBubble: View {
     
     // MARK: - 气泡视图
     
+    @ViewBuilder
     private var userBubble: some View {
-        renderContent(message.content)
+        let content = renderContent(message.content)
             .padding(10)
-            .background(enableBackground ? Color.blue.opacity(0.7) : Color.blue)
             .foregroundColor(.white)
-            .cornerRadius(12)
+
+        if enableLiquidGlass {
+            content
+                .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                .background(.blue.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else {
+            content
+                .background(enableBackground ? Color.blue.opacity(0.7) : Color.blue)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
     }
     
+    @ViewBuilder
     private var errorBubble: some View {
-        Text(message.content)
+        let content = Text(message.content)
             .padding(10)
-            .background(enableBackground ? Color.red.opacity(0.7) : Color.red)
             .foregroundColor(.white)
-            .cornerRadius(12)
+
+        if enableLiquidGlass {
+            content
+                .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                .background(.red.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else {
+            content
+                .background(enableBackground ? Color.red.opacity(0.7) : Color.red)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
     }
     
+    @ViewBuilder
     private var assistantBubble: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let content = VStack(alignment: .leading, spacing: 8) {
             // 思考过程区域
             if let reasoning = message.reasoning, !reasoning.isEmpty {
                 reasoningView(reasoning)
@@ -83,8 +105,14 @@ struct ChatBubble: View {
             }
         }
         .padding(10)
-        .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
-        .cornerRadius(12)
+
+        if enableLiquidGlass {
+            content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+        } else {
+            content
+                .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
     }
     
     // MARK: - 辅助视图

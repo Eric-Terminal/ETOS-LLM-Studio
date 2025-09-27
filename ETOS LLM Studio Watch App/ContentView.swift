@@ -57,7 +57,10 @@ struct ContentView: View {
 
                         // 消息列表
                         ForEach($viewModel.messages) { $message in
-                            ChatBubble(message: $message, enableMarkdown: viewModel.enableMarkdown, enableBackground: viewModel.enableBackground)
+                            ChatBubble(message: $message, 
+                                       enableMarkdown: viewModel.enableMarkdown, 
+                                       enableBackground: viewModel.enableBackground,
+                                       enableLiquidGlass: viewModel.enableLiquidGlass) // Pass down the toggle
                                 .id(message.id)
                                 .listRowInsets(EdgeInsets())
                                 .listRowBackground(Color.clear)
@@ -95,7 +98,16 @@ struct ContentView: View {
                     }
                     .listStyle(.plain)
                     .background(Color.clear)
-                    // 视图修饰符
+                    .toolbar { // 使用标准的 Toolbar
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button(action: { viewModel.activeSheet = .settings }) {
+                                Image(systemName: "gearshape.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .padding(8)
+                            .glassEffect(in: Circle())
+                        }
+                    }
                     .onChange(of: viewModel.messages.count) {
                         withAnimation {
                             proxy.scrollTo("inputBubble", anchor: .bottom)
@@ -148,6 +160,7 @@ struct ContentView: View {
                             allBackgrounds: viewModel.backgroundImages,
                             currentBackgroundImage: $viewModel.currentBackgroundImage,
                             enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
+                            enableLiquidGlass: $viewModel.enableLiquidGlass,
                             deleteAction: viewModel.deleteSession,
                             branchAction: viewModel.branchSession,
                             exportAction: { session in
@@ -184,14 +197,9 @@ struct ContentView: View {
     // MARK: - 视图组件
     
     private var inputBubble: some View {
-        HStack(spacing: 12) {
-            Button(action: { viewModel.activeSheet = .settings }) {
-                Image(systemName: "gearshape.fill")
-            }
-            .buttonStyle(.plain)
-            .fixedSize()
-            
+        let content = HStack(spacing: 12) {
             TextField("输入...", text: $viewModel.userInput)
+                .textFieldStyle(.plain)
             
             Button(action: viewModel.sendMessage) {
                 Image(systemName: "arrow.up.circle.fill")
@@ -201,9 +209,18 @@ struct ContentView: View {
             .disabled(viewModel.userInput.isEmpty || (viewModel.allMessagesForSession.last?.isLoading ?? false))
         }
         .padding(10)
-        .background(viewModel.enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial))
-        .cornerRadius(12)
-        .padding(.horizontal)
-        .padding(.vertical, 4)
+
+        return AnyView(
+            Group {
+                if viewModel.enableLiquidGlass {
+                    content.glassEffect(.clear)
+                } else {
+                    content.background(viewModel.enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial))
+                        .cornerRadius(12)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 4)
+        )
     }
 }

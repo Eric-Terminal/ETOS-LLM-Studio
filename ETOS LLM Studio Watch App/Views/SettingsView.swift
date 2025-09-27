@@ -33,6 +33,7 @@ struct SettingsView: View {
     let allBackgrounds: [String]
     @Binding var currentBackgroundImage: String
     @Binding var enableAutoRotateBackground: Bool
+    @Binding var enableLiquidGlass: Bool // New Binding
     
     // MARK: - 操作
     
@@ -50,9 +51,8 @@ struct SettingsView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                // MARK: 模型设置
-                Section(header: Text("模型设置")) {
+            List {
+                Section {
                     Picker("当前模型", selection: $selectedModel) {
                         ForEach(allModels) { config in
                             Text(config.name).tag(config)
@@ -62,23 +62,27 @@ struct SettingsView: View {
                         dismiss()
                     }
                     
-                    if currentSession != nil {
-                        NavigationLink(destination: ModelAdvancedSettingsView(
-                            aiTemperature: $aiTemperature,
-                            aiTopP: $aiTopP,
-                            systemPrompt: $systemPrompt,
-                            maxChatHistory: $maxChatHistory,
-                            lazyLoadMessageCount: $lazyLoadMessageCount,
-                            enableStreaming: $enableStreaming,
-                            currentSession: $currentSession
-                        )) {
-                            Text("高级设置")
-                        }
+                    Button("开启新对话") {
+                        let newSession = ChatSession(id: UUID(), name: "新的对话", topicPrompt: nil, enhancedPrompt: nil, isTemporary: true)
+                        sessions.insert(newSession, at: 0)
+                        currentSession = newSession
+                        dismiss()
                     }
                 }
-                
-                // MARK: 对话管理
-                Section(header: Text("对话管理")) {
+
+                Section {
+                    NavigationLink(destination: ModelAdvancedSettingsView(
+                        aiTemperature: $aiTemperature,
+                        aiTopP: $aiTopP,
+                        systemPrompt: $systemPrompt,
+                        maxChatHistory: $maxChatHistory,
+                        lazyLoadMessageCount: $lazyLoadMessageCount,
+                        enableStreaming: $enableStreaming,
+                        currentSession: $currentSession
+                    )) {
+                        Label("模型高级设置", systemImage: "brain.head.profile")
+                    }
+                    
                     NavigationLink(destination: SessionListView(
                         sessions: $sessions,
                         currentSession: $currentSession,
@@ -92,50 +96,24 @@ struct SettingsView: View {
                         },
                         saveSessionsAction: saveSessionsAction
                     )) {
-                        Text("历史会话")
+                        Label("历史会话管理", systemImage: "list.bullet.rectangle")
                     }
                     
-                    Button("开启新对话") {
-                        let newSession = ChatSession(id: UUID(), name: "新的对话", topicPrompt: nil, enhancedPrompt: nil, isTemporary: true)
-                        sessions.insert(newSession, at: 0)
-                        currentSession = newSession
-                        dismiss()
-                    }
-                }
-
-                // MARK: 显示设置
-                Section(header: Text("显示设置")) {
-                    Toggle("渲染 Markdown", isOn: $enableMarkdown)
-                    Toggle("显示背景", isOn: $enableBackground)
-                    
-                    if enableBackground {
-                        VStack(alignment: .leading) {
-                            Text("背景模糊: \(String(format: "%.1f", backgroundBlur))")
-                            Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
-                        }
-                        
-                        VStack(alignment: .leading) {
-                            Text("背景不透明度: \(String(format: "%.2f", backgroundOpacity))")
-                            Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
-                        }
-                        
-                        Toggle("背景随机轮换", isOn: $enableAutoRotateBackground)
-                        
-                        if !enableAutoRotateBackground {
-                            NavigationLink(destination: BackgroundPickerView(
-                                allBackgrounds: allBackgrounds,
-                                selectedBackground: $currentBackgroundImage
-                            )) {
-                                Text("选择背景")
-                            }
-                        }
+                    NavigationLink(destination: DisplaySettingsView(
+                        enableMarkdown: $enableMarkdown,
+                        enableBackground: $enableBackground,
+                        backgroundBlur: $backgroundBlur,
+                        backgroundOpacity: $backgroundOpacity,
+                        enableAutoRotateBackground: $enableAutoRotateBackground,
+                        currentBackgroundImage: $currentBackgroundImage,
+                        enableLiquidGlass: $enableLiquidGlass, // Pass binding
+                        allBackgrounds: allBackgrounds
+                    )) {
+                        Label("显示与外观", systemImage: "photo.on.rectangle")
                     }
                 }
             }
             .navigationTitle("设置")
-            .toolbar {
-                Button("完成") { dismiss() }
-            }
         }
     }
 }
