@@ -78,3 +78,7 @@ AppConfig.json
 # Private Assets
 ETOS LLM Studio Watch App/Assets.xcassets/AppIcon.appiconset/*.png
 ETOS LLM Studio Watch App/Assets.xcassets/Background*.imageset/
+
+# Ignored by user request
+similarity-search-kit/
+DEVELOPMENT*.md

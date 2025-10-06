@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:ETOS LLM Studio iOS App/ETOS LLM Studio iOS App.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:ETOS LLM Studio Watch App/ETOS LLM Studio Watch App.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Shared/Shared.xcodeproj">
+   </FileRef>
+</Workspace>
