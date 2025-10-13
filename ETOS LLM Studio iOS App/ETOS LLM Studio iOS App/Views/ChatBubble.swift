@@ -64,9 +64,15 @@ struct ChatBubble: View {
                 .background(Color.blue.opacity(0.5))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         } else {
-            content
-                .background(enableBackground ? Color.blue.opacity(0.7) : Color.blue)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            if enableBackground {
+                content
+                    .background(Color.blue.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                content
+                    .background(Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
         }
     }
     
@@ -82,9 +88,15 @@ struct ChatBubble: View {
                 .background(Color.red.opacity(0.5))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         } else {
-            content
-                .background(enableBackground ? Color.red.opacity(0.7) : Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            if enableBackground {
+                content
+                    .background(Color.red.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                content
+                    .background(Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
         }
     }
     
@@ -132,9 +144,15 @@ struct ChatBubble: View {
         if enableLiquidGlass {
             content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
         } else {
-            content
-                .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            if enableBackground {
+                content
+                    .background(Color.black.opacity(0.3))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                content
+                    .background(Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
         }
     }
     

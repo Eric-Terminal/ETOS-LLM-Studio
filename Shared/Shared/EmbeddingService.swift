@@ -11,7 +11,6 @@
 import Foundation
 import NaturalLanguage
 
-@available(macOS 12.0, iOS 15.0, watchOS 7.0, tvOS 15.0, *)
 class EmbeddingService {
 
     // MARK: - 单例

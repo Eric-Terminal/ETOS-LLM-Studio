@@ -17,7 +17,7 @@ struct EditSessionNameView: View {
     // MARK: - 绑定与属性
     
     @Binding var session: ChatSession
-    var onSave: (ChatSession) -> Void
+    var onSave: () -> Void
     
     // MARK: - 状态
     
@@ -29,7 +29,7 @@ struct EditSessionNameView: View {
 
     // MARK: - 初始化器
     
-    init(session: Binding<ChatSession>, onSave: @escaping (ChatSession) -> Void) {
+    init(session: Binding<ChatSession>, onSave: @escaping () -> Void) {
         _session = session
         self.onSave = onSave
         _newName = State(initialValue: session.wrappedValue.name)
@@ -46,7 +46,7 @@ struct EditSessionNameView: View {
 
                 Button("保存") {
                     session.name = newName
-                    onSave(session)
+                    onSave()
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)

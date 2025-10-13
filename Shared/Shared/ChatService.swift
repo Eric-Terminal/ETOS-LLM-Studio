@@ -73,8 +73,7 @@ public class ChatService {
         ConfigLoader.setupBackgroundsDirectory()
         self.providers = ConfigLoader.loadProviders()
         self.adapters = adapters ?? [
-            "openai-compatible": OpenAIAdapter()
-            // 在这里可以添加新的 Adapter, 例如: "google-gemini": GoogleAdapter()
+            "openai-compatible": OpenAIAdapter(),
         ]
         
         var loadedSessions = Persistence.loadChatSessions()
@@ -235,6 +234,17 @@ public class ChatService {
         }
     }
     
+    public func deleteMessage(_ message: ChatMessage) {
+        guard let currentSession = currentSessionSubject.value else { return }
+        var messages = messagesForSessionSubject.value
+        
+        messages.removeAll { $0.id == message.id }
+        
+        messagesForSessionSubject.send(messages)
+        Persistence.saveMessages(messages, for: currentSession.id)
+        logger.info("🗑️ 已删除消息: \(message.id.uuidString)")
+    }
+    
     public func updateMessageContent(_ message: ChatMessage, with newContent: String) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
@@ -251,6 +261,13 @@ public class ChatService {
         if let index = currentSessions.firstIndex(where: { $0.id == session.id }) {
             currentSessions[index] = session
             chatSessionsSubject.send(currentSessions)
+            
+            // 关键修复：如果被修改的是当前会话，则必须同步更新 currentSessionSubject
+            if currentSessionSubject.value?.id == session.id {
+                currentSessionSubject.send(session)
+                logger.info("  - 同步更新了当前活动会话的状态。")
+            }
+            
             Persistence.saveChatSessions(currentSessions)
             logger.info("💾 更新了会话详情: \(session.name)")
         }
@@ -365,7 +382,6 @@ public class ChatService {
     }
     
     /// 处理单个工具调用
-    @available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
     private func handleToolCall(_ toolCall: InternalToolCall) async -> ChatMessage {
         logger.info("🤖 正在处理工具调用: \(toolCall.toolName)")
         
@@ -411,13 +427,12 @@ public class ChatService {
         tools: [InternalToolDefinition]?,
         enableMemory: Bool
     ) async {
-        // 自动查第一步：执行记忆搜索
-        var memoryPrompt = ""
-        if enableMemory, #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *), let userMessage = userMessage {
-            let memories = await self.memoryManager.searchMemories(query: userMessage.content, topK: 3)
+        // 自动查：执行记忆搜索
+        var memories: [MemoryItem] = []
+        if enableMemory, let userMessage = userMessage {
+            let topK = UserDefaults.standard.integer(forKey: "memoryTopK")
+            memories = await self.memoryManager.searchMemories(query: userMessage.content, topK: topK)
             if !memories.isEmpty {
-                let memoryStrings = memories.map { "- (\($0.createdAt.formatted(date: .abbreviated, time: .shortened))): \($0.content)" }
-                memoryPrompt = "# 相关历史记忆\n\(memoryStrings.joined(separator: "\n"))\n\n---"
                 logger.info("📚 已检索到 \(memories.count) 条相关记忆。")
             }
         }
@@ -436,13 +451,15 @@ public class ChatService {
 
         var messagesToSend: [ChatMessage] = []
         
-        var combinedPrompt = buildCombinedPrompt(global: systemPrompt, topic: currentSessionSubject.value?.topicPrompt)
-        if !memoryPrompt.isEmpty {
-            combinedPrompt = memoryPrompt + "\n" + combinedPrompt
-        }
+        // 使用新的XML格式构建最终的系统提示词
+        let finalSystemPrompt = buildFinalSystemPrompt(
+            global: systemPrompt,
+            topic: currentSessionSubject.value?.topicPrompt,
+            memories: memories
+        )
         
-        if !combinedPrompt.isEmpty {
-            messagesToSend.append(ChatMessage(role: .system, content: combinedPrompt))
+        if !finalSystemPrompt.isEmpty {
+            messagesToSend.append(ChatMessage(role: .system, content: finalSystemPrompt))
         }
         
         var chatHistory = messages.filter { $0.role != .error && $0.id != loadingMessageID }
@@ -451,7 +468,13 @@ public class ChatService {
         }
         
         if let enhanced = enhancedPrompt, !enhanced.isEmpty, let lastUserMsgIndex = chatHistory.lastIndex(where: { $0.role == .user }) {
-            chatHistory[lastUserMsgIndex].content += "\n\n<instruction>\n\(enhanced)\n</instruction>"
+            // 优化2：如果存在增强指令，则用 <user_input> 包裹用户的原始输入
+            let originalUserInput = chatHistory[lastUserMsgIndex].content
+            chatHistory[lastUserMsgIndex].content = "<user_input>\n\(originalUserInput)\n</user_input>"
+            
+            // 优化1：为增强指令添加“默默执行”的元指令
+            let metaInstruction = "这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。"
+            chatHistory[lastUserMsgIndex].content += "\n\n---\n\n<instruction>\n\(metaInstruction)\n\n\(enhanced)\n</instruction>"
         }
         messagesToSend.append(contentsOf: chatHistory)
         
@@ -513,7 +536,7 @@ public class ChatService {
         case adapterNotFound(format: String)
         case requestBuildFailed(provider: String)
 
-        var errorDescription: String? {
+        var localizedDescription: String {
             switch self {
             case .badStatusCode(let code): return "服务器响应错误，状态码: \(code)"
             case .adapterNotFound(let format): return "找不到适用于 '\(format)' 格式的 API 适配器。"
@@ -545,7 +568,7 @@ public class ChatService {
     private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool) async {
         do {
             let data = try await fetchData(for: request)
-            logger.debug("✅ [Debug] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
+            logger.log("✅ [Log] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
             await processResponseMessage(responseMessage: try adapter.parseResponse(data: data), loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory)
         } catch {
             addErrorMessage("网络或解析错误: \(error.localizedDescription)")
@@ -555,20 +578,61 @@ public class ChatService {
     
     /// 处理已解析的聊天消息，包含所有工具调用和UI更新的核心逻辑 (可测试)
     internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool) async {
-        var responseMessage = responseMessage // Make it mutable
-        if let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty {
-            // 统一处理所有工具调用，总是执行二次调用流程
-            logger.info("🤖 AI 请求调用工具...进入二次调用流程。")
+        var responseMessage = responseMessage // Make mutable
+
+        // BUGFIX: 无论是否存在工具调用，都应首先解析并提取思考过程。
+        let (finalContent, extractedReasoning) = parseThoughtTags(from: responseMessage.content)
+        responseMessage.content = finalContent
+        if !extractedReasoning.isEmpty {
+            responseMessage.reasoningContent = (responseMessage.reasoningContent ?? "") + "\n" + extractedReasoning
+        }
+
+        // --- 检查是否存在工具调用 ---
+        guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
+            // --- 无工具调用，标准流程 ---
             updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+            requestStatusSubject.send(.finished)
             
+            if wasTemporarySession, let userMsg = userMessage { await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage) }
+            return
+        }
+
+        // --- 有工具调用，进入 Agent 逻辑 ---
+        
+        // 1. 无论工具是哪种类型，都先将 AI 的文本回复更新到 UI
+        updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+
+        // 2. 根据 isBlocking 标志将工具调用分类
+        let toolDefs = availableTools ?? []
+        let blockingCalls = toolCalls.filter { tc in
+            toolDefs.first { $0.name == tc.toolName }?.isBlocking == true
+        }
+        let nonBlockingCalls = toolCalls.filter { tc in
+            toolDefs.first { $0.name == tc.toolName }?.isBlocking != true // 默认视为非阻塞
+        }
+
+        // 3. 在后台处理所有非阻塞式工具调用 (“即发即忘”)
+        if !nonBlockingCalls.isEmpty {
+            logger.info("🔥 在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
+            Task {
+                    for toolCall in nonBlockingCalls {
+                        let resultMessage = await handleToolCall(toolCall)
+                        // 只保存工具执行结果，不将其发回给 AI
+                        var messages = Persistence.loadMessages(for: currentSessionID)
+                        messages.append(resultMessage)
+                        Persistence.saveMessages(messages, for: currentSessionID)
+                        logger.info("  - ✅ 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
+                    }
+            }
+        }
+
+        // 4. 如果存在阻塞式工具，则执行“二次调用”流程
+        if !blockingCalls.isEmpty {
+            logger.info("🤖 正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             var toolResultMessages: [ChatMessage] = []
-            if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
-                for toolCall in toolCalls {
-                    let resultMessage = await handleToolCall(toolCall)
-                    toolResultMessages.append(resultMessage)
-                }
-            } else {
-                toolResultMessages.append(ChatMessage(role: .error, content: "错误: 工具调用需要 watchOS 9.0 或更高版本。"))
+            for toolCall in blockingCalls {
+                let resultMessage = await handleToolCall(toolCall)
+                toolResultMessages.append(resultMessage)
             }
             
             var updatedMessages = self.messagesForSessionSubject.value
@@ -576,7 +640,7 @@ public class ChatService {
             self.messagesForSessionSubject.send(updatedMessages)
             Persistence.saveMessages(updatedMessages, for: currentSessionID)
             
-            logger.info("🔄 再次调用 AI 以生成最终回复...")
+            logger.info("🔄 正在将工具结果发回 AI 以生成最终回复...")
             await executeMessageRequest(
                 messages: updatedMessages, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
@@ -584,16 +648,11 @@ public class ChatService {
                 enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory
             )
         } else {
-            // --- 无工具调用，标准流程 ---
-            var responseMessage = responseMessage
-            let (finalContent, extractedReasoning) = parseThoughtTags(from: responseMessage.content)
-            responseMessage.content = finalContent
-            if !extractedReasoning.isEmpty { responseMessage.reasoningContent = (responseMessage.reasoningContent ?? "") + "\n" + extractedReasoning }
-            
-            updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+            // 5. 如果只有非阻塞式工具，则在这里结束请求
             requestStatusSubject.send(.finished)
-            
-            if wasTemporarySession, let userMsg = userMessage { await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage) }
+            if wasTemporarySession, let userMsg = userMessage {
+                await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage)
+            }
         }
     }
     
@@ -686,14 +745,25 @@ public class ChatService {
         return (finalContent.trimmingCharacters(in: .whitespacesAndNewlines), finalReasoning)
     }
     
-    /// 构建组合后的系统 Prompt
-    private func buildCombinedPrompt(global: String, topic: String?) -> String {
-        let topicPrompt = topic ?? ""
-        if !global.isEmpty && !topicPrompt.isEmpty {
-            return "# 全局指令\n\n\(global)\n\n---\n\n# 当前话题指令\n\n\(topicPrompt)"
-        } else {
-            return global.isEmpty ? topicPrompt : global
+    /// 构建最终的、使用 XML 标签包裹的系统提示词。
+    private func buildFinalSystemPrompt(global: String?, topic: String?, memories: [MemoryItem]) -> String {
+        var parts: [String] = []
+
+        if let global, !global.isEmpty {
+            parts.append("<system_prompt>\n\(global)\n</system_prompt>")
         }
+
+        if let topic, !topic.isEmpty {
+            parts.append("<topic_prompt>\n\(topic)\n</topic_prompt>")
+        }
+
+        if !memories.isEmpty {
+            let memoryStrings = memories.map { "- (\($0.createdAt.formatted(date: .abbreviated, time: .shortened))): \($0.content)" }
+            let memoriesContent = memoryStrings.joined(separator: "\n")
+            parts.append("<memory>\n# 相关历史记忆\n\(memoriesContent)\n</memory>")
+        }
+
+        return parts.joined(separator: "\n\n")
     }
     
     // MARK: - 自动会话标题生成
@@ -745,7 +815,7 @@ public class ChatService {
 
         do {
             let data = try await fetchData(for: request)
-            logger.debug("✅ [Debug] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
+            logger.log("✅ [Log] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
             let responseMessage = try adapter.parseResponse(data: data)
             
             // 6. 清理和应用标题

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		073D1C562E8F55EB00E6D9E1 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; };
 		073D1C572E8F55EB00E6D9E1 /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 077CD2612E962D8D00AD6556 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -45,6 +46,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				073D1C562E8F55EB00E6D9E1 /* Shared.framework in Frameworks */,
+				077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -105,6 +107,7 @@
 			);
 			name = "ETOS LLM Studio iOS App";
 			packageProductDependencies = (
+				077CD2612E962D8D00AD6556 /* MarkdownUI */,
 			);
 			productName = "ETOS LLM Studio iOS App";
 			productReference = 073CA6DB2E8CFD65004516A0 /* ETOS LLM Studio iOS App.app */;
@@ -156,6 +159,9 @@
 			);
 			mainGroup = 073CA6D22E8CFD65004516A0;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 073CA6DC2E8CFD65004516A0 /* Products */;
 			projectDirPath = "";
@@ -460,6 +466,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		077CD2612E962D8D00AD6556 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 073CA6D32E8CFD65004516A0 /* Project object */;
 }

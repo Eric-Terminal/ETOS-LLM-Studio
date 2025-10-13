@@ -26,7 +26,7 @@ struct SessionListView: View {
     let exportAction: (ChatSession) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
     let onSessionSelected: (ChatSession) -> Void
-    let updateSessionAction: (ChatSession) -> Void
+    let saveSessionsAction: () -> Void
     
     // MARK: - 状态
     
@@ -62,9 +62,7 @@ struct SessionListView: View {
             sessionToEdit in 
             if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionToEdit.id }) {
                 let sessionBinding = $sessions[sessionIndex]
-                EditSessionNameView(session: sessionBinding, onSave: { updatedSession in
-                    updateSessionAction(updatedSession)
-                })
+                EditSessionNameView(session: sessionBinding, onSave: saveSessionsAction)
             }
         }
         .confirmationDialog("确认删除", isPresented: $showDeleteSessionConfirm, titleVisibility: .visible) {
@@ -149,23 +147,42 @@ private struct SessionRowView: View {
             .contentShape(Rectangle()) // 终极修复：明确按钮的可点击形状
         }
         .buttonStyle(.plain)
-        .swipeActions(edge: .leading) {
-            NavigationLink {
-                SessionActionsView(
-                    session: session,
-                    sessionToEdit: $sessionToEdit,
-                    sessionToBranch: $sessionToBranch,
-                    showBranchOptions: $showBranchOptions,
-                    sessionIndexToDelete: $sessionIndexToDelete,
-                    showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                    sessions: $sessions,
-                    onExport: { exportAction(session) },
-                    onDeleteLastMessage: { deleteLastMessageAction(session) }
-                )
+        .contextMenu {
+            Button {
+                sessionToEdit = session
             } label: {
-                Label("更多", systemImage: "ellipsis")
+                Label("编辑话题", systemImage: "pencil")
             }
-            .tint(.gray)
+
+            Button {
+                sessionToBranch = session
+                showBranchOptions = true
+            } label: {
+                Label("创建分支", systemImage: "arrow.branch")
+            }
+
+            Button {
+                exportAction(session)
+            } label: {
+                Label("通过网络导出", systemImage: "wifi")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                deleteLastMessageAction(session)
+            } label: {
+                Label("删除最后一条消息", systemImage: "delete.backward.fill")
+            }
+
+            Button(role: .destructive) {
+                if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+                    sessionIndexToDelete = IndexSet(integer: index)
+                    showDeleteSessionConfirm = true
+                }
+            } label: {
+                Label("删除会话", systemImage: "trash.fill")
+            }
         }
     }
 }

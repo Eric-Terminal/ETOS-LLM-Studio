@@ -15,13 +15,17 @@ import CoreML
 public class NativeTokenizer: TokenizerProtocol {
     public init() {}
 
-    /// 使用 NLTokenizer 将文本分割成词元数组
+    /// 使用正则表达式将文本分割成词元数组，保留单词和标点。
     public func tokenize(text: String) -> [String] {
-        let tokenizer = NLTokenizer(unit: .word)
-        tokenizer.string = text
-        let tokenRanges = tokenizer.tokens(for: text.startIndex..<text.endIndex).map { text[$0] }
-        let tokens = tokenRanges.map { String($0) }
-        return tokens
+        do {
+            // 这个正则表达式会匹配一串连续的单词字符(\w+)或一串连续的非单词、非空白字符([^\s\w]+)
+            let regex = try NSRegularExpression(pattern: "\\w+|[^\\s\\w]+")
+            let results = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+            return results.map { String(text[Range($0.range, in: text)!]) }
+        } catch {
+            print("无效的正则表达式: \(error.localizedDescription)")
+            return []
+        }
     }
 
     /// 将词元数组合并回单个字符串

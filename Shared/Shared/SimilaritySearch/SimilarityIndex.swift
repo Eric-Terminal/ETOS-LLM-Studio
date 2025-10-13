@@ -19,7 +19,6 @@ public typealias SimilarityMetricType = SimilarityIndex.SimilarityMetricType
 public typealias TextSplitterType = SimilarityIndex.TextSplitterType
 public typealias VectorStoreType = SimilarityIndex.VectorStoreType
 
-@available(macOS 11.0, iOS 15.0, *)
 public class SimilarityIndex: Identifiable, Hashable {
     // MARK: - 属性
 
@@ -94,9 +93,7 @@ public class SimilarityIndex: Identifiable, Hashable {
 
     /// 相似度度量类型的枚举。
     public enum SimilarityMetricType {
-        case dotproduct // 点积
         case cosine     // 余弦相似度
-        case euclidian  // 欧氏距离
     }
 
     /// 文本分割器类型的枚举。
@@ -190,38 +187,10 @@ public class SimilarityIndex: Identifiable, Hashable {
         }
     }
 
-    public class func combinedResultsString(_ results: [SearchResult]) -> String {
-        let combinedResults = results.map { result -> String in
-            let metadataString = result.metadata.map { key, value in
-                "\(key.uppercased()): \(value)"
-            }.joined(separator: "\n")
-
-            return "\(result.text)\n\(metadataString)"
-        }.joined(separator: "\n\n")
-
-        return combinedResults
-    }
-
-    public class func exportLLMPrompt(query: String, results: [SearchResult]) -> String {
-        let sourcesText = combinedResultsString(results)
-        let prompt = """
-            根据一份长文档中提取的以下部分和一个问题，创建一个包含引用（"SOURCES"）的最终答案。
-            如果你不知道答案，就说你不知道。不要试图编造答案。
-            总是在你的答案中返回一个 "SOURCES" 部分。
-
-            问题: \(query)
-            =========
-            \(sourcesText)
-            =========
-            最终答案:
-            """
-        return prompt
-    }
 }
 
 // MARK: - 增删改查 (CRUD)
 
-@available(macOS 11.0, iOS 15.0, *) 
 public extension SimilarityIndex {
     // MARK: 创建
 
@@ -275,9 +244,6 @@ public extension SimilarityIndex {
         return indexItems.first { $0.id == id }
     }
 
-    func sample(_ count: Int) -> [IndexItem]? {
-        return Array(indexItems.prefix(upTo: count))
-    }
 
     // MARK: 更新
 
@@ -319,7 +285,6 @@ public extension SimilarityIndex {
 
 // MARK: - 持久化
 
-@available(macOS 13.0, iOS 16.0, *) 
 public extension SimilarityIndex {
     func saveIndex(toDirectory path: URL? = nil, name: String? = nil) throws -> URL {
         let indexName = name ?? self.indexName
@@ -381,30 +346,4 @@ public extension SimilarityIndex {
         return appSpecificDirectory
     }
 
-    func estimatedSizeInBytes() -> Int {
-        var totalSize = 0
-
-        for item in indexItems {
-            // 计算 'id' 属性的大小
-            let idSize = item.id.utf8.count
-
-            // 计算 'text' 属性的大小
-            let textSize = item.text.utf8.count
-
-            // 计算 'embedding' 属性的大小
-            let floatSize = MemoryLayout<Float>.size
-            let embeddingSize = item.embedding.count * floatSize
-
-            // 计算 'metadata' 属性的大小
-            let metadataSize = item.metadata.reduce(0) { size, keyValue -> Int in
-                let keySize = keyValue.key.utf8.count
-                let valueSize = keyValue.value.utf8.count
-                return size + keySize + valueSize
-            }
-
-            totalSize += idSize + textSize + embeddingSize + metadataSize
-        }
-
-        return totalSize
-    }
 }

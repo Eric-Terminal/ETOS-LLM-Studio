@@ -60,7 +60,7 @@ struct AboutView: View {
                     Text("项目地址")
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                    Link("在 GitHub 上查看", destination: URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!)
+                    Text("https://github.com/Eric-Terminal/ETOS-LLM-Studio")
                         .font(.body)
                 }
                 

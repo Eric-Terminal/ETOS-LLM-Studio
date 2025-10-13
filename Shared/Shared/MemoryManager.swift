@@ -12,7 +12,6 @@ import Foundation
 import Combine
 import os.log
 
-@available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *)
 public class MemoryManager {
 
     // MARK: - 单例
@@ -38,12 +37,27 @@ public class MemoryManager {
 
     // MARK: - 初始化
 
+    /// 公开的初始化方法，用于生产环境。
     public init() {
         logger.info("🧠 MemoryManager v2 (wrapper) 正在初始化...")
-        // self.initializationTask is implicitly nil here.
-        // Now we can safely use self to create the task.
         self.initializationTask = Task {
             await self.setup()
+        }
+    }
+    
+    /// 内部的初始化方法，用于测试环境，允许注入一个自定义的 SimilarityIndex。
+    internal init(testIndex: SimilarityIndex) {
+        logger.info("🧠 MemoryManager v2 (wrapper) 正在使用测试索引进行初始化...")
+        self.similarityIndex = testIndex
+        self.initializationTask = Task {
+            do {
+                let loadedItems = try self.similarityIndex.loadIndex()
+                self.internalMemoriesPublisher.send(loadedItems ?? [])
+                logger.info("  - 测试初始化完成。从磁盘加载了 \(loadedItems?.count ?? 0) 条记忆。")
+            } catch {
+                logger.error("  - ❌ (测试) 加载记忆索引失败: \(error.localizedDescription)")
+                self.internalMemoriesPublisher.send([])
+            }
         }
     }
     
@@ -114,7 +128,15 @@ public class MemoryManager {
     /// 根据查询文本搜索最相关的记忆。
     public func searchMemories(query: String, topK: Int) async -> [MemoryItem] {
         await initializationTask.value
-        let results = await similarityIndex.search(query, top: topK)
+        
+        let searchTopK: Int
+        if topK == 0 {
+            searchTopK = similarityIndex.indexItems.count
+        } else {
+            searchTopK = topK
+        }
+        
+        let results = await similarityIndex.search(query, top: searchTopK)
         return results.map { MemoryItem(from: $0) }
     }
     

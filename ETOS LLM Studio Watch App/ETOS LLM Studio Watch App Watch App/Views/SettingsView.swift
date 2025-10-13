@@ -85,8 +85,8 @@ struct SettingsView: View {
                             ChatService.shared.setCurrentSession(selectedSession)
                             dismiss()
                         },
-                        saveSessionsAction: {
-                            viewModel.forceSaveSessions()
+                        updateSessionAction: { session in
+                            viewModel.updateSession(session)
                         }
                     )) {
                         Label("历史会话管理", systemImage: "list.bullet.rectangle")

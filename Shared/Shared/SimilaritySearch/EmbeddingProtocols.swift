@@ -14,7 +14,6 @@ import Combine
 
 /// 一个用于嵌入模型的协议，可以生成文本的向量表示。
 /// 实现此协议以支持不同的文本向量化编码模型。
-@available(macOS 11.0, iOS 15.0, *)
 public protocol EmbeddingsProtocol {
     /// 嵌入模型关联的分词器类型。
     associatedtype TokenizerType

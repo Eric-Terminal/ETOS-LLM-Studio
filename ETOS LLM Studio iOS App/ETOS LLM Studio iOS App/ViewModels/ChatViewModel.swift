@@ -1,7 +1,7 @@
 // ============================================================================
 // ChatViewModel.swift
-// ============================================================================ 
-// ETOS LLM Studio Watch App 核心视图模型文件 (已重构)
+// ============================================================================
+// ETOS LLM Studio iOS App 核心视图模型文件
 //
 // 功能特性:
 // - 驱动主视图 (ContentView) 的所有业务逻辑
@@ -11,7 +11,6 @@
 
 import Foundation
 import SwiftUI
-import WatchKit
 import os.log
 import Combine
 import Shared
@@ -74,7 +73,6 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - 私有属性
     
-    private var extendedSession: WKExtendedRuntimeSession?
     private let chatService: ChatService
     private var cancellables = Set<AnyCancellable>()
     
@@ -93,26 +91,11 @@ class ChatViewModel: ObservableObject {
 
         // 设置 Combine 订阅
         setupSubscriptions()
-        
-        // 监听应用返回前台事件，以重置可能卡住的状态
-        NotificationCenter.default.addObserver(self, selector: #selector(handleDidBecomeActive), name: WKApplication.didBecomeActiveNotification, object: nil)
 
         // 自动轮换背景逻辑
         rotateBackgroundImageIfNeeded()
         
         logger.info("  - ViewModel initialized and subscribed to a ChatService instance.")
-    }
-    
-    @objc private func handleDidBecomeActive() {
-        logger.info("App became active, checking for interrupted state.")
-        // [BUG FIX] This logic was too aggressive. It incorrectly assumed a request
-        // was interrupted when the app became active while a request was in flight.
-        // The underlying URLSession's timeout is the correct way to handle this.
-        // if isSendingMessage {
-        //     logger.warning("  - Message sending was interrupted. Resetting state.")
-        //     isSendingMessage = false
-        //     chatService.addErrorMessage("网络请求已中断，请重试。")
-        // }
     }
     
     private func setupSubscriptions() {
@@ -151,10 +134,8 @@ class ChatViewModel: ObservableObject {
                 switch status {
                 case .started:
                     self?.isSendingMessage = true
-                    self?.startExtendedSession()
                 case .finished, .error:
                     self?.isSendingMessage = false
-                    self?.stopExtendedSession()
                 @unknown default:
                     // 为未来可能的状态保留，不做任何操作
                     break
@@ -214,8 +195,7 @@ class ChatViewModel: ObservableObject {
     }
     
     func retryLastMessage() {
-        // 移除 isSendingMessage 保护，允许中断当前正在发送的请求。
-        // ChatService 中的 retryLastMessage 会处理重置消息历史的逻辑。
+        guard !isSendingMessage else { return }
         Task {
             await chatService.retryLastMessage(
                 aiTemperature: aiTemperature,
@@ -300,18 +280,12 @@ class ChatViewModel: ObservableObject {
         messageToEdit = nil
     }
     
-    func updateSession(_ session: ChatSession) {
-        chatService.updateSession(session)
+    func forceSaveSessions() {
+        chatService.forceSaveSessions()
     }
     
     func canRetry(message: ChatMessage) -> Bool {
-        // 如果消息正在发送中，仅允许对最后一条助手消息（加载中的那条）进行重试。
-        if isSendingMessage {
-            return message.id == allMessagesForSession.last?.id && allMessagesForSession.last?.role == .assistant
-        }
-
-        // 在非发送状态下的原始逻辑。
-        guard let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }) else {
+        guard !isSendingMessage, let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }) else {
             return false
         }
         
@@ -371,17 +345,5 @@ class ChatViewModel: ObservableObject {
                 completion(.success)
             }
         }.resume()
-    }
-    
-    // MARK: - 私有方法 (内部逻辑)
-    
-    private func startExtendedSession() {
-        extendedSession = WKExtendedRuntimeSession()
-        extendedSession?.start()
-    }
-    
-    private func stopExtendedSession() {
-        extendedSession?.invalidate()
-        extendedSession = nil
     }
 }

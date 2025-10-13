@@ -78,6 +78,7 @@ public class OpenAIAdapter: APIAdapter {
                 let role: String?
                 let content: String?
                 let tool_calls: [OpenAIToolCall]?
+                let reasoning_content: String? // 重新添加被移除的字段
             }
             let message: Message? // 用于非流式
             let delta: Message?   // 用于流式
@@ -186,6 +187,7 @@ public class OpenAIAdapter: APIAdapter {
             id: UUID(),
             role: MessageRole(rawValue: message.role ?? "assistant") ?? .assistant,
             content: message.content ?? "",
+            reasoningContent: message.reasoning_content, // 映射解析出的字段
             toolCalls: internalToolCalls
         )
     }
@@ -213,7 +215,7 @@ public class OpenAIAdapter: APIAdapter {
                 logger.warning("检测到流式响应中的工具调用，当前版本暂不支持处理，将忽略。")
             }
             
-            return ChatMessagePart(content: delta.content, reasoningContent: nil) // reasoning_content 字段在 v2.1 已移除
+            return ChatMessagePart(content: delta.content, reasoningContent: delta.reasoning_content) // 映射解析出的字段
         } catch {
             logger.warning("流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")
             return nil
