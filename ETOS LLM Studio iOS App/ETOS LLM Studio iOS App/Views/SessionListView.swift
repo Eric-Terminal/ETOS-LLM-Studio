@@ -22,7 +22,7 @@ struct SessionListView: View {
     // MARK: - 操作
     
     let deleteAction: (IndexSet) -> Void
-    let branchAction: (ChatSession, Bool) -> Void
+    let branchAction: (ChatSession, Bool) -> ChatSession?
     let exportAction: (ChatSession) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
     let onSessionSelected: (ChatSession) -> Void
@@ -81,18 +81,18 @@ struct SessionListView: View {
         .confirmationDialog("创建分支", isPresented: $showBranchOptions, titleVisibility: .visible) {
             Button("仅分支提示词") {
                 if let session = sessionToBranch {
-                    branchAction(session, false)
-                    if let newSession = sessions.first(where: { $0.name == "分支: \(session.name)" && $0.id != session.id }) {
+                    if let newSession = branchAction(session, false) {
                         onSessionSelected(newSession)
                     }
+                    sessionToBranch = nil
                 }
             }
             Button("分支提示词和对话记录") {
                 if let session = sessionToBranch {
-                    branchAction(session, true)
-                    if let newSession = sessions.first(where: { $0.name == "分支: \(session.name)" && $0.id != session.id }) {
+                    if let newSession = branchAction(session, true) {
                         onSessionSelected(newSession)
                     }
+                    sessionToBranch = nil
                 }
             }
             Button("取消", role: .cancel) {

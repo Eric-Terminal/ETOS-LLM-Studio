@@ -208,6 +208,7 @@ private struct MessageRowView: View {
     let proxy: ScrollViewProxy
     
     @State private var showInfoAlert = false
+    @State private var showDeleteConfirm = false
     
     var body: some View {
         let isReasoningExpandedBinding = Binding<Bool>(
@@ -256,7 +257,7 @@ private struct MessageRowView: View {
             Divider()
 
             Button(role: .destructive) {
-                viewModel.deleteMessage(message)
+                showDeleteConfirm = true
             } label: {
                 Label("删除消息", systemImage: "trash.fill")
             }
@@ -267,6 +268,14 @@ private struct MessageRowView: View {
             if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
                 Text("消息 ID: \(message.id.uuidString)\n会话位置: 第 \(index + 1) / \(viewModel.allMessagesForSession.count) 条")
             }
+        }
+        .confirmationDialog("确认删除消息", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                viewModel.deleteMessage(message)
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("删除后无法恢复这条消息。")
         }
     }
 }

@@ -18,6 +18,8 @@ struct ProviderDetailView: View {
     @State private var fetchError: String?
     @State private var showErrorAlert = false
     @State private var isInEditMode = false
+    @State private var pendingDeleteOffsets: IndexSet?
+    @State private var showDeleteModelConfirm = false
     
     var body: some View {
         ZStack {
@@ -39,7 +41,7 @@ struct ProviderDetailView: View {
                         }
                     }
                 }
-                .onDelete(perform: deleteModel)
+                .onDelete(perform: prepareDeleteModel)
             }
             
             if isFetchingModels {
@@ -83,6 +85,16 @@ struct ProviderDetailView: View {
         } message: {
             Text(fetchError ?? "发生未知错误。")
         }
+        .alert("确认删除模型", isPresented: $showDeleteModelConfirm) {
+            Button("删除", role: .destructive) {
+                performDeleteModel()
+            }
+            Button("取消", role: .cancel) {
+                pendingDeleteOffsets = nil
+            }
+        } message: {
+            Text(deleteModelWarningMessage())
+        }
     }
     
     private func fetchAndMergeModels() async {
@@ -106,8 +118,30 @@ struct ProviderDetailView: View {
         }
     }
     
-    private func deleteModel(at offsets: IndexSet) {
+    private func prepareDeleteModel(at offsets: IndexSet) {
+        pendingDeleteOffsets = offsets
+        showDeleteModelConfirm = true
+    }
+    
+    private func performDeleteModel() {
+        guard let offsets = pendingDeleteOffsets else { return }
         provider.models.remove(atOffsets: offsets)
+        pendingDeleteOffsets = nil
+    }
+    
+    private func deleteModelWarningMessage() -> String {
+        guard let offsets = pendingDeleteOffsets else {
+            return "删除后无法恢复这些模型。"
+        }
+        let names = offsets.compactMap { index -> String? in
+            guard provider.models.indices.contains(index) else { return nil }
+            return provider.models[index].displayName
+        }
+        if names.isEmpty {
+            return "删除后无法恢复这些模型。"
+        } else {
+            return "您将删除以下模型：\(names.joined(separator: "、"))。此操作无法撤销。"
+        }
     }
     
     private func saveChanges() {

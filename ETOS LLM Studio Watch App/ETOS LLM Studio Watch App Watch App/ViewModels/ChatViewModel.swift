@@ -60,6 +60,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
     @AppStorage("enableMemory") var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     
     // MARK: - 公开属性
@@ -152,7 +153,7 @@ class ChatViewModel: ObservableObject {
                 case .started:
                     self?.isSendingMessage = true
                     self?.startExtendedSession()
-                case .finished, .error:
+                case .finished, .error, .cancelled:
                     self?.isSendingMessage = false
                     self?.stopExtendedSession()
                 @unknown default:
@@ -204,7 +205,8 @@ class ChatViewModel: ObservableObject {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite
             )
         }
     }
@@ -224,7 +226,8 @@ class ChatViewModel: ObservableObject {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite
             )
         }
     }
@@ -249,8 +252,9 @@ class ChatViewModel: ObservableObject {
         chatService.deleteSessions(sessions)
     }
     
-    func branchSession(from sourceSession: ChatSession, copyMessages: Bool) {
-        chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
+    @discardableResult
+    func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
+        return chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
     }
     
     func deleteLastMessage(for session: ChatSession) {
@@ -305,9 +309,14 @@ class ChatViewModel: ObservableObject {
     }
     
     func canRetry(message: ChatMessage) -> Bool {
-        // 如果消息正在发送中，仅允许对最后一条助手消息（加载中的那条）进行重试。
+        // 如果消息正在发送中，允许对最后一条助手消息以及对应的用户消息进行重试。
         if isSendingMessage {
-            return message.id == allMessagesForSession.last?.id && allMessagesForSession.last?.role == .assistant
+            guard let lastMessage = allMessagesForSession.last else { return false }
+            if lastMessage.id == message.id { return true }
+            if let secondLast = allMessagesForSession.dropLast().last, secondLast.role == .user {
+                return secondLast.id == message.id
+            }
+            return false
         }
 
         // 在非发送状态下的原始逻辑。

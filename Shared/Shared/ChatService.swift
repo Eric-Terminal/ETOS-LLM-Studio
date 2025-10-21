@@ -40,11 +40,20 @@ public class ChatService {
         case started
         case finished
         case error
+        case cancelled
     }
 
     // MARK: - 私有状态
     
     private var cancellables = Set<AnyCancellable>()
+    /// 当前正在执行的网络请求任务，用于支持手动取消和重试。
+    private var currentRequestTask: Task<Void, Error>?
+    /// 与当前请求绑定的标识符，保证并发情况下的状态清理正确。
+    private var currentRequestToken: UUID?
+    /// 当前请求对应的会话 ID，主要用于撤销占位消息。
+    private var currentRequestSessionID: UUID?
+    /// 当前请求生成的加载占位消息 ID，方便在取消时移除。
+    private var currentLoadingMessageID: UUID?
     private var providers: [Provider]
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
@@ -156,6 +165,33 @@ public class ChatService {
             throw error
         }
     }
+
+    /// 取消当前正在进行的请求，并进行必要的状态恢复。
+    public func cancelOngoingRequest() async {
+        guard let task = currentRequestTask else { return }
+        let token = currentRequestToken
+        task.cancel()
+        
+        do {
+            try await task.value
+        } catch is CancellationError {
+            logger.info("🛑 用户已手动取消当前请求。")
+        } catch {
+            logger.error("⚠️ 取消请求时出现意外错误: \(error.localizedDescription)")
+        }
+        
+        if currentRequestToken == token {
+            if let sessionID = currentRequestSessionID, let loadingID = currentLoadingMessageID {
+                removeMessage(withID: loadingID, in: sessionID)
+            }
+            currentRequestTask = nil
+            currentRequestToken = nil
+            currentRequestSessionID = nil
+            currentLoadingMessageID = nil
+        }
+        
+        requestStatusSubject.send(.cancelled)
+    }
     
     public func saveAndReloadProviders(from providers: [Provider]) {
         logger.info("💾 正在保存并重载提供商配置...")
@@ -204,7 +240,8 @@ public class ChatService {
         logger.info("💾 删除后已保存会话列表。" )
     }
     
-    public func branchSession(from sourceSession: ChatSession, copyMessages: Bool) {
+    @discardableResult
+    public func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
         let newSession = ChatSession(id: UUID(), name: "分支: \(sourceSession.name)", topicPrompt: sourceSession.topicPrompt, enhancedPrompt: sourceSession.enhancedPrompt, isTemporary: false)
         logger.info("🌿 创建了分支会话: \(newSession.name)")
         if copyMessages {
@@ -220,6 +257,7 @@ public class ChatService {
         setCurrentSession(newSession)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("💾 保存了会话列表。" )
+        return newSession
     }
     
     public func deleteLastMessage(for session: ChatSession) {
@@ -311,7 +349,8 @@ public class ChatService {
         maxChatHistory: Int,
         enableStreaming: Bool,
         enhancedPrompt: String?,
-        enableMemory: Bool
+        enableMemory: Bool,
+        enableMemoryWrite: Bool
     ) async {
         guard var currentSession = currentSessionSubject.value else {
             addErrorMessage("错误: 没有当前会话。" )
@@ -345,22 +384,50 @@ public class ChatService {
         Persistence.saveMessages(messages, for: currentSession.id)
         requestStatusSubject.send(.started)
         
-        // 初始调用，传入 saveMemoryTool
-        await executeMessageRequest(
-            messages: messages,
-            loadingMessageID: loadingMessage.id,
-            currentSessionID: currentSession.id,
-            userMessage: userMessage,
-            wasTemporarySession: wasTemporarySession,
-            aiTemperature: aiTemperature,
-            aiTopP: aiTopP,
-            systemPrompt: systemPrompt,
-            maxChatHistory: maxChatHistory,
-            enableStreaming: enableStreaming,
-            enhancedPrompt: enhancedPrompt,
-            tools: enableMemory ? [saveMemoryTool] : nil, // 根据开关决定是否提供工具
-            enableMemory: enableMemory
-        )
+        // 记录当前请求的上下文，便于取消和状态恢复
+        currentRequestSessionID = currentSession.id
+        currentLoadingMessageID = loadingMessage.id
+        let requestToken = UUID()
+        currentRequestToken = requestToken
+        
+        let requestTask = Task<Void, Error> { [weak self] in
+            guard let self else { return }
+            let tools = (enableMemory && enableMemoryWrite) ? [self.saveMemoryTool] : nil
+            await self.executeMessageRequest(
+                messages: messages,
+                loadingMessageID: loadingMessage.id,
+                currentSessionID: currentSession.id,
+                userMessage: userMessage,
+                wasTemporarySession: wasTemporarySession,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: enhancedPrompt,
+                tools: tools,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite
+            )
+        }
+        currentRequestTask = requestTask
+        
+        defer {
+            if currentRequestToken == requestToken {
+                currentRequestTask = nil
+                currentRequestToken = nil
+                currentRequestSessionID = nil
+                currentLoadingMessageID = nil
+            }
+        }
+        
+        do {
+            try await requestTask.value
+        } catch is CancellationError {
+            logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
+        } catch {
+            logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Agent & Tooling
@@ -425,7 +492,8 @@ public class ChatService {
         enableStreaming: Bool,
         enhancedPrompt: String?,
         tools: [InternalToolDefinition]?,
-        enableMemory: Bool
+        enableMemory: Bool,
+        enableMemoryWrite: Bool
     ) async {
         // 自动查：执行记忆搜索
         var memories: [MemoryItem] = []
@@ -489,7 +557,7 @@ public class ChatService {
         if enableStreaming {
             await handleStreamedResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory)
         } else {
-            await handleStandardResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: tools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory)
+            await handleStandardResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: tools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite)
         }
     }
 
@@ -500,9 +568,11 @@ public class ChatService {
         maxChatHistory: Int,
         enableStreaming: Bool,
         enhancedPrompt: String?,
-        enableMemory: Bool
+        enableMemory: Bool,
+        enableMemoryWrite: Bool
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
+        await cancelOngoingRequest()
         let messages = messagesForSessionSubject.value
         
         // 1. 找到最后一条用户消息
@@ -525,7 +595,8 @@ public class ChatService {
             maxChatHistory: maxChatHistory,
             enableStreaming: enableStreaming,
             enhancedPrompt: enhancedPrompt,
-            enableMemory: enableMemory
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite
         )
     }
     
@@ -565,19 +636,32 @@ public class ChatService {
         return bytes
     }
     
-    private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool) async {
+    private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool) async {
         do {
             let data = try await fetchData(for: request)
-            logger.log("✅ [Log] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
-            await processResponseMessage(responseMessage: try adapter.parseResponse(data: data), loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory)
+            let rawResponse = String(data: data, encoding: .utf8) ?? "<二进制数据，无法以 UTF-8 解码>"
+            logger.log("✅ [Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
+            
+            do {
+                let parsedMessage = try adapter.parseResponse(data: data)
+                await processResponseMessage(responseMessage: parsedMessage, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite)
+            } catch is CancellationError {
+                logger.info("⚠️ 请求在解析阶段被取消，已忽略后续处理。")
+            } catch {
+                logger.error("❌ 解析响应失败: \(error.localizedDescription)")
+                addErrorMessage("解析响应失败，请查看原始响应:\n\(rawResponse)")
+                requestStatusSubject.send(.error)
+            }
+        } catch is CancellationError {
+            logger.info("⚠️ 请求在拉取数据时被取消。")
         } catch {
-            addErrorMessage("网络或解析错误: \(error.localizedDescription)")
+            addErrorMessage("网络错误: \(error.localizedDescription)")
             requestStatusSubject.send(.error)
         }
     }
     
     /// 处理已解析的聊天消息，包含所有工具调用和UI更新的核心逻辑 (可测试)
-    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool) async {
+    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool) async {
         var responseMessage = responseMessage // Make mutable
 
         // BUGFIX: 无论是否存在工具调用，都应首先解析并提取思考过程。
@@ -604,6 +688,14 @@ public class ChatService {
 
         // 2. 根据 isBlocking 标志将工具调用分类
         let toolDefs = availableTools ?? []
+        if toolDefs.isEmpty {
+            logger.info("🔇 当前未提供任何工具定义，忽略 AI 返回的 \(toolCalls.count) 个工具调用。")
+            requestStatusSubject.send(.finished)
+            if wasTemporarySession, let userMsg = userMessage {
+                await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage)
+            }
+            return
+        }
         let blockingCalls = toolCalls.filter { tc in
             toolDefs.first { $0.name == tc.toolName }?.isBlocking == true
         }
@@ -645,7 +737,7 @@ public class ChatService {
                 messages: updatedMessages, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
-                enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory
+                enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite
             )
         } else {
             // 5. 如果只有非阻塞式工具，则在这里结束请求
@@ -700,9 +792,22 @@ public class ChatService {
                 }
             }
 
+        } catch is CancellationError {
+            logger.info("⚠️ 流式请求在处理中被取消。")
         } catch {
             addErrorMessage("流式传输错误: \(error.localizedDescription)")
             requestStatusSubject.send(.error)
+        }
+    }
+    
+    /// 在取消请求时移除占位消息，保持消息列表干净。
+    private func removeMessage(withID messageID: UUID, in sessionID: UUID) {
+        var messages = messagesForSessionSubject.value
+        if let index = messages.firstIndex(where: { $0.id == messageID }) {
+            messages.remove(at: index)
+            messagesForSessionSubject.send(messages)
+            Persistence.saveMessages(messages, for: sessionID)
+            logger.info("🗑️ 已移除占位消息 \(messageID.uuidString)。")
         }
     }
     

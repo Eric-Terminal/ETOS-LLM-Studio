@@ -15,6 +15,7 @@ public struct ExtendedFeaturesView: View {
     
     // 使用 AppStorage 来持久化记忆功能的开关状态
     @AppStorage("enableMemory") private var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
     
     public init() {}
     
@@ -25,6 +26,11 @@ public struct ExtendedFeaturesView: View {
                 
                 // 只有在功能启用时才显示管理入口
                 if enableMemory {
+                    Toggle("是否记录新的记忆", isOn: $enableMemoryWrite)
+                    Text("关闭后仅读取记忆，不会请求保存新内容。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    
                     // 我们之前注释掉的 #available 检查仍然是必要的
                     if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
                         NavigationLink(destination: MemorySettingsView().environmentObject(viewModel)) {

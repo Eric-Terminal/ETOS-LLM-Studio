@@ -26,6 +26,7 @@ struct MessageActionsView: View {
     // MARK: - 环境
     
     @Environment(\.dismiss) var dismiss
+    @State private var showDeleteConfirm = false
 
     // MARK: - 视图主体
     
@@ -51,8 +52,7 @@ struct MessageActionsView: View {
             
             Section {
                 Button(role: .destructive) {
-                    onDelete()
-                    dismiss()
+                    showDeleteConfirm = true
                 } label: {
                     Label("删除消息", systemImage: "trash.fill")
                 }
@@ -80,5 +80,14 @@ struct MessageActionsView: View {
         }
         .navigationTitle("操作")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("确认删除消息", isPresented: $showDeleteConfirm) {
+            Button("删除", role: .destructive) {
+                onDelete()
+                dismiss()
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("删除后无法恢复这条消息。")
+        }
     }
 }

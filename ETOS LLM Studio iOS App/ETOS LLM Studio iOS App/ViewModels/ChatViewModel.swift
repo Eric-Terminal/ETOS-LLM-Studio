@@ -59,6 +59,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
     @AppStorage("enableMemory") var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     
     // MARK: - 公开属性
@@ -134,7 +135,7 @@ class ChatViewModel: ObservableObject {
                 switch status {
                 case .started:
                     self?.isSendingMessage = true
-                case .finished, .error:
+                case .finished, .error, .cancelled:
                     self?.isSendingMessage = false
                 @unknown default:
                     // 为未来可能的状态保留，不做任何操作
@@ -185,7 +186,8 @@ class ChatViewModel: ObservableObject {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite
             )
         }
     }
@@ -195,7 +197,6 @@ class ChatViewModel: ObservableObject {
     }
     
     func retryLastMessage() {
-        guard !isSendingMessage else { return }
         Task {
             await chatService.retryLastMessage(
                 aiTemperature: aiTemperature,
@@ -204,7 +205,8 @@ class ChatViewModel: ObservableObject {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite
             )
         }
     }
@@ -229,8 +231,9 @@ class ChatViewModel: ObservableObject {
         chatService.deleteSessions(sessions)
     }
     
-    func branchSession(from sourceSession: ChatSession, copyMessages: Bool) {
-        chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
+    @discardableResult
+    func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
+        return chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
     }
     
     func deleteLastMessage(for session: ChatSession) {
@@ -285,7 +288,16 @@ class ChatViewModel: ObservableObject {
     }
     
     func canRetry(message: ChatMessage) -> Bool {
-        guard !isSendingMessage, let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }) else {
+        if isSendingMessage {
+            guard let lastMessage = allMessagesForSession.last else { return false }
+            if lastMessage.id == message.id { return true }
+            if let secondLast = allMessagesForSession.dropLast().last, secondLast.role == .user {
+                return secondLast.id == message.id
+            }
+            return false
+        }
+        
+        guard let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }) else {
             return false
         }
         

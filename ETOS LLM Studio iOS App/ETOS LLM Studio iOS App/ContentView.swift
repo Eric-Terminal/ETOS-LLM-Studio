@@ -31,7 +31,8 @@ struct ContentView: View {
                         viewModel.deleteSession(at: indexSet)
                     },
                     branchAction: { session, copyMessages in
-                        viewModel.branchSession(from: session, copyMessages: copyMessages)
+                        let newSession = viewModel.branchSession(from: session, copyMessages: copyMessages)
+                        return newSession
                     },
                     exportAction: { session in
                         viewModel.activeSheet = .export(session)
