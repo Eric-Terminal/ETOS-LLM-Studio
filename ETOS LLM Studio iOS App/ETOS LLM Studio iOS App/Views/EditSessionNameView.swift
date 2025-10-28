@@ -1,63 +1,36 @@
-// ============================================================================
-// EditSessionNameView.swift
-// ============================================================================
-// ETOS LLM Studio Watch App 会话名称编辑视图
-//
-// 功能特性:
-// - 提供编辑会话（话题）名称的界面
-// - 保存修改后的名称
-// ============================================================================
-
 import SwiftUI
 import Shared
 
-/// 用于编辑会话名称的视图
 struct EditSessionNameView: View {
-    
-    // MARK: - 绑定与属性
-    
     @Binding var session: ChatSession
     var onSave: () -> Void
-    
-    // MARK: - 状态
-    
-    @State private var newName: String
-    
-    // MARK: - 环境
-    
-    @Environment(\.dismiss) var dismiss
-
-    // MARK: - 初始化器
+    @State private var name: String
+    @Environment(\.dismiss) private var dismiss
     
     init(session: Binding<ChatSession>, onSave: @escaping () -> Void) {
         _session = session
         self.onSave = onSave
-        _newName = State(initialValue: session.wrappedValue.name)
+        _name = State(initialValue: session.wrappedValue.name)
     }
-
-    // MARK: - 视图主体
     
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                TextField("输入新名称", text: $newName)
-                    .textFieldStyle(.plain)
-                    .padding()
-
+        Form {
+            Section("会话名称") {
+                TextField("输入新名称", text: $name)
+            }
+        }
+        .navigationTitle("编辑话题")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
-                    session.name = newName
+                    session.name = name
                     onSave()
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
-            }
-            .navigationTitle("编辑话题")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        dismiss()
-                    }
-                }
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }

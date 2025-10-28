@@ -1,188 +1,245 @@
 // ============================================================================
 // SessionListView.swift
-// ============================================================================ 
-// ETOS LLM Studio Watch App 会话历史列表视图
-//
-// 功能特性:
-// - 显示所有历史会话
-// - 支持会话选择、删除和更多操作（通过滑动菜单）
-// ============================================================================ 
+// ============================================================================
+// 会话管理界面 (iOS)
+// - 展示所有会话并支持快速切换
+// - 支持内联重命名、分支、导出与删除
+// ============================================================================
 
 import SwiftUI
 import Shared
 
-/// 会话历史列表视图
 struct SessionListView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
     
-    // MARK: - 绑定
-    
-    @Binding var sessions: [ChatSession]
-    @Binding var currentSession: ChatSession?
-    
-    // MARK: - 操作
-    
-    let deleteAction: (IndexSet) -> Void
-    let branchAction: (ChatSession, Bool) -> ChatSession?
-    let exportAction: (ChatSession) -> Void
-    let deleteLastMessageAction: (ChatSession) -> Void
-    let onSessionSelected: (ChatSession) -> Void
-    let saveSessionsAction: () -> Void
-    
-    // MARK: - 状态
-    
-    @State private var showDeleteSessionConfirm: Bool = false
-    @State private var sessionIndexToDelete: IndexSet?
-    @State private var sessionToEdit: ChatSession?
-    @State private var showBranchOptions: Bool = false
-    @State private var sessionToBranch: ChatSession?
-    
-    // MARK: - 视图主体
+    @State private var editingSessionID: UUID?
+    @State private var draftName: String = ""
+    @State private var sessionToExport: ChatSession?
+    @State private var showDeleteConfirmation = false
+    @State private var sessionsToDelete: [ChatSession] = []
     
     var body: some View {
-        List {
-            ForEach(sessions) {
-                session in 
-                SessionRowView(
-                    session: session,
-                    currentSession: $currentSession,
-                    sessions: $sessions,
-                    sessionToEdit: $sessionToEdit,
-                    sessionToBranch: $sessionToBranch,
-                    showBranchOptions: $showBranchOptions,
-                    sessionIndexToDelete: $sessionIndexToDelete,
-                    showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                    onSessionSelected: onSessionSelected,
-                    exportAction: exportAction,
-                    deleteLastMessageAction: deleteLastMessageAction
+        NavigationStack {
+            List {
+                Section {
+                    Button {
+                        viewModel.createNewSession()
+                        focusOnLatest()
+                    } label: {
+                        Label("开启新对话", systemImage: "plus.circle.fill")
+                    }
+                }
+                
+                Section("会话") {
+                    ForEach(viewModel.chatSessions) { session in
+                        SessionRow(
+                            session: session,
+                            isCurrent: session.id == viewModel.currentSession?.id,
+                            isEditing: editingSessionID == session.id,
+                            draftName: editingSessionID == session.id ? $draftName : .constant(session.name),
+                            onCommit: { newName in
+                        viewModel.updateSessionName(session, newName: newName)
+                        editingSessionID = nil
+                    },
+                    onSelect: {
+                        viewModel.setCurrentSession(session)
+                    },
+                    onRename: {
+                        editingSessionID = session.id
+                        draftName = session.name
+                    },
+                    onBranch: { copyHistory in
+                        let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
+                        viewModel.setCurrentSession(newSession)
+                        focusOnLatest()
+                    },
+                    onExport: {
+                        sessionToExport = session
+                    },
+                    onDeleteLastMessage: {
+                        viewModel.deleteLastMessage(for: session)
+                    },
+                    onDelete: {
+                        sessionsToDelete = [session]
+                        showDeleteConfirmation = true
+                    },
+                    onCancelRename: {
+                        editingSessionID = nil
+                        draftName = session.name
+                    }
                 )
-            }
-        }
-        .navigationTitle("历史会话")
-        .sheet(item: $sessionToEdit) {
-            sessionToEdit in 
-            if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionToEdit.id }) {
-                let sessionBinding = $sessions[sessionIndex]
-                EditSessionNameView(session: sessionBinding, onSave: saveSessionsAction)
-            }
-        }
-        .confirmationDialog("确认删除", isPresented: $showDeleteSessionConfirm, titleVisibility: .visible) {
-            Button("删除会话", role: .destructive) {
-                if let indexSet = sessionIndexToDelete {
-                    deleteAction(indexSet)
-                }
-                sessionIndexToDelete = nil
-            }
-            Button("取消", role: .cancel) {
-                sessionIndexToDelete = nil
-            }
-        } message: {
-            Text("您确定要删除这个会话及其所有消息吗？此操作无法撤销。")
-        }
-        .confirmationDialog("创建分支", isPresented: $showBranchOptions, titleVisibility: .visible) {
-            Button("仅分支提示词") {
-                if let session = sessionToBranch {
-                    if let newSession = branchAction(session, false) {
-                        onSessionSelected(newSession)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                sessionsToDelete = [session]
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
                     }
-                    sessionToBranch = nil
-                }
-            }
-            Button("分支提示词和对话记录") {
-                if let session = sessionToBranch {
-                    if let newSession = branchAction(session, true) {
-                        onSessionSelected(newSession)
+                    .onDelete { indexSet in
+                        let toDelete = indexSet.map { viewModel.chatSessions[$0] }
+                        sessionsToDelete = toDelete
+                        showDeleteConfirmation = true
                     }
-                    sessionToBranch = nil
                 }
             }
-            Button("取消", role: .cancel) {
-                sessionToBranch = nil
+            .navigationTitle("会话管理")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    EditButton()
+                }
             }
-        } message: {
-            if let session = sessionToBranch {
-                Text("从“\(session.name)”创建新的分支对话。")
+            .alert("确认删除会话", isPresented: $showDeleteConfirmation) {
+                Button("删除", role: .destructive) {
+                    viewModel.deleteSessions(sessionsToDelete)
+                    sessionsToDelete.removeAll()
+                }
+                Button("取消", role: .cancel) {
+                    sessionsToDelete.removeAll()
+                }
+            } message: {
+                Text("删除后所有消息也将被移除，操作不可恢复。")
             }
+            .sheet(item: $sessionToExport) { session in
+                ExportView(session: session) { sess, ip, completion in
+                    viewModel.exportSessionViaNetwork(session: sess, ipAddress: ip, completion: completion)
+                }
+            }
+        }
+    }
+    
+    private func focusOnLatest() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            editingSessionID = viewModel.currentSession?.id
+            draftName = viewModel.currentSession?.name ?? ""
         }
     }
 }
 
-// MARK: - 私有子视图
+// MARK: - Row
 
-/// SessionListView 的列表行视图
-/// 提取出来以简化主视图并避免编译器超时
-private struct SessionRowView: View {
-    
-    // MARK: 属性与绑定
-    
+private struct SessionRow: View {
     let session: ChatSession
-    @Binding var currentSession: ChatSession?
-    @Binding var sessions: [ChatSession]
-    @Binding var sessionToEdit: ChatSession?
-    @Binding var sessionToBranch: ChatSession?
-    @Binding var showBranchOptions: Bool
-    @Binding var sessionIndexToDelete: IndexSet?
-    @Binding var showDeleteSessionConfirm: Bool
+    let isCurrent: Bool
+    let isEditing: Bool
+    @Binding var draftName: String
     
-    // MARK: 操作
+    let onCommit: (String) -> Void
+    let onSelect: () -> Void
+    let onRename: () -> Void
+    let onBranch: (Bool) -> Void
+    let onExport: () -> Void
+    let onDeleteLastMessage: () -> Void
+    let onDelete: () -> Void
+    let onCancelRename: () -> Void
     
-    let onSessionSelected: (ChatSession) -> Void
-    let exportAction: (ChatSession) -> Void
-    let deleteLastMessageAction: (ChatSession) -> Void
-
-    // MARK: 视图主体
+    @FocusState private var focused: Bool
     
     var body: some View {
-        Button(action: { onSessionSelected(session) }) {
-            HStack {
-                MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
-                    .foregroundColor(.primary)
-                    .allowsHitTesting(false) // 修复 Bug #1：让点击可以“穿透”滚动文本
-
-                if currentSession?.id == session.id {
+        VStack(alignment: .leading, spacing: 6) {
+            if isEditing {
+                TextField("会话名称", text: $draftName)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focused)
+                    .onSubmit {
+                        commit()
+                    }
+                    .onAppear { focused = true }
+                
+                HStack {
+                    Button("保存") {
+                        commit()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
+                    Button("取消") {
+                        onCancelRename()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.top, 4)
+            } else {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(session.name)
+                            .font(.headline)
+                        if let topic = session.topicPrompt, !topic.isEmpty {
+                            Text(topic)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    
                     Spacer()
-                    Image(systemName: "checkmark")
+                    
+                    if isCurrent {
+                        Capsule()
+                            .fill(Color.accentColor.opacity(0.2))
+                            .frame(width: 70, height: 26)
+                            .overlay(
+                                Label("当前", systemImage: "checkmark")
+                                    .font(.footnote.bold())
+                                    .foregroundColor(.accentColor)
+                            )
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelect()
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading) // 修复 Bug #2：让整行都能被点击
-            .contentShape(Rectangle()) // 终极修复：明确按钮的可点击形状
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 6)
         .contextMenu {
             Button {
-                sessionToEdit = session
+                onSelect()
             } label: {
-                Label("编辑话题", systemImage: "pencil")
+                Label("切换到此会话", systemImage: "checkmark.circle")
             }
-
+            
             Button {
-                sessionToBranch = session
-                showBranchOptions = true
+                onRename()
             } label: {
-                Label("创建分支", systemImage: "arrow.branch")
+                Label("重命名", systemImage: "pencil")
             }
-
+            
             Button {
-                exportAction(session)
+                onBranch(false)
             } label: {
-                Label("通过网络导出", systemImage: "wifi")
+                Label("创建提示词分支", systemImage: "arrow.branch")
             }
-
-            Divider()
-
-            Button(role: .destructive) {
-                deleteLastMessageAction(session)
+            
+            Button {
+                onBranch(true)
             } label: {
-                Label("删除最后一条消息", systemImage: "delete.backward.fill")
+                Label("复制历史创建分支", systemImage: "arrow.triangle.branch")
             }
-
-            Button(role: .destructive) {
-                if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-                    sessionIndexToDelete = IndexSet(integer: index)
-                    showDeleteSessionConfirm = true
-                }
+            
+            Button {
+                onExport()
             } label: {
-                Label("删除会话", systemImage: "trash.fill")
+                Label("导出到电脑", systemImage: "wifi")
+            }
+            
+            Button {
+                onDeleteLastMessage()
+            } label: {
+                Label("删除最后一条消息", systemImage: "delete.backward")
+            }
+            
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("删除会话", systemImage: "trash")
             }
         }
+    }
+    
+    private func commit() {
+        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onCommit(trimmed)
     }
 }

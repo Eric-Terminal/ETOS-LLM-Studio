@@ -1,26 +1,26 @@
 // ============================================================================
-// ChatViewModel.swift
+// ChatViewModel.swift (iOS)
 // ============================================================================
-// ETOS LLM Studio iOS App 核心视图模型文件
+// ETOS LLM Studio iOS App 视图模型
 //
-// 功能特性:
-// - 驱动主视图 (ContentView) 的所有业务逻辑
-// - 管理应用状态，包括消息、会话、设置等
-// - 处理网络请求、数据操作和用户交互
+// 说明:
+// - 复用 Shared.ChatService 提供的业务逻辑
+// - 抽离 watchOS 相关实现，改用 UIKit 生命周期事件
+// - 为 iOS 界面提供消息、会话、设置等绑定数据
 // ============================================================================
 
+import Combine
 import Foundation
 import SwiftUI
-import os.log
-import Combine
 import Shared
-
-private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
-class ChatViewModel: ObservableObject {
+final class ChatViewModel: ObservableObject {
     
-    // MARK: - @Published 属性 (UI 状态)
+    // MARK: - Published UI State
     
     @Published var messages: [ChatMessage] = []
     @Published var allMessagesForSession: [ChatMessage] = []
@@ -28,22 +28,17 @@ class ChatViewModel: ObservableObject {
     @Published var userInput: String = ""
     @Published var messageToEdit: ChatMessage?
     @Published var activeSheet: ActiveSheet?
-    
     @Published var chatSessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
-    
     @Published var providers: [Provider] = []
     @Published var selectedModel: RunnableModel?
     @Published var activatedModels: [RunnableModel] = []
-    
     @Published var memories: [MemoryItem] = []
-    
-    // 重构: 用于管理UI状态，与数据模型分离
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var isSendingMessage: Bool = false
     
-    // MARK: - 用户偏好设置 (AppStorage)
+    // MARK: - User Preferences (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
     @AppStorage("enableBackground") var enableBackground: Bool = true
@@ -54,7 +49,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("systemPrompt") var systemPrompt: String = ""
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = false
-    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 10
+    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 25
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = ""
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
@@ -62,7 +57,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     
-    // MARK: - 公开属性
+    // MARK: - Public Properties
     
     let backgroundImages: [String]
     
@@ -72,44 +67,54 @@ class ChatViewModel: ObservableObject {
         return UIImage(contentsOfFile: fileURL.path)
     }
     
-    // MARK: - 私有属性
+    // MARK: - Private Properties
     
     private let chatService: ChatService
     private var cancellables = Set<AnyCancellable>()
     
-    // MARK: - 初始化
-
-    /// 主应用使用的便利初始化方法
+    // MARK: - Init
+    
     convenience init() {
         self.init(chatService: .shared)
     }
-
-    /// 用于测试和依赖注入的指定初始化方法
-    internal init(chatService: ChatService) {
-        logger.info("🚀 [ViewModel] ChatViewModel initializing with specific service...")
+    
+    init(chatService: ChatService) {
         self.chatService = chatService
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
-
-        // 设置 Combine 订阅
-        setupSubscriptions()
-
-        // 自动轮换背景逻辑
-        rotateBackgroundImageIfNeeded()
         
-        logger.info("  - ViewModel initialized and subscribed to a ChatService instance.")
+        setupSubscriptions()
+        rotateBackgroundImageIfNeeded()
+        registerLifecycleObservers()
     }
+    
+    private func registerLifecycleObservers() {
+#if canImport(UIKit)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+#endif
+    }
+    
+    @objc private func handleDidBecomeActive() {
+        // 预留: 恢复 UI 或触发刷新
+    }
+    
+    // MARK: - Combine Subscriptions
     
     private func setupSubscriptions() {
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)
             .assign(to: \.chatSessions, on: self)
             .store(in: &cancellables)
-            
+        
         chatService.currentSessionSubject
             .receive(on: DispatchQueue.main)
             .assign(to: \.currentSession, on: self)
             .store(in: &cancellables)
-            
+        
         chatService.messagesForSessionSubject
             .receive(on: DispatchQueue.main)
             .assign(to: \.allMessagesForSession, on: self)
@@ -118,28 +123,26 @@ class ChatViewModel: ObservableObject {
         chatService.providersSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] providers in
-                guard let self = self else { return }
+                guard let self else { return }
                 self.providers = providers
-                self.activatedModels = self.chatService.activatedRunnableModels
+                self.activatedModels = chatService.activatedRunnableModels
             }
             .store(in: &cancellables)
-
+        
         chatService.selectedModelSubject
             .receive(on: DispatchQueue.main)
             .assign(to: \.selectedModel, on: self)
             .store(in: &cancellables)
-            
+        
         chatService.requestStatusSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
+                guard let self else { return }
                 switch status {
                 case .started:
-                    self?.isSendingMessage = true
+                    isSendingMessage = true
                 case .finished, .error, .cancelled:
-                    self?.isSendingMessage = false
-                @unknown default:
-                    // 为未来可能的状态保留，不做任何操作
-                    break
+                    isSendingMessage = false
                 }
             }
             .store(in: &cancellables)
@@ -150,7 +153,7 @@ class ChatViewModel: ObservableObject {
                 self?.updateDisplayedMessages()
             }
             .store(in: &cancellables)
-            
+        
         MemoryManager.shared.memoriesPublisher
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
@@ -158,22 +161,20 @@ class ChatViewModel: ObservableObject {
     }
     
     private func rotateBackgroundImageIfNeeded() {
-        if enableAutoRotateBackground, !self.backgroundImages.isEmpty {
-            let availableBackgrounds = self.backgroundImages.filter { $0 != self.currentBackgroundImage }
-            currentBackgroundImage = availableBackgrounds.randomElement() ?? self.backgroundImages.randomElement() ?? ""
-            logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage)")
-        } else if !self.backgroundImages.contains(self.currentBackgroundImage) {
-             currentBackgroundImage = self.backgroundImages.first ?? ""
+        guard enableAutoRotateBackground, !backgroundImages.isEmpty else {
+            if !backgroundImages.contains(currentBackgroundImage) {
+                currentBackgroundImage = backgroundImages.first ?? ""
+            }
+            return
         }
+        let available = backgroundImages.filter { $0 != currentBackgroundImage }
+        currentBackgroundImage = available.randomElement() ?? backgroundImages.randomElement() ?? ""
     }
     
-    // MARK: - 公开方法 (视图操作)
-    
-    // MARK: 消息流
+    // MARK: - Messaging
     
     func sendMessage() {
-        logger.info("✉️ [ViewModel] sendMessage called.")
-        let userMessageContent = userInput
+        let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userMessageContent.isEmpty, !isSendingMessage else { return }
         userInput = ""
         
@@ -211,12 +212,7 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    // MARK: 会话和消息管理
-    
-    func deleteMessage(at offsets: IndexSet) {
-        // 此方法已废弃，因为直接操作 messages 数组不安全
-        // 应该通过 message ID 来删除
-    }
+    // MARK: - Session & Message Management
     
     func deleteMessage(_ message: ChatMessage) {
         chatService.deleteMessage(message)
@@ -233,7 +229,7 @@ class ChatViewModel: ObservableObject {
     
     @discardableResult
     func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
-        return chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
+        chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
     }
     
     func deleteLastMessage(for session: ChatSession) {
@@ -243,23 +239,53 @@ class ChatViewModel: ObservableObject {
     func createNewSession() {
         chatService.createNewSession()
     }
-    
-    // MARK: 记忆管理
-    
-    func addMemory(content: String) async {
-        await MemoryManager.shared.addMemory(content: content)
+
+    func setSelectedModel(_ model: RunnableModel) {
+        chatService.setSelectedModel(model)
     }
 
-    func updateMemory(item: MemoryItem) async {
-        await MemoryManager.shared.updateMemory(item: item)
-    }
-
-    func deleteMemories(at offsets: IndexSet) async {
-        let itemsToDelete = offsets.map { memories[$0] }
-        await MemoryManager.shared.deleteMemories(itemsToDelete)
+    func setCurrentSession(_ session: ChatSession) {
+        chatService.setCurrentSession(session)
     }
     
-    // MARK: 视图状态与持久化
+    func updateSession(_ session: ChatSession) {
+        chatService.updateSession(session)
+    }
+    
+    func updateSessionName(_ session: ChatSession, newName: String) {
+        var updated = session
+        updated.name = newName
+        chatService.updateSession(updated)
+    }
+    
+    func commitEditedMessage(_ message: ChatMessage, content: String) {
+        chatService.updateMessageContent(message, with: content)
+        messageToEdit = nil
+    }
+    
+    func canRetry(message: ChatMessage) -> Bool {
+        if isSendingMessage {
+            guard let lastMessage = allMessagesForSession.last else { return false }
+            if lastMessage.id == message.id { return true }
+            if let previous = allMessagesForSession.dropLast().last, previous.role == .user {
+                return previous.id == message.id
+            }
+            return false
+        }
+        
+        guard
+            let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }),
+            let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == message.id })
+        else {
+            return false
+        }
+        return messageIndex >= lastUserMessageIndex
+    }
+    
+    func saveCurrentSessionDetails() {
+        guard let session = currentSession else { return }
+        chatService.updateSession(session)
+    }
     
     func updateDisplayedMessages() {
         let lazyCount = lazyLoadMessageCount
@@ -271,67 +297,48 @@ class ChatViewModel: ObservableObject {
             isHistoryFullyLoaded = true
         }
     }
-
-    func saveCurrentSessionDetails() {
-        if let session = currentSession {
-            chatService.updateSession(session)
-        }
+    
+    func loadEntireHistory() {
+        messages = allMessagesForSession
+        isHistoryFullyLoaded = true
     }
     
-    func commitEditedMessage(_ message: ChatMessage) {
-        chatService.updateMessageContent(message, with: message.content)
-        messageToEdit = nil
+    // MARK: - Memory Management
+    
+    func addMemory(content: String) async {
+        await MemoryManager.shared.addMemory(content: content)
     }
     
-    func forceSaveSessions() {
-        chatService.forceSaveSessions()
+    func updateMemory(item: MemoryItem) async {
+        await MemoryManager.shared.updateMemory(item: item)
     }
     
-    func canRetry(message: ChatMessage) -> Bool {
-        if isSendingMessage {
-            guard let lastMessage = allMessagesForSession.last else { return false }
-            if lastMessage.id == message.id { return true }
-            if let secondLast = allMessagesForSession.dropLast().last, secondLast.role == .user {
-                return secondLast.id == message.id
-            }
-            return false
-        }
-        
-        guard let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }) else {
-            return false
-        }
-        
-        guard let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == message.id }) else {
-            return false
-        }
-        
-        return messageIndex >= lastUserMessageIndex
+    func deleteMemories(at offsets: IndexSet) async {
+        let items = offsets.map { memories[$0] }
+        await MemoryManager.shared.deleteMemories(items)
     }
     
-    // MARK: 导出
+    // MARK: - Export
     
     func exportSessionViaNetwork(session: ChatSession, ipAddress: String, completion: @escaping (ExportStatus) -> Void) {
-        logger.info("🚀 [Export] Preparing to export via network...")
         let messagesToExport = Persistence.loadMessages(for: session.id)
-        
-        // 重构: 直接使用 ChatMessage 并进行简单映射
         let exportableMessages = messagesToExport.map {
             ExportableChatMessage(role: $0.role.rawValue, content: $0.content, reasoning: $0.reasoningContent)
         }
         let promptsToExport = ExportPrompts(
-            globalSystemPrompt: self.systemPrompt.isEmpty ? nil : self.systemPrompt,
+            globalSystemPrompt: systemPrompt.isEmpty ? nil : systemPrompt,
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt
         )
         let fullExportData = FullExportData(prompts: promptsToExport, history: exportableMessages)
-
+        
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
         guard let jsonData = try? encoder.encode(fullExportData) else {
             completion(.failed("JSON Encoding Failed"))
             return
         }
-
+        
         guard let url = URL(string: "http://\(ipAddress)") else {
             completion(.failed("Invalid IP Address"))
             return
@@ -342,14 +349,15 @@ class ChatViewModel: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = jsonData
         request.timeoutInterval = 60
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        
+        URLSession.shared.dataTask(with: request) { _, response, error in
             DispatchQueue.main.async {
-                if let error = error {
+                if let error {
                     completion(.failed("Network Error: \(error.localizedDescription)"))
                     return
                 }
-                guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
                     let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
                     completion(.failed("Server Error: \(statusCode)"))
                     return

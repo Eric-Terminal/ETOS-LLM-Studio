@@ -1,281 +1,345 @@
-
 // ============================================================================
 // ChatView.swift
 // ============================================================================
-// ETOS LLM Studio iOS App 聊天主视图
-//
-// 功能特性:
-// - 应用的主聊天界面，负责组合聊天列表和输入框
-// - 连接 ChatViewModel 来驱动视图
-// - 管理 Sheet 和导航
+// 聊天主界面 (iOS)
+// - 显示消息列表、底部固定输入框
+// - 支持长按消息调出操作菜单
+// - 使用系统风格的留白与材质，贴合 Apple Design
 // ============================================================================
 
 import SwiftUI
 import MarkdownUI
 import Shared
+import UIKit
 
 struct ChatView: View {
-    
-    // MARK: - 状态对象
-    
     @EnvironmentObject private var viewModel: ChatViewModel
-    @State private var isAtBottom = true
-    @State private var showScrollToBottomButton = false
-    @State private var showMultilineInput = false
-    
-    // MARK: - 视图主体
+    @State private var showScrollToBottom = false
+    @State private var editingMessage: ChatMessage?
+    @State private var editingContent: String = ""
+    @FocusState private var composerFocused: Bool
     
     var body: some View {
-        ZStack {
-            // 背景图
-            if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageUIImage {
-                Image(uiImage: bgImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .edgesIgnoringSafeArea(.all)
-                    .blur(radius: viewModel.backgroundBlur)
-                    .opacity(viewModel.backgroundOpacity)
-            }
-            
-            VStack(spacing: 0) {
+        NavigationStack {
+            ZStack {
+                backgroundLayer
                 ScrollViewReader { proxy in
-                    ZStack(alignment: .bottom) {
-                        chatList(proxy: proxy)
-
-                        if showScrollToBottomButton {
-                            scrollToBottomButton(proxy: proxy)
+                    ScrollView {
+                        LazyVStack(alignment: .trailing, spacing: 12, pinnedViews: []) {
+                            modelSelectorBar
+                            historyBanner
+                            
+                            ForEach(viewModel.messages) { message in
+                                ChatBubble(
+                                    message: message,
+                                    isReasoningExpanded: Binding(
+                                        get: { viewModel.reasoningExpandedState[message.id, default: false] },
+                                        set: { viewModel.reasoningExpandedState[message.id] = $0 }
+                                    ),
+                                    isToolCallsExpanded: Binding(
+                                        get: { viewModel.toolCallsExpandedState[message.id, default: false] },
+                                        set: { viewModel.toolCallsExpandedState[message.id] = $0 }
+                                    ),
+                                    enableMarkdown: viewModel.enableMarkdown,
+                                    enableBackground: viewModel.enableBackground
+                                )
+                                .id(message.id)
+                                .contextMenu {
+                                    contextMenu(for: message)
+                                }
+                                .onAppear {
+                                    if message.id == viewModel.messages.last?.id {
+                                        showScrollToBottom = false
+                                    }
+                                }
+                                .onDisappear {
+                                    if message.id == viewModel.messages.last?.id {
+                                        showScrollToBottom = true
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 120)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            composerFocused = false
+                        }
+                    )
+                    .onChange(of: viewModel.messages.count) { _ in
+                        guard !viewModel.messages.isEmpty else { return }
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo(viewModel.messages.last?.id, anchor: .bottom)
+                        }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if showScrollToBottom {
+                            Button {
+                                if let last = viewModel.messages.last {
+                                    withAnimation(.easeOut(duration: 0.25)) {
+                                        proxy.scrollTo(last.id, anchor: .bottom)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .font(.system(size: 22, weight: .medium))
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundStyle(.tint)
+                                    .padding(10)
+                                    .background(.regularMaterial, in: Circle())
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 140)
+                            .transition(.scale.combined(with: .opacity))
+                            .accessibilityLabel("滚动到底部")
                         }
                     }
                 }
-                inputBar
             }
-            .navigationTitle(viewModel.currentSession?.name ?? "新对话")
-            .sheet(item: $viewModel.activeSheet) { item in
-                sheetView(for: item)
-            }
-            .sheet(isPresented: $showMultilineInput) {
-                MultilineInputView(userInput: $viewModel.userInput)
-            }
-            .onChange(of: viewModel.activeSheet) {
-                if viewModel.activeSheet == nil {
-                    viewModel.saveCurrentSessionDetails()
+            .navigationTitle(viewModel.currentSession?.name ?? "新的对话")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button {
+                            viewModel.createNewSession()
+                        } label: {
+                            Label("开始新会话", systemImage: "plus.message")
+                        }
+                        
+                        Button {
+                            composerFocused = true
+                        } label: {
+                            Label("快速输入", systemImage: "keyboard")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("快速操作")
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                MessageComposerView(
+                    text: $viewModel.userInput,
+                    isSending: viewModel.isSendingMessage,
+                    sendAction: {
+                        viewModel.sendMessage()
+                    },
+                    focus: $composerFocused
+                )
+                .background(.ultraThinMaterial)
+            }
+            .sheet(item: $editingMessage) { message in
+                NavigationStack {
+                    EditMessageSheet(
+                        originalMessage: message,
+                        text: $editingContent
+                    ) { newContent in
+                        viewModel.commitEditedMessage(message, content: newContent)
+                    }
+                }
+                .presentationDetents([.medium, .large])
             }
         }
     }
     
-    // MARK: - 视图组件
+    // MARK: - Background
+    
+    private var backgroundLayer: some View {
+        Group {
+            if viewModel.enableBackground,
+               let image = viewModel.currentBackgroundImageUIImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                    .blur(radius: viewModel.backgroundBlur)
+                    .opacity(viewModel.backgroundOpacity)
+                    .overlay(Color.black.opacity(0.1))
+            } else {
+                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            }
+        }
+    }
+    
+// MARK: - Components
+
+    @ViewBuilder
+    private var historyBanner: some View {
+        let remaining = viewModel.allMessagesForSession.count - viewModel.messages.count
+        if remaining > 0 && !viewModel.isHistoryFullyLoaded {
+            Button {
+                withAnimation {
+                    viewModel.loadEntireHistory()
+                }
+            } label: {
+                Label("显示剩余 \(remaining) 条记录", systemImage: "arrow.uturn.left.circle")
+            }
+            .font(.footnote)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial, in: Capsule())
+            .padding(.top, 12)
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var modelSelectorBar: some View {
+        if !viewModel.activatedModels.isEmpty {
+            let selection = Binding<String?>(
+                get: { viewModel.selectedModel?.id },
+                set: { newValue in
+                    guard let id = newValue,
+                          let target = viewModel.activatedModels.first(where: { $0.id == id }) else { return }
+                    viewModel.setSelectedModel(target)
+                }
+            )
+            VStack(alignment: .leading, spacing: 8) {
+                Text("当前模型")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("选择模型", selection: selection) {
+                    Text("选择模型")
+                        .tag(Optional<String>.none)
+                    ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(runnable.model.displayName)
+                            Text(runnable.provider.name)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(Optional<String>.some(runnable.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(
+                    Color(uiColor: .secondarySystemBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+        }
+    }
     
     @ViewBuilder
-    private func sheetView(for item: ActiveSheet) -> some View {
-        switch item {
-        case .editMessage:
-            if let messageToEdit = viewModel.messageToEdit {
-                EditMessageView(message: messageToEdit, onSave: { updatedMessage in
-                    viewModel.commitEditedMessage(updatedMessage)
-                })
-            }
-        case .settings:
-            SettingsView(viewModel: viewModel)
-        case .export(let session):
-            ExportView(
-                session: session,
-                onExport: viewModel.exportSessionViaNetwork
-            )
-        @unknown default:
-            Text("未知视图")
+    private func contextMenu(for message: ChatMessage) -> some View {
+        Button {
+            editingMessage = message
+            editingContent = message.content
+        } label: {
+            Label("编辑", systemImage: "pencil")
         }
-    }
-    
-    private func chatList(proxy: ScrollViewProxy) -> some View {
-        List {
-            if viewModel.messages.isEmpty {
-                Spacer().frame(maxHeight: .infinity).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+        
+        if viewModel.canRetry(message: message) {
+            Button {
+                viewModel.retryLastMessage()
+            } label: {
+                Label("重试响应", systemImage: "arrow.clockwise")
             }
-            
-            let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
-            if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
-                Button(action: {
-                    withAnimation {
-                        viewModel.messages = viewModel.allMessagesForSession
-                        viewModel.isHistoryFullyLoaded = true
-                    }
-                }) {
-                    Label("显示剩余 \(remainingCount) 条记录", systemImage: "arrow.up.circle")
+        }
+        
+        Button(role: .destructive) {
+            viewModel.deleteMessage(message)
+        } label: {
+            Label("删除消息", systemImage: "trash")
+        }
+        
+        Divider()
+        
+        Button {
+            UIPasteboard.general.string = message.content
+        } label: {
+            Label("复制内容", systemImage: "doc.on.doc")
+        }
+        
+        if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
+            Text("位置: 第 \(index + 1) / \(viewModel.allMessagesForSession.count) 条")
+        }
+        Text("ID: \(message.id.uuidString)").font(.footnote)
+    }
+}
+
+// MARK: - Composer
+
+private struct MessageComposerView: View {
+    @Binding var text: String
+    let isSending: Bool
+    let sendAction: () -> Void
+    let focus: FocusState<Bool>.Binding
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Divider()
+            HStack(alignment: .center, spacing: 12) {
+                TextField("输入...", text: $text, axis: .vertical)
+                    .lineLimit(1...4)
+                    .textFieldStyle(.roundedBorder)
+                    .focused(focus)
+                
+                Button {
+                    sendAction()
+                } label: {
+                    Image(systemName: isSending ? "paperplane.circle.fill" : "paperplane.fill")
+                        .font(.system(size: 20, weight: .semibold))
                 }
-                .buttonStyle(.bordered)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
+                .buttonStyle(.borderless)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                .help("发送当前消息")
             }
-
-            ForEach(viewModel.messages) { message in
-                MessageRowView(message: message, viewModel: viewModel, proxy: proxy)
-            }
-            
-            Spacer()
-                .id("bottomSpacer")
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .onAppear { isAtBottom = true; showScrollToBottomButton = false }
-                .onDisappear { isAtBottom = false; showScrollToBottomButton = true }
+            .padding(.horizontal)
+            .padding(.bottom, 12)
         }
-        .listStyle(.plain)
-        .onTapGesture {
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        }
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
-        .onAppear {
-            UITableView.appearance().backgroundColor = .clear
-        }
-        .onDisappear {
-            UITableView.appearance().backgroundColor = .systemGroupedBackground
-        }
-        .toolbar {
-
-        }
-        .onChange(of: viewModel.messages.count) {
-            if isAtBottom {
-                withAnimation {
-                    proxy.scrollTo("bottomSpacer", anchor: .bottom)
-                }
-            }
-        }
-    }
-    
-    private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
-        Button(action: {
-            withAnimation {
-                proxy.scrollTo("bottomSpacer", anchor: .bottom)
-            }
-        }) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.largeTitle)
-                .padding()
-        }
-        .buttonStyle(.plain)
-    }
-    
-    private var inputBar: some View {
-        HStack(alignment: .center, spacing: 12) {
-            TextField("输入...", text: $viewModel.userInput)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color(uiColor: .systemGray6))
-                .clipShape(Capsule())
-
-            Button(action: { showMultilineInput = true }) {
-                Image(systemName: "plus.viewfinder")
-                    .font(.title2)
-            }
-            .buttonStyle(.plain)
-
-            Button(action: viewModel.sendMessage) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.userInput.isEmpty || viewModel.isSendingMessage)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
         .background(.thinMaterial)
     }
 }
 
-private struct MultilineInputView: View {
-    @Binding var userInput: String
-    @Environment(\.dismiss) var dismiss
+// MARK: - Edit Sheet
+
+private struct EditMessageSheet: View {
+    let originalMessage: ChatMessage
+    @Binding var text: String
+    let onSave: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationStack {
-            TextEditor(text: $userInput)
-                .padding()
-                .navigationTitle("编辑消息")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("完成") { dismiss() }
-                    }
+        Form {
+            Section("原始内容") {
+                Text(originalMessage.content)
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+            }
+            
+            Section("编辑后") {
+                TextEditor(text: $text)
+                    .frame(minHeight: 160)
+            }
+        }
+        .navigationTitle("编辑消息")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("保存") {
+                    onSave(text)
+                    dismiss()
                 }
-        }
-    }
-}
-
-private struct MessageRowView: View {
-    let message: ChatMessage
-    @ObservedObject var viewModel: ChatViewModel
-    let proxy: ScrollViewProxy
-    
-    @State private var showInfoAlert = false
-    @State private var showDeleteConfirm = false
-    
-    var body: some View {
-        let isReasoningExpandedBinding = Binding<Bool>(
-            get: { viewModel.reasoningExpandedState[message.id, default: false] },
-            set: { viewModel.reasoningExpandedState[message.id] = $0 }
-        )
-        
-        let isToolCallsExpandedBinding = Binding<Bool>(
-            get: { viewModel.toolCallsExpandedState[message.id, default: false] },
-            set: { viewModel.toolCallsExpandedState[message.id] = $0 }
-        )
-        
-        return ChatBubble(
-            message: message,
-            isReasoningExpanded: isReasoningExpandedBinding,
-            isToolCallsExpanded: isToolCallsExpandedBinding,
-            enableMarkdown: viewModel.enableMarkdown,
-            enableBackground: viewModel.enableBackground,
-            enableLiquidGlass: viewModel.enableLiquidGlass
-        )
-        .id(message.id)
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .contextMenu {
-            Button {
-                viewModel.messageToEdit = message
-                viewModel.activeSheet = .editMessage
-            } label: {
-                Label("编辑消息", systemImage: "pencil")
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-
-            if viewModel.canRetry(message: message) {
-                Button {
-                    viewModel.retryLastMessage()
-                } label: {
-                    Label("重试", systemImage: "arrow.clockwise")
-                }
-            }
-
-            Button {
-                showInfoAlert = true
-            } label: {
-                Label("信息", systemImage: "info.circle")
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                showDeleteConfirm = true
-            } label: {
-                Label("删除消息", systemImage: "trash.fill")
-            }
-        }
-        .alert("信息", isPresented: $showInfoAlert) {
-            Button("好的") { }
-        } message: {
-            if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
-                Text("消息 ID: \(message.id.uuidString)\n会话位置: 第 \(index + 1) / \(viewModel.allMessagesForSession.count) 条")
-            }
-        }
-        .confirmationDialog("确认删除消息", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("删除", role: .destructive) {
-                viewModel.deleteMessage(message)
-            }
-            Button("取消", role: .cancel) { }
-        } message: {
-            Text("删除后无法恢复这条消息。")
         }
     }
 }

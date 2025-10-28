@@ -10,6 +10,7 @@
 
 import Foundation
 import Combine
+import NaturalLanguage
 import os.log
 
 public class MemoryManager {
@@ -69,7 +70,8 @@ public class MemoryManager {
     }
     
     private func setup() async {
-        self.similarityIndex = await SimilarityIndex(name: "etos-memory-index")
+        let nativeEmbeddings = NativeEmbeddings(language: NLLanguage.simplifiedChinese)
+        self.similarityIndex = await SimilarityIndex(name: "etos-memory-index", model: nativeEmbeddings)
         
         do {
             let loadedItems = try similarityIndex.loadIndex()

@@ -1,71 +1,42 @@
 // ============================================================================
-// ContentView.swift
+// ContentView.swift (iOS)
 // ============================================================================
-// ETOS LLM Studio iOS App 主视图文件
-//
-// 定义内容:
-// - App 的根视图，包含一个 TabView
-// - TabView 管理三个主要页面: 聊天、会话历史和设置
+// 应用根视图:
+// - 构建底部 TabView，包含聊天、会话、设置三个主要模块
+// - 通过环境注入的 ChatViewModel 在各子视图间共享状态
 // ============================================================================
 
 import SwiftUI
-import Shared
 
 struct ContentView: View {
-    @EnvironmentObject var viewModel: ChatViewModel
-    @State private var selectedTab = 0
-
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @State private var selection: Tab = .chat
+    
+    enum Tab: Hashable {
+        case chat
+        case sessions
+        case settings
+    }
+    
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: $selection) {
             ChatView()
                 .tabItem {
-                    Label("聊天", systemImage: "message.fill")
+                    Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
                 }
-                .tag(0)
-
-            NavigationStack {
-                SessionListView(
-                    sessions: $viewModel.chatSessions,
-                    currentSession: $viewModel.currentSession,
-                    deleteAction: { indexSet in
-                        viewModel.deleteSession(at: indexSet)
-                    },
-                    branchAction: { session, copyMessages in
-                        let newSession = viewModel.branchSession(from: session, copyMessages: copyMessages)
-                        return newSession
-                    },
-                    exportAction: { session in
-                        viewModel.activeSheet = .export(session)
-                    },
-                    deleteLastMessageAction: { session in
-                        viewModel.deleteLastMessage(for: session)
-                    },
-                    onSessionSelected: { selectedSession in
-                        ChatService.shared.setCurrentSession(selectedSession)
-                        selectedTab = 0
-                    },
-                    saveSessionsAction: {
-                        viewModel.forceSaveSessions()
-                    }
-                )
-            }
+                .tag(Tab.chat)
+            
+            SessionListView()
                 .tabItem {
                     Label("会话", systemImage: "list.bullet")
                 }
-                .tag(1)
-
-            NavigationStack {
-                SettingsView(viewModel: viewModel)
-            }
+                .tag(Tab.sessions)
+            
+            SettingsView()
                 .tabItem {
-                    Label("设置", systemImage: "gear")
+                    Label("设置", systemImage: "gearshape.fill")
                 }
-                .tag(2)
+                .tag(Tab.settings)
         }
     }
-}
-
-#Preview {
-    ContentView()
-        .environmentObject(ChatViewModel())
 }
