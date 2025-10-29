@@ -14,30 +14,26 @@ struct MemorySettingsView: View {
     }
     
     var body: some View {
-        List {
-            Section(header: Text("检索设置")) {
-                HStack {
-                    Text("Top K")
-                    Spacer()
+        Form {
+            Section {
+                LabeledContent("检索数量 (Top K)") {
                     TextField("0 表示不限制", value: $memoryTopK, formatter: numberFormatter)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 100)
+                        .frame(width: 80)
                         .onChange(of: memoryTopK) { newValue in
                             memoryTopK = max(0, newValue)
                         }
                 }
+            } header: {
+                Text("检索设置")
+            } footer: {
+                Text("设置为 0 表示检索所有记忆。默认值为 3。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             
-            Text("设置为 0 表示检索所有记忆。默认值为 3。")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .listRowInsets(EdgeInsets(top: -8, leading: 16, bottom: 12, trailing: 16))
-                .listRowBackground(Color.clear)
-            
-            
-            Section(header: Text("记忆列表")) {
+            Section("记忆列表") {
                 if viewModel.memories.isEmpty {
                     ContentUnavailableView(
                         "暂无记忆",

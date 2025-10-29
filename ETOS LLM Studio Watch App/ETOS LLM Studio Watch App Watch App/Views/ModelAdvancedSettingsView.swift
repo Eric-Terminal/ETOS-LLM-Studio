@@ -110,13 +110,19 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
             
-            Section(header: Text("性能设置"), footer: Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")) {
-                HStack {
-                    Text("懒加载消息数")
-                    Spacer()
-                    TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
+            Section(header: Text("性能设置")) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("懒加载消息数")
+                        Spacer()
+                        TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
+                    // 将说明文字内嵌到同一块里，避免 watchOS 额外的垂直留白
+                    Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
                 }
             }
         }

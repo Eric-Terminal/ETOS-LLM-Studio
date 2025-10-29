@@ -15,9 +15,16 @@ import os.log
 
 /// 代表从流式 API 响应中解析出的单个数据片段。
 public struct ChatMessagePart {
+    public struct ToolCallDelta {
+        public var id: String?
+        public var index: Int?
+        public var nameFragment: String?
+        public var argumentsFragment: String?
+    }
+
     public var content: String?
     public var reasoningContent: String?
-    // 暂不支持在流式响应中处理工具调用
+    public var toolCallDeltas: [ToolCallDelta]?
 }
 
 
@@ -63,11 +70,12 @@ public class OpenAIAdapter: APIAdapter {
     // MARK: - 内部解码模型 (实现细节)
     
     private struct OpenAIToolCall: Decodable {
-        let id: String
+        let id: String?
         let type: String
+        let index: Int?
         struct Function: Decodable {
-            let name: String
-            let arguments: String
+            let name: String?
+            let arguments: String?
         }
         let function: Function
     }
@@ -176,8 +184,17 @@ public class OpenAIAdapter: APIAdapter {
         // **翻译官的核心工作 (工具调用反向翻译)**:
         let internalToolCalls: [InternalToolCall]?
         if let openAIToolCalls = message.tool_calls {
-            internalToolCalls = openAIToolCalls.map {
-                InternalToolCall(id: $0.id, toolName: $0.function.name, arguments: $0.function.arguments)
+            internalToolCalls = openAIToolCalls.compactMap {
+                guard let id = $0.id else {
+                    logger.error("解析工具调用失败: 缺少调用 ID。")
+                    return nil
+                }
+                guard let name = $0.function.name else {
+                    logger.error("解析工具调用失败: 缺少函数名称，ID: \(id)")
+                    return nil
+                }
+                let arguments = $0.function.arguments ?? ""
+                return InternalToolCall(id: id, toolName: name, arguments: arguments)
             }
         } else {
             internalToolCalls = nil
@@ -210,16 +227,25 @@ public class OpenAIAdapter: APIAdapter {
             let chunk = try JSONDecoder().decode(OpenAIResponse.self, from: data)
             guard let delta = chunk.choices.first?.delta else { return nil }
             
-            // 警告: 当前版本暂不支持在流式响应中处理工具调用。
-            if delta.tool_calls != nil {
-                logger.warning("检测到流式响应中的工具调用，当前版本暂不支持处理，将忽略。")
+            // 解析流式响应中的工具调用增量 (采用 Append 模式)
+            let toolCallDeltas: [ChatMessagePart.ToolCallDelta]?
+            if let openAIToolCalls = delta.tool_calls {
+                toolCallDeltas = openAIToolCalls.enumerated().map { idx, call in
+                    ChatMessagePart.ToolCallDelta(
+                        id: call.id,
+                        index: call.index ?? idx,
+                        nameFragment: call.function.name,
+                        argumentsFragment: call.function.arguments
+                    )
+                }
+            } else {
+                toolCallDeltas = nil
             }
             
-            return ChatMessagePart(content: delta.content, reasoningContent: delta.reasoning_content) // 映射解析出的字段
+            return ChatMessagePart(content: delta.content, reasoningContent: delta.reasoning_content, toolCallDeltas: toolCallDeltas) // 映射解析出的字段
         } catch {
             logger.warning("流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")
             return nil
         }
     }
 }
-

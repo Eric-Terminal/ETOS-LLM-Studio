@@ -42,22 +42,21 @@ public struct MemorySettingsView: View {
 
     private var memoryListView: some View {
         List {
-            Section(header: Text("检索设置")) {
+            Section {
                 HStack {
                     Text("检索数量 (Top K)")
                     Spacer()
                     TextField("数量", value: $memoryTopK, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 100)
+                        .frame(width: 80)
                 }
+            } header: {
+                Text("检索设置")
+            } footer: {
+                Text("设置为 0 表示加载全部记忆。默认值为 3。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-
-            Text("设置为 0 表示加载全部记忆。默认值为 3。")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .listRowInsets(EdgeInsets(top: -8, leading: 12, bottom: 12, trailing: 12))
-                .listRowBackground(Color.clear)
 
             Section(header: Text("记忆列表")) {
                 if viewModel.memories.isEmpty {

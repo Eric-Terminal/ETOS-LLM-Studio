@@ -573,7 +573,7 @@ public class ChatService {
         }
         
         if enableStreaming {
-            await handleStreamedResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory)
+            await handleStreamedResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, availableTools: tools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite)
         } else {
             await handleStandardResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: tools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite)
         }
@@ -738,10 +738,25 @@ public class ChatService {
             toolDefs.first { $0.name == tc.toolName }?.isBlocking != true // 默认视为非阻塞
         }
 
-        // 3. 在后台处理所有非阻塞式工具调用 (“即发即忘”)
+        // 3. 判断 AI 是否已经给出正文，如果正文为空，需要准备走二次调用
+        let hasAssistantContent = !responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        // 4. 收集需要同步等待结果的工具调用
+        var blockingResultMessages: [ChatMessage] = []
+        if !blockingCalls.isEmpty {
+            logger.info("🤖 正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
+            for toolCall in blockingCalls {
+                let resultMessage = await handleToolCall(toolCall)
+                blockingResultMessages.append(resultMessage)
+            }
+        }
+
+        var nonBlockingResultsForFollowUp: [ChatMessage] = []
         if !nonBlockingCalls.isEmpty {
-            logger.info("🔥 在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
-            Task {
+            if hasAssistantContent {
+                // 仅当 AI 已经给出正文时，才异步执行非阻塞式工具，避免阻塞 UI
+                logger.info("🔥 在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
+                Task {
                     for toolCall in nonBlockingCalls {
                         let resultMessage = await handleToolCall(toolCall)
                         // 只保存工具执行结果，不将其发回给 AI
@@ -750,20 +765,22 @@ public class ChatService {
                         Persistence.saveMessages(messages, for: currentSessionID)
                         logger.info("  - ✅ 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
+                }
+            } else {
+                // 没有正文时需要等待工具结果，再次回传给 AI 生成最终回答
+                logger.info("📎 非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
+                for toolCall in nonBlockingCalls {
+                    let resultMessage = await handleToolCall(toolCall)
+                    nonBlockingResultsForFollowUp.append(resultMessage)
+                }
             }
         }
 
-        // 4. 如果存在阻塞式工具，则执行“二次调用”流程
-        if !blockingCalls.isEmpty {
-            logger.info("🤖 正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
-            var toolResultMessages: [ChatMessage] = []
-            for toolCall in blockingCalls {
-                let resultMessage = await handleToolCall(toolCall)
-                toolResultMessages.append(resultMessage)
-            }
-            
+        let shouldTriggerFollowUp = !blockingResultMessages.isEmpty || !nonBlockingResultsForFollowUp.isEmpty
+
+        if shouldTriggerFollowUp {
             var updatedMessages = self.messagesForSessionSubject.value
-            updatedMessages.append(contentsOf: toolResultMessages)
+            updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
             self.messagesForSessionSubject.send(updatedMessages)
             Persistence.saveMessages(updatedMessages, for: currentSessionID)
             
@@ -775,7 +792,7 @@ public class ChatService {
                 enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite
             )
         } else {
-            // 5. 如果只有非阻塞式工具，则在这里结束请求
+            // 5. 如果只有非阻塞式工具并且 AI 已经给出正文，则在这里结束请求
             requestStatusSubject.send(.finished)
             if wasTemporarySession, let userMsg = userMessage {
                 await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage)
@@ -783,9 +800,15 @@ public class ChatService {
         }
     }
     
-    private func handleStreamedResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int) async {
+    private func handleStreamedResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, availableTools: [InternalToolDefinition]?, enableMemory: Bool, enableMemoryWrite: Bool) async {
         do {
             let bytes = try await streamData(for: request)
+
+            // 保存流式过程中逐步构建的工具调用，用于后续二次调用
+            var toolCallBuilders: [Int: (id: String?, name: String?, arguments: String)] = [:]
+            var toolCallOrder: [Int] = []
+            var toolCallIndexByID: [String: Int] = [:]
+
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
                 
@@ -797,6 +820,42 @@ public class ChatService {
                     if let reasoningPart = part.reasoningContent {
                         if messages[index].reasoningContent == nil { messages[index].reasoningContent = "" }
                         messages[index].reasoningContent! += reasoningPart
+                    }
+                    if let toolDeltas = part.toolCallDeltas, !toolDeltas.isEmpty {
+                        // 记录工具调用的增量信息
+                        for delta in toolDeltas {
+                            let resolvedIndex: Int
+                            if let id = delta.id, let existed = toolCallIndexByID[id] {
+                                resolvedIndex = existed
+                            } else if let explicitIndex = delta.index {
+                                resolvedIndex = explicitIndex
+                                if let id = delta.id {
+                                    toolCallIndexByID[id] = explicitIndex
+                                }
+                            } else {
+                                resolvedIndex = (toolCallOrder.last ?? -1) + 1
+                                if let id = delta.id {
+                                    toolCallIndexByID[id] = resolvedIndex
+                                }
+                            }
+                            var builder = toolCallBuilders[resolvedIndex] ?? (id: nil, name: nil, arguments: "")
+                            if let id = delta.id { builder.id = id }
+                            if let nameFragment = delta.nameFragment, !nameFragment.isEmpty { builder.name = nameFragment }
+                            if let argsFragment = delta.argumentsFragment, !argsFragment.isEmpty { builder.arguments += argsFragment }
+                            toolCallBuilders[resolvedIndex] = builder
+                            if !toolCallOrder.contains(resolvedIndex) {
+                                toolCallOrder.append(resolvedIndex)
+                            }
+                        }
+                        // 将当前已知的工具调用更新到消息，便于 UI 显示“正在调用工具”
+                        let partialToolCalls: [InternalToolCall] = toolCallOrder.compactMap { orderIdx in
+                            guard let builder = toolCallBuilders[orderIdx], let name = builder.name else { return nil }
+                            let id = builder.id ?? "tool-\(orderIdx)"
+                            return InternalToolCall(id: id, toolName: name, arguments: builder.arguments)
+                        }
+                        if !partialToolCalls.isEmpty {
+                            messages[index].toolCalls = partialToolCalls
+                        }
                     }
                     messagesForSessionSubject.send(messages)
                 }
@@ -811,20 +870,41 @@ public class ChatService {
                     if messages[index].reasoningContent == nil { messages[index].reasoningContent = "" }
                     messages[index].reasoningContent! += "\n" + extractedReasoning
                 }
+                if messages[index].toolCalls == nil && !toolCallOrder.isEmpty {
+                    let finalToolCalls: [InternalToolCall] = toolCallOrder.compactMap { orderIdx in
+                        guard let builder = toolCallBuilders[orderIdx], let name = builder.name else {
+                            logger.error("⚠️ 流式响应中检测到未完成的工具调用 (index: \(orderIdx))，缺少名称。")
+                            return nil
+                        }
+                        let id = builder.id ?? "tool-\(orderIdx)"
+                        return InternalToolCall(id: id, toolName: name, arguments: builder.arguments)
+                    }
+                    if !finalToolCalls.isEmpty {
+                        messages[index].toolCalls = finalToolCalls
+                    }
+                }
                 finalAssistantMessage = messages[index]
                 messagesForSessionSubject.send(messages)
                 Persistence.saveMessages(messages, for: currentSessionID)
             }
-            requestStatusSubject.send(.finished)
-
-            if wasTemporarySession, let finalAssistantMessage = finalAssistantMessage, let userMsg = userMessage {
-                Task {
-                    await generateAndApplySessionTitle(
-                        for: currentSessionID,
-                        firstUserMessage: userMsg,
-                        firstAssistantMessage: finalAssistantMessage
-                    )
-                }
+            
+            if let finalAssistantMessage = finalAssistantMessage {
+                await processResponseMessage(
+                    responseMessage: finalAssistantMessage,
+                    loadingMessageID: loadingMessageID,
+                    currentSessionID: currentSessionID,
+                    userMessage: userMessage,
+                    wasTemporarySession: wasTemporarySession,
+                    availableTools: availableTools,
+                    aiTemperature: aiTemperature,
+                    aiTopP: aiTopP,
+                    systemPrompt: systemPrompt,
+                    maxChatHistory: maxChatHistory,
+                    enableMemory: enableMemory,
+                    enableMemoryWrite: enableMemoryWrite
+                )
+            } else {
+                requestStatusSubject.send(.finished)
             }
 
         } catch is CancellationError {

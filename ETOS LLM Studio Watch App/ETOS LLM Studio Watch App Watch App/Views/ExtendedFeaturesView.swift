@@ -21,15 +21,19 @@ public struct ExtendedFeaturesView: View {
     
     public var body: some View {
         List {
-            Section(header: Text("长期记忆"), footer: Text("启用后，AI将拥有长期记忆能力。它会在每次对话前自动检索相关记忆，并能通过工具主动学习和保存新信息。")) {
+            Section {
                 Toggle("启用记忆功能", isOn: $enableMemory)
                 
                 // 只有在功能启用时才显示管理入口
                 if enableMemory {
-                    Toggle("是否记录新的记忆", isOn: $enableMemoryWrite)
-                    Text("关闭后仅读取记忆，不会请求保存新内容。")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+                    Toggle(isOn: $enableMemoryWrite) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("是否记录新的记忆")
+                            Text("关闭后仅读取记忆，不会请求保存新内容。")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     
                     // 我们之前注释掉的 #available 检查仍然是必要的
                     if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
@@ -41,6 +45,10 @@ public struct ExtendedFeaturesView: View {
                             .foregroundColor(.gray)
                     }
                 }
+            } header: {
+                Text("长期记忆")
+            } footer: {
+                Text("启用后，AI将拥有长期记忆能力。它会在每次对话前自动检索相关记忆，并能通过工具主动学习和保存新信息。")
             }
         }
         .navigationTitle("拓展功能")
