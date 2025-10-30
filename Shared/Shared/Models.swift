@@ -78,18 +78,69 @@ public struct Provider: Codable, Identifiable, Hashable {
 
 /// 代表一个在提供商下的具体模型
 public struct Model: Codable, Identifiable, Hashable {
+    public enum Capability: String, Codable, Hashable {
+        case chat
+        case speechToText
+    }
+    
     public var id: UUID
     public var modelName: String // 技术名称, 例如: "deepseek-chat"
     public var displayName: String
     public var isActivated: Bool
     public var overrideParameters: [String: JSONValue]
+    public var capabilities: [Capability]
 
-    public init(id: UUID = UUID(), modelName: String, displayName: String? = nil, isActivated: Bool = false, overrideParameters: [String: JSONValue] = [:]) {
+    public init(
+        id: UUID = UUID(),
+        modelName: String,
+        displayName: String? = nil,
+        isActivated: Bool = false,
+        overrideParameters: [String: JSONValue] = [:],
+        capabilities: [Capability] = [.chat]
+    ) {
         self.id = id
         self.modelName = modelName
         self.displayName = displayName ?? modelName
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
+        self.capabilities = capabilities.isEmpty ? [.chat] : capabilities
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id, modelName, displayName, isActivated, overrideParameters, capabilities
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.modelName = try container.decode(String.self, forKey: .modelName)
+        self.displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? modelName
+        self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
+        self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
+        let decodedCapabilities = try container.decodeIfPresent([Capability].self, forKey: .capabilities) ?? [.chat]
+        self.capabilities = decodedCapabilities.isEmpty ? [.chat] : decodedCapabilities
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(modelName, forKey: .modelName)
+        if displayName != modelName {
+            try container.encode(displayName, forKey: .displayName)
+        }
+        try container.encode(isActivated, forKey: .isActivated)
+        if !overrideParameters.isEmpty {
+            try container.encode(overrideParameters, forKey: .overrideParameters)
+        }
+        if !(capabilities.count == 1 && capabilities.first == .chat) {
+            try container.encode(capabilities, forKey: .capabilities)
+        }
+    }
+}
+
+public extension Model {
+    var supportsSpeechToText: Bool {
+        capabilities.contains(.speechToText)
     }
 }
 

@@ -25,6 +25,10 @@ struct SettingsView: View {
                 }
                 
                 Section("对话行为") {
+                    let speechModelBinding = Binding<RunnableModel?>(
+                        get: { viewModel.selectedSpeechModel },
+                        set: { viewModel.setSelectedSpeechModel($0) }
+                    )
                     NavigationLink {
                         ModelAdvancedSettingsView(
                             aiTemperature: $viewModel.aiTemperature,
@@ -34,7 +38,10 @@ struct SettingsView: View {
                             lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
                             enableStreaming: $viewModel.enableStreaming,
                             enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
-                            currentSession: $viewModel.currentSession
+                            currentSession: $viewModel.currentSession,
+                            enableSpeechInput: $viewModel.enableSpeechInput,
+                            selectedSpeechModel: speechModelBinding,
+                            speechModels: viewModel.speechModels
                         )
                     } label: {
                         Label("高级模型设置", systemImage: "slider.vertical.3")

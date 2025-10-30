@@ -57,6 +57,22 @@ public protocol APIAdapter {
     /// - Parameter line: 从流中读取的一行字符串 (通常以 "data:" 开头)。
     /// - Returns: **一个 `ChatMessagePart` 数据片段，如果行无效则返回 `nil`。**
     func parseStreamingResponse(line: String) -> ChatMessagePart?
+    
+    /// 构建语音转文字请求。
+    func buildTranscriptionRequest(for model: RunnableModel, audioData: Data, fileName: String, mimeType: String, language: String?) -> URLRequest?
+    
+    /// 解析语音转文字响应。
+    func parseTranscriptionResponse(data: Data) throws -> String
+}
+
+public extension APIAdapter {
+    func buildTranscriptionRequest(for model: RunnableModel, audioData: Data, fileName: String, mimeType: String, language: String?) -> URLRequest? {
+        nil
+    }
+    
+    func parseTranscriptionResponse(data: Data) throws -> String {
+        throw NSError(domain: "APIAdapter", code: -10, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现语音转文字功能。"])
+    }
 }
 
 
@@ -92,6 +108,10 @@ public class OpenAIAdapter: APIAdapter {
             let delta: Message?   // 用于流式
         }
         let choices: [Choice]
+    }
+    
+    private struct OpenAITranscriptionResponse: Decodable {
+        let text: String
     }
 
     public init() {}
@@ -247,5 +267,71 @@ public class OpenAIAdapter: APIAdapter {
             logger.warning("流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")
             return nil
         }
+    }
+    
+    public func buildTranscriptionRequest(for model: RunnableModel, audioData: Data, fileName: String, mimeType: String, language: String?) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建语音转文字请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        let transcriptionURL = baseURL.appendingPathComponent("audio/transcriptions")
+        
+        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建语音转文字请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
+            return nil
+        }
+        
+        var request = URLRequest(url: transcriptionURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        body.appendMultipartField(name: "model", value: model.model.modelName, boundary: boundary)
+        if let language, !language.isEmpty {
+            body.appendMultipartField(name: "language", value: language, boundary: boundary)
+        }
+        body.appendMultipartFile(name: "file", fileName: fileName, mimeType: mimeType, data: audioData, boundary: boundary)
+        body.appendString("--\(boundary)--\r\n")
+        
+        request.httpBody = body
+        return request
+    }
+    
+    public func parseTranscriptionResponse(data: Data) throws -> String {
+        do {
+            let response = try JSONDecoder().decode(OpenAITranscriptionResponse.self, from: data)
+            return response.text
+        } catch {
+            if let raw = String(data: data, encoding: .utf8) {
+                logger.error("语音转文字响应解析失败，原始数据: \(raw)")
+            }
+            throw error
+        }
+    }
+}
+
+private extension Data {
+    mutating func appendString(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
+        }
+    }
+    
+    mutating func appendMultipartField(name: String, value: String, boundary: String) {
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+        appendString("\(value)\r\n")
+    }
+    
+    mutating func appendMultipartFile(name: String, fileName: String, mimeType: String, data: Data, boundary: String) {
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fileName)\"\r\n")
+        appendString("Content-Type: \(mimeType)\r\n\r\n")
+        append(data)
+        appendString("\r\n")
     }
 }

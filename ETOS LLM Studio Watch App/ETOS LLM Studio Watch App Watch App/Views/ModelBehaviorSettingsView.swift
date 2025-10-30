@@ -15,160 +15,146 @@ struct ModelBehaviorSettingsView: View {
     @Binding var model: Model
     let onSave: () -> Void
     
-    // 用于编辑覆盖参数的中间状态
-    @State private var maxTokens: String = ""
-    @State private var topK: String = ""
-    @State private var frequencyPenalty: String = ""
-    @State private var presencePenalty: String = ""
-    @State private var enableThinking: Bool = false
-    @State private var thinkingBudget: String = ""
+    // 手表端也复用表达式编辑逻辑，保持与 iPhone 一致的覆盖策略
+    @State private var expressionEntries: [ExpressionEntry] = []
     
     var body: some View {
         Form {
-            Section(header: Text("常用参数覆盖")) {
-                Toggle("启用思考过程", isOn: $enableThinking)
-                
-                HStack(spacing: 15) {
-                    MarqueeText(content: "max_tokens")
-                        .clipped()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    TextField("", text: $maxTokens)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
+            Section(header: Text("参数表达式")) {
+                ForEach($expressionEntries) { $entry in
+                    ExpressionRow(entry: $entry, onDelete: { deleteEntry(entry.id) })
+                        .onChange(of: entry.text) { _ in
+                            validateEntry(withId: entry.id)
+                        }
                 }
                 
-                HStack(spacing: 15) {
-                    MarqueeText(content: "top_k")
-                        .clipped()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    TextField("", text: $topK)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
+                Button {
+                    addEmptyEntry()
+                } label: {
+                    Label("添加", systemImage: "plus")
                 }
-                
-                HStack(spacing: 15) {
-                    MarqueeText(content: "frequency_penalty")
-                        .clipped()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    TextField("", text: $frequencyPenalty)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                }
-                
-                HStack(spacing: 15) {
-                    MarqueeText(content: "presence_penalty")
-                        .clipped()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    TextField("", text: $presencePenalty)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                }
-
-                HStack(spacing: 15) {
-                    MarqueeText(content: "thinking_budget")
-                        .clipped()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    TextField("", text: $thinkingBudget)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                }
+            }
+            
+            Section(header: Text("写法提示")) {
+                Text("使用 key = value 格式，例如 thinking_budget = 128")
+                Text("嵌套用 { }，例如 chat_template_kwargs = {thinking = false}")
             }
         }
         .navigationTitle(model.displayName)
-        .onAppear(perform: loadParameters)
-        .onDisappear {
-            saveParameters()
+        .onAppear(perform: loadExpressions)
+        .onDisappear(perform: saveExpressions)
+    }
+}
+
+// MARK: - 内部状态
+
+extension ModelBehaviorSettingsView {
+    struct ExpressionEntry: Identifiable, Equatable {
+        let id: UUID
+        var text: String
+        var error: String?
+        
+        init(id: UUID = UUID(), text: String, error: String? = nil) {
+            self.id = id
+            self.text = text
+            self.error = error
         }
     }
     
-    private func loadParameters() {
-        // 加载 max_tokens
-        if case let .int(value) = model.overrideParameters["max_tokens"] {
-            self.maxTokens = String(value)
+    private func loadExpressions() {
+        let serialized = ParameterExpressionParser.serialize(parameters: model.overrideParameters)
+        if serialized.isEmpty {
+            expressionEntries = [ExpressionEntry(text: "")]
         } else {
-            self.maxTokens = ""
-        }
-        
-        // 加载 top_k
-        if case let .int(value) = model.overrideParameters["top_k"] {
-            self.topK = String(value)
-        } else {
-            self.topK = ""
-        }
-        
-        // 加载 frequency_penalty
-        if case let .double(value) = model.overrideParameters["frequency_penalty"] {
-            self.frequencyPenalty = String(value)
-        } else {
-            self.frequencyPenalty = ""
-        }
-        
-        // 加载 presence_penalty
-        if case let .double(value) = model.overrideParameters["presence_penalty"] {
-            self.presencePenalty = String(value)
-        } else {
-            self.presencePenalty = ""
-        }
-        
-        // 加载 enable_thinking
-        if case let .bool(value) = model.overrideParameters["enable_thinking"] {
-            self.enableThinking = value
-        } else {
-            self.enableThinking = false
-        }
-
-        // 加载 thinking_budget
-        if case let .int(value) = model.overrideParameters["thinking_budget"] {
-            self.thinkingBudget = String(value)
-        } else {
-            self.thinkingBudget = ""
+            expressionEntries = serialized.map { ExpressionEntry(text: $0) }
         }
     }
     
-    private func saveParameters() {
-        // 保存 max_tokens
-        if let intValue = Int(maxTokens), intValue > 0 {
-            model.overrideParameters["max_tokens"] = .int(intValue)
-        } else {
-            model.overrideParameters.removeValue(forKey: "max_tokens")
+    private func addEmptyEntry() {
+        expressionEntries.append(ExpressionEntry(text: ""))
+    }
+    
+    private func deleteEntry(_ id: UUID) {
+        expressionEntries.removeAll { $0.id == id }
+        if expressionEntries.isEmpty {
+            addEmptyEntry()
+        }
+    }
+    
+    private func validateEntry(withId id: UUID) {
+        guard let index = expressionEntries.firstIndex(where: { $0.id == id }) else { return }
+        var entry = expressionEntries[index]
+        let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            entry.error = nil
+            expressionEntries[index] = entry
+            return
         }
         
-        // 保存 top_k
-        if let intValue = Int(topK), intValue > 0 {
-            model.overrideParameters["top_k"] = .int(intValue)
-        } else {
-            model.overrideParameters.removeValue(forKey: "top_k")
+        do {
+            _ = try ParameterExpressionParser.parse(trimmed)
+            entry.error = nil
+        } catch {
+            entry.error = error.localizedDescription
+        }
+        expressionEntries[index] = entry
+    }
+    
+    private func saveExpressions() {
+        var updatedEntries = expressionEntries
+        var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
+        var hasError = false
+        
+        for index in updatedEntries.indices {
+            let trimmed = updatedEntries[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                updatedEntries[index].error = nil
+                continue
+            }
+            
+            do {
+                let parsed = try ParameterExpressionParser.parse(trimmed)
+                parsedExpressions.append(parsed)
+                updatedEntries[index].error = nil
+            } catch {
+                updatedEntries[index].error = error.localizedDescription
+                hasError = true
+            }
         }
         
-        // 保存 frequency_penalty
-        if let doubleValue = Double(frequencyPenalty) {
-            model.overrideParameters["frequency_penalty"] = .double(doubleValue)
-        } else {
-            model.overrideParameters.removeValue(forKey: "frequency_penalty")
+        expressionEntries = updatedEntries
+        
+        guard !hasError else {
+            return
         }
         
-        // 保存 presence_penalty
-        if let doubleValue = Double(presencePenalty) {
-            model.overrideParameters["presence_penalty"] = .double(doubleValue)
-        } else {
-            model.overrideParameters.removeValue(forKey: "presence_penalty")
-        }
-        
-        // 保存 enable_thinking
-        if enableThinking {
-            model.overrideParameters["enable_thinking"] = .bool(true)
-        } else {
-            model.overrideParameters.removeValue(forKey: "enable_thinking")
-        }
-
-        // 保存 thinking_budget
-        if let intValue = Int(thinkingBudget), intValue > 0 {
-            model.overrideParameters["thinking_budget"] = .int(intValue)
-        } else {
-            model.overrideParameters.removeValue(forKey: "thinking_budget")
-        }
-        
-        // 通知上层视图执行保存操作
+        let merged = ParameterExpressionParser.buildParameters(from: parsedExpressions)
+        model.overrideParameters = merged
         onSave()
+    }
+}
+
+// MARK: - 子视图
+
+private struct ExpressionRow: View {
+    @Binding var entry: ModelBehaviorSettingsView.ExpressionEntry
+    let onDelete: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("比如 temperature = 0.8", text: $entry.text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            
+            if let error = entry.error {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+            
+            Button(role: .destructive, action: onDelete) {
+                Label("删除", systemImage: "trash")
+            }
+        }
     }
 }

@@ -10,6 +10,9 @@ struct ModelAdvancedSettingsView: View {
     @Binding var enableStreaming: Bool
     @Binding var enableAutoSessionNaming: Bool
     @Binding var currentSession: ChatSession?
+    @Binding var enableSpeechInput: Bool
+    @Binding var selectedSpeechModel: RunnableModel?
+    var speechModels: [RunnableModel]
     
     private var numberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -49,6 +52,30 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ), axis: .vertical)
                 .lineLimit(2...6)
+            }
+            
+            Section("语音输入") {
+                Toggle("启用语言输入", isOn: $enableSpeechInput)
+                if enableSpeechInput {
+                    if speechModels.isEmpty {
+                        Text("暂无标记为语音转文字的模型，请先在模型列表中激活。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("语音识别模型", selection: $selectedSpeechModel) {
+                            Text("未选择").tag(Optional<RunnableModel>.none)
+                            ForEach(speechModels) { runnable in
+                                Text("\(runnable.model.displayName) · \(runnable.provider.name)")
+                                    .tag(Optional<RunnableModel>.some(runnable))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        
+                        Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             
             Section("输出样式") {

@@ -15,6 +15,7 @@ import WatchKit
 import os.log
 import Combine
 import Shared
+import AVFoundation
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
@@ -43,6 +44,13 @@ class ChatViewModel: ObservableObject {
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var isSendingMessage: Bool = false
+    @Published var speechModels: [RunnableModel] = []
+    @Published var selectedSpeechModel: RunnableModel?
+    @Published var isSpeechRecorderPresented: Bool = false
+    @Published var isRecordingSpeech: Bool = false
+    @Published var speechTranscriptionInProgress: Bool = false
+    @Published var speechErrorMessage: String?
+    @Published var showSpeechErrorAlert: Bool = false
     
     // MARK: - 用户偏好设置 (AppStorage)
     
@@ -62,6 +70,8 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
+    @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
+    @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     
     // MARK: - 公开属性
     
@@ -78,6 +88,8 @@ class ChatViewModel: ObservableObject {
     private var extendedSession: WKExtendedRuntimeSession?
     private let chatService: ChatService
     private var cancellables = Set<AnyCancellable>()
+    private var audioRecorder: AVAudioRecorder?
+    private var speechRecordingURL: URL?
     
     // MARK: - 初始化
 
@@ -138,6 +150,8 @@ class ChatViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.providers = providers
                 self.activatedModels = self.chatService.activatedRunnableModels
+                self.speechModels = self.chatService.activatedSpeechModels
+                self.syncSpeechModelSelection()
             }
             .store(in: &cancellables)
 
@@ -174,6 +188,8 @@ class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
             .store(in: &cancellables)
+        
+        syncSpeechModelSelection()
     }
     
     private func rotateBackgroundImageIfNeeded() {
@@ -230,6 +246,150 @@ class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite
             )
         }
+    }
+    
+    // MARK: 语音输入
+    
+    func setSelectedSpeechModel(_ model: RunnableModel?) {
+        selectedSpeechModel = model
+        let newIdentifier = model?.id ?? ""
+        if speechModelIdentifier != newIdentifier {
+            speechModelIdentifier = newIdentifier
+        }
+    }
+    
+    func appendTranscribedText(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if userInput.isEmpty {
+            userInput = trimmed
+        } else {
+            let needsSpace = !(userInput.last?.isWhitespace ?? true)
+            userInput += (needsSpace ? " " : "") + trimmed
+        }
+    }
+    
+    func beginSpeechInputFlow() {
+        guard enableSpeechInput else {
+            presentSpeechError("请先在高级设置中开启语言输入功能。")
+            return
+        }
+        guard !speechModels.isEmpty else {
+            presentSpeechError("暂无可用的语音模型，请先在模型列表中启用。")
+            return
+        }
+        guard selectedSpeechModel != nil else {
+            presentSpeechError("请选择一个语音转文字模型。")
+            return
+        }
+        speechErrorMessage = nil
+        showSpeechErrorAlert = false
+        isSpeechRecorderPresented = true
+    }
+    
+    func startSpeechRecording() async {
+        guard !isRecordingSpeech else { return }
+        guard enableSpeechInput else {
+            presentSpeechError("语言输入已被关闭。")
+            isSpeechRecorderPresented = false
+            return
+        }
+        guard selectedSpeechModel != nil else {
+            presentSpeechError("尚未选择语音转文字模型。")
+            isSpeechRecorderPresented = false
+            return
+        }
+        
+        let permissionGranted = await requestMicrophonePermission()
+        guard permissionGranted else {
+            presentSpeechError("麦克风权限被拒绝，请到设置中开启。")
+            isSpeechRecorderPresented = false
+            return
+        }
+        
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            
+            if let existingURL = speechRecordingURL {
+                try? FileManager.default.removeItem(at: existingURL)
+            }
+            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            ]
+            
+            audioRecorder = try AVAudioRecorder(url: targetURL, settings: settings)
+            audioRecorder?.prepareToRecord()
+            guard audioRecorder?.record() == true else {
+                throw NSError(domain: "SpeechRecorder", code: -1, userInfo: [NSLocalizedDescriptionKey: "录音启动失败。"])
+            }
+            
+            speechRecordingURL = targetURL
+            isRecordingSpeech = true
+        } catch {
+            presentSpeechError("开始录音失败: \(error.localizedDescription)")
+            isSpeechRecorderPresented = false
+            audioRecorder = nil
+            speechRecordingURL = nil
+        }
+    }
+    
+    func finishSpeechRecording() {
+        guard isRecordingSpeech else { return }
+        isRecordingSpeech = false
+        audioRecorder?.stop()
+        guard let url = speechRecordingURL else {
+            audioRecorder = nil
+            speechRecordingURL = nil
+            isSpeechRecorderPresented = false
+            presentSpeechError("录音文件未找到，无法转写。")
+            return
+        }
+        
+        speechTranscriptionInProgress = true
+        Task {
+            defer {
+                speechTranscriptionInProgress = false
+                isSpeechRecorderPresented = false
+                audioRecorder = nil
+                speechRecordingURL = nil
+                try? FileManager.default.removeItem(at: url)
+            }
+            do {
+                let data = try Data(contentsOf: url)
+                guard let speechModel = selectedSpeechModel else {
+                    throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: "尚未选择语音转文字模型。"])
+                }
+                let transcript = try await chatService.transcribeAudio(
+                    using: speechModel,
+                    audioData: data,
+                    fileName: url.lastPathComponent,
+                    mimeType: "audio/m4a"
+                )
+                appendTranscribedText(transcript)
+            } catch {
+                presentSpeechError(error.localizedDescription)
+            }
+        }
+    }
+    
+    func cancelSpeechRecording() {
+        if isRecordingSpeech {
+            audioRecorder?.stop()
+            isRecordingSpeech = false
+        }
+        speechTranscriptionInProgress = false
+        if let url = speechRecordingURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        audioRecorder = nil
+        speechRecordingURL = nil
+        isSpeechRecorderPresented = false
     }
     
     // MARK: 会话和消息管理
@@ -383,6 +543,42 @@ class ChatViewModel: ObservableObject {
     }
     
     // MARK: - 私有方法 (内部逻辑)
+    
+    private func requestMicrophonePermission() async -> Bool {
+        let session = AVAudioSession.sharedInstance()
+        switch session.recordPermission {
+        case .granted:
+            return true
+        case .denied:
+            return false
+        case .undetermined:
+            return await withCheckedContinuation { continuation in
+                session.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        @unknown default:
+            return false
+        }
+    }
+    
+    private func presentSpeechError(_ message: String) {
+        speechErrorMessage = message
+        showSpeechErrorAlert = true
+    }
+    
+    private func syncSpeechModelSelection() {
+        if let match = speechModels.first(where: { $0.id == speechModelIdentifier }) {
+            if selectedSpeechModel?.id != match.id {
+                selectedSpeechModel = match
+            }
+        } else {
+            selectedSpeechModel = nil
+            if !speechModelIdentifier.isEmpty {
+                speechModelIdentifier = ""
+            }
+        }
+    }
     
     private func startExtendedSession() {
         extendedSession = WKExtendedRuntimeSession()

@@ -24,6 +24,9 @@ struct ModelAdvancedSettingsView: View {
     @Binding var enableStreaming: Bool
     @Binding var enableAutoSessionNaming: Bool // 新增绑定
     @Binding var currentSession: ChatSession?
+    @Binding var enableSpeechInput: Bool
+    @Binding var selectedSpeechModel: RunnableModel?
+    var speechModels: [RunnableModel]
     
     // MARK: - 私有属性
     
@@ -57,6 +60,26 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ), axis: .vertical)
                 .lineLimit(5...10)
+            }
+            
+            Section(header: Text("语音输入"), footer: Text("识别结果会自动追加到输入框，便于确认和补充。")) {
+                Toggle("启用语言输入", isOn: $enableSpeechInput)
+                if enableSpeechInput {
+                    if speechModels.isEmpty {
+                        Text("暂无可用的语音模型，请先在模型设置中启用。")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Picker("语音模型", selection: $selectedSpeechModel) {
+                            Text("未选择").tag(Optional<RunnableModel>.none)
+                            ForEach(speechModels) { runnable in
+                                Text(runnable.model.displayName)
+                                    .tag(Optional<RunnableModel>.some(runnable))
+                            }
+                        }
+                        .pickerStyle(.navigationLink)
+                    }
+                }
             }
             
             Section(header: Text("增强提示词"), footer: Text("该提示词会附加在您的最后一条消息末尾，以增强指令效果。")) {

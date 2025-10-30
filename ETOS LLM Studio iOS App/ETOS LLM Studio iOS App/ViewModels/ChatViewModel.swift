@@ -37,6 +37,8 @@ final class ChatViewModel: ObservableObject {
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var isSendingMessage: Bool = false
+    @Published var speechModels: [RunnableModel] = []
+    @Published var selectedSpeechModel: RunnableModel?
     
     // MARK: - User Preferences (AppStorage)
     
@@ -56,6 +58,8 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
+    @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
+    @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     
     // MARK: - Public Properties
     
@@ -126,6 +130,8 @@ final class ChatViewModel: ObservableObject {
                 guard let self else { return }
                 self.providers = providers
                 self.activatedModels = chatService.activatedRunnableModels
+                self.speechModels = chatService.activatedSpeechModels
+                self.syncSpeechModelSelection()
             }
             .store(in: &cancellables)
         
@@ -158,6 +164,8 @@ final class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
             .store(in: &cancellables)
+        
+        syncSpeechModelSelection()
     }
     
     private func rotateBackgroundImageIfNeeded() {
@@ -190,6 +198,38 @@ final class ChatViewModel: ObservableObject {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite
             )
+        }
+    }
+    
+    func setSelectedSpeechModel(_ model: RunnableModel?) {
+        selectedSpeechModel = model
+        let newIdentifier = model?.id ?? ""
+        if speechModelIdentifier != newIdentifier {
+            speechModelIdentifier = newIdentifier
+        }
+    }
+    
+    func appendTranscribedText(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if userInput.isEmpty {
+            userInput = trimmed
+        } else {
+            let needsSpace = !(userInput.last?.isWhitespace ?? true)
+            userInput += (needsSpace ? " " : "") + trimmed
+        }
+    }
+    
+    private func syncSpeechModelSelection() {
+        if let match = speechModels.first(where: { $0.id == speechModelIdentifier }) {
+            if selectedSpeechModel?.id != match.id {
+                selectedSpeechModel = match
+            }
+        } else {
+            selectedSpeechModel = nil
+            if !speechModelIdentifier.isEmpty {
+                speechModelIdentifier = ""
+            }
         }
     }
     

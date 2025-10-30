@@ -45,6 +45,10 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    let speechModelBinding = Binding<RunnableModel?>(
+                        get: { viewModel.selectedSpeechModel },
+                        set: { viewModel.setSelectedSpeechModel($0) }
+                    )
                     NavigationLink(destination: ModelAdvancedSettingsView(
                         aiTemperature: $viewModel.aiTemperature,
                         aiTopP: $viewModel.aiTopP,
@@ -53,7 +57,10 @@ struct SettingsView: View {
                         lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
                         enableStreaming: $viewModel.enableStreaming,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
-                        currentSession: $viewModel.currentSession
+                        currentSession: $viewModel.currentSession,
+                        enableSpeechInput: $viewModel.enableSpeechInput,
+                        selectedSpeechModel: speechModelBinding,
+                        speechModels: viewModel.speechModels
                     )) {
                         Label("模型高级设置", systemImage: "brain.head.profile")
                     }

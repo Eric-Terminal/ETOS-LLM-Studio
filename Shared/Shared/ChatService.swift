@@ -70,6 +70,10 @@ public class ChatService {
         }
         return models
     }
+    
+    public var activatedSpeechModels: [RunnableModel] {
+        activatedRunnableModels.filter { $0.model.supportsSpeechToText }
+    }
 
     // MARK: - 初始化
     
@@ -162,6 +166,48 @@ public class ChatService {
             return fetchedModels
         } catch {
             logger.error("  - ❌ 获取或解析模型列表失败: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    /// 将音频数据发送到选定的语音转文字模型，并返回识别结果。
+    /// - Parameters:
+    ///   - model: 需要调用的语音模型。
+    ///   - audioData: 录制的音频数据。
+    ///   - fileName: 上传使用的文件名。
+    ///   - mimeType: 音频数据的类型，例如 `audio/m4a`。
+    ///   - language: 可选的语言提示，留空则由模型自动判断。
+    /// - Returns: 识别出的文本。
+    public func transcribeAudio(
+        using model: RunnableModel,
+        audioData: Data,
+        fileName: String,
+        mimeType: String,
+        language: String? = nil
+    ) async throws -> String {
+        logger.info("🎙️ 正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
+        
+        guard let adapter = adapters[model.provider.apiFormat] else {
+            throw NetworkError.adapterNotFound(format: model.provider.apiFormat)
+        }
+        
+        guard let request = adapter.buildTranscriptionRequest(
+            for: model,
+            audioData: audioData,
+            fileName: fileName,
+            mimeType: mimeType,
+            language: language
+        ) else {
+            throw NetworkError.featureUnavailable(provider: model.provider.name)
+        }
+        
+        do {
+            let data = try await fetchData(for: request)
+            let transcript = try adapter.parseTranscriptionResponse(data: data)
+            logger.info("✅ 语音转文字完成，长度 \(transcript.count) 字符。")
+            return transcript
+        } catch {
+            logger.error("❌ 语音转文字失败: \(error.localizedDescription)")
             throw error
         }
     }
@@ -624,12 +670,14 @@ public class ChatService {
         case badStatusCode(code: Int, responseBody: Data?)
         case adapterNotFound(format: String)
         case requestBuildFailed(provider: String)
+        case featureUnavailable(provider: String)
 
         var errorDescription: String? {
             switch self {
             case .badStatusCode(let code, _): return "服务器响应错误，状态码: \(code)"
             case .adapterNotFound(let format): return "找不到适用于 '\(format)' 格式的 API 适配器。"
             case .requestBuildFailed(let provider): return "无法为 '\(provider)' 构建请求。"
+            case .featureUnavailable(let provider): return "当前提供商 \(provider) 暂未实现语音转文字能力。"
             }
         }
     }

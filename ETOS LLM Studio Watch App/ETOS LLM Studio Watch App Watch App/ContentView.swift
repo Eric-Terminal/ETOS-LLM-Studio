@@ -202,7 +202,7 @@ struct ContentView: View {
     }
     
     private var inputBubble: some View {
-        Group {
+        let coreBubble = Group {
             if viewModel.enableLiquidGlass {
                 HStack(spacing: 10) {
                     TextField("输入...", text: $viewModel.userInput)
@@ -221,7 +221,6 @@ struct ContentView: View {
                     .disabled(viewModel.userInput.isEmpty || viewModel.isSendingMessage)
                 }
                 .frame(height: 38)
-                
             } else {
                 HStack(spacing: 12) {
                     TextField("输入...", text: $viewModel.userInput)
@@ -241,5 +240,35 @@ struct ContentView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
+        
+        let speechSheetBinding = Binding(
+            get: { viewModel.isSpeechRecorderPresented },
+            set: { viewModel.isSpeechRecorderPresented = $0 }
+        )
+        let speechErrorBinding = Binding(
+            get: { viewModel.showSpeechErrorAlert },
+            set: { viewModel.showSpeechErrorAlert = $0 }
+        )
+        
+        return coreBubble
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if viewModel.enableSpeechInput {
+                    Button {
+                        viewModel.beginSpeechInputFlow()
+                    } label: {
+                        Label("语言输入", systemImage: viewModel.isRecordingSpeech ? "waveform.circle.fill" : "mic.fill")
+                    }
+                    .tint(.blue)
+                    .disabled(viewModel.speechModels.isEmpty)
+                }
+            }
+            .sheet(isPresented: speechSheetBinding) {
+                SpeechRecorderView(viewModel: viewModel)
+            }
+            .alert("语音输入错误", isPresented: speechErrorBinding) {
+                Button("好的", role: .cancel) { }
+            } message: {
+                Text(viewModel.speechErrorMessage ?? "发生未知错误，请稍后重试。")
+            }
     }
 }
