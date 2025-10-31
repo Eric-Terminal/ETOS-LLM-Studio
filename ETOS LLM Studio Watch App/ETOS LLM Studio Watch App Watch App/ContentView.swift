@@ -251,7 +251,16 @@ struct ContentView: View {
         )
         
         return coreBubble
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                if !viewModel.userInput.isEmpty {
+                    Button(role: .destructive) {
+                        viewModel.clearUserInput()
+                    } label: {
+                        Label("清空输入", systemImage: "trash")
+                    }
+                }
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 if viewModel.enableSpeechInput {
                     Button {
                         viewModel.beginSpeechInputFlow()

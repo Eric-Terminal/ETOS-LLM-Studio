@@ -72,7 +72,17 @@ public class ChatService {
     }
     
     public var activatedSpeechModels: [RunnableModel] {
-        activatedRunnableModels
+        let speechCapable = activatedRunnableModels.filter { $0.model.supportsSpeechToText }
+        return speechCapable.isEmpty ? activatedRunnableModels : speechCapable
+    }
+
+    private func resolveSelectedSpeechModel() -> RunnableModel? {
+        let storedIdentifier = UserDefaults.standard.string(forKey: "speechModelIdentifier")
+        if let identifier = storedIdentifier,
+           let match = activatedSpeechModels.first(where: { $0.id == identifier }) {
+            return match
+        }
+        return activatedSpeechModels.first
     }
 
     // MARK: - 初始化
@@ -417,9 +427,16 @@ public class ChatService {
         }
 
         // 准备用户消息和UI占位消息
+        let audioPlaceholder = "[语音消息]"
         var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if messageContent.isEmpty, audioAttachment != nil {
-            messageContent = "[语音消息]"
+        var usedAudioPlaceholder = false
+        if audioAttachment != nil {
+            if messageContent.isEmpty {
+                messageContent = audioPlaceholder
+                usedAudioPlaceholder = true
+            } else if messageContent == audioPlaceholder {
+                usedAudioPlaceholder = true
+            }
         }
         let userMessage = ChatMessage(role: .user, content: messageContent)
         let loadingMessage = ChatMessage(role: .assistant, content: "") // 内容为空的助手消息作为加载占位符
@@ -429,6 +446,17 @@ public class ChatService {
         messages.append(userMessage)
         messages.append(loadingMessage)
         messagesForSessionSubject.send(messages)
+        
+        if usedAudioPlaceholder, let audioAttachment {
+            Task {
+                await self.handleBackgroundTranscription(
+                    audioAttachment: audioAttachment,
+                    placeholder: audioPlaceholder,
+                    messageID: userMessage.id,
+                    sessionID: currentSession.id
+                )
+            }
+        }
         
         // 处理临时会话的转换
         if currentSession.isTemporary {
@@ -713,6 +741,101 @@ public class ChatService {
             throw NetworkError.badStatusCode(code: statusCode, responseBody: nil)
         }
         return bytes
+    }
+    
+    private func handleBackgroundTranscription(audioAttachment: AudioAttachment, placeholder: String, messageID: UUID, sessionID: UUID) async {
+        guard let speechModel = resolveSelectedSpeechModel() else {
+            logger.error("❌ 语音转文字失败: 未配置可用的语音模型。")
+            if await MainActor.run(body: { currentSessionSubject.value?.id == sessionID }) {
+                await MainActor.run {
+                    self.addErrorMessage("语音转文字失败：尚未配置语音模型。请在设置中选择一个模型。")
+                }
+            }
+            return
+        }
+        
+        logger.info("📝 (后台) 正在使用 \(speechModel.model.displayName) 进行语音转文字...")
+        
+        do {
+            let rawTranscript = try await transcribeAudio(
+                using: speechModel,
+                audioData: audioAttachment.data,
+                fileName: audioAttachment.fileName,
+                mimeType: audioAttachment.mimeType
+            )
+            let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            guard !transcript.isEmpty else {
+                logger.error("❌ 语音转文字失败：识别结果为空。")
+                if await MainActor.run(body: { currentSessionSubject.value?.id == sessionID }) {
+                    await MainActor.run {
+                        self.addErrorMessage("语音转文字失败：识别结果为空。请稍后重试。")
+                    }
+                }
+                return
+            }
+            
+            await MainActor.run {
+                self.applyTranscriptionResult(
+                    transcript,
+                    toMessageWithID: messageID,
+                    in: sessionID,
+                    placeholder: placeholder
+                )
+            }
+        } catch {
+            logger.error("❌ 语音转文字失败：\(error.localizedDescription)")
+            if await MainActor.run(body: { currentSessionSubject.value?.id == sessionID }) {
+                await MainActor.run {
+                    self.addErrorMessage("语音转文字失败：\(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    @MainActor
+    private func applyTranscriptionResult(_ transcript: String, toMessageWithID messageID: UUID, in sessionID: UUID, placeholder: String) {
+        var messages: [ChatMessage]
+        let isCurrentSession = currentSessionSubject.value?.id == sessionID
+        
+        if isCurrentSession {
+            messages = messagesForSessionSubject.value
+        } else {
+            messages = Persistence.loadMessages(for: sessionID)
+        }
+        
+        guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
+            logger.warning("⚠️ 未找到需要更新的语音消息（可能会话已被切换或删除）。")
+            return
+        }
+        
+        messages[index].content = transcript
+        
+        if isCurrentSession {
+            messagesForSessionSubject.send(messages)
+        }
+        Persistence.saveMessages(messages, for: sessionID)
+        
+        // 如果是新建的会话且名称仍为占位符，则同步更新会话名称
+        if isCurrentSession, var currentSession = currentSessionSubject.value, currentSession.name == placeholder {
+            currentSession.name = String(transcript.prefix(20))
+            currentSessionSubject.send(currentSession)
+            var sessions = chatSessionsSubject.value
+            if let sessionIndex = sessions.firstIndex(where: { $0.id == currentSession.id }) {
+                sessions[sessionIndex] = currentSession
+                chatSessionsSubject.send(sessions)
+                Persistence.saveChatSessions(sessions)
+            }
+        } else {
+            var sessions = chatSessionsSubject.value
+            if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) {
+                if sessions[sessionIndex].name == placeholder {
+                    sessions[sessionIndex].name = String(transcript.prefix(20))
+                    chatSessionsSubject.send(sessions)
+                    Persistence.saveChatSessions(sessions)
+                }
+            }
+        }
     }
     
     private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool) async {

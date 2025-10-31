@@ -63,29 +63,24 @@ struct ModelAdvancedSettingsView: View {
                 .lineLimit(5...10)
             }
             
-            Section(header: Text("语音输入"), footer: Text(sendSpeechAsAudio ? "录音完成后会直接附带音频给模型，不再转写。" : "识别结果会自动追加到输入框，便于确认和补充。")) {
+            Section(header: Text("语音输入"), footer: Text(sendSpeechAsAudio ? "录音将附带音频给当前模型，同时使用下方所选模型后台转写文字。" : "识别结果会自动追加到输入框，便于确认和补充。")) {
                 Toggle("启用语言输入", isOn: $enableSpeechInput)
                 if enableSpeechInput {
                     Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
-                    if sendSpeechAsAudio {
-                        Text("如果当前模型不支持音频，将直接返回错误提示。")
+                    
+                    if speechModels.isEmpty {
+                        Text("暂无可用的模型，请先在模型设置中启用。")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     } else {
-                        if speechModels.isEmpty {
-                            Text("暂无可用的模型，请先在模型设置中启用。")
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
-                        } else {
-                            Picker("语音模型", selection: $selectedSpeechModel) {
-                                Text("未选择").tag(Optional<RunnableModel>.none)
-                                ForEach(speechModels) { runnable in
-                                    Text(runnable.model.displayName)
-                                        .tag(Optional<RunnableModel>.some(runnable))
-                                }
+                        Picker("语音模型", selection: $selectedSpeechModel) {
+                            Text("未选择").tag(Optional<RunnableModel>.none)
+                            ForEach(speechModels) { runnable in
+                                Text(runnable.model.displayName)
+                                    .tag(Optional<RunnableModel>.some(runnable))
                             }
-                            .pickerStyle(.navigationLink)
                         }
+                        .pickerStyle(.navigationLink)
                     }
                 }
             }
@@ -142,19 +137,17 @@ struct ModelAdvancedSettingsView: View {
             }
             
             Section(header: Text("性能设置")) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("懒加载消息数")
-                        Spacer()
-                        TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 60)
-                    }
-                    // 将说明文字内嵌到同一块里，避免 watchOS 额外的垂直留白
-                    Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+                HStack {
+                    Text("懒加载消息数")
+                    Spacer()
+                    TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
                 }
+                
+                Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
         }
         .navigationTitle("高级模型设置")

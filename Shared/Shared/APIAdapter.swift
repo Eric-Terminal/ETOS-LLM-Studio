@@ -184,10 +184,39 @@ public class OpenAIAdapter: APIAdapter {
             finalPayload["tool_choice"] = "auto"
         }
         
+        let containsAudioAttachment = audioAttachment != nil
+        
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
-            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
-                logger.debug("构建的聊天请求体 (Raw Request Body):\n---\n\(jsonString)\n---")
+            if let httpBody = request.httpBody {
+                if containsAudioAttachment {
+                    var sanitizedPayload = finalPayload
+                    if var messages = sanitizedPayload["messages"] as? [[String: Any]] {
+                        for index in messages.indices {
+                            guard var contentArray = messages[index]["content"] as? [[String: Any]] else { continue }
+                            for contentIndex in contentArray.indices {
+                                var contentItem = contentArray[contentIndex]
+                                guard let type = contentItem["type"] as? String, type == "input_audio" else { continue }
+                                guard var audioInfo = contentItem["input_audio"] as? [String: Any],
+                                      let rawData = audioInfo["data"] as? String else { continue }
+                                audioInfo["data"] = "[base64 omitted: \(rawData.count) chars]"
+                                contentItem["input_audio"] = audioInfo
+                                contentArray[contentIndex] = contentItem
+                            }
+                            messages[index]["content"] = contentArray
+                        }
+                        sanitizedPayload["messages"] = messages
+                    }
+                    
+                    if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
+                       let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
+                        logger.debug("构建的聊天请求体 (已隐藏音频 Base64):\n---\n\(sanitizedString)\n---")
+                    } else if let jsonString = String(data: httpBody, encoding: .utf8) {
+                        logger.debug("构建的聊天请求体 (无法完全隐藏音频，输出原始体的 hash): \(jsonString.hashValue)")
+                    }
+                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
+                    logger.debug("构建的聊天请求体 (Raw Request Body):\n---\n\(jsonString)\n---")
+                }
             }
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")

@@ -59,29 +59,27 @@ struct ModelAdvancedSettingsView: View {
                 Toggle("启用语言输入", isOn: $enableSpeechInput)
                 if enableSpeechInput {
                     Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
-                    if sendSpeechAsAudio {
-                        Text("录音完成后会作为音频附件直接发送给当前模型；若模型不支持音频，将返回错误信息。")
+                    
+                    if speechModels.isEmpty {
+                        Text("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        if speechModels.isEmpty {
-                            Text("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Picker("语音识别模型", selection: $selectedSpeechModel) {
-                                Text("未选择").tag(Optional<RunnableModel>.none)
-                                ForEach(speechModels) { runnable in
-                                    Text("\(runnable.model.displayName) · \(runnable.provider.name)")
-                                        .tag(Optional<RunnableModel>.some(runnable))
-                                }
+                        Picker("语音识别模型", selection: $selectedSpeechModel) {
+                            Text("未选择").tag(Optional<RunnableModel>.none)
+                            ForEach(speechModels) { runnable in
+                                Text("\(runnable.model.displayName) · \(runnable.provider.name)")
+                                    .tag(Optional<RunnableModel>.some(runnable))
                             }
-                            .pickerStyle(.menu)
-                            
-                            Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                         }
+                        .pickerStyle(.menu)
+                        
+                        let description = sendSpeechAsAudio
+                        ? "语音会直接附带音频给当前模型，同时后台用该模型转写文本。"
+                        : "语音内容会先发送到该模型转写，识别结果会自动补到输入框。"
+                        Text(description)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -123,6 +121,10 @@ struct ModelAdvancedSettingsView: View {
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
                 }
+                
+                Text("设置进入历史会话时默认加载的最近消息数量。数值越小，长对话加载越快；设置为 0 表示加载全部历史。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("高级模型设置")

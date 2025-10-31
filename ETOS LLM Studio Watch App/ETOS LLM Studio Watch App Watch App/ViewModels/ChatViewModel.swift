@@ -16,6 +16,7 @@ import os.log
 import Combine
 import Shared
 import AVFoundation
+import AVFAudio
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
@@ -51,6 +52,8 @@ class ChatViewModel: ObservableObject {
     @Published var speechTranscriptionInProgress: Bool = false
     @Published var speechErrorMessage: String?
     @Published var showSpeechErrorAlert: Bool = false
+    @Published var recordingDuration: TimeInterval = 0
+    @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     
     // MARK: - 用户偏好设置 (AppStorage)
     
@@ -91,6 +94,9 @@ class ChatViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var audioRecorder: AVAudioRecorder?
     private var speechRecordingURL: URL?
+    private var recordingStartDate: Date?
+    private var recordingTimer: Timer?
+    private let waveformSampleCount: Int = 24
     
     // MARK: - 初始化
 
@@ -270,6 +276,10 @@ class ChatViewModel: ObservableObject {
         }
     }
     
+    func clearUserInput() {
+        userInput = ""
+    }
+    
     func beginSpeechInputFlow() {
         guard enableSpeechInput else {
             presentSpeechError("请先在高级设置中开启语言输入功能。")
@@ -332,6 +342,7 @@ class ChatViewModel: ObservableObject {
             ]
             
             audioRecorder = try AVAudioRecorder(url: targetURL, settings: settings)
+            audioRecorder?.isMeteringEnabled = true
             audioRecorder?.prepareToRecord()
             guard audioRecorder?.record() == true else {
                 throw NSError(domain: "SpeechRecorder", code: -1, userInfo: [NSLocalizedDescriptionKey: "录音启动失败。"])
@@ -339,9 +350,12 @@ class ChatViewModel: ObservableObject {
             
             speechRecordingURL = targetURL
             isRecordingSpeech = true
+            resetRecordingVisuals()
+            startRecordingTimer()
         } catch {
             presentSpeechError("开始录音失败: \(error.localizedDescription)")
             isSpeechRecorderPresented = false
+            stopRecordingTimer(resetVisuals: true)
             audioRecorder = nil
             speechRecordingURL = nil
         }
@@ -351,11 +365,13 @@ class ChatViewModel: ObservableObject {
         guard isRecordingSpeech else { return }
         isRecordingSpeech = false
         audioRecorder?.stop()
+        stopRecordingTimer()
         guard let url = speechRecordingURL else {
             audioRecorder = nil
             speechRecordingURL = nil
             isSpeechRecorderPresented = false
             presentSpeechError("录音文件未找到，无法处理。")
+            resetRecordingVisuals()
             return
         }
         
@@ -365,10 +381,14 @@ class ChatViewModel: ObservableObject {
             audioRecorder = nil
             speechRecordingURL = nil
             isSpeechRecorderPresented = false
+            resetRecordingVisuals()
             return
         }
         
         speechTranscriptionInProgress = true
+        if sendSpeechAsAudio {
+            isSpeechRecorderPresented = false
+        }
         Task {
             defer {
                 speechTranscriptionInProgress = false
@@ -376,6 +396,7 @@ class ChatViewModel: ObservableObject {
                 audioRecorder = nil
                 speechRecordingURL = nil
                 try? FileManager.default.removeItem(at: url)
+                resetRecordingVisuals()
             }
             do {
                 let data = try Data(contentsOf: url)
@@ -428,6 +449,49 @@ class ChatViewModel: ObservableObject {
         audioRecorder = nil
         speechRecordingURL = nil
         isSpeechRecorderPresented = false
+        stopRecordingTimer(resetVisuals: true)
+    }
+    
+    private func resetRecordingVisuals() {
+        recordingDuration = 0
+        waveformSamples = Array(repeating: 0, count: waveformSampleCount)
+    }
+    
+    private func startRecordingTimer() {
+        stopRecordingTimer()
+        recordingStartDate = Date()
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.updateRecordingMetrics()
+            }
+        }
+        if let timer = recordingTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+    
+    private func stopRecordingTimer(resetVisuals: Bool = false) {
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        recordingStartDate = nil
+        if resetVisuals {
+            resetRecordingVisuals()
+        }
+    }
+    
+    @MainActor
+    private func updateRecordingMetrics() {
+        guard let recorder = audioRecorder else { return }
+        recorder.updateMeters()
+        let power = recorder.averagePower(forChannel: 0)
+        let normalizedLevel = max(0, min(1, (power + 60) / 60))
+        recordingDuration = Date().timeIntervalSince(recordingStartDate ?? Date())
+        var samples = waveformSamples
+        samples.append(CGFloat(normalizedLevel))
+        if samples.count > waveformSampleCount {
+            samples.removeFirst(samples.count - waveformSampleCount)
+        }
+        waveformSamples = samples
     }
     
     // MARK: 会话和消息管理
@@ -583,15 +647,14 @@ class ChatViewModel: ObservableObject {
     // MARK: - 私有方法 (内部逻辑)
     
     private func requestMicrophonePermission() async -> Bool {
-        let session = AVAudioSession.sharedInstance()
-        switch session.recordPermission {
+        switch AVAudioApplication.shared.recordPermission {
         case .granted:
             return true
         case .denied:
             return false
         case .undetermined:
             return await withCheckedContinuation { continuation in
-                session.requestRecordPermission { granted in
+                AVAudioApplication.requestRecordPermission { granted in
                     continuation.resume(returning: granted)
                 }
             }
