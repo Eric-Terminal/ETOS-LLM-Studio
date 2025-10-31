@@ -58,6 +58,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
+    @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     
@@ -225,12 +226,19 @@ final class ChatViewModel: ObservableObject {
             if selectedSpeechModel?.id != match.id {
                 selectedSpeechModel = match
             }
-        } else {
-            selectedSpeechModel = nil
-            if !speechModelIdentifier.isEmpty {
-                speechModelIdentifier = ""
-            }
+            return
         }
+        
+        guard !speechModelIdentifier.isEmpty else {
+            selectedSpeechModel = nil
+            return
+        }
+        
+        // 如果模型列表还没刷新出来，先保留之前的选择等待同步
+        guard !speechModels.isEmpty else { return }
+        
+        selectedSpeechModel = nil
+        speechModelIdentifier = ""
     }
     
     func addErrorMessage(_ content: String) {

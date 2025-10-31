@@ -72,7 +72,7 @@ public class ChatService {
     }
     
     public var activatedSpeechModels: [RunnableModel] {
-        activatedRunnableModels.filter { $0.model.supportsSpeechToText }
+        activatedRunnableModels
     }
 
     // MARK: - 初始化
@@ -407,7 +407,8 @@ public class ChatService {
         enableStreaming: Bool,
         enhancedPrompt: String?,
         enableMemory: Bool,
-        enableMemoryWrite: Bool
+        enableMemoryWrite: Bool,
+        audioAttachment: AudioAttachment? = nil
     ) async {
         guard var currentSession = currentSessionSubject.value else {
             addErrorMessage("错误: 没有当前会话。" )
@@ -416,7 +417,11 @@ public class ChatService {
         }
 
         // 准备用户消息和UI占位消息
-        let userMessage = ChatMessage(role: .user, content: content)
+        var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if messageContent.isEmpty, audioAttachment != nil {
+            messageContent = "[语音消息]"
+        }
+        let userMessage = ChatMessage(role: .user, content: messageContent)
         let loadingMessage = ChatMessage(role: .assistant, content: "") // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
         
@@ -467,7 +472,8 @@ public class ChatService {
                 enhancedPrompt: enhancedPrompt,
                 tools: tools,
                 enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite
+                enableMemoryWrite: enableMemoryWrite,
+                audioAttachment: audioAttachment
             )
         }
         currentRequestTask = requestTask
@@ -553,7 +559,8 @@ public class ChatService {
         enhancedPrompt: String?,
         tools: [InternalToolDefinition]?,
         enableMemory: Bool,
-        enableMemoryWrite: Bool
+        enableMemoryWrite: Bool,
+        audioAttachment: AudioAttachment?
     ) async {
         // 自动查：执行记忆搜索
         var memories: [MemoryItem] = []
@@ -612,7 +619,7 @@ public class ChatService {
         
         let commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
         
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools) else {
+        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachment: audioAttachment) else {
             addErrorMessage("错误: 无法构建 API 请求。" )
             requestStatusSubject.send(.error)
             return
@@ -837,7 +844,8 @@ public class ChatService {
                 messages: updatedMessages, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
-                enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite
+                enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
+                audioAttachment: nil
             )
         } else {
             // 5. 如果只有非阻塞式工具并且 AI 已经给出正文，则在这里结束请求
@@ -1093,7 +1101,7 @@ public class ChatService {
         
         // 5. 构建并发送API请求 (非流式)
         let payload: [String: Any] = ["temperature": 0.5, "stream": false]
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: payload, messages: titleRequestMessages, tools: nil) else {
+        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: payload, messages: titleRequestMessages, tools: nil, audioAttachment: nil) else {
             logger.error("构建标题生成请求失败。")
             return
         }

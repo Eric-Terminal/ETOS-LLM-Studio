@@ -70,6 +70,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
+    @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     
@@ -274,13 +275,15 @@ class ChatViewModel: ObservableObject {
             presentSpeechError("请先在高级设置中开启语言输入功能。")
             return
         }
-        guard !speechModels.isEmpty else {
-            presentSpeechError("暂无可用的语音模型，请先在模型列表中启用。")
-            return
-        }
-        guard selectedSpeechModel != nil else {
-            presentSpeechError("请选择一个语音转文字模型。")
-            return
+        if !sendSpeechAsAudio {
+            guard !speechModels.isEmpty else {
+                presentSpeechError("暂无可用的模型，请先在模型设置中启用。")
+                return
+            }
+            guard selectedSpeechModel != nil else {
+                presentSpeechError("请选择一个语音转文字模型。")
+                return
+            }
         }
         speechErrorMessage = nil
         showSpeechErrorAlert = false
@@ -294,10 +297,12 @@ class ChatViewModel: ObservableObject {
             isSpeechRecorderPresented = false
             return
         }
-        guard selectedSpeechModel != nil else {
-            presentSpeechError("尚未选择语音转文字模型。")
-            isSpeechRecorderPresented = false
-            return
+        if !sendSpeechAsAudio {
+            guard selectedSpeechModel != nil else {
+                presentSpeechError("尚未选择语音转文字模型。")
+                isSpeechRecorderPresented = false
+                return
+            }
         }
         
         let permissionGranted = await requestMicrophonePermission()
@@ -315,12 +320,15 @@ class ChatViewModel: ObservableObject {
             if let existingURL = speechRecordingURL {
                 try? FileManager.default.removeItem(at: existingURL)
             }
-            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).m4a")
+            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).wav")
             let settings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                AVSampleRateKey: 44100,
+                AVFormatIDKey: Int(kAudioFormatLinearPCM),
+                AVSampleRateKey: 16000,
                 AVNumberOfChannelsKey: 1,
-                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsNonInterleaved: false
             ]
             
             audioRecorder = try AVAudioRecorder(url: targetURL, settings: settings)
@@ -347,7 +355,16 @@ class ChatViewModel: ObservableObject {
             audioRecorder = nil
             speechRecordingURL = nil
             isSpeechRecorderPresented = false
-            presentSpeechError("录音文件未找到，无法转写。")
+            presentSpeechError("录音文件未找到，无法处理。")
+            return
+        }
+        
+        if sendSpeechAsAudio && isSendingMessage {
+            presentSpeechError("上一条消息仍在发送，请稍后再试。")
+            try? FileManager.default.removeItem(at: url)
+            audioRecorder = nil
+            speechRecordingURL = nil
+            isSpeechRecorderPresented = false
             return
         }
         
@@ -362,16 +379,37 @@ class ChatViewModel: ObservableObject {
             }
             do {
                 let data = try Data(contentsOf: url)
-                guard let speechModel = selectedSpeechModel else {
-                    throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: "尚未选择语音转文字模型。"])
+                if sendSpeechAsAudio {
+                    let attachment = AudioAttachment(data: data, mimeType: "audio/wav", format: "wav", fileName: url.lastPathComponent)
+                    var messageText = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if messageText.isEmpty {
+                        messageText = "[语音消息]"
+                    }
+                    userInput = ""
+                    await chatService.sendAndProcessMessage(
+                        content: messageText,
+                        aiTemperature: aiTemperature,
+                        aiTopP: aiTopP,
+                        systemPrompt: systemPrompt,
+                        maxChatHistory: maxChatHistory,
+                        enableStreaming: enableStreaming,
+                        enhancedPrompt: currentSession?.enhancedPrompt,
+                        enableMemory: enableMemory,
+                        enableMemoryWrite: enableMemoryWrite,
+                        audioAttachment: attachment
+                    )
+                } else {
+                    guard let speechModel = selectedSpeechModel else {
+                        throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: "尚未选择语音转文字模型。"])
+                    }
+                    let transcript = try await chatService.transcribeAudio(
+                        using: speechModel,
+                        audioData: data,
+                        fileName: url.lastPathComponent,
+                        mimeType: "audio/wav"
+                    )
+                    appendTranscribedText(transcript)
                 }
-                let transcript = try await chatService.transcribeAudio(
-                    using: speechModel,
-                    audioData: data,
-                    fileName: url.lastPathComponent,
-                    mimeType: "audio/m4a"
-                )
-                appendTranscribedText(transcript)
             } catch {
                 presentSpeechError(error.localizedDescription)
             }
@@ -572,12 +610,17 @@ class ChatViewModel: ObservableObject {
             if selectedSpeechModel?.id != match.id {
                 selectedSpeechModel = match
             }
-        } else {
-            selectedSpeechModel = nil
-            if !speechModelIdentifier.isEmpty {
-                speechModelIdentifier = ""
-            }
+            return
         }
+        guard !speechModelIdentifier.isEmpty else {
+            selectedSpeechModel = nil
+            return
+        }
+        guard !speechModels.isEmpty else {
+            return
+        }
+        selectedSpeechModel = nil
+        speechModelIdentifier = ""
     }
     
     private func startExtendedSession() {

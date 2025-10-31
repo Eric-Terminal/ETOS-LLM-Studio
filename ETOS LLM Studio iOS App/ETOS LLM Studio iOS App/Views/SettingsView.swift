@@ -41,6 +41,7 @@ struct SettingsView: View {
                             currentSession: $viewModel.currentSession,
                             enableSpeechInput: $viewModel.enableSpeechInput,
                             selectedSpeechModel: speechModelBinding,
+                            sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
                             speechModels: viewModel.speechModels
                         )
                     } label: {

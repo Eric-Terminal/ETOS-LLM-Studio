@@ -6,12 +6,14 @@ struct SpeechRecorderView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        VStack(spacing: 14) {
+        let processingTitle = viewModel.sendSpeechAsAudio ? "正在发送…" : "正在转换…"
+        let processingDescription = viewModel.sendSpeechAsAudio ? "录音会作为音频附件发送给当前模型。" : "请稍候，正在将语音转换为文本。"
+        return VStack(spacing: 14) {
             if viewModel.speechTranscriptionInProgress {
-                ProgressView("正在转换…")
+                ProgressView(processingTitle)
                     .progressViewStyle(.circular)
                     .padding(.vertical, 4)
-                Text("请稍候，正在将语音转换为文本。")
+                Text(processingDescription)
                     .font(.footnote)
                     .foregroundColor(.secondary)
             } else {
@@ -19,14 +21,14 @@ struct SpeechRecorderView: View {
                     .font(.system(size: 34))
                     .foregroundColor(.accentColor)
                     .padding(.top, 6)
-                Text(viewModel.isRecordingSpeech ? "正在录音…" : "准备录音")
+                Text(viewModel.isRecordingSpeech ? "正在录音…" : (viewModel.sendSpeechAsAudio ? "录音后将直接发送" : "准备录音"))
                     .font(.headline)
                 
                 Button("完成录音") {
                     viewModel.finishSpeechRecording()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!viewModel.isRecordingSpeech)
+                .disabled(!viewModel.isRecordingSpeech || viewModel.speechTranscriptionInProgress)
             }
             
             Button("取消", role: .cancel) {
@@ -43,6 +45,11 @@ struct SpeechRecorderView: View {
         .onDisappear {
             if viewModel.isRecordingSpeech {
                 viewModel.cancelSpeechRecording()
+            }
+        }
+        .onChange(of: viewModel.isSpeechRecorderPresented) { presented in
+            if !presented {
+                dismiss()
             }
         }
     }

@@ -41,7 +41,7 @@ public protocol APIAdapter {
     ///   - messages: **使用标准 `ChatMessage` 模型的消息历史记录。**
     ///   - tools: 一个可选的 `InternalToolDefinition` 数组，定义了可供 AI 使用的工具。
     /// - Returns: 一个配置好的 `URLRequest` 对象，如果构建失败则返回 `nil`。
-    func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?) -> URLRequest?
+    func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachment: AudioAttachment?) -> URLRequest?
     
     /// 构建一个用于获取模型列表的网络请求。
     /// - Parameter provider: 需要查询的 `Provider`。
@@ -118,7 +118,7 @@ public class OpenAIAdapter: APIAdapter {
 
     // MARK: - 协议方法实现
 
-    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?) -> URLRequest? {
+    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachment: AudioAttachment?) -> URLRequest? {
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -136,9 +136,32 @@ public class OpenAIAdapter: APIAdapter {
         }
         request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
         
-        let apiMessages = messages.map { msg -> [String: Any] in
-            var dict: [String: Any] = ["role": msg.role.rawValue, "content": msg.content]
-            // 如果消息是工具调用的结果，则添加 tool_call_id
+        let apiMessages: [[String: Any]] = messages.enumerated().map { index, msg in
+            var dict: [String: Any] = ["role": msg.role.rawValue]
+            let isLastUserMessage = index == messages.indices.last && msg.role == .user
+            
+            if let audioAttachment, isLastUserMessage {
+                var contentParts: [[String: Any]] = []
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    contentParts.append([
+                        "type": "input_text",
+                        "text": trimmed
+                    ])
+                }
+                let base64Audio = audioAttachment.data.base64EncodedString()
+                contentParts.append([
+                    "type": "input_audio",
+                    "input_audio": [
+                        "data": base64Audio,
+                        "format": audioAttachment.format
+                    ]
+                ])
+                dict["content"] = contentParts
+            } else {
+                dict["content"] = msg.content
+            }
+            
             if msg.role == .tool, let toolCallId = msg.toolCalls?.first?.id {
                 dict["tool_call_id"] = toolCallId
             }

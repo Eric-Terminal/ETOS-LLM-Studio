@@ -12,6 +12,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var currentSession: ChatSession?
     @Binding var enableSpeechInput: Bool
     @Binding var selectedSpeechModel: RunnableModel?
+    @Binding var sendSpeechAsAudio: Bool
     var speechModels: [RunnableModel]
     
     private var numberFormatter: NumberFormatter {
@@ -57,23 +58,30 @@ struct ModelAdvancedSettingsView: View {
             Section("语音输入") {
                 Toggle("启用语言输入", isOn: $enableSpeechInput)
                 if enableSpeechInput {
-                    if speechModels.isEmpty {
-                        Text("暂无标记为语音转文字的模型，请先在模型列表中激活。")
+                    Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
+                    if sendSpeechAsAudio {
+                        Text("录音完成后会作为音频附件直接发送给当前模型；若模型不支持音频，将返回错误信息。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("语音识别模型", selection: $selectedSpeechModel) {
-                            Text("未选择").tag(Optional<RunnableModel>.none)
-                            ForEach(speechModels) { runnable in
-                                Text("\(runnable.model.displayName) · \(runnable.provider.name)")
-                                    .tag(Optional<RunnableModel>.some(runnable))
+                        if speechModels.isEmpty {
+                            Text("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("语音识别模型", selection: $selectedSpeechModel) {
+                                Text("未选择").tag(Optional<RunnableModel>.none)
+                                ForEach(speechModels) { runnable in
+                                    Text("\(runnable.model.displayName) · \(runnable.provider.name)")
+                                        .tag(Optional<RunnableModel>.some(runnable))
+                                }
                             }
+                            .pickerStyle(.menu)
+                            
+                            Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
-                        .pickerStyle(.menu)
-                        
-                        Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }

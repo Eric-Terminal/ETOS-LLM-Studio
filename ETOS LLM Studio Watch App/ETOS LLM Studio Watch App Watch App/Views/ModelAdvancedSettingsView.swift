@@ -26,6 +26,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var currentSession: ChatSession?
     @Binding var enableSpeechInput: Bool
     @Binding var selectedSpeechModel: RunnableModel?
+    @Binding var sendSpeechAsAudio: Bool
     var speechModels: [RunnableModel]
     
     // MARK: - 私有属性
@@ -62,22 +63,29 @@ struct ModelAdvancedSettingsView: View {
                 .lineLimit(5...10)
             }
             
-            Section(header: Text("语音输入"), footer: Text("识别结果会自动追加到输入框，便于确认和补充。")) {
+            Section(header: Text("语音输入"), footer: Text(sendSpeechAsAudio ? "录音完成后会直接附带音频给模型，不再转写。" : "识别结果会自动追加到输入框，便于确认和补充。")) {
                 Toggle("启用语言输入", isOn: $enableSpeechInput)
                 if enableSpeechInput {
-                    if speechModels.isEmpty {
-                        Text("暂无可用的语音模型，请先在模型设置中启用。")
+                    Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
+                    if sendSpeechAsAudio {
+                        Text("如果当前模型不支持音频，将直接返回错误提示。")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     } else {
-                        Picker("语音模型", selection: $selectedSpeechModel) {
-                            Text("未选择").tag(Optional<RunnableModel>.none)
-                            ForEach(speechModels) { runnable in
-                                Text(runnable.model.displayName)
-                                    .tag(Optional<RunnableModel>.some(runnable))
+                        if speechModels.isEmpty {
+                            Text("暂无可用的模型，请先在模型设置中启用。")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Picker("语音模型", selection: $selectedSpeechModel) {
+                                Text("未选择").tag(Optional<RunnableModel>.none)
+                                ForEach(speechModels) { runnable in
+                                    Text(runnable.model.displayName)
+                                        .tag(Optional<RunnableModel>.some(runnable))
+                                }
                             }
+                            .pickerStyle(.navigationLink)
                         }
-                        .pickerStyle(.navigationLink)
                     }
                 }
             }

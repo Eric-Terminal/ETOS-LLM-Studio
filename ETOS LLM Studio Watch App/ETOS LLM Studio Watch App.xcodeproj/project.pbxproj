@@ -492,6 +492,7 @@
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
@@ -525,6 +526,7 @@
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
