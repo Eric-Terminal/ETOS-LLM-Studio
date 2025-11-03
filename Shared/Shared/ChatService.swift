@@ -593,10 +593,9 @@ public class ChatService {
         // 自动查：执行记忆搜索
         var memories: [MemoryItem] = []
         if enableMemory, let userMessage = userMessage {
-            let storedValue = UserDefaults.standard.object(forKey: "memoryTopK") as? NSNumber
-            let topK = max(0, storedValue?.intValue ?? 0)
+            let topK = resolvedMemoryTopK()
             memories = await self.memoryManager.searchMemories(query: userMessage.content, topK: topK)
-            if topK > 0 && memories.count > topK {
+            if topK > 0 {
                 memories = Array(memories.prefix(topK))
             }
             if !memories.isEmpty {
@@ -1180,6 +1179,26 @@ public class ChatService {
         }
 
         return parts.joined(separator: "\n\n")
+    }
+
+    /// 解析长期记忆检索的 Top K 配置，支持旧版本留下的字符串/浮点数形式。
+    private func resolvedMemoryTopK() -> Int {
+        let defaults = UserDefaults.standard
+        let rawValue = defaults.object(forKey: "memoryTopK")
+
+        if let number = rawValue as? NSNumber {
+            return max(0, number.intValue)
+        }
+
+        if let stringValue = rawValue as? String, let parsed = Int(stringValue) {
+            let clamped = max(0, parsed)
+            defaults.set(clamped, forKey: "memoryTopK")
+            return clamped
+        }
+
+        let fallback = 3
+        defaults.set(fallback, forKey: "memoryTopK")
+        return fallback
     }
     
     // MARK: - 自动会话标题生成

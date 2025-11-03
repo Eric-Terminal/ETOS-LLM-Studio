@@ -126,7 +126,9 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
             
-            Section(header: Text("上下文管理"), footer: Text("设置发送到模型的最近消息数量。例如，设置为10将只发送最后5条用户消息和5条AI回复。设置为0表示不限制。")) {
+            Section(
+                header: Text("上下文管理"),
+                footer: Text("设置发送到模型的最近消息数量。例如，设置为10将只发送最后5条用户消息和5条AI回复。设置为0表示不限制。")) {
                 HStack {
                     Text("最大上下文消息数")
                     Spacer()
@@ -136,7 +138,12 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
             
-            Section(header: Text("性能设置")) {
+            Section(
+                header: Text("性能设置"),
+                footer: Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            ) {
                 HStack {
                     Text("懒加载消息数")
                     Spacer()
@@ -144,10 +151,6 @@ struct ModelAdvancedSettingsView: View {
                         .multilineTextAlignment(.trailing)
                         .frame(width: 60)
                 }
-                
-                Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
             }
         }
         .navigationTitle("高级模型设置")

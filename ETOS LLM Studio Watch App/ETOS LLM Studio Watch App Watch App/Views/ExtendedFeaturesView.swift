@@ -23,15 +23,26 @@ public struct ExtendedFeaturesView: View {
         List {
             Section {
                 Toggle("启用记忆功能", isOn: $enableMemory)
-                
-                // 只有在功能启用时才显示管理入口
-                if enableMemory {
+            } header: {
+                Text("长期记忆")
+            } footer: {
+                Text("启用后，AI将拥有长期记忆能力。它会在每次对话前自动检索相关记忆，并能通过工具主动学习和保存新信息。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+            
+            if enableMemory {
+                Section {
                     Toggle("是否记录新的记忆", isOn: $enableMemoryWrite)
+                } header: {
+                    Text("记忆写入")
+                } footer: {
                     Text("关闭后仅读取记忆，不会请求保存新内容。")
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                    
-                    // 我们之前注释掉的 #available 检查仍然是必要的
+                }
+                
+                Section {
                     if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
                         NavigationLink(destination: MemorySettingsView().environmentObject(viewModel)) {
                             Label("记忆库管理", systemImage: "brain.head.profile")
@@ -40,11 +51,9 @@ public struct ExtendedFeaturesView: View {
                         Label("记忆库管理 (系统版本过低)", systemImage: "brain.head.profile")
                             .foregroundColor(.gray)
                     }
+                } header: {
+                    Text("记忆库管理")
                 }
-            } header: {
-                Text("长期记忆")
-            } footer: {
-                Text("启用后，AI将拥有长期记忆能力。它会在每次对话前自动检索相关记忆，并能通过工具主动学习和保存新信息。")
             }
         }
         .navigationTitle("拓展功能")
