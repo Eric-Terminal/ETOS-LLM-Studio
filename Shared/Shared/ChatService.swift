@@ -543,10 +543,11 @@ public class ChatService {
     }
     
     /// 处理单个工具调用
-    private func handleToolCall(_ toolCall: InternalToolCall) async -> ChatMessage {
+    private func handleToolCall(_ toolCall: InternalToolCall) async -> (ChatMessage, String?) {
         logger.info("🤖 正在处理工具调用: \(toolCall.toolName)")
         
         var content = ""
+        var displayResult: String?
         
         switch toolCall.toolName {
         case "save_memory":
@@ -557,18 +558,41 @@ public class ChatService {
             if let argsData = toolCall.arguments.data(using: .utf8), let args = try? JSONDecoder().decode(SaveMemoryArgs.self, from: argsData) {
                 await self.memoryManager.addMemory(content: args.content)
                 content = "成功将内容 \"\(args.content)\" 存入记忆。"
+                displayResult = content
                 logger.info("  - ✅ 记忆保存成功。")
             } else {
                 content = "错误：无法解析 save_memory 的参数。"
+                displayResult = content
                 logger.error("  - ❌ 无法解析 save_memory 的参数: \(toolCall.arguments)")
             }
             
         default:
             content = "错误：未知的工具名称 \(toolCall.toolName)。"
+            displayResult = content
             logger.error("  - ❌ 未知的工具名称: \(toolCall.toolName)")
         }
         
-        return ChatMessage(role: .tool, content: content, toolCalls: [InternalToolCall(id: toolCall.id, toolName: toolCall.toolName, arguments: "")])
+        let message = ChatMessage(
+            role: .tool,
+            content: content,
+            toolCalls: [InternalToolCall(id: toolCall.id, toolName: toolCall.toolName, arguments: "", result: displayResult)]
+        )
+        
+        return (message, displayResult)
+    }
+
+    @MainActor
+    private func attachToolResult(_ result: String, to toolCallID: String, loadingMessageID: UUID, sessionID: UUID) {
+        var messages = messagesForSessionSubject.value
+        guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
+        var message = messages[messageIndex]
+        guard var toolCalls = message.toolCalls,
+              let callIndex = toolCalls.firstIndex(where: { $0.id == toolCallID }) else { return }
+        toolCalls[callIndex].result = result
+        message.toolCalls = toolCalls
+        messages[messageIndex] = message
+        messagesForSessionSubject.send(messages)
+        Persistence.saveMessages(messages, for: sessionID)
     }
 
     // MARK: - 核心请求执行逻辑 (已重构)
@@ -923,7 +947,10 @@ public class ChatService {
         if !blockingCalls.isEmpty {
             logger.info("🤖 正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             for toolCall in blockingCalls {
-                let resultMessage = await handleToolCall(toolCall)
+                let (resultMessage, toolResult) = await handleToolCall(toolCall)
+                if let toolResult {
+                    await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: loadingMessageID, sessionID: currentSessionID)
+                }
                 blockingResultMessages.append(resultMessage)
             }
         }
@@ -935,7 +962,10 @@ public class ChatService {
                 logger.info("🔥 在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
                 Task {
                     for toolCall in nonBlockingCalls {
-                        let resultMessage = await handleToolCall(toolCall)
+                        let (resultMessage, toolResult) = await handleToolCall(toolCall)
+                        if let toolResult {
+                            await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: loadingMessageID, sessionID: currentSessionID)
+                        }
                         // 只保存工具执行结果，不将其发回给 AI
                         var messages = Persistence.loadMessages(for: currentSessionID)
                         messages.append(resultMessage)
@@ -947,7 +977,10 @@ public class ChatService {
                 // 没有正文时需要等待工具结果，再次回传给 AI 生成最终回答
                 logger.info("📎 非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
                 for toolCall in nonBlockingCalls {
-                    let resultMessage = await handleToolCall(toolCall)
+                    let (resultMessage, toolResult) = await handleToolCall(toolCall)
+                    if let toolResult {
+                        await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: loadingMessageID, sessionID: currentSessionID)
+                    }
                     nonBlockingResultsForFollowUp.append(resultMessage)
                 }
             }

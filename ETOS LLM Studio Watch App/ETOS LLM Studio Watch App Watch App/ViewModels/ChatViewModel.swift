@@ -545,12 +545,13 @@ class ChatViewModel: ObservableObject {
     // MARK: 视图状态与持久化
     
     func updateDisplayedMessages() {
+        let filtered = visibleMessages(from: allMessagesForSession)
         let lazyCount = lazyLoadMessageCount
-        if lazyCount > 0 && allMessagesForSession.count > lazyCount {
-            messages = Array(allMessagesForSession.suffix(lazyCount))
+        if lazyCount > 0 && filtered.count > lazyCount {
+            messages = Array(filtered.suffix(lazyCount))
             isHistoryFullyLoaded = false
         } else {
-            messages = allMessagesForSession
+            messages = filtered
             isHistoryFullyLoaded = true
         }
     }
@@ -694,5 +695,17 @@ class ChatViewModel: ObservableObject {
     private func stopExtendedSession() {
         extendedSession?.invalidate()
         extendedSession = nil
+    }
+    
+    private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
+        source.filter { message in
+            if message.role == .tool,
+               let calls = message.toolCalls,
+               !calls.isEmpty,
+               calls.allSatisfy({ $0.toolName == "save_memory" }) {
+                return false
+            }
+            return true
+        }
     }
 }

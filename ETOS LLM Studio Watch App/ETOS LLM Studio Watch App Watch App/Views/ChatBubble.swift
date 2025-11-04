@@ -200,12 +200,24 @@ struct ChatBubble: View {
 
             if isToolCallsExpanded {
                 ForEach(toolCalls, id: \.id) { toolCall in
-                    HStack {
-                        Image(systemName: "wrench.and.screwdriver.fill")
-                        Text(toolCall.toolName)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: "wrench.and.screwdriver.fill")
+                            Text(toolCall.toolName)
+                        }
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        if !toolCall.arguments.isEmpty {
+                            Text(toolCall.arguments)
+                                .font(.caption2.monospaced())
+                                .foregroundColor(.secondary)
+                        }
+                        if let result = toolCall.result, !result.isEmpty {
+                            Text(result)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
                     .padding(.leading, 4)
                 }
             }

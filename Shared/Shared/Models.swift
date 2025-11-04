@@ -231,6 +231,14 @@ public struct InternalToolCall: Codable, Hashable {
     public let id: String
     public let toolName: String
     public let arguments: String // 参数通常是JSON字符串
+    public var result: String? // 工具执行结果（用于展示）
+
+    public init(id: String, toolName: String, arguments: String, result: String? = nil) {
+        self.id = id
+        self.toolName = toolName
+        self.arguments = arguments
+        self.result = result
+    }
 }
 
 /// 内部工具调用的返回结果，与服务商无关。

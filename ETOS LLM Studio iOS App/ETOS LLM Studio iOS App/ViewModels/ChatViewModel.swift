@@ -336,18 +336,19 @@ final class ChatViewModel: ObservableObject {
     }
     
     func updateDisplayedMessages() {
+        let filtered = visibleMessages(from: allMessagesForSession)
         let lazyCount = lazyLoadMessageCount
-        if lazyCount > 0 && allMessagesForSession.count > lazyCount {
-            messages = Array(allMessagesForSession.suffix(lazyCount))
+        if lazyCount > 0 && filtered.count > lazyCount {
+            messages = Array(filtered.suffix(lazyCount))
             isHistoryFullyLoaded = false
         } else {
-            messages = allMessagesForSession
+            messages = filtered
             isHistoryFullyLoaded = true
         }
     }
     
     func loadEntireHistory() {
-        messages = allMessagesForSession
+        messages = visibleMessages(from: allMessagesForSession)
         isHistoryFullyLoaded = true
     }
     
@@ -413,5 +414,17 @@ final class ChatViewModel: ObservableObject {
                 completion(.success)
             }
         }.resume()
+    }
+
+    private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
+        source.filter { message in
+            if message.role == .tool,
+               let calls = message.toolCalls,
+               !calls.isEmpty,
+               calls.allSatisfy({ $0.toolName == "save_memory" }) {
+                return false
+            }
+            return true
+        }
     }
 }

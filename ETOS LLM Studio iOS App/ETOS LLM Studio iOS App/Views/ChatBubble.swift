@@ -64,13 +64,18 @@ struct ChatBubble: View {
            !toolCalls.isEmpty {
             DisclosureGroup(isExpanded: $isToolCallsExpanded) {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(toolCalls, id: \.self) { call in
+                    ForEach(toolCalls, id: \.id) { call in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(call.toolName)
                                 .font(.footnote.weight(.semibold))
                             Text(call.arguments)
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
+                            if let result = call.result, !result.isEmpty {
+                                Text(result)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(8)
                         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
