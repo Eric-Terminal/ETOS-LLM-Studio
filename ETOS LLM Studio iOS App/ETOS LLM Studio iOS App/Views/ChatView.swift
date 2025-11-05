@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var showScrollToBottom = false
     @State private var editingMessage: ChatMessage?
     @State private var editingContent: String = ""
+    @State private var messageInfo: MessageInfoPayload?
     @FocusState private var composerFocused: Bool
     
     var body: some View {
@@ -140,6 +141,9 @@ struct ChatView: View {
                     }
                 }
                 .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $messageInfo) { info in
+                MessageInfoSheet(payload: info)
             }
         }
     }
@@ -265,9 +269,16 @@ struct ChatView: View {
         }
         
         if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
-            Text("位置: 第 \(index + 1) / \(viewModel.allMessagesForSession.count) 条")
+            Button {
+                messageInfo = MessageInfoPayload(
+                    message: message,
+                    displayIndex: index + 1,
+                    totalCount: viewModel.allMessagesForSession.count
+                )
+            } label: {
+                Label("查看消息信息", systemImage: "info.circle")
+            }
         }
-        Text("ID: \(message.id.uuidString)").font(.footnote)
     }
 }
 
@@ -340,6 +351,65 @@ private struct EditMessageSheet: View {
                 }
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+        }
+    }
+}
+
+// MARK: - Message Info
+
+/// 用于承载消息信息弹窗的数据结构，避免直接暴露ChatMessage本身。
+private struct MessageInfoPayload: Identifiable {
+    let id = UUID()
+    let message: ChatMessage
+    let displayIndex: Int
+    let totalCount: Int
+}
+
+/// 消息详情弹窗，展示消息的唯一标识与位置索引。
+private struct MessageInfoSheet: View {
+    let payload: MessageInfoPayload
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("基础信息") {
+                    LabeledContent("角色") {
+                        Text(roleDescription(payload.message.role))
+                    }
+                    LabeledContent("列表位置") {
+                        Text("第 \(payload.displayIndex) / \(payload.totalCount) 条")
+                    }
+                }
+                
+                Section("唯一标识") {
+                    Text(payload.message.id.uuidString)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+                }
+            }
+            .navigationTitle("消息信息")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+    
+    /// 将消息角色转换为易读的中文描述
+    private func roleDescription(_ role: MessageRole) -> String {
+        switch role {
+        case .system:
+            return "系统"
+        case .user:
+            return "用户"
+        case .assistant:
+            return "助手"
+        case .tool:
+            return "工具"
+        case .error:
+            return "错误"
         }
     }
 }

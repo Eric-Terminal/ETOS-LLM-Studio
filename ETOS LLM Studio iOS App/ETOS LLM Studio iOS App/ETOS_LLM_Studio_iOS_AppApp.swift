@@ -10,15 +10,18 @@
 // ============================================================================
 
 import SwiftUI
+import Shared
 
 @main
 struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var syncManager = WatchSyncManager.shared
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
+                .environmentObject(syncManager)
         }
     }
 }

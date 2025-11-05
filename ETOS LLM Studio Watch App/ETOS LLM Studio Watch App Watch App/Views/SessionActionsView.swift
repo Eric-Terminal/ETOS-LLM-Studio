@@ -4,7 +4,7 @@
 // ETOS LLM Studio Watch App 会话操作菜单视图
 //
 // 功能特性:
-// - 提供编辑话题、创建分支、网络导出、删除会话等操作
+// - 提供编辑话题、创建分支、同步删除等操作
 // ============================================================================
 
 import SwiftUI
@@ -24,7 +24,6 @@ struct SessionActionsView: View {
     
     // MARK: - 操作
     
-    let onExport: () -> Void
     let onDeleteLastMessage: () -> Void
 
     // MARK: - 环境
@@ -51,22 +50,16 @@ struct SessionActionsView: View {
                     Label("创建分支", systemImage: "arrow.branch")
                 }
 
-                Button {
-                    onExport()
-                    dismiss()
-                } label: {
-                    Label("通过网络导出", systemImage: "wifi")
-                }
             }
 
-           Section {
-               Button(role: .destructive) {
-                   onDeleteLastMessage()
-                   dismiss()
-               } label: {
-                   Label("删除最后一条消息", systemImage: "delete.backward.fill")
-               }
-           }
+            Section {
+                Button(role: .destructive) {
+                    onDeleteLastMessage()
+                    dismiss()
+                } label: {
+                    Label("删除最后一条消息", systemImage: "delete.backward.fill")
+                }
+            }
             
             Section {
                 Button(role: .destructive) {

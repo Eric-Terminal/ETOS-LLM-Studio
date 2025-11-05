@@ -64,7 +64,7 @@ final class ChatViewModel: ObservableObject {
     
     // MARK: - Public Properties
     
-    let backgroundImages: [String]
+    @Published var backgroundImages: [String] = []
     
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
@@ -165,17 +165,20 @@ final class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshBackgroundImages()
+            }
+            .store(in: &cancellables)
         
         syncSpeechModelSelection()
     }
     
     private func rotateBackgroundImageIfNeeded() {
-        guard enableAutoRotateBackground, !backgroundImages.isEmpty else {
-            if !backgroundImages.contains(currentBackgroundImage) {
-                currentBackgroundImage = backgroundImages.first ?? ""
-            }
-            return
-        }
+        refreshBackgroundImages()
+        guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
         let available = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = available.randomElement() ?? backgroundImages.randomElement() ?? ""
     }
@@ -275,6 +278,14 @@ final class ChatViewModel: ObservableObject {
         chatService.deleteSessions(sessions)
     }
     
+    /// 统计指定会话的消息数量，当前会话直接复用内存缓存，其余会话按需加载
+    func messageCount(for session: ChatSession) -> Int {
+        if session.id == currentSession?.id {
+            return allMessagesForSession.count
+        }
+        return Persistence.loadMessages(for: session.id).count
+    }
+    
     @discardableResult
     func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
         chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
@@ -367,53 +378,15 @@ final class ChatViewModel: ObservableObject {
         await MemoryManager.shared.deleteMemories(items)
     }
     
-    // MARK: - Export
+    // MARK: - Sync Helpers
     
-    func exportSessionViaNetwork(session: ChatSession, ipAddress: String, completion: @escaping (ExportStatus) -> Void) {
-        let messagesToExport = Persistence.loadMessages(for: session.id)
-        let exportableMessages = messagesToExport.map {
-            ExportableChatMessage(role: $0.role.rawValue, content: $0.content, reasoning: $0.reasoningContent)
+    /// 重新加载背景图片列表，保持当前选择有效
+    private func refreshBackgroundImages() {
+        let images = ConfigLoader.loadBackgroundImages()
+        backgroundImages = images
+        if !images.contains(currentBackgroundImage) {
+            currentBackgroundImage = images.first ?? ""
         }
-        let promptsToExport = ExportPrompts(
-            globalSystemPrompt: systemPrompt.isEmpty ? nil : systemPrompt,
-            topicPrompt: session.topicPrompt,
-            enhancedPrompt: session.enhancedPrompt
-        )
-        let fullExportData = FullExportData(prompts: promptsToExport, history: exportableMessages)
-        
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        guard let jsonData = try? encoder.encode(fullExportData) else {
-            completion(.failed("JSON Encoding Failed"))
-            return
-        }
-        
-        guard let url = URL(string: "http://\(ipAddress)") else {
-            completion(.failed("Invalid IP Address"))
-            return
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = jsonData
-        request.timeoutInterval = 60
-        
-        URLSession.shared.dataTask(with: request) { _, response, error in
-            DispatchQueue.main.async {
-                if let error {
-                    completion(.failed("Network Error: \(error.localizedDescription)"))
-                    return
-                }
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                    completion(.failed("Server Error: \(statusCode)"))
-                    return
-                }
-                completion(.success)
-            }
-        }.resume()
     }
 
     private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {

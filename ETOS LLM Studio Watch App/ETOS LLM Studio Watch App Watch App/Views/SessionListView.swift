@@ -5,7 +5,7 @@
 //
 // 功能特性:
 // - 显示所有历史会话
-// - 支持会话选择、删除和更多操作（通过滑动菜单）
+// - 支持会话选择、删除和更多操作（通过滑动菜单和详情面板）
 // ============================================================================ 
 
 import SwiftUI
@@ -23,7 +23,6 @@ struct SessionListView: View {
     
     let deleteAction: (IndexSet) -> Void
     let branchAction: (ChatSession, Bool) -> ChatSession?
-    let exportAction: (ChatSession) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
     let onSessionSelected: (ChatSession) -> Void
     let updateSessionAction: (ChatSession) -> Void
@@ -52,7 +51,6 @@ struct SessionListView: View {
                     sessionIndexToDelete: $sessionIndexToDelete,
                     showDeleteSessionConfirm: $showDeleteSessionConfirm,
                     onSessionSelected: onSessionSelected,
-                    exportAction: exportAction,
                     deleteLastMessageAction: deleteLastMessageAction
                 )
             }
@@ -128,7 +126,6 @@ private struct SessionRowView: View {
     // MARK: 操作
     
     let onSessionSelected: (ChatSession) -> Void
-    let exportAction: (ChatSession) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
 
     // MARK: 视图主体
@@ -159,7 +156,6 @@ private struct SessionRowView: View {
                     sessionIndexToDelete: $sessionIndexToDelete,
                     showDeleteSessionConfirm: $showDeleteSessionConfirm,
                     sessions: $sessions,
-                    onExport: { exportAction(session) },
                     onDeleteLastMessage: { deleteLastMessageAction(session) }
                 )
             } label: {

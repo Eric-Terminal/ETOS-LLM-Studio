@@ -295,21 +295,11 @@ public struct FullExportData: Codable {
 public enum ActiveSheet: Identifiable, Equatable {
     case settings
     case editMessage
-    case export(ChatSession)
     
     public var id: Int {
         switch self {
         case .settings: return 1
         case .editMessage: return 2
-        case .export: return 3
         }
     }
-}
-
-/// 导出状态枚举
-public enum ExportStatus {
-    case idle
-    case exporting
-    case success
-    case failed(String)
 }

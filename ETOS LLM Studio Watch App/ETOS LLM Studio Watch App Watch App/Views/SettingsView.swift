@@ -17,6 +17,10 @@ struct SettingsView: View {
     // MARK: - 视图模型
     
     @ObservedObject var viewModel: ChatViewModel
+    @EnvironmentObject private var syncManager: WatchSyncManager
+    @AppStorage("sync.options.providers") private var syncProviders = true
+    @AppStorage("sync.options.sessions") private var syncSessions = true
+    @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
 
     // MARK: - 环境
     
@@ -70,11 +74,11 @@ struct SettingsView: View {
                         Label("数据与模型设置", systemImage: "key.icloud.fill")
                     }
                     
-                    NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
-                        Label("拓展功能", systemImage: "puzzlepiece.extension")
-                    }
-                    
-                    NavigationLink(destination: SessionListView(
+                NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
+                    Label("拓展功能", systemImage: "puzzlepiece.extension")
+                }
+
+                NavigationLink(destination: SessionListView(
                         sessions: $viewModel.chatSessions,
                         currentSession: $viewModel.currentSession,
                         deleteAction: { indexSet in
@@ -83,9 +87,6 @@ struct SettingsView: View {
                         branchAction: { session, copyMessages in
                             let newSession = viewModel.branchSession(from: session, copyMessages: copyMessages)
                             return newSession
-                        },
-                        exportAction: { session in
-                            viewModel.activeSheet = .export(session)
                         },
                         deleteLastMessageAction: { session in
                             viewModel.deleteLastMessage(for: session)
@@ -118,8 +119,85 @@ struct SettingsView: View {
                         Label("关于", systemImage: "info.circle")
                     }
                 }
+
+                Section("设备同步") {
+                    Toggle("同步提供商", isOn: $syncProviders)
+                    Toggle("同步会话", isOn: $syncSessions)
+                    Toggle("同步背景", isOn: $syncBackgrounds)
+                    Button {
+                        syncManager.performSync(direction: .pull, options: selectedSyncOptions)
+                    } label: {
+                        Label("从手机同步", systemImage: "arrow.down.backward")
+                    }
+                    .disabled(selectedSyncOptions.isEmpty || isSyncing)
+                    Button {
+                        syncManager.performSync(direction: .push, options: selectedSyncOptions)
+                    } label: {
+                        Label("推送到手机", systemImage: "arrow.up.forward")
+                    }
+                    .disabled(selectedSyncOptions.isEmpty || isSyncing)
+                    syncStatusView
+                }
             }
             .navigationTitle("设置")
         }
+    }
+
+    private var selectedSyncOptions: SyncOptions {
+        var option: SyncOptions = []
+        if syncProviders { option.insert(.providers) }
+        if syncSessions { option.insert(.sessions) }
+        if syncBackgrounds { option.insert(.backgrounds) }
+        return option
+    }
+    
+    private var isSyncing: Bool {
+        if case .syncing = syncManager.state {
+            return true
+        }
+        return false
+    }
+    
+    @ViewBuilder
+    private var syncStatusView: some View {
+        switch syncManager.state {
+        case .idle:
+            Text("未同步").font(.caption).foregroundStyle(.secondary)
+        case .syncing(let message):
+            HStack {
+                ProgressView()
+                Text(message).font(.caption)
+            }
+        case .success(let summary):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("同步成功", systemImage: "checkmark.circle")
+                    .foregroundStyle(.green)
+                Text(summaryDescription(summary))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let reason):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("同步失败", systemImage: "xmark.circle")
+                    .foregroundStyle(.red)
+                Text(reason)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+    
+    private func summaryDescription(_ summary: SyncMergeSummary) -> String {
+        var parts: [String] = []
+        if summary.importedProviders > 0 {
+            parts.append("提供商 +\(summary.importedProviders)")
+        }
+        if summary.importedSessions > 0 {
+            parts.append("会话 +\(summary.importedSessions)")
+        }
+        if summary.importedBackgrounds > 0 {
+            parts.append("背景 +\(summary.importedBackgrounds)")
+        }
+        return parts.isEmpty ? "两端数据一致" : parts.joined(separator: "，")
     }
 }

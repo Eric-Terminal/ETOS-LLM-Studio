@@ -3,7 +3,7 @@
 // ============================================================================
 // 会话管理界面 (iOS)
 // - 展示所有会话并支持快速切换
-// - 支持内联重命名、分支、导出与删除
+// - 支持内联重命名、分支与删除
 // ============================================================================
 
 import SwiftUI
@@ -14,9 +14,9 @@ struct SessionListView: View {
     
     @State private var editingSessionID: UUID?
     @State private var draftName: String = ""
-    @State private var sessionToExport: ChatSession?
     @State private var showDeleteConfirmation = false
     @State private var sessionsToDelete: [ChatSession] = []
+    @State private var sessionInfo: SessionInfoPayload?
     
     var body: some View {
         NavigationStack {
@@ -38,44 +38,40 @@ struct SessionListView: View {
                             isEditing: editingSessionID == session.id,
                             draftName: editingSessionID == session.id ? $draftName : .constant(session.name),
                             onCommit: { newName in
-                        viewModel.updateSessionName(session, newName: newName)
-                        editingSessionID = nil
-                    },
-                    onSelect: {
-                        viewModel.setCurrentSession(session)
-                    },
-                    onRename: {
-                        editingSessionID = session.id
-                        draftName = session.name
-                    },
-                    onBranch: { copyHistory in
-                        let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
-                        viewModel.setCurrentSession(newSession)
-                        focusOnLatest()
-                    },
-                    onExport: {
-                        sessionToExport = session
-                    },
-                    onDeleteLastMessage: {
-                        viewModel.deleteLastMessage(for: session)
-                    },
-                    onDelete: {
-                        sessionsToDelete = [session]
-                        showDeleteConfirmation = true
-                    },
-                    onCancelRename: {
-                        editingSessionID = nil
-                        draftName = session.name
-                    }
-                )
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
+                                viewModel.updateSessionName(session, newName: newName)
+                                editingSessionID = nil
+                            },
+                            onSelect: {
+                                viewModel.setCurrentSession(session)
+                            },
+                            onRename: {
+                                editingSessionID = session.id
+                                draftName = session.name
+                            },
+                            onBranch: { copyHistory in
+                                let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
+                                viewModel.setCurrentSession(newSession)
+                                focusOnLatest()
+                            },
+                            onDeleteLastMessage: {
+                                viewModel.deleteLastMessage(for: session)
+                            },
+                            onDelete: {
                                 sessionsToDelete = [session]
                                 showDeleteConfirmation = true
-                            } label: {
-                                Label("删除", systemImage: "trash")
+                            },
+                            onCancelRename: {
+                                editingSessionID = nil
+                                draftName = session.name
+                            },
+                            onInfo: {
+                                sessionInfo = SessionInfoPayload(
+                                    session: session,
+                                    messageCount: viewModel.messageCount(for: session),
+                                    isCurrent: session.id == viewModel.currentSession?.id
+                                )
                             }
-                        }
+                        )
                     }
                     .onDelete { indexSet in
                         let toDelete = indexSet.map { viewModel.chatSessions[$0] }
@@ -101,10 +97,8 @@ struct SessionListView: View {
             } message: {
                 Text("删除后所有消息也将被移除，操作不可恢复。")
             }
-            .sheet(item: $sessionToExport) { session in
-                ExportView(session: session) { sess, ip, completion in
-                    viewModel.exportSessionViaNetwork(session: sess, ipAddress: ip, completion: completion)
-                }
+            .sheet(item: $sessionInfo) { info in
+                SessionInfoSheet(payload: info)
             }
         }
     }
@@ -129,10 +123,10 @@ private struct SessionRow: View {
     let onSelect: () -> Void
     let onRename: () -> Void
     let onBranch: (Bool) -> Void
-    let onExport: () -> Void
     let onDeleteLastMessage: () -> Void
     let onDelete: () -> Void
     let onCancelRename: () -> Void
+    let onInfo: () -> Void
     
     @FocusState private var focused: Bool
     
@@ -160,7 +154,7 @@ private struct SessionRow: View {
                 }
                 .padding(.top, 4)
             } else {
-                HStack {
+                HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(session.name)
                             .font(.headline)
@@ -184,6 +178,15 @@ private struct SessionRow: View {
                                     .foregroundColor(.accentColor)
                             )
                     }
+                    
+                    Button {
+                        onInfo()
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 18, weight: .medium))
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("查看会话信息")
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -218,15 +221,15 @@ private struct SessionRow: View {
             }
             
             Button {
-                onExport()
-            } label: {
-                Label("导出到电脑", systemImage: "wifi")
-            }
-            
-            Button {
                 onDeleteLastMessage()
             } label: {
                 Label("删除最后一条消息", systemImage: "delete.backward")
+            }
+            
+            Button {
+                onInfo()
+            } label: {
+                Label("查看会话信息", systemImage: "info.circle")
             }
             
             Button(role: .destructive) {
@@ -241,5 +244,68 @@ private struct SessionRow: View {
         let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         onCommit(trimmed)
+    }
+}
+
+// MARK: - Session Info
+
+/// 会话信息弹窗的数据载体，用于隔离 UI 与业务模型
+private struct SessionInfoPayload: Identifiable {
+    let id = UUID()
+    let session: ChatSession
+    let messageCount: Int
+    let isCurrent: Bool
+}
+
+/// 会话信息弹窗，展示基础状态与唯一标识
+private struct SessionInfoSheet: View {
+    let payload: SessionInfoPayload
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("会话概览") {
+                    LabeledContent("名称") {
+                        Text(payload.session.name)
+                    }
+                    LabeledContent("状态") {
+                        Text(payload.isCurrent ? "当前会话" : "历史会话")
+                            .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
+                    }
+                    LabeledContent("消息数量") {
+                        Text("\(payload.messageCount) 条")
+                    }
+                }
+                
+                if let topic = payload.session.topicPrompt, !topic.isEmpty {
+                    Section("主题提示") {
+                        Text(topic)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
+                    Section("增强提示词") {
+                        Text(enhanced)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                Section("唯一标识") {
+                    Text(payload.session.id.uuidString)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+                }
+            }
+            .navigationTitle("会话信息")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
     }
 }

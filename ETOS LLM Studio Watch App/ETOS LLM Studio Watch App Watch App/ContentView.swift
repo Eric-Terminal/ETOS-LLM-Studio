@@ -74,11 +74,6 @@ struct ContentView: View {
             }
         case .settings:
             SettingsView(viewModel: viewModel)
-        case .export(let session):
-            ExportView(
-                session: session,
-                onExport: viewModel.exportSessionViaNetwork
-            )
         @unknown default:
             Text("未知视图")
         }

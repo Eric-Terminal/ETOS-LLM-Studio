@@ -79,7 +79,7 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - 公开属性
     
-    let backgroundImages: [String]
+    @Published var backgroundImages: [String] = []
     
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
@@ -195,18 +195,23 @@ class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshBackgroundImages()
+            }
+            .store(in: &cancellables)
         
         syncSpeechModelSelection()
     }
     
     private func rotateBackgroundImageIfNeeded() {
-        if enableAutoRotateBackground, !self.backgroundImages.isEmpty {
-            let availableBackgrounds = self.backgroundImages.filter { $0 != self.currentBackgroundImage }
-            currentBackgroundImage = availableBackgrounds.randomElement() ?? self.backgroundImages.randomElement() ?? ""
-            logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage)")
-        } else if !self.backgroundImages.contains(self.currentBackgroundImage) {
-             currentBackgroundImage = self.backgroundImages.first ?? ""
-        }
+        refreshBackgroundImages()
+        guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
+        let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
+        currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""
+        logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage)")
     }
     
     // MARK: - 公开方法 (视图操作)
@@ -594,58 +599,15 @@ class ChatViewModel: ObservableObject {
         return messageIndex >= lastUserMessageIndex
     }
     
-    // MARK: 导出
-    
-    func exportSessionViaNetwork(session: ChatSession, ipAddress: String, completion: @escaping (ExportStatus) -> Void) {
-        logger.info("🚀 [Export] Preparing to export via network...")
-        let messagesToExport = Persistence.loadMessages(for: session.id)
-        
-        // 重构: 直接使用 ChatMessage 并进行简单映射
-        let exportableMessages = messagesToExport.map {
-            ExportableChatMessage(role: $0.role.rawValue, content: $0.content, reasoning: $0.reasoningContent)
-        }
-        let promptsToExport = ExportPrompts(
-            globalSystemPrompt: self.systemPrompt.isEmpty ? nil : self.systemPrompt,
-            topicPrompt: session.topicPrompt,
-            enhancedPrompt: session.enhancedPrompt
-        )
-        let fullExportData = FullExportData(prompts: promptsToExport, history: exportableMessages)
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        guard let jsonData = try? encoder.encode(fullExportData) else {
-            completion(.failed("JSON Encoding Failed"))
-            return
-        }
-
-        guard let url = URL(string: "http://\(ipAddress)") else {
-            completion(.failed("Invalid IP Address"))
-            return
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = jsonData
-        request.timeoutInterval = 60
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    completion(.failed("Network Error: \(error.localizedDescription)"))
-                    return
-                }
-                guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                    completion(.failed("Server Error: \(statusCode)"))
-                    return
-                }
-                completion(.success)
-            }
-        }.resume()
-    }
-    
     // MARK: - 私有方法 (内部逻辑)
+    
+    private func refreshBackgroundImages() {
+        let images = ConfigLoader.loadBackgroundImages()
+        backgroundImages = images
+        if !images.contains(currentBackgroundImage) {
+            currentBackgroundImage = images.first ?? ""
+        }
+    }
     
     private func requestMicrophonePermission() async -> Bool {
         switch AVAudioApplication.shared.recordPermission {
