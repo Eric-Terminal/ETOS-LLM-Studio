@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 
 public enum SyncEngine {
     
@@ -163,16 +164,14 @@ public enum SyncEngine {
                 }
                 
                 // UUID 冲突但内容不同，新建会话避免覆盖
-                session.id = UUID()
-                session.name.append("（同步副本）")
+                session = makeSyncedCopy(from: session, nameSuffix: "（同步副本）")
             } else if let duplicate = sessions.first(where: { $0.isEquivalent(to: session) }) {
                 let localMessages = Persistence.loadMessages(for: duplicate.id)
                 if localMessages.isContentEqual(to: payload.messages) {
                     skipped += 1
                     continue
                 }
-                session.id = UUID()
-                session.name.append("（同步冲突）")
+                session = makeSyncedCopy(from: session, nameSuffix: "（同步冲突）")
             }
             
             // 写入消息文件
@@ -240,5 +239,19 @@ public enum SyncEngine {
         }
         
         return (imported, skipped)
+    }
+
+    // MARK: - Helpers
+
+    /// 创建带有新 UUID 的会话副本，并附加命名后缀
+    private static func makeSyncedCopy(from session: ChatSession, nameSuffix: String) -> ChatSession {
+        let updatedName = session.name + nameSuffix
+        return ChatSession(
+            id: UUID(),
+            name: updatedName,
+            topicPrompt: session.topicPrompt,
+            enhancedPrompt: session.enhancedPrompt,
+            isTemporary: false
+        )
     }
 }

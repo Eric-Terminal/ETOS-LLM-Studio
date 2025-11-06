@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 #if canImport(WatchConnectivity)
 import WatchConnectivity
 #endif
@@ -59,10 +60,17 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             return
         }
         
+#if os(iOS)
         guard session.isPaired else {
             state = .failed("未检测到已配对的对端设备。")
             return
         }
+#elseif os(watchOS)
+        guard session.isCompanionAppInstalled else {
+            state = .failed("未检测到配套的 iPhone 应用。")
+            return
+        }
+#endif
         
         guard session.isReachable || direction == .push else {
             state = .failed("对端不在线，稍后重试。")

@@ -184,6 +184,10 @@ struct SettingsView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+        @unknown default:
+            Text("未知状态")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
     
