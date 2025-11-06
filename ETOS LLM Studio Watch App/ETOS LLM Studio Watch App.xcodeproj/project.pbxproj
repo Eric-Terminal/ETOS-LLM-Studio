@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		073CA6BF2E8CFD3D004516A0 /* ETOS LLM Studio Watch App Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 073CA6BE2E8CFD3D004516A0 /* ETOS LLM Studio Watch App Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		073D1C532E8F55D800E6D9E1 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA7132E8D083E004516A0 /* Shared.framework */; };
-		073D1C542E8F55D800E6D9E1 /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA7132E8D083E004516A0 /* Shared.framework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		073D1C542E8F55D800E6D9E1 /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA7132E8D083E004516A0 /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		077294F72E8D0FD5006EF6C2 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 077294F62E8D0FD5006EF6C2 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
@@ -172,6 +172,7 @@
 			buildConfigurationList = 073CA6CB2E8CFD3F004516A0 /* Build configuration list for PBXNativeTarget "ETOS LLM Studio Watch App Watch App" */;
 			buildPhases = (
 				073CA6BA2E8CFD3D004516A0 /* Sources */,
+				079B40282EBCA6020092F002 /* ShellScript */,
 				073CA6BB2E8CFD3D004516A0 /* Frameworks */,
 				073CA6BC2E8CFD3D004516A0 /* Resources */,
 				073D1C552E8F55D800E6D9E1 /* Embed Frameworks */,
@@ -319,6 +320,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		079B40282EBCA6020092F002 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nxcrun agvtool next-version -all\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		073CA6BA2E8CFD3D004516A0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -423,6 +445,7 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};
@@ -479,6 +502,7 @@
 				MTL_FAST_MATH = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};
@@ -512,6 +536,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
+				VERSIONING_SYSTEM = "apple-generic";
 				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
@@ -547,6 +572,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
 				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
