@@ -29,8 +29,10 @@ struct DisplaySettingsView: View {
     
     var body: some View {
         Form {
-            Section(header: Text("特效")) {
-                Toggle("启用液态玻璃", isOn: $enableLiquidGlass)
+            if #available(watchOS 26.0, *) {
+                Section(header: Text("特效")) {
+                    Toggle("启用液态玻璃", isOn: $enableLiquidGlass)
+                }
             }
             
             Section(header: Text("内容显示")) {

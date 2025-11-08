@@ -15,6 +15,13 @@ public struct MemorySettingsView: View {
     @State private var isAddingMemory = false
     @AppStorage("memoryTopK") var memoryTopK: Int = 3
 
+    private var embeddingModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedEmbeddingModel },
+            set: { viewModel.setSelectedEmbeddingModel($0) }
+        )
+    }
+
     private var numberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -43,6 +50,29 @@ public struct MemorySettingsView: View {
     private var memoryListView: some View {
         List {
             Section {
+                let options = viewModel.embeddingModelOptions
+                if options.isEmpty {
+                    Text("暂无可用模型。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("嵌入模型", selection: embeddingModelBinding) {
+                        Text("未选择").tag(Optional<RunnableModel>.none)
+                        ForEach(options) { runnable in
+                            Text("\(runnable.model.displayName) | \(runnable.provider.name)")
+                                .tag(Optional<RunnableModel>.some(runnable))
+                        }
+                    }
+                }
+            } header: {
+                Text("嵌入模型")
+            } footer: {
+                Text("列出当前配置的所有模型，记忆嵌入会调用所选模型。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 HStack {
                     Text("检索数量 (Top K)")
                     Spacer()
@@ -53,7 +83,7 @@ public struct MemorySettingsView: View {
             } header: {
                 Text("检索设置")
             } footer: {
-                Text("设置为 0 表示加载全部记忆。默认值为 3。")
+                Text("设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

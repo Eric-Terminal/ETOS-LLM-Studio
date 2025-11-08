@@ -63,6 +63,12 @@ public protocol APIAdapter {
     
     /// 解析语音转文字响应。
     func parseTranscriptionResponse(data: Data) throws -> String
+    
+    /// 构建一个用于生成嵌入的请求。
+    func buildEmbeddingRequest(for model: RunnableModel, texts: [String]) -> URLRequest?
+    
+    /// 解析嵌入响应，返回与输入文本一一对应的向量。
+    func parseEmbeddingResponse(data: Data) throws -> [[Float]]
 }
 
 public extension APIAdapter {
@@ -72,6 +78,14 @@ public extension APIAdapter {
     
     func parseTranscriptionResponse(data: Data) throws -> String {
         throw NSError(domain: "APIAdapter", code: -10, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现语音转文字功能。"])
+    }
+    
+    func buildEmbeddingRequest(for model: RunnableModel, texts: [String]) -> URLRequest? {
+        nil
+    }
+    
+    func parseEmbeddingResponse(data: Data) throws -> [[Float]] {
+        throw NSError(domain: "APIAdapter", code: -11, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现嵌入 API。"])
     }
 }
 
@@ -112,6 +126,13 @@ public class OpenAIAdapter: APIAdapter {
     
     private struct OpenAITranscriptionResponse: Decodable {
         let text: String
+    }
+    
+    private struct OpenAIEmbeddingResponse: Decodable {
+        struct DataEntry: Decodable {
+            let embedding: [Double]
+        }
+        let data: [DataEntry]
     }
 
     public init() {}
@@ -360,6 +381,52 @@ public class OpenAIAdapter: APIAdapter {
         } catch {
             if let raw = String(data: data, encoding: .utf8) {
                 logger.error("语音转文字响应解析失败，原始数据: \(raw)")
+            }
+            throw error
+        }
+    }
+    
+    public func buildEmbeddingRequest(for model: RunnableModel, texts: [String]) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建嵌入请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        let embeddingsURL = baseURL.appendingPathComponent("embeddings")
+        
+        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建嵌入请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
+            return nil
+        }
+        
+        var request = URLRequest(url: embeddingsURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        
+        var payload: [String: Any] = [
+            "model": model.model.modelName,
+            "input": texts
+        ]
+        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        payload.merge(overrides) { _, new in new }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            return request
+        } catch {
+            logger.error("构建嵌入请求失败: 无法编码 JSON - \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    public func parseEmbeddingResponse(data: Data) throws -> [[Float]] {
+        do {
+            let response = try JSONDecoder().decode(OpenAIEmbeddingResponse.self, from: data)
+            return response.data.map { entry in entry.embedding.map { Float($0) } }
+        } catch {
+            if let raw = String(data: data, encoding: .utf8) {
+                logger.error("嵌入响应解析失败，原始数据: \(raw)")
             }
             throw error
         }

@@ -136,15 +136,15 @@ public class SimilarityIndex: Identifiable, Hashable {
     // MARK: - 编码
 
     public func getEmbedding(for text: String, embedding: [Float]? = nil) async -> [Float] {
-        if let embedding = embedding, embedding.count == dimension {
-            // 有效的嵌入，无需编码
+        if let embedding = embedding {
+            updateDimensionIfNeeded(with: embedding.count)
             return embedding
         } else {
-            // 添加到索引前需要编码
             guard let encoded = await indexModel.encode(sentence: text) else {
                 print("编码文本失败。 \(text)")
-                return Array(repeating: Float(0), count: dimension)
+                return dimension > 0 ? Array(repeating: Float(0), count: dimension) : []
             }
+            updateDimensionIfNeeded(with: encoded.count)
             return encoded
         }
     }
@@ -152,12 +152,20 @@ public class SimilarityIndex: Identifiable, Hashable {
     // MARK: - 搜索
 
     public func search(_ query: String, top resultCount: Int? = nil, metric: DistanceMetricProtocol? = nil) async -> [SearchResult] {
-        let resultCount = resultCount ?? 5
         guard let queryEmbedding = await indexModel.encode(sentence: query) else {
             print("为查询 '\(query)' 生成嵌入失败。" )
             return []
         }
-
+        updateDimensionIfNeeded(with: queryEmbedding.count)
+        return search(usingQueryEmbedding: queryEmbedding, top: resultCount, metric: metric)
+    }
+    
+    public func search(usingQueryEmbedding queryEmbedding: [Float], top resultCount: Int? = nil, metric: DistanceMetricProtocol? = nil) -> [SearchResult] {
+        let resultCount = resultCount ?? 5
+        guard !indexItems.isEmpty else { return [] }
+        if queryEmbedding.isEmpty {
+            return []
+        }
         var indexIds: [String] = []
         var indexEmbeddings: [[Float]] = []
 
@@ -166,11 +174,17 @@ public class SimilarityIndex: Identifiable, Hashable {
             indexEmbeddings.append(item.embedding)
         }
 
-        // 计算距离并找到最近的邻居
+        if dimension == 0 {
+            dimension = queryEmbedding.count
+        } else if dimension != queryEmbedding.count {
+            print("查询嵌入维度 (\(queryEmbedding.count)) 与索引维度 (\(dimension)) 不匹配。")
+            return []
+        }
+
         if let customMetric = metric {
-            // 允许在查询时使用自定义度量
             indexMetric = customMetric
         }
+
         let searchResults = indexMetric.findNearest(for: queryEmbedding, in: indexEmbeddings, resultsCount: resultCount)
 
         // 将结果映射到索引ID
@@ -187,6 +201,15 @@ public class SimilarityIndex: Identifiable, Hashable {
         }
     }
 
+    private func updateDimensionIfNeeded(with newValue: Int) {
+        guard newValue > 0 else { return }
+        if dimension == 0 {
+            dimension = newValue
+        } else if dimension != newValue {
+            print("检测到嵌入维度变化: \(dimension) -> \(newValue)，将使用最新维度。")
+            dimension = newValue
+        }
+    }
 }
 
 // MARK: - 增删改查 (CRUD)

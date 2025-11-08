@@ -81,6 +81,7 @@ public struct Model: Codable, Identifiable, Hashable {
     public enum Capability: String, Codable, Hashable {
         case chat
         case speechToText
+        case embedding
     }
     
     public var id: UUID
@@ -141,6 +142,10 @@ public struct Model: Codable, Identifiable, Hashable {
 public extension Model {
     var supportsSpeechToText: Bool {
         capabilities.contains(.speechToText)
+    }
+    
+    var supportsEmbedding: Bool {
+        capabilities.contains(.embedding)
     }
 }
 

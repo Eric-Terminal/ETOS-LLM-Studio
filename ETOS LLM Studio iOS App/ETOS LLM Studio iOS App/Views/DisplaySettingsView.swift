@@ -15,7 +15,9 @@ struct DisplaySettingsView: View {
         Form {
             Section("内容表现") {
                 Toggle("渲染 Markdown", isOn: $enableMarkdown)
-                Toggle("液态玻璃效果", isOn: $enableLiquidGlass)
+                if #available(iOS 26.0, *) {
+                    Toggle("液态玻璃效果", isOn: $enableLiquidGlass)
+                }
             }
             
             Section("背景") {

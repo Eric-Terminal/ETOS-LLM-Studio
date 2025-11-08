@@ -62,6 +62,15 @@ fileprivate class MockURLProtocol: URLProtocol {
 
 @Suite("MemoryManager Tests")
 struct MemoryManagerTests {
+    
+    struct MockEmbeddingGenerator: MemoryEmbeddingGenerating {
+        func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]] {
+            texts.map { text in
+                let base = max(1, text.count % 5 + 1)
+                return Array(repeating: Float(base), count: 8)
+            }
+        }
+    }
 
     // Helper now accepts a specific manager instance to clean up.
     private func cleanup(memoryManager: MemoryManager) async {
@@ -75,7 +84,7 @@ struct MemoryManagerTests {
 
     @Test("Add and Retrieve Memory")
     func testAddMemory() async throws {
-        let memoryManager = MemoryManager()
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
         await memoryManager.waitForInitialization()
         await cleanup(memoryManager: memoryManager)
         
@@ -91,7 +100,7 @@ struct MemoryManagerTests {
 
     @Test("Delete Memory")
     func testDeleteMemory() async throws {
-        let memoryManager = MemoryManager()
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
         await memoryManager.waitForInitialization()
         await cleanup(memoryManager: memoryManager)
         
@@ -115,7 +124,7 @@ struct MemoryManagerTests {
 
     @Test("Update Memory")
     func testUpdateMemory() async throws {
-        let memoryManager = MemoryManager()
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
         await memoryManager.waitForInitialization()
         await cleanup(memoryManager: memoryManager)
 
@@ -143,7 +152,7 @@ struct MemoryManagerTests {
 
     @Test("Search Memories")
     func testSearchMemories() async throws {
-        let memoryManager = MemoryManager()
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
         await memoryManager.waitForInitialization()
         await cleanup(memoryManager: memoryManager)
 
@@ -274,14 +283,14 @@ fileprivate struct OpenAIResponse: Codable {
 fileprivate struct ChatServiceTests {
     
     // 在所有测试之间共享的变量
-    var memoryManager: MemoryManager! 
+    var memoryManager: MemoryManager!
     var mockAdapter: MockAPIAdapter! 
     var chatService: ChatService! 
     var dummyModel: RunnableModel! 
 
     // swift-testing 的初始化方法，在每个测试运行前被调用
     init() async {
-        memoryManager = MemoryManager()
+        memoryManager = MemoryManager(embeddingGenerator: MemoryManagerTests.MockEmbeddingGenerator())
         await memoryManager.waitForInitialization()
         
         mockAdapter = MockAPIAdapter()

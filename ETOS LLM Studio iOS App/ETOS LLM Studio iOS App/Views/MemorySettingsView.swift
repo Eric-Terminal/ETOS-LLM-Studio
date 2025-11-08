@@ -6,6 +6,13 @@ struct MemorySettingsView: View {
     @State private var isAddingMemory = false
     @AppStorage("memoryTopK") private var memoryTopK: Int = 3
     
+    private var embeddingModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedEmbeddingModel },
+            set: { viewModel.setSelectedEmbeddingModel($0) }
+        )
+    }
+    
     private var numberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -15,6 +22,30 @@ struct MemorySettingsView: View {
     
     var body: some View {
         Form {
+            Section {
+                let options = viewModel.embeddingModelOptions
+                if options.isEmpty {
+                    Text("暂无可用模型，请先在“数据与模型设置”中启用。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("嵌入模型", selection: embeddingModelBinding) {
+                        Text("未选择").tag(Optional<RunnableModel>.none)
+                        ForEach(options) { runnable in
+                            Text("\(runnable.model.displayName) | \(runnable.provider.name)")
+                                .tag(Optional<RunnableModel>.some(runnable))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            } header: {
+                Text("嵌入模型")
+            } footer: {
+                Text("列出当前配置的所有模型，记忆嵌入请求会使用所选模型发送。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 LabeledContent("检索数量 (Top K)") {
                     TextField("0 表示不限制", value: $memoryTopK, formatter: numberFormatter)
@@ -28,7 +59,7 @@ struct MemorySettingsView: View {
             } header: {
                 Text("检索设置")
             } footer: {
-                Text("设置为 0 表示检索所有记忆。默认值为 3。")
+                Text("设置为 0 表示跳过检索，直接把所有记忆原文注入上下文。默认为 3。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

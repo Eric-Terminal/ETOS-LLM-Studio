@@ -59,14 +59,16 @@ struct ChatBubble: View {
             .foregroundColor(.white)
 
         if enableLiquidGlass {
-            content
-                .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                .background(Color.blue.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            if #available(watchOS 26.0, *) {
+                content
+                    .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color.blue.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                userBubbleFallback(content)
+            }
         } else {
-            content
-                .background(enableBackground ? Color.blue.opacity(0.7) : Color.blue)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            userBubbleFallback(content)
         }
     }
     
@@ -77,14 +79,16 @@ struct ChatBubble: View {
             .foregroundColor(.white)
 
         if enableLiquidGlass {
-            content
-                .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                .background(Color.red.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            if #available(watchOS 26.0, *) {
+                content
+                    .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color.red.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                errorBubbleFallback(content)
+            }
         } else {
-            content
-                .background(enableBackground ? Color.red.opacity(0.7) : Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            errorBubbleFallback(content)
         }
     }
     
@@ -130,11 +134,13 @@ struct ChatBubble: View {
         .padding(10)
 
         if enableLiquidGlass {
-            content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+            if #available(watchOS 26.0, *) {
+                content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+            } else {
+                assistantBubbleFallback(content)
+            }
         } else {
-            content
-                .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            assistantBubbleFallback(content)
         }
     }
     
@@ -207,11 +213,6 @@ struct ChatBubble: View {
                         }
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                        if !toolCall.arguments.isEmpty {
-                            Text(toolCall.arguments)
-                                .font(.caption2.monospaced())
-                                .foregroundColor(.secondary)
-                        }
                         if let result = toolCall.result, !result.isEmpty {
                             Text(result)
                                 .font(.caption2)
@@ -223,5 +224,28 @@ struct ChatBubble: View {
             }
         }
         .padding(.bottom, isToolCallsExpanded ? 5 : 0)
+    }
+    
+    // MARK: - 回退样式
+    
+    @ViewBuilder
+    private func userBubbleFallback<Content: View>(_ content: Content) -> some View {
+        content
+            .background(enableBackground ? Color.blue.opacity(0.7) : Color.blue)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    @ViewBuilder
+    private func errorBubbleFallback<Content: View>(_ content: Content) -> some View {
+        content
+            .background(enableBackground ? Color.red.opacity(0.7) : Color.red)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    @ViewBuilder
+    private func assistantBubbleFallback<Content: View>(_ content: Content) -> some View {
+        content
+            .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

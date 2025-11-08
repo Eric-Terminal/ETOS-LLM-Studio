@@ -47,6 +47,7 @@ class ChatViewModel: ObservableObject {
     @Published var isSendingMessage: Bool = false
     @Published var speechModels: [RunnableModel] = []
     @Published var selectedSpeechModel: RunnableModel?
+    @Published var selectedEmbeddingModel: RunnableModel?
     @Published var isSpeechRecorderPresented: Bool = false
     @Published var isRecordingSpeech: Bool = false
     @Published var speechTranscriptionInProgress: Bool = false
@@ -76,6 +77,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
+    @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     
     // MARK: - 公开属性
     
@@ -85,6 +87,12 @@ class ChatViewModel: ObservableObject {
         guard !currentBackgroundImage.isEmpty else { return nil }
         let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(currentBackgroundImage)
         return UIImage(contentsOfFile: fileURL.path)
+    }
+    
+    var embeddingModelOptions: [RunnableModel] {
+        providers.flatMap { provider in
+            provider.models.map { RunnableModel(provider: provider, model: $0) }
+        }
     }
     
     // MARK: - 私有属性
@@ -159,6 +167,7 @@ class ChatViewModel: ObservableObject {
                 self.activatedModels = self.chatService.activatedRunnableModels
                 self.speechModels = self.chatService.activatedSpeechModels
                 self.syncSpeechModelSelection()
+                self.syncEmbeddingModelSelection()
             }
             .store(in: &cancellables)
 
@@ -204,6 +213,7 @@ class ChatViewModel: ObservableObject {
             .store(in: &cancellables)
         
         syncSpeechModelSelection()
+        syncEmbeddingModelSelection()
     }
     
     private func rotateBackgroundImageIfNeeded() {
@@ -267,6 +277,14 @@ class ChatViewModel: ObservableObject {
         let newIdentifier = model?.id ?? ""
         if speechModelIdentifier != newIdentifier {
             speechModelIdentifier = newIdentifier
+        }
+    }
+    
+    func setSelectedEmbeddingModel(_ model: RunnableModel?) {
+        selectedEmbeddingModel = model
+        let newIdentifier = model?.id ?? ""
+        if memoryEmbeddingModelIdentifier != newIdentifier {
+            memoryEmbeddingModelIdentifier = newIdentifier
         }
     }
     
@@ -647,6 +665,24 @@ class ChatViewModel: ObservableObject {
         }
         selectedSpeechModel = nil
         speechModelIdentifier = ""
+    }
+    
+    private func syncEmbeddingModelSelection() {
+        if let match = embeddingModelOptions.first(where: { $0.id == memoryEmbeddingModelIdentifier }) {
+            if selectedEmbeddingModel?.id != match.id {
+                selectedEmbeddingModel = match
+            }
+            return
+        }
+        guard !memoryEmbeddingModelIdentifier.isEmpty else {
+            selectedEmbeddingModel = nil
+            return
+        }
+        guard !embeddingModelOptions.isEmpty else {
+            return
+        }
+        selectedEmbeddingModel = nil
+        memoryEmbeddingModelIdentifier = ""
     }
     
     private func startExtendedSession() {

@@ -68,9 +68,6 @@ struct ChatBubble: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(call.toolName)
                                 .font(.footnote.weight(.semibold))
-                            Text(call.arguments)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
                             if let result = call.result, !result.isEmpty {
                                 Text(result)
                                     .font(.caption)

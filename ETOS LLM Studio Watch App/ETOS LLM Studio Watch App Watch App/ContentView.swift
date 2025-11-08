@@ -21,6 +21,14 @@ struct ContentView: View {
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     
+    private var isLiquidGlassEnabled: Bool {
+        if #available(watchOS 26.0, *) {
+            return viewModel.enableLiquidGlass
+        } else {
+            return false
+        }
+    }
+    
     // MARK: - 视图主体
     
     var body: some View {
@@ -117,12 +125,21 @@ struct ContentView: View {
         .background(Color.clear)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: { viewModel.activeSheet = .settings }) {
+                let settingsButton = Button(action: { viewModel.activeSheet = .settings }) {
                     Image(systemName: "gearshape.fill")
                 }
                 .buttonStyle(.plain)
                 .padding(8)
-                .glassEffect(in: Circle())
+                
+                if isLiquidGlassEnabled {
+                    if #available(watchOS 26.0, *) {
+                        settingsButton.glassEffect(in: Circle())
+                    } else {
+                        settingsButton
+                    }
+                } else {
+                    settingsButton
+                }
             }
         }
         .onChange(of: viewModel.messages.count) {
@@ -152,7 +169,7 @@ struct ContentView: View {
             isToolCallsExpanded: isToolCallsExpandedBinding,
             enableMarkdown: viewModel.enableMarkdown,
             enableBackground: viewModel.enableBackground,
-            enableLiquidGlass: viewModel.enableLiquidGlass
+            enableLiquidGlass: isLiquidGlassEnabled
         )
         .id(message.id)
         .listRowInsets(EdgeInsets())
@@ -183,13 +200,23 @@ struct ContentView: View {
     }
     
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
-        Button(action: {
+        let scrollAction = {
             withAnimation {
                 proxy.scrollTo("inputBubble", anchor: .bottom)
             }
-        }) {
-            Image(systemName: "arrow.down.circle.fill")
-                .glassEffect(.clear, in: Circle())
+        }
+        
+        return Button(action: scrollAction) {
+            let icon = Image(systemName: "arrow.down.circle.fill")
+            if isLiquidGlassEnabled {
+                if #available(watchOS 26.0, *) {
+                    icon.glassEffect(.clear, in: Circle())
+                } else {
+                    icon
+                }
+            } else {
+                icon
+            }
         }
         .buttonStyle(.plain)
         .padding(.bottom, 10)
@@ -198,22 +225,32 @@ struct ContentView: View {
     
     private var inputBubble: some View {
         let coreBubble = Group {
-            if viewModel.enableLiquidGlass {
+            if isLiquidGlassEnabled {
                 HStack(spacing: 10) {
-                    TextField("输入...", text: $viewModel.userInput)
+                    let textField = TextField("输入...", text: $viewModel.userInput)
                         .textFieldStyle(.plain)
                         .padding(.horizontal, 0)
                         .padding(.vertical, 0)
-                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 16))
+                    
+                    if #available(watchOS 26.0, *) {
+                        textField.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 16))
+                    } else {
+                        textField
+                    }
 
-                    Button(action: viewModel.sendMessage) {
+                    let sendButton = Button(action: viewModel.sendMessage) {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 18, weight: .medium))
                     }
                     .buttonStyle(.plain)
                     .frame(width: 38, height: 38)
-                    .glassEffect(.clear, in: Circle())
                     .disabled(viewModel.userInput.isEmpty || viewModel.isSendingMessage)
+                    
+                    if #available(watchOS 26.0, *) {
+                        sendButton.glassEffect(.clear, in: Circle())
+                    } else {
+                        sendButton
+                    }
                 }
                 .frame(height: 38)
             } else {

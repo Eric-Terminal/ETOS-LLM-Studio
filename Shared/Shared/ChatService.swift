@@ -16,6 +16,11 @@ public struct RunnableModel: Identifiable, Hashable {
     public var id: String { "\(provider.id.uuidString)-\(model.id.uuidString)" }
     public let provider: Provider
     public let model: Model
+    
+    public init(provider: Provider, model: Model) {
+        self.provider = provider
+        self.model = model
+    }
 }
 
 public class ChatService {
@@ -75,7 +80,7 @@ public class ChatService {
         let speechCapable = activatedRunnableModels.filter { $0.model.supportsSpeechToText }
         return speechCapable.isEmpty ? activatedRunnableModels : speechCapable
     }
-
+    
     private func resolveSelectedSpeechModel() -> RunnableModel? {
         let storedIdentifier = UserDefaults.standard.string(forKey: "speechModelIdentifier")
         if let identifier = storedIdentifier,
@@ -616,11 +621,15 @@ public class ChatService {
     ) async {
         // 自动查：执行记忆搜索
         var memories: [MemoryItem] = []
-        if enableMemory, let userMessage = userMessage {
+        if enableMemory {
             let topK = resolvedMemoryTopK()
-            memories = await self.memoryManager.searchMemories(query: userMessage.content, topK: topK)
-            if topK > 0 {
-                memories = Array(memories.prefix(topK))
+            if topK == 0 {
+                memories = await self.memoryManager.getAllMemories()
+            } else {
+                let queryText = buildMemoryQueryContext(from: messages, fallbackUserMessage: userMessage)
+                if let queryText {
+                    memories = await self.memoryManager.searchMemories(query: queryText, topK: topK)
+                }
             }
             if !memories.isEmpty {
                 logger.info("📚 已检索到 \(memories.count) 条相关记忆。")
@@ -1152,12 +1161,20 @@ public class ChatService {
     private func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) {
         var messages = messagesForSessionSubject.value
         if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+            let preservedToolCalls = messages[index].toolCalls
+            let mergedToolCalls: [InternalToolCall]? = {
+                if let newCalls = newMessage.toolCalls, !newCalls.isEmpty {
+                    return newCalls
+                }
+                // 如果新消息没有附带工具调用，则沿用之前的记录，方便在最终答案中回顾工具使用详情。
+                return preservedToolCalls
+            }()
             messages[index] = ChatMessage(
                 id: loadingMessageID, // 保持ID不变
                 role: newMessage.role,
                 content: newMessage.content,
                 reasoningContent: newMessage.reasoningContent,
-                toolCalls: newMessage.toolCalls // 确保 toolCalls 也被更新
+                toolCalls: mergedToolCalls // 确保 toolCalls 保持最新或沿用历史数据
             )
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)
@@ -1236,6 +1253,53 @@ public class ChatService {
     
     // MARK: - 自动会话标题生成
 
+    private func buildMemoryQueryContext(from messages: [ChatMessage], fallbackUserMessage: ChatMessage?) -> String? {
+        let window = latestTwoRounds(from: messages)
+        let lines = window.compactMap { message -> String? in
+            let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            switch message.role {
+            case .user:
+                return "User: \(trimmed)"
+            case .assistant:
+                return "Assistant: \(trimmed)"
+            default:
+                return nil
+            }
+        }
+        if !lines.isEmpty {
+            return lines.joined(separator: "\n")
+        }
+        return fallbackUserMessage?.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    private func latestTwoRounds(from messages: [ChatMessage]) -> [ChatMessage] {
+        var collected: [ChatMessage] = []
+        var userCount = 0
+        var assistantCount = 0
+        
+        for message in messages.reversed() {
+            switch message.role {
+            case .user:
+                if userCount < 2 {
+                    collected.append(message)
+                    userCount += 1
+                }
+            case .assistant:
+                if assistantCount < 2 {
+                    collected.append(message)
+                    assistantCount += 1
+                }
+            default:
+                continue
+            }
+            if userCount >= 2 && assistantCount >= 2 {
+                break
+            }
+        }
+        return collected.reversed()
+    }
+    
     private func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage, firstAssistantMessage: ChatMessage) async {
         // 1. 检查功能是否开启
         let isAutoNamingEnabled = UserDefaults.standard.object(forKey: "enableAutoSessionNaming") as? Bool ?? true
