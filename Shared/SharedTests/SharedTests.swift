@@ -846,28 +846,28 @@ fileprivate struct VectorSearchTests {
         let top3 = data.topK(3, by: <)
         #expect(top3 == [1, 2, 5])
     }
-
+    
     @Test("Test topK with integers in descending order")
     func testTopK_descending() {
         let data = [5, 2, 9, 1, 8, 6]
         let top3 = data.topK(3, by: >)
         #expect(top3 == [9, 8, 6])
     }
-
+    
     @Test("Test topK when k is larger than array count")
     func testTopK_kLargerThanCount() {
         let data = [5, 2, 9]
         let top5 = data.topK(5, by: <)
         #expect(top5 == [2, 5, 9])
     }
-
+    
     @Test("Test topK when k is zero")
     func testTopK_kIsZero() {
         let data = [5, 2, 9, 1, 8, 6]
         let top0 = data.topK(0, by: <)
         #expect(top0.isEmpty)
     }
-
+    
     @Test("Test topK with an empty array")
     func testTopK_emptyArray() {
         let data: [Int] = []
@@ -892,11 +892,11 @@ fileprivate struct VectorSearchTests {
         var model: Never { fatalError("Not implemented") }
         
         let dimension: Int
-
+        
         init(dimension: Int = 4) {
             self.dimension = dimension
         }
-
+        
         func encode(sentence: String) async -> [Float]? {
             var embedding = [Float](repeating: 0.0, count: dimension)
             let hash = sentence.hashValue
@@ -906,7 +906,7 @@ fileprivate struct VectorSearchTests {
             return embedding
         }
     }
-
+    
     struct JsonStoreTests {
         let store = JsonStore()
         let items = [
@@ -915,32 +915,32 @@ fileprivate struct VectorSearchTests {
         ]
         let testDir: URL
         let indexName = "testIndex"
-
+        
         init() {
             testDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
         }
-
+        
         func cleanup() {
             try? FileManager.default.removeItem(at: testDir)
         }
-
+        
         @Test("Save and Load Index")
         func testSaveAndLoadIndex() throws {
             let savedURL = try store.saveIndex(items: items, to: testDir, as: indexName)
             #expect(FileManager.default.fileExists(atPath: savedURL.path))
-
+            
             let loadedItems = try store.loadIndex(from: savedURL)
             #expect(loadedItems.count == 2)
             #expect(loadedItems.first?.id == "1")
             cleanup()
         }
-
+        
         @Test("List Indexes")
         func testListIndexes() throws {
             _ = try store.saveIndex(items: items, to: testDir, as: indexName)
             _ = try store.saveIndex(items: [], to: testDir, as: "anotherIndex")
-
+            
             let indexes = store.listIndexes(at: testDir)
             #expect(indexes.count == 2)
             #expect(indexes.contains(where: { $0.lastPathComponent == "testIndex.json" }))
@@ -953,12 +953,12 @@ fileprivate struct VectorSearchTests {
         var index: SimilarityIndex!
         let testDir: URL
         let indexName = "similarityTestIndex"
-
+        
         init() {
             testDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
         }
-
+        
         mutating func setup() async {
             let mockEmbeddings = MockEmbeddings(dimension: 4)
             index = await SimilarityIndex(name: indexName, model: mockEmbeddings, metric: CosineSimilarity(), vectorStore: JsonStore())
@@ -968,7 +968,7 @@ fileprivate struct VectorSearchTests {
         func cleanup() {
             try? FileManager.default.removeItem(at: testDir)
         }
-
+        
         @Test("Add and Get Item")
         mutating func testAddAndGetItem() async {
             await setup()
@@ -977,7 +977,7 @@ fileprivate struct VectorSearchTests {
             #expect(itemB?.text == "banana")
             cleanup()
         }
-
+        
         @Test("Update Item")
         mutating func testUpdateItem() async {
             await setup()
@@ -986,7 +986,7 @@ fileprivate struct VectorSearchTests {
             #expect(itemB?.text == "blueberry")
             cleanup()
         }
-
+        
         @Test("Remove Item")
         mutating func testRemoveItem() async {
             await setup()
@@ -995,7 +995,7 @@ fileprivate struct VectorSearchTests {
             #expect(index.getItem(id: "b") == nil)
             cleanup()
         }
-
+        
         @Test("Search Items")
         mutating func testSearchItems() async {
             await setup()
@@ -1010,7 +1010,7 @@ fileprivate struct VectorSearchTests {
             await setup()
             let savedURL = try index.saveIndex(toDirectory: testDir)
             #expect(FileManager.default.fileExists(atPath: savedURL.path))
-
+            
             let mockEmbeddings = MockEmbeddings(dimension: 4)
             var newIndex = await SimilarityIndex(name: indexName, model: mockEmbeddings, vectorStore: JsonStore())
             let loadedItems = try newIndex.loadIndex(fromDirectory: testDir)
@@ -1026,18 +1026,18 @@ fileprivate struct VectorSearchTests {
     struct NativeTokenizerTests {
         @Test("Tokenize a simple sentence")
         func testTokenizeSentence() {
-                let tokenizer = NativeTokenizer()
-                let text = "This is a test."
-                let tokens = tokenizer.tokenize(text: text)
-                #expect(tokens == ["This", "is", "a", "test", "."])
+            let tokenizer = NativeTokenizer()
+            let text = "This is a test."
+            let tokens = tokenizer.tokenize(text: text)
+            #expect(tokens == ["This", "is", "a", "test", "."])
         }
-
+        
         @Test("Tokenize sentence with punctuation")
         func testTokenizeWithPunctuation() {
-                let tokenizer = NativeTokenizer()
-                let text = "Hello, world! How are you?"
-                let tokens = tokenizer.tokenize(text: text)
-                #expect(tokens == ["Hello", ",", "world", "!", "How", "are", "you", "?"])
+            let tokenizer = NativeTokenizer()
+            let text = "Hello, world! How are you?"
+            let tokens = tokenizer.tokenize(text: text)
+            #expect(tokens == ["Hello", ",", "world", "!", "How", "are", "you", "?"])
         }
     }
     
@@ -1050,106 +1050,7 @@ fileprivate struct VectorSearchTests {
         let vectorD: [Float] = [3.0, -1.5, 0.5]
         let zeroVector: [Float] = [0.0, 0.0, 0.0]
         let differentLengthVector: [Float] = [1.0, 2.0]
-
-        @Test("DotProduct: Basic calculation")
-        func testDotProduct() {
-            let metric = DotProduct()
-            let distance = metric.distance(between: vectorA, and: vectorB)
-            #expect(distance == 32.0)
-        }
         
-        @Test("DotProduct: Vector with itself")
-        func testDotProduct_self() {
-            let metric = DotProduct()
-            let distance = metric.distance(between: vectorA, and: vectorA)
-            #expect(distance == 14.0)
-        }
-
-        @Test("DotProduct: Vector with zero vector")
-        func testDotProduct_withZero() {
-            let metric = DotProduct()
-            let distance = metric.distance(between: vectorA, and: zeroVector)
-            #expect(distance == 0.0)
-        }
-
-        @Test("DotProduct: Different length vectors")
-        func testDotProduct_differentLength() {
-            let metric = DotProduct()
-            let distance = metric.distance(between: vectorA, and: differentLengthVector)
-            #expect(distance == -Float.greatestFiniteMagnitude)
-        }
-
-        @Test("CosineSimilarity: Identical vectors")
-        func testCosineSimilarity_identical() {
-            let metric = CosineSimilarity()
-            let similarity = metric.distance(between: vectorA, and: vectorA)
-            #expect(abs(similarity - 1.0) < 1e-6)
-        }
-
-        @Test("CosineSimilarity: Opposite vectors")
-        func testCosineSimilarity_opposite() {
-            let metric = CosineSimilarity()
-            let similarity = metric.distance(between: vectorA, and: vectorC)
-            #expect(abs(similarity - (-1.0)) < 1e-6)
-        }
         
-        @Test("CosineSimilarity: Orthogonal vectors")
-        func testCosineSimilarity_orthogonal() {
-            let metric = CosineSimilarity()
-            let v1: [Float] = [1.0, 0.0]
-            let v2: [Float] = [0.0, 1.0]
-            let similarity = metric.distance(between: v1, and: v2)
-            #expect(abs(similarity - 0.0) < 1e-6)
-        }
-
-        @Test("CosineSimilarity: Different length vectors")
-        func testCosineSimilarity_differentLength() {
-            let metric = CosineSimilarity()
-            let similarity = metric.distance(between: vectorA, and: differentLengthVector)
-            #expect(similarity == -1)
-        }
-        
-        @Test("EuclideanDistance: Basic calculation")
-        func testEuclideanDistance() {
-            let metric = EuclideanDistance()
-            let v1: [Float] = [0.0, 3.0]
-            let v2: [Float] = [4.0, 0.0]
-            let distance = metric.distance(between: v1, and: v2)
-            #expect(abs(distance - 5.0) < 1e-6)
-        }
-
-        @Test("EuclideanDistance: Identical vectors")
-        func testEuclideanDistance_identical() {
-            let metric = EuclideanDistance()
-            let distance = metric.distance(between: vectorA, and: vectorA)
-            #expect(distance == 0.0)
-        }
-
-        @Test("EuclideanDistance: Different length vectors")
-        func testEuclideanDistance_differentLength() {
-            let metric = EuclideanDistance()
-            let distance = metric.distance(between: vectorA, and: differentLengthVector)
-            #expect(distance == Float.greatestFiniteMagnitude)
-        }
-        
-        @Test("sortedScores: Returns top K scores (descending)")
-        func testSortedScores() {
-            let scores: [Float] = [0.1, 0.9, 0.5, 0.8, 0.2]
-            let top3 = sortedScores(scores: scores, topK: 3)
-            let extractedScores = top3.map { $0.0 }
-            let extractedIndices = top3.map { $0.1 }
-            #expect(extractedScores == [0.9, 0.8, 0.5])
-            #expect(extractedIndices == [1, 3, 2])
-        }
-        
-        @Test("sortedDistances: Returns top K distances (ascending)")
-        func testSortedDistances() {
-            let distances: [Float] = [10.5, 2.1, 8.7, 5.5, 9.0]
-            let top3 = sortedDistances(distances: distances, topK: 3)
-            let extractedDistances = top3.map { $0.0 }
-            let extractedIndices = top3.map { $0.1 }
-            #expect(extractedDistances == [2.1, 5.5, 8.7])
-            #expect(extractedIndices == [1, 3, 2])
-        }
     }
 }

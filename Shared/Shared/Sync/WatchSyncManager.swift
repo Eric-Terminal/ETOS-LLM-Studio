@@ -155,12 +155,12 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         from url: URL,
         isResponse: Bool,
         requestID: String?
-    ) {
+    ) async {
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
             let package = try decoder.decode(SyncPackage.self, from: data)
-            let summary = SyncEngine.apply(package: package)
+            let summary = await SyncEngine.apply(package: package)
             lastSummary = summary
             lastUpdatedAt = Date()
             
@@ -214,7 +214,7 @@ extension WatchSyncManager: WCSessionDelegate {
         Task { @MainActor in
             let isResponse = (file.metadata?["response"] as? Bool) ?? false
             let requestID = file.metadata?["requestID"] as? String
-            applyPackage(from: file.fileURL, isResponse: isResponse, requestID: requestID)
+            await applyPackage(from: file.fileURL, isResponse: isResponse, requestID: requestID)
         }
     }
     

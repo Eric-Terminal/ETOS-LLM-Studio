@@ -24,6 +24,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let providers = SyncOptions(rawValue: 1 << 0)
     public static let sessions = SyncOptions(rawValue: 1 << 1)
     public static let backgrounds = SyncOptions(rawValue: 1 << 2)
+    public static let memories = SyncOptions(rawValue: 1 << 3)
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -68,17 +69,33 @@ public struct SyncPackage: Codable {
     public var providers: [Provider]
     public var sessions: [SyncedSession]
     public var backgrounds: [SyncedBackground]
+    public var memories: [MemoryItem]
+    
+    enum CodingKeys: String, CodingKey {
+        case options, providers, sessions, backgrounds, memories
+    }
     
     public init(
         options: SyncOptions,
         providers: [Provider] = [],
         sessions: [SyncedSession] = [],
-        backgrounds: [SyncedBackground] = []
+        backgrounds: [SyncedBackground] = [],
+        memories: [MemoryItem] = []
     ) {
         self.options = options
         self.providers = providers
         self.sessions = sessions
         self.backgrounds = backgrounds
+        self.memories = memories
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        options = try container.decode(SyncOptions.self, forKey: .options)
+        providers = try container.decodeIfPresent([Provider].self, forKey: .providers) ?? []
+        sessions = try container.decodeIfPresent([SyncedSession].self, forKey: .sessions) ?? []
+        backgrounds = try container.decodeIfPresent([SyncedBackground].self, forKey: .backgrounds) ?? []
+        memories = try container.decodeIfPresent([MemoryItem].self, forKey: .memories) ?? []
     }
 }
 
@@ -90,6 +107,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedSessions: Int
     public var importedBackgrounds: Int
     public var skippedBackgrounds: Int
+    public var importedMemories: Int
+    public var skippedMemories: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -97,7 +116,9 @@ public struct SyncMergeSummary: Equatable {
         importedSessions: 0,
         skippedSessions: 0,
         importedBackgrounds: 0,
-        skippedBackgrounds: 0
+        skippedBackgrounds: 0,
+        importedMemories: 0,
+        skippedMemories: 0
     )
 }
 

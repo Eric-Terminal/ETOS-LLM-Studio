@@ -139,6 +139,30 @@ public class MemoryManager {
             logger.error("❌ 添加记忆失败：\(error.localizedDescription)")
         }
     }
+    
+    /// 从外部导入一条记忆（用于设备同步等场景）。
+    @discardableResult
+    public func restoreMemory(id: UUID, content: String, createdAt: Date) async -> Bool {
+        await initializationTask.value
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let chunkTexts = chunker.chunk(text: trimmed)
+        guard !chunkTexts.isEmpty else { return false }
+        
+        do {
+            let embeddings = try await embeddingGenerator.generateEmbeddings(
+                for: chunkTexts,
+                preferredModelID: preferredEmbeddingModelIdentifier()
+            )
+            let memory = MemoryItem(id: id, content: trimmed, embedding: [], createdAt: createdAt)
+            await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
+            logger.info("🔁 已恢复外部记忆。")
+            return true
+        } catch {
+            logger.error("❌ 恢复外部记忆失败：\(error.localizedDescription)")
+            return false
+        }
+    }
 
     /// 更新一条现有的记忆。
     public func updateMemory(item: MemoryItem) async {

@@ -21,6 +21,7 @@ public enum SyncEngine {
         var providers: [Provider] = []
         var sessions: [SyncedSession] = []
         var backgrounds: [SyncedBackground] = []
+        var memories: [MemoryItem] = []
         
         if options.contains(.providers) {
             providers = ConfigLoader.loadProviders()
@@ -46,11 +47,17 @@ public enum SyncEngine {
             }
         }
         
+        if options.contains(.memories) {
+            let rawStore = MemoryRawStore()
+            memories = rawStore.loadMemories()
+        }
+        
         return SyncPackage(
             options: options,
             providers: providers,
             sessions: sessions,
-            backgrounds: backgrounds
+            backgrounds: backgrounds,
+            memories: memories
         )
     }
     
@@ -60,8 +67,9 @@ public enum SyncEngine {
     @discardableResult
     public static func apply(
         package: SyncPackage,
-        chatService: ChatService = .shared
-    ) -> SyncMergeSummary {
+        chatService: ChatService = .shared,
+        memoryManager: MemoryManager? = nil
+    ) async -> SyncMergeSummary {
         var summary = SyncMergeSummary.empty
         
         if package.options.contains(.providers) {
@@ -83,6 +91,13 @@ public enum SyncEngine {
             if result.imported > 0 {
                 NotificationCenter.default.post(name: .syncBackgroundsUpdated, object: nil)
             }
+        }
+        
+        if package.options.contains(.memories) {
+            let manager = memoryManager ?? .shared
+            let result = await mergeMemories(package.memories, memoryManager: manager)
+            summary.importedMemories = result.imported
+            summary.skippedMemories = result.skipped
         }
         
         return summary
@@ -239,6 +254,61 @@ public enum SyncEngine {
         }
         
         return (imported, skipped)
+    }
+    
+    // MARK: - Memories
+    
+    private static func mergeMemories(
+        _ incoming: [MemoryItem],
+        memoryManager: MemoryManager
+    ) async -> (imported: Int, skipped: Int) {
+        guard !incoming.isEmpty else { return (0, 0) }
+        
+        let existingMemories = await memoryManager.getAllMemories()
+        var normalizedContents = Set(existingMemories.map { normalizeContent($0.content) })
+        var existingIDs = Set(existingMemories.map { $0.id })
+        var imported = 0
+        var skipped = 0
+        
+        for var memory in incoming {
+            let normalized = normalizeContent(memory.content)
+            guard !normalized.isEmpty else {
+                skipped += 1
+                continue
+            }
+            
+            if normalizedContents.contains(normalized) {
+                skipped += 1
+                continue
+            }
+            
+            if existingIDs.contains(memory.id) {
+                memory.id = UUID()
+            }
+            
+            let success = await memoryManager.restoreMemory(
+                id: memory.id,
+                content: memory.content,
+                createdAt: memory.createdAt
+            )
+            
+            if success {
+                imported += 1
+                normalizedContents.insert(normalized)
+                existingIDs.insert(memory.id)
+            } else {
+                skipped += 1
+            }
+        }
+        
+        return (imported, skipped)
+    }
+    
+    private static func normalizeContent(_ content: String) -> String {
+        content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .lowercased()
     }
 
     // MARK: - Helpers

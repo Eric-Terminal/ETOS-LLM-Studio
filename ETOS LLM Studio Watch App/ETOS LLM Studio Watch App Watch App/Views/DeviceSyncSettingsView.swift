@@ -6,6 +6,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.providers") private var syncProviders = true
     @AppStorage("sync.options.sessions") private var syncSessions = true
     @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
+    @AppStorage("sync.options.memories") private var syncMemories = false
     
     var body: some View {
         List {
@@ -13,6 +14,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("同步提供商", isOn: $syncProviders)
                 Toggle("同步会话", isOn: $syncSessions)
                 Toggle("同步背景", isOn: $syncBackgrounds)
+                Toggle("同步记忆（仅文本）", isOn: $syncMemories)
             }
             
             Section("同步操作") {
@@ -43,6 +45,7 @@ struct DeviceSyncSettingsView: View {
         if syncProviders { option.insert(.providers) }
         if syncSessions { option.insert(.sessions) }
         if syncBackgrounds { option.insert(.backgrounds) }
+        if syncMemories { option.insert(.memories) }
         return option
     }
     
@@ -96,6 +99,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedBackgrounds > 0 {
             parts.append("背景 +\(summary.importedBackgrounds)")
+        }
+        if summary.importedMemories > 0 {
+            parts.append("记忆 +\(summary.importedMemories)")
         }
         return parts.isEmpty ? "两端数据一致" : parts.joined(separator: "，")
     }

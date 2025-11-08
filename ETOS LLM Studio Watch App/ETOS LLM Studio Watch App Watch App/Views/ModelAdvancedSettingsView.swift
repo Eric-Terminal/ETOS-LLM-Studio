@@ -54,35 +54,11 @@ struct ModelAdvancedSettingsView: View {
                         if var session = currentSession {
                             session.topicPrompt = newValue
                             currentSession = session
-                            print("--- DEBUG: Topic Prompt set, preparing to save. ---")
-                            // 关键修复：在修改后立即调用更新函数
                             ChatService.shared.updateSession(session)
                         }
                     }
                 ), axis: .vertical)
                 .lineLimit(5...10)
-            }
-            
-            Section(header: Text("语音输入"), footer: Text(sendSpeechAsAudio ? "录音将附带音频给当前模型，同时使用下方所选模型后台转写文字。" : "识别结果会自动追加到输入框，便于确认和补充。")) {
-                Toggle("启用语言输入", isOn: $enableSpeechInput)
-                if enableSpeechInput {
-                    Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
-                    
-                    if speechModels.isEmpty {
-                        Text("暂无可用的模型，请先在模型设置中启用。")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Picker("语音模型", selection: $selectedSpeechModel) {
-                            Text("未选择").tag(Optional<RunnableModel>.none)
-                            ForEach(speechModels) { runnable in
-                                Text(runnable.model.displayName)
-                                    .tag(Optional<RunnableModel>.some(runnable))
-                            }
-                        }
-                        .pickerStyle(.navigationLink)
-                    }
-                }
             }
             
             Section(header: Text("增强提示词"), footer: Text("该提示词会附加在您的最后一条消息末尾，以增强指令效果。")) {
@@ -150,6 +126,31 @@ struct ModelAdvancedSettingsView: View {
                     TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 60)
+                }
+            }
+            
+            Section(
+                header: Text("语音输入"),
+                footer: Text(sendSpeechAsAudio ? "录音将附带音频给当前模型，同时使用下方所选模型后台转写文字。" : "识别结果会自动追加到输入框，便于确认和补充。")
+            ) {
+                Toggle("启用语言输入", isOn: $enableSpeechInput)
+                if enableSpeechInput {
+                    Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
+                    
+                    if speechModels.isEmpty {
+                        Text("暂无可用的模型，请先在模型设置中启用。")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Picker("语音模型", selection: $selectedSpeechModel) {
+                            Text("未选择").tag(Optional<RunnableModel>.none)
+                            ForEach(speechModels) { runnable in
+                                Text(runnable.model.displayName)
+                                    .tag(Optional<RunnableModel>.some(runnable))
+                            }
+                        }
+                        .pickerStyle(.navigationLink)
+                    }
                 }
             }
         }
