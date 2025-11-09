@@ -71,6 +71,31 @@ struct MemoryManagerTests {
             }
         }
     }
+    
+    actor FlakyEmbeddingGenerator: MemoryEmbeddingGenerating {
+        enum TestError: Error {
+            case forced
+        }
+        
+        private var attempts = 0
+        private let failuresBeforeSuccess: Int
+        
+        init(failuresBeforeSuccess: Int) {
+            self.failuresBeforeSuccess = max(0, failuresBeforeSuccess)
+        }
+        
+        func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]] {
+            attempts += 1
+            if attempts <= failuresBeforeSuccess {
+                throw TestError.forced
+            }
+            return texts.map { _ in Array(repeating: 0.42, count: 4) }
+        }
+        
+        func attemptsCount() -> Int {
+            attempts
+        }
+    }
 
     // Helper now accepts a specific manager instance to clean up.
     private func cleanup(memoryManager: MemoryManager) async {
@@ -95,6 +120,57 @@ struct MemoryManagerTests {
         #expect(allMems.count == 1)
         #expect(allMems.first?.content == content)
 
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Embedding Retry Handles Transient Failures")
+    func testEmbeddingRetryLogic() async throws {
+        let generator = FlakyEmbeddingGenerator(failuresBeforeSuccess: 2)
+        let retryPolicy = MemoryEmbeddingRetryPolicy(maxAttempts: 3, initialDelay: 0, backoffMultiplier: 1)
+        let memoryManager = MemoryManager(
+            embeddingGenerator: generator,
+            chunkSize: 200,
+            retryPolicy: retryPolicy
+        )
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "用户最喜欢的茶是铁观音。")
+        
+        let attempts = await generator.attemptsCount()
+        #expect(attempts == 3, "生成器应在两次失败后第3次成功。")
+        
+        let memories = await memoryManager.getAllMemories()
+        #expect(memories.count == 1)
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Persist Pending Memory And Reconcile")
+    func testPendingMemoryReconciledAfterFailure() async throws {
+        let generator = FlakyEmbeddingGenerator(failuresBeforeSuccess: 1)
+        let retryPolicy = MemoryEmbeddingRetryPolicy(maxAttempts: 1, initialDelay: 0, backoffMultiplier: 1)
+        let memoryManager = MemoryManager(
+            embeddingGenerator: generator,
+            retryPolicy: retryPolicy
+        )
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "用户偏爱用法压壶冲咖啡。")
+        
+        let attemptsAfterAdd = await generator.attemptsCount()
+        #expect(attemptsAfterAdd == 1, "首次添加应失败一次并立即写入 JSON。")
+        
+        let memories = await memoryManager.getAllMemories()
+        #expect(memories.count == 1, "即便嵌入失败也要保存原文记忆。")
+        
+        let reconciled = await memoryManager.reconcilePendingEmbeddings()
+        #expect(reconciled == 1, "缺失的记忆应被识别并补偿。")
+        
+        let attemptsAfterReconcile = await generator.attemptsCount()
+        #expect(attemptsAfterReconcile == 2, "补偿时应再次调用嵌入并最终成功。")
+        
         await cleanup(memoryManager: memoryManager)
     }
 

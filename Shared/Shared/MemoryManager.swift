@@ -13,6 +13,20 @@ import Combine
 import NaturalLanguage
 import os.log
 
+public struct MemoryEmbeddingRetryPolicy {
+    public static let `default` = MemoryEmbeddingRetryPolicy()
+    
+    public let maxAttempts: Int
+    public let initialDelay: TimeInterval
+    public let backoffMultiplier: Double
+    
+    public init(maxAttempts: Int = 3, initialDelay: TimeInterval = 0.5, backoffMultiplier: Double = 2.0) {
+        self.maxAttempts = max(1, maxAttempts)
+        self.initialDelay = max(0, initialDelay)
+        self.backoffMultiplier = max(1.0, backoffMultiplier)
+    }
+}
+
 public class MemoryManager {
 
     // MARK: - 单例
@@ -39,13 +53,20 @@ public class MemoryManager {
     private let chunker: MemoryChunker
     private let embeddingGenerator: MemoryEmbeddingGenerating
     private let preferredEmbeddingModelKey = "memoryEmbeddingModelIdentifier"
+    private let embeddingRetryPolicy: MemoryEmbeddingRetryPolicy
+    private let consistencyCheckDefaultDelay: TimeInterval = 2.0
 
     // MARK: - 初始化
 
     /// 公开的初始化方法，用于生产环境。
-    public init(embeddingGenerator: MemoryEmbeddingGenerating? = nil, chunkSize: Int = 200) {
+    public init(
+        embeddingGenerator: MemoryEmbeddingGenerating? = nil,
+        chunkSize: Int = 200,
+        retryPolicy: MemoryEmbeddingRetryPolicy = .default
+    ) {
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
+        self.embeddingRetryPolicy = retryPolicy
         logger.info("🧠 MemoryManager v2 (wrapper) 正在初始化...")
         self.initializationTask = Task {
             await self.setup()
@@ -53,10 +74,16 @@ public class MemoryManager {
     }
     
     /// 内部的初始化方法，用于测试环境，允许注入一个自定义的 SimilarityIndex。
-    internal init(testIndex: SimilarityIndex, embeddingGenerator: MemoryEmbeddingGenerating? = nil, chunkSize: Int = 200) {
+    internal init(
+        testIndex: SimilarityIndex,
+        embeddingGenerator: MemoryEmbeddingGenerating? = nil,
+        chunkSize: Int = 200,
+        retryPolicy: MemoryEmbeddingRetryPolicy = .default
+    ) {
         logger.info("🧠 MemoryManager v2 (wrapper) 正在使用测试索引进行初始化...")
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
+        self.embeddingRetryPolicy = retryPolicy
         self.similarityIndex = testIndex
         self.initializationTask = Task {
             do {
@@ -114,6 +141,8 @@ public class MemoryManager {
             internalMemoriesPublisher.send(rawMemories)
             logger.info("  - 原文记忆初始化完成，当前条目: \(rawMemories.count)。")
         }
+        
+        await reconcilePendingEmbeddings()
     }
 
     // MARK: - 公开方法 (CRUD)
@@ -127,16 +156,16 @@ public class MemoryManager {
         let chunkTexts = chunker.chunk(text: trimmed)
         guard !chunkTexts.isEmpty else { return }
         
+        let memory = MemoryItem(id: UUID(), content: trimmed, embedding: [], createdAt: Date())
+        cacheMemory(memory)
+        
         do {
-            let embeddings = try await embeddingGenerator.generateEmbeddings(
-                for: chunkTexts,
-                preferredModelID: preferredEmbeddingModelIdentifier()
-            )
-            let memory = MemoryItem(id: UUID(), content: trimmed, embedding: [], createdAt: Date())
+            let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
             logger.info("✅ 已添加新的记忆。")
         } catch {
             logger.error("❌ 添加记忆失败：\(error.localizedDescription)")
+            scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
         }
     }
     
@@ -149,17 +178,17 @@ public class MemoryManager {
         let chunkTexts = chunker.chunk(text: trimmed)
         guard !chunkTexts.isEmpty else { return false }
         
+        let memory = MemoryItem(id: id, content: trimmed, embedding: [], createdAt: createdAt)
+        cacheMemory(memory)
+        
         do {
-            let embeddings = try await embeddingGenerator.generateEmbeddings(
-                for: chunkTexts,
-                preferredModelID: preferredEmbeddingModelIdentifier()
-            )
-            let memory = MemoryItem(id: id, content: trimmed, embedding: [], createdAt: createdAt)
+            let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
             logger.info("🔁 已恢复外部记忆。")
             return true
         } catch {
             logger.error("❌ 恢复外部记忆失败：\(error.localizedDescription)")
+            scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
             return false
         }
     }
@@ -175,17 +204,17 @@ public class MemoryManager {
         let chunkTexts = chunker.chunk(text: trimmed)
         guard !chunkTexts.isEmpty else { return }
         
+        let updatedMemory = MemoryItem(id: item.id, content: trimmed, embedding: [], createdAt: item.createdAt)
+        cacheMemory(updatedMemory)
+        
         do {
-            let embeddings = try await embeddingGenerator.generateEmbeddings(
-                for: chunkTexts,
-                preferredModelID: preferredEmbeddingModelIdentifier()
-            )
+            let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             removeVectorEntries(for: [item.id])
-            let updatedMemory = MemoryItem(id: item.id, content: trimmed, embedding: [], createdAt: item.createdAt)
             await ingest(memory: updatedMemory, chunkTexts: chunkTexts, embeddings: embeddings)
             logger.info("✅ 已更新记忆项。")
         } catch {
             logger.error("❌ 更新记忆失败：\(error.localizedDescription)")
+            scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
         }
     }
 
@@ -234,6 +263,50 @@ public class MemoryManager {
     
     // MARK: - 私有方法
     
+    private func embeddingsWithRetry(for chunkTexts: [String]) async throws -> [[Float]] {
+        let preferredModelID = preferredEmbeddingModelIdentifier()
+        var attempt = 0
+        var currentDelay = embeddingRetryPolicy.initialDelay
+        
+        while attempt < embeddingRetryPolicy.maxAttempts {
+            attempt += 1
+            do {
+                let embeddings = try await embeddingGenerator.generateEmbeddings(
+                    for: chunkTexts,
+                    preferredModelID: preferredModelID
+                )
+                try validateEmbeddings(embeddings, matches: chunkTexts)
+                return embeddings
+            } catch {
+                logger.error("❌ 嵌入生成失败（第 \(attempt) 次）：\(error.localizedDescription)")
+                if attempt >= embeddingRetryPolicy.maxAttempts {
+                    logger.fault("❌ 超过最大嵌入重试次数，放弃本次记忆写入。")
+                    throw error
+                }
+                
+                if currentDelay > 0 {
+                    let nanoseconds = UInt64(currentDelay * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: nanoseconds)
+                } else {
+                    await Task.yield()
+                }
+                currentDelay *= embeddingRetryPolicy.backoffMultiplier
+            }
+        }
+        
+        throw MemoryEmbeddingError.invalidResponse
+    }
+    
+    private func validateEmbeddings(_ embeddings: [[Float]], matches texts: [String]) throws {
+        guard embeddings.count == texts.count else {
+            throw MemoryEmbeddingError.resultCountMismatch(expected: texts.count, actual: embeddings.count)
+        }
+        
+        guard embeddings.allSatisfy({ !$0.isEmpty }) else {
+            throw MemoryEmbeddingError.invalidResponse
+        }
+    }
+
     private func saveIndex() {
         let directory = MemoryStoragePaths.vectorStoreDirectory()
         persistenceQueue.async { [weak self] in
@@ -303,6 +376,83 @@ public class MemoryManager {
                 self.logger.error("❌ 保存原文记忆失败: \(error.localizedDescription)")
             }
         }
+    }
+    
+    private func scheduleConsistencyCheck(after delay: TimeInterval = 0) {
+        Task { [weak self] in
+            guard let self else { return }
+            if delay > 0 {
+                let nanoseconds = UInt64(delay * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
+            _ = await self.reconcilePendingEmbeddings()
+        }
+    }
+    
+    @discardableResult
+    internal func reconcilePendingEmbeddings() async -> Int {
+        let memoryIDs = Set(cachedMemories.map { $0.id })
+        guard !memoryIDs.isEmpty else { return 0 }
+        
+        removeOrphanedVectorEntries(validMemoryIDs: memoryIDs)
+        let missingMemories = memoriesMissingEmbeddings(validMemoryIDs: memoryIDs)
+        guard !missingMemories.isEmpty else { return 0 }
+        
+        logger.info("🔍 检测到 \(missingMemories.count) 条记忆缺少嵌入，尝试自动补偿。")
+        for memory in missingMemories {
+            await backfillEmbedding(for: memory)
+        }
+        return missingMemories.count
+    }
+    
+    private func memoriesMissingEmbeddings(validMemoryIDs: Set<UUID>) -> [MemoryItem] {
+        guard !similarityIndex.indexItems.isEmpty else {
+            return cachedMemories.filter { validMemoryIDs.contains($0.id) }
+        }
+        
+        let indexedParentIDs = Set(similarityIndex.indexItems.compactMap { item -> UUID? in
+            if let parentId = item.metadata["parentMemoryId"], let uuid = UUID(uuidString: parentId) {
+                return uuid
+            }
+            return UUID(uuidString: item.id)
+        })
+        
+        return cachedMemories.filter { validMemoryIDs.contains($0.id) && !indexedParentIDs.contains($0.id) }
+    }
+    
+    private func backfillEmbedding(for memory: MemoryItem) async {
+        let chunkTexts = chunker.chunk(text: memory.content)
+        guard !chunkTexts.isEmpty else {
+            logger.error("⚠️ 记忆 \(memory.id.uuidString) 内容无法分块，跳过补偿。")
+            return
+        }
+        
+        do {
+            let embeddings = try await embeddingsWithRetry(for: chunkTexts)
+            await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
+            logger.info("🔁 已补齐记忆嵌入：\(memory.id.uuidString)。")
+        } catch {
+            logger.error("❌ 补写记忆嵌入失败：\(error.localizedDescription)")
+            scheduleConsistencyCheck(after: max(consistencyCheckDefaultDelay, embeddingRetryPolicy.initialDelay))
+        }
+    }
+    
+    private func removeOrphanedVectorEntries(validMemoryIDs: Set<UUID>) {
+        guard !similarityIndex.indexItems.isEmpty else { return }
+        let orphanChunkIDs = similarityIndex.indexItems.compactMap { item -> String? in
+            guard let parentId = item.metadata["parentMemoryId"],
+                  let uuid = UUID(uuidString: parentId) else {
+                return nil
+            }
+            return validMemoryIDs.contains(uuid) ? nil : item.id
+        }
+        guard !orphanChunkIDs.isEmpty else { return }
+        
+        for chunkId in orphanChunkIDs {
+            similarityIndex.removeItem(id: chunkId)
+        }
+        logger.info("🧹 已移除 \(orphanChunkIDs.count) 条孤立的向量分块。")
+        saveIndex()
     }
     
     private func removeVectorEntries(for ids: Set<UUID>) {
