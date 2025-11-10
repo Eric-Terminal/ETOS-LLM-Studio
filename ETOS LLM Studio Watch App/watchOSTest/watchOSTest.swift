@@ -44,7 +44,9 @@ class MockChatService: ChatService {
         enableStreaming: Bool,
         enhancedPrompt: String?,
         enableMemory: Bool,
-        enableMemoryWrite: Bool
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
+        audioAttachment: AudioAttachment? = nil
     ) async {
         // 调用我们自定义的处理程序，以便在测试中验证行为。
         sendMessageHandler?(content)

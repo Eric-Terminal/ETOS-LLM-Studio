@@ -423,6 +423,7 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
         audioAttachment: AudioAttachment? = nil
     ) async {
         guard var currentSession = currentSessionSubject.value else {
@@ -506,6 +507,7 @@ public class ChatService {
                 tools: tools,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
                 audioAttachment: audioAttachment
             )
         }
@@ -617,6 +619,7 @@ public class ChatService {
         tools: [InternalToolDefinition]?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
         audioAttachment: AudioAttachment?
     ) async {
         // 自动查：执行记忆搜索
@@ -654,7 +657,8 @@ public class ChatService {
         let finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
             topic: currentSessionSubject.value?.topicPrompt,
-            memories: memories
+            memories: memories,
+            includeSystemTime: includeSystemTime
         )
         
         if !finalSystemPrompt.isEmpty {
@@ -686,9 +690,9 @@ public class ChatService {
         }
         
         if enableStreaming {
-            await handleStreamedResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, availableTools: tools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite)
+            await handleStreamedResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, availableTools: tools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
         } else {
-            await handleStandardResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: tools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite)
+            await handleStandardResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: tools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
         }
     }
 
@@ -700,7 +704,8 @@ public class ChatService {
         enableStreaming: Bool,
         enhancedPrompt: String?,
         enableMemory: Bool,
-        enableMemoryWrite: Bool
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
         await cancelOngoingRequest()
@@ -727,7 +732,8 @@ public class ChatService {
             enableStreaming: enableStreaming,
             enhancedPrompt: enhancedPrompt,
             enableMemory: enableMemory,
-            enableMemoryWrite: enableMemoryWrite
+            enableMemoryWrite: enableMemoryWrite,
+            includeSystemTime: includeSystemTime
         )
     }
     
@@ -870,7 +876,7 @@ public class ChatService {
         }
     }
     
-    private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool) async {
+    private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
         do {
             let data = try await fetchData(for: request)
             let rawResponse = String(data: data, encoding: .utf8) ?? "<二进制数据，无法以 UTF-8 解码>"
@@ -878,7 +884,7 @@ public class ChatService {
             
             do {
                 let parsedMessage = try adapter.parseResponse(data: data)
-                await processResponseMessage(responseMessage: parsedMessage, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite)
+                await processResponseMessage(responseMessage: parsedMessage, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
             } catch is CancellationError {
                 logger.info("⚠️ 请求在解析阶段被取消，已忽略后续处理。")
             } catch {
@@ -906,7 +912,7 @@ public class ChatService {
     }
     
     /// 处理已解析的聊天消息，包含所有工具调用和UI更新的核心逻辑 (可测试)
-    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool) async {
+    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
         var responseMessage = responseMessage // Make mutable
 
         // BUGFIX: 无论是否存在工具调用，都应首先解析并提取思考过程。
@@ -1009,6 +1015,7 @@ public class ChatService {
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
                 enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
                 audioAttachment: nil
             )
         } else {
@@ -1020,7 +1027,7 @@ public class ChatService {
         }
     }
     
-    private func handleStreamedResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, availableTools: [InternalToolDefinition]?, enableMemory: Bool, enableMemoryWrite: Bool) async {
+    private func handleStreamedResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, availableTools: [InternalToolDefinition]?, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
         do {
             let bytes = try await streamData(for: request)
 
@@ -1121,7 +1128,8 @@ public class ChatService {
                     systemPrompt: systemPrompt,
                     maxChatHistory: maxChatHistory,
                     enableMemory: enableMemory,
-                    enableMemoryWrite: enableMemoryWrite
+                    enableMemoryWrite: enableMemoryWrite,
+                    includeSystemTime: includeSystemTime
                 )
             } else {
                 requestStatusSubject.send(.finished)
@@ -1205,7 +1213,7 @@ public class ChatService {
     }
     
     /// 构建最终的、使用 XML 标签包裹的系统提示词。
-    private func buildFinalSystemPrompt(global: String?, topic: String?, memories: [MemoryItem]) -> String {
+    private func buildFinalSystemPrompt(global: String?, topic: String?, memories: [MemoryItem], includeSystemTime: Bool) -> String {
         var parts: [String] = []
 
         if let global, !global.isEmpty {
@@ -1214,6 +1222,14 @@ public class ChatService {
 
         if let topic, !topic.isEmpty {
             parts.append("<topic_prompt>\n\(topic)\n</topic_prompt>")
+        }
+        
+        if includeSystemTime {
+            parts.append("""
+<time>
+\(formattedSystemTimeDescription())
+</time>
+""")
         }
 
         if !memories.isEmpty {
@@ -1229,6 +1245,25 @@ public class ChatService {
         }
 
         return parts.joined(separator: "\n\n")
+    }
+    
+    private func formattedSystemTimeDescription() -> String {
+        let now = Date()
+        let localeFormatter = DateFormatter()
+        localeFormatter.calendar = Calendar(identifier: .gregorian)
+        localeFormatter.locale = Locale(identifier: "zh_CN")
+        localeFormatter.timeZone = TimeZone.current
+        localeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
+        let localTime = localeFormatter.string(from: now)
+        
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.timeZone = TimeZone.current
+        let isoTime = isoFormatter.string(from: now)
+        
+        return """
+当前系统本地时间：\(localTime)
+ISO8601：\(isoTime)
+"""
     }
 
     /// 解析长期记忆检索的 Top K 配置，支持旧版本留下的字符串/浮点数形式。

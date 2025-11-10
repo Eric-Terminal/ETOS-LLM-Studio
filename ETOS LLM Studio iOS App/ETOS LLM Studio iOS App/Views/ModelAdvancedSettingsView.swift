@@ -13,6 +13,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var enableSpeechInput: Bool
     @Binding var selectedSpeechModel: RunnableModel?
     @Binding var sendSpeechAsAudio: Bool
+    @Binding var includeSystemTimeInPrompt: Bool
     var speechModels: [RunnableModel]
     
     private var numberFormatter: NumberFormatter {
@@ -53,6 +54,11 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ), axis: .vertical)
                 .lineLimit(2...6)
+                
+                Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
+                Text("开启后会在系统提示中注入 <time> 标签，并包含当前设备时间。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             
             Section("输出样式") {

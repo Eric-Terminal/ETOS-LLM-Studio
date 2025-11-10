@@ -415,7 +415,7 @@ fileprivate struct ChatServiceTests {
         MockURLProtocol.mockResponses[titleURL] = .success((mockTitleHTTPResponse, Data()))
 
         // 2. 执行 (Act)
-        await chatService.sendAndProcessMessage(content: "This is another test", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false)
+        await chatService.sendAndProcessMessage(content: "This is another test", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
 
         // 等待后台的标题生成任务完成（并失败）
         try await Task.sleep(for: .milliseconds(200))
@@ -449,7 +449,7 @@ fileprivate struct ChatServiceTests {
 
         // 2. 执行 (Act)
         // 发送第一条消息，这将触发临时会话转正，并调用标题生成逻辑
-        await chatService.sendAndProcessMessage(content: "Hello world, this is a test message", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false)
+        await chatService.sendAndProcessMessage(content: "Hello world, this is a test message", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
 
         // 等待后台的标题生成任务完成
         try await Task.sleep(for: .milliseconds(200))
@@ -494,7 +494,7 @@ fileprivate struct ChatServiceTests {
             // 2. 执行 (Act)
             // 这个任务会触发网络请求，该请求将被我们的 MockURLProtocol 拦截。
             Task {
-                await chatService.sendAndProcessMessage(content: "test message", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false)
+                await chatService.sendAndProcessMessage(content: "test message", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
             }
         }
         
@@ -511,7 +511,7 @@ fileprivate struct ChatServiceTests {
         await cleanup()
         await memoryManager.addMemory(content: "The user's cat is named Fluffy.")
         
-        await chatService.sendAndProcessMessage(content: "what is my cat's name?", aiTemperature: 0, aiTopP: 1, systemPrompt: "You are a helpful assistant.", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: true)
+        await chatService.sendAndProcessMessage(content: "what is my cat's name?", aiTemperature: 0, aiTopP: 1, systemPrompt: "You are a helpful assistant.", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: true, includeSystemTime: false)
         
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
@@ -525,7 +525,7 @@ fileprivate struct ChatServiceTests {
         await cleanup()
         await memoryManager.addMemory(content: "The user's cat is named Fluffy.")
         
-        await chatService.sendAndProcessMessage(content: "what is my cat's name?", aiTemperature: 0, aiTopP: 1, systemPrompt: "You are a helpful assistant.", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false)
+        await chatService.sendAndProcessMessage(content: "what is my cat's name?", aiTemperature: 0, aiTopP: 1, systemPrompt: "You are a helpful assistant.", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
         
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
@@ -559,7 +559,8 @@ fileprivate struct ChatServiceTests {
             enableStreaming: false,
             enhancedPrompt: nil,
             enableMemory: false, // 关闭记忆以简化测试
-            enableMemoryWrite: false
+            enableMemoryWrite: false,
+            includeSystemTime: false
         )
         
         // 3. Assert
@@ -574,10 +575,36 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
     
+    @Test("Time tag is injected when preference is enabled")
+    func testSystemTimePromptInjection() async throws {
+        await cleanup()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "ok")
+        
+        await chatService.sendAndProcessMessage(
+            content: "现在几点？",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: true
+        )
+        
+        let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
+        let content = systemMessage?.content ?? ""
+        #expect(content.contains("<time>"), "System prompt should include <time> when the toggle is on.")
+        #expect(content.contains("ISO8601"), "Time block should include ISO8601 representation for determinism.")
+        
+        await cleanup()
+    }
+    
     @Test("save_memory tool is provided when memory is enabled")
     func testToolProvision_Enabled() async throws {
         await cleanup()
-        await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: true)
+        await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: true, includeSystemTime: false)
         #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "save_memory" }) == true)
         await cleanup()
     }
@@ -585,7 +612,7 @@ fileprivate struct ChatServiceTests {
     @Test("save_memory tool is NOT provided when memory is disabled")
     func testToolProvision_Disabled() async throws {
         await cleanup()
-        await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false)
+        await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
         #expect(self.mockAdapter.receivedTools == nil)
         await cleanup()
     }
@@ -593,7 +620,7 @@ fileprivate struct ChatServiceTests {
     @Test("save_memory tool is NOT provided when write switch is disabled")
     func testToolProvision_WriteSwitchDisabled() async throws {
         await cleanup()
-        await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: false)
+        await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: false, includeSystemTime: false)
         #expect(self.mockAdapter.receivedTools == nil)
         await cleanup()
     }
@@ -665,12 +692,12 @@ fileprivate struct ChatServiceTests {
     func testRetryLastMessage() async {
         // Arrange
         let firstUserMessage = "Hello, what is the weather?"
-        await chatService.sendAndProcessMessage(content: firstUserMessage, aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false)
+        await chatService.sendAndProcessMessage(content: firstUserMessage, aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
         let firstRequestMessages = mockAdapter.receivedMessages
         #expect(firstRequestMessages?.last?.content == firstUserMessage)
         
         // Act
-        await chatService.retryLastMessage(aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false)
+        await chatService.retryLastMessage(aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
         let secondRequestMessages = mockAdapter.receivedMessages
 
         // Assert

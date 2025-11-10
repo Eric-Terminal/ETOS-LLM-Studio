@@ -85,6 +85,7 @@ struct SettingsView: View {
                         enableSpeechInput: $viewModel.enableSpeechInput,
                         selectedSpeechModel: speechModelBinding,
                         sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
+                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
                         speechModels: viewModel.speechModels
                     )) {
                         Label("模型高级设置", systemImage: "brain.head.profile")

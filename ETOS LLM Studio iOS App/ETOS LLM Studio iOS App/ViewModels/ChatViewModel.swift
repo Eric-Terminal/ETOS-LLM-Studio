@@ -63,6 +63,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
+    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
     
     // MARK: - Public Properties
     
@@ -210,7 +211,8 @@ final class ChatViewModel: ObservableObject {
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
             )
         }
     }
@@ -295,7 +297,8 @@ final class ChatViewModel: ObservableObject {
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
             )
         }
     }
@@ -413,6 +416,10 @@ final class ChatViewModel: ObservableObject {
     func deleteMemories(at offsets: IndexSet) async {
         let items = offsets.map { memories[$0] }
         await MemoryManager.shared.deleteMemories(items)
+    }
+    
+    func reembedAllMemories() async throws -> MemoryReembeddingSummary {
+        try await MemoryManager.shared.reembedAllMemories()
     }
     
     // MARK: - Sync Helpers

@@ -78,6 +78,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
+    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
     
     // MARK: - 公开属性
     
@@ -244,7 +245,8 @@ class ChatViewModel: ObservableObject {
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
             )
         }
     }
@@ -265,7 +267,8 @@ class ChatViewModel: ObservableObject {
                 enableStreaming: enableStreaming,
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
             )
         }
     }
@@ -440,6 +443,7 @@ class ChatViewModel: ObservableObject {
                         enhancedPrompt: currentSession?.enhancedPrompt,
                         enableMemory: enableMemory,
                         enableMemoryWrite: enableMemoryWrite,
+                        includeSystemTime: includeSystemTimeInPrompt,
                         audioAttachment: attachment
                     )
                 } else {
@@ -563,6 +567,10 @@ class ChatViewModel: ObservableObject {
     func deleteMemories(at offsets: IndexSet) async {
         let itemsToDelete = offsets.map { memories[$0] }
         await MemoryManager.shared.deleteMemories(itemsToDelete)
+    }
+    
+    func reembedAllMemories() async throws -> MemoryReembeddingSummary {
+        try await MemoryManager.shared.reembedAllMemories()
     }
     
     // MARK: 视图状态与持久化

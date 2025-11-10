@@ -27,6 +27,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var enableSpeechInput: Bool
     @Binding var selectedSpeechModel: RunnableModel?
     @Binding var sendSpeechAsAudio: Bool
+    @Binding var includeSystemTimeInPrompt: Bool
     var speechModels: [RunnableModel]
     
     // MARK: - 私有属性
@@ -74,6 +75,11 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ), axis: .vertical)
                 .lineLimit(5...10)
+                
+                Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
+                Text("开启后会在系统提示中插入 <time> 块，提供当前时间线索。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
             
             Section(header: Text("会话设置")) {

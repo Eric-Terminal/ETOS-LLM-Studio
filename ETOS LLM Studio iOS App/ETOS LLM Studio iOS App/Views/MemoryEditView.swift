@@ -19,8 +19,8 @@ struct MemoryEditView: View {
         }
         .navigationTitle("编辑记忆")
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("退出") { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {

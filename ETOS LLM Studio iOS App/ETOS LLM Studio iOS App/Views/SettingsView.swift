@@ -48,6 +48,7 @@ struct SettingsView: View {
                             enableSpeechInput: $viewModel.enableSpeechInput,
                             selectedSpeechModel: speechModelBinding,
                             sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
+                            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
                             speechModels: viewModel.speechModels
                         )
                     } label: {

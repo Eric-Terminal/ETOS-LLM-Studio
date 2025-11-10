@@ -27,6 +27,11 @@ public struct MemoryEmbeddingRetryPolicy {
     }
 }
 
+public struct MemoryReembeddingSummary {
+    public let processedMemories: Int
+    public let chunkCount: Int
+}
+
 public class MemoryManager {
 
     // MARK: - 单例
@@ -237,6 +242,52 @@ public class MemoryManager {
         return cachedMemories
     }
 
+    /// 重新构建所有记忆的嵌入，并清空旧的向量存储。
+    @discardableResult
+    public func reembedAllMemories() async throws -> MemoryReembeddingSummary {
+        await initializationTask.value
+        logger.info("🔁 正在重新生成全部记忆嵌入...")
+        let memories = cachedMemories
+        similarityIndex.removeAll()
+        purgePersistedVectorStores()
+        
+        guard !memories.isEmpty else {
+            saveIndex()
+            logger.info("ℹ️ 记忆列表为空，已写入空索引。")
+            return MemoryReembeddingSummary(processedMemories: 0, chunkCount: 0)
+        }
+        
+        var processedMemories = 0
+        var chunkCount = 0
+        
+        for memory in memories {
+            let chunkTexts = chunker.chunk(text: memory.content)
+            guard !chunkTexts.isEmpty else {
+                logger.error("⚠️ 记忆 \(memory.id.uuidString) 无有效分块，跳过。")
+                continue
+            }
+            
+            let embeddings = try await embeddingsWithRetry(for: chunkTexts)
+            for (index, chunkText) in chunkTexts.enumerated() {
+                let chunkID = UUID().uuidString
+                let metadata = chunkMetadata(for: memory, chunkIndex: index, chunkId: chunkID)
+                await similarityIndex.addItem(
+                    id: chunkID,
+                    text: chunkText,
+                    metadata: metadata,
+                    embedding: embeddings[index]
+                )
+                chunkCount += 1
+            }
+            
+            processedMemories += 1
+        }
+        
+        saveIndex()
+        logger.info("✅ 记忆重嵌入完成：\(processedMemories) 条记忆 -> \(chunkCount) 个分块。")
+        return MemoryReembeddingSummary(processedMemories: processedMemories, chunkCount: chunkCount)
+    }
+
     // MARK: - 公开方法 (搜索)
 
     /// 根据查询文本搜索最相关的记忆。
@@ -331,12 +382,7 @@ public class MemoryManager {
         
         for (index, chunkText) in chunkTexts.enumerated() {
             let chunkID = UUID().uuidString
-            let metadata = [
-                "createdAt": dateFormatter.string(from: memory.createdAt),
-                "parentMemoryId": memory.id.uuidString,
-                "chunkIndex": String(index),
-                "chunkId": chunkID
-            ]
+            let metadata = chunkMetadata(for: memory, chunkIndex: index, chunkId: chunkID)
             
             await similarityIndex.addItem(
                 id: chunkID,
@@ -468,6 +514,33 @@ public class MemoryManager {
         for item in itemsToRemove {
             similarityIndex.removeItem(id: item.id)
         }
+    }
+    
+    private func purgePersistedVectorStores() {
+        let directory = MemoryStoragePaths.vectorStoreDirectory()
+        let fileManager = FileManager.default
+        do {
+            let files = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            let sqliteFiles = files.filter {
+                $0.pathExtension == "sqlite" &&
+                $0.deletingPathExtension().lastPathComponent.contains(MemoryStoragePaths.vectorStoreName)
+            }
+            for file in sqliteFiles {
+                try fileManager.removeItem(at: file)
+                logger.info("🗑️ 已删除旧向量存储：\(file.lastPathComponent)")
+            }
+        } catch {
+            logger.error("⚠️ 清理旧向量存储失败：\(error.localizedDescription)")
+        }
+    }
+    
+    private func chunkMetadata(for memory: MemoryItem, chunkIndex: Int, chunkId: String) -> [String: String] {
+        [
+            "createdAt": dateFormatter.string(from: memory.createdAt),
+            "parentMemoryId": memory.id.uuidString,
+            "chunkIndex": String(chunkIndex),
+            "chunkId": chunkId
+        ]
     }
 }
 

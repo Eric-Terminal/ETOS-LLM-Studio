@@ -13,6 +13,9 @@ import Shared
 public struct MemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @State private var isAddingMemory = false
+    @State private var isReembeddingMemories = false
+    @State private var showReembedConfirmation = false
+    @State private var reembedAlert: MemoryReembedAlert?
     @AppStorage("memoryTopK") var memoryTopK: Int = 3
 
     private var embeddingModelBinding: Binding<RunnableModel?> {
@@ -44,6 +47,25 @@ public struct MemorySettingsView: View {
             .sheet(isPresented: $isAddingMemory) {
                 AddMemorySheet()
                     .environmentObject(viewModel)
+            }
+            .confirmationDialog(
+                "重新嵌入全部记忆？",
+                isPresented: $showReembedConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("重新嵌入", role: .destructive) {
+                    triggerFullReembed()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("将删除旧的 SQLite 向量数据库，并根据当前记忆重新生成嵌入。")
+            }
+            .alert(item: $reembedAlert) { alert in
+                Alert(
+                    title: Text(alert.title),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text("好的"))
+                )
             }
     }
 
@@ -87,6 +109,27 @@ public struct MemorySettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            
+            Section(
+                header: Text("数据维护"),
+                footer: Text("将清空旧向量数据库，并按当前记忆重算所有嵌入。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Button(role: .destructive) {
+                    showReembedConfirmation = true
+                } label: {
+                    HStack {
+                        Label("重新生成全部嵌入", systemImage: "arrow.triangle.2.circlepath")
+                        if isReembeddingMemories {
+                            Spacer()
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
+                    }
+                }
+                .disabled(isReembeddingMemories)
+            }
 
             Section(header: Text("记忆列表")) {
                 if viewModel.memories.isEmpty {
@@ -113,6 +156,26 @@ public struct MemorySettingsView: View {
     private func deleteItems(at offsets: IndexSet) {
         Task {
             await viewModel.deleteMemories(at: offsets)
+        }
+    }
+    
+    private func triggerFullReembed() {
+        guard !isReembeddingMemories else { return }
+        isReembeddingMemories = true
+        
+        Task {
+            do {
+                let summary = try await viewModel.reembedAllMemories()
+                await MainActor.run {
+                    reembedAlert = MemoryReembedAlert.success(summary: summary)
+                    isReembeddingMemories = false
+                }
+            } catch {
+                await MainActor.run {
+                    reembedAlert = MemoryReembedAlert.failure(message: error.localizedDescription)
+                    isReembeddingMemories = false
+                }
+            }
         }
     }
 }
@@ -142,6 +205,42 @@ public struct AddMemorySheet: View {
             }
             .disabled(memoryContent.isEmpty)
         }
+    }
+}
+
+private struct MemoryReembedAlert: Identifiable {
+    enum Kind {
+        case success(MemoryReembeddingSummary)
+        case failure(String)
+    }
+    
+    let id = UUID()
+    let kind: Kind
+    
+    var title: String {
+        switch kind {
+        case .success:
+            return "重新嵌入完成"
+        case .failure:
+            return "重新嵌入失败"
+        }
+    }
+    
+    var message: String {
+        switch kind {
+        case .success(let summary):
+            return "已处理 \(summary.processedMemories) 条记忆，生成 \(summary.chunkCount) 个分块。"
+        case .failure(let message):
+            return message
+        }
+    }
+    
+    static func success(summary: MemoryReembeddingSummary) -> MemoryReembedAlert {
+        MemoryReembedAlert(kind: .success(summary))
+    }
+    
+    static func failure(message: String) -> MemoryReembedAlert {
+        MemoryReembedAlert(kind: .failure(message))
     }
 }
 
