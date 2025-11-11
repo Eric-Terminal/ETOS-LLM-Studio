@@ -75,6 +75,10 @@ final class ChatViewModel: ObservableObject {
         return UIImage(contentsOfFile: fileURL.path)
     }
     
+    var historyLoadChunkSize: Int {
+        incrementalHistoryBatchSize
+    }
+    
     var embeddingModelOptions: [RunnableModel] {
         providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0) }
@@ -84,6 +88,9 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Private Properties
     
     private let chatService: ChatService
+    private var additionalHistoryLoaded: Int = 0
+    private var lastSessionID: UUID?
+    private let incrementalHistoryBatchSize = 5
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Init
@@ -388,19 +395,42 @@ final class ChatViewModel: ObservableObject {
     
     func updateDisplayedMessages() {
         let filtered = visibleMessages(from: allMessagesForSession)
+        
+        if lastSessionID != currentSession?.id {
+            lastSessionID = currentSession?.id
+            additionalHistoryLoaded = 0
+        }
+        
         let lazyCount = lazyLoadMessageCount
         if lazyCount > 0 && filtered.count > lazyCount {
-            messages = Array(filtered.suffix(lazyCount))
-            isHistoryFullyLoaded = false
+            let limit = lazyCount + additionalHistoryLoaded
+            if filtered.count > limit {
+                messages = Array(filtered.suffix(limit))
+                isHistoryFullyLoaded = false
+            } else {
+                messages = filtered
+                isHistoryFullyLoaded = true
+                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, filtered.count - lazyCount))
+            }
         } else {
             messages = filtered
             isHistoryFullyLoaded = true
+            additionalHistoryLoaded = 0
         }
     }
     
     func loadEntireHistory() {
-        messages = visibleMessages(from: allMessagesForSession)
+        let filtered = visibleMessages(from: allMessagesForSession)
+        additionalHistoryLoaded = max(0, filtered.count - lazyLoadMessageCount)
+        messages = filtered
         isHistoryFullyLoaded = true
+    }
+    
+    func loadMoreHistoryChunk(count: Int? = nil) {
+        guard !isHistoryFullyLoaded else { return }
+        let increment = count ?? incrementalHistoryBatchSize
+        additionalHistoryLoaded += increment
+        updateDisplayedMessages()
     }
     
     // MARK: - Memory Management

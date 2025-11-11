@@ -30,7 +30,8 @@ struct SettingsView: View {
                 Section {
                     Picker("当前模型", selection: $viewModel.selectedModel) {
                         ForEach(viewModel.activatedModels) { model in
-                            Text(model.model.displayName).tag(model as RunnableModel?)
+                            Text("\(model.model.displayName) | \(model.provider.name)")
+                                .tag(model as RunnableModel?)
                         }
                     }
                     .onChange(of: viewModel.selectedModel) { _, newValue in

@@ -77,6 +77,22 @@ struct MessageActionsView: View {
                         .font(.caption2)
                 }
             }
+            
+            if let usage = message.tokenUsage, usage.hasData {
+                Section("Token 用量") {
+                    if let prompt = usage.promptTokens {
+                        LabeledContent("发送 Tokens", value: "\(prompt)")
+                    }
+                    if let completion = usage.completionTokens {
+                        LabeledContent("接收 Tokens", value: "\(completion)")
+                    }
+                    if let total = usage.totalTokens, (usage.promptTokens != total || usage.completionTokens != total) {
+                        LabeledContent("总计", value: "\(total)")
+                    } else if let totalOnly = usage.totalTokens, usage.promptTokens == nil && usage.completionTokens == nil {
+                        LabeledContent("总计", value: "\(totalOnly)")
+                    }
+                }
+            }
         }
         .navigationTitle("操作")
         .navigationBarTitleDisplayMode(.inline)

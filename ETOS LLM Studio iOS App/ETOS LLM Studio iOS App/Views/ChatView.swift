@@ -20,6 +20,8 @@ struct ChatView: View {
     @State private var messageInfo: MessageInfoPayload?
     @FocusState private var composerFocused: Bool
     
+    private let scrollBottomAnchorID = "chat-scroll-bottom"
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -58,11 +60,15 @@ struct ChatView: View {
                                         showScrollToBottom = true
                                     }
                                 }
-                            }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 120)
+                        
+                        Color.clear
+                            .frame(height: 1)
+                            .id(scrollBottomAnchorID)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 120)
+                }
                     .scrollDismissesKeyboard(.interactively)
                     .simultaneousGesture(
                         TapGesture().onEnded {
@@ -71,18 +77,12 @@ struct ChatView: View {
                     )
                     .onChange(of: viewModel.messages.count) { _ in
                         guard !viewModel.messages.isEmpty else { return }
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            proxy.scrollTo(viewModel.messages.last?.id, anchor: .bottom)
-                        }
+                        scrollToBottom(proxy: proxy)
                     }
                     .overlay(alignment: .bottomTrailing) {
                         if showScrollToBottom {
                             Button {
-                                if let last = viewModel.messages.last {
-                                    withAnimation(.easeOut(duration: 0.25)) {
-                                        proxy.scrollTo(last.id, anchor: .bottom)
-                                    }
-                                }
+                                scrollToBottom(proxy: proxy)
                             } label: {
                                 Image(systemName: "arrow.down.circle.fill")
                                     .font(.system(size: 22, weight: .medium))
@@ -173,12 +173,13 @@ struct ChatView: View {
     private var historyBanner: some View {
         let remaining = viewModel.allMessagesForSession.count - viewModel.messages.count
         if remaining > 0 && !viewModel.isHistoryFullyLoaded {
+            let chunk = min(remaining, viewModel.historyLoadChunkSize)
             Button {
                 withAnimation {
-                    viewModel.loadEntireHistory()
+                    viewModel.loadMoreHistoryChunk()
                 }
             } label: {
-                Label("显示剩余 \(remaining) 条记录", systemImage: "arrow.uturn.left.circle")
+                Label("向上加载 \(chunk) 条记录", systemImage: "arrow.uturn.left.circle")
             }
             .font(.footnote)
             .padding(.vertical, 8)
@@ -278,6 +279,23 @@ struct ChatView: View {
             } label: {
                 Label("查看消息信息", systemImage: "info.circle")
             }
+        }
+    }
+}
+
+// MARK: - Helpers
+
+private extension ChatView {
+    func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
+        let action = {
+            proxy.scrollTo(scrollBottomAnchorID, anchor: .bottom)
+        }
+        if animated {
+            withAnimation(.easeOut(duration: 0.25)) {
+                action()
+            }
+        } else {
+            action()
         }
     }
 }

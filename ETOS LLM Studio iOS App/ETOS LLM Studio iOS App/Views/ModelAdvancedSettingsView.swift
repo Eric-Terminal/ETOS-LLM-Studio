@@ -55,7 +55,13 @@ struct ModelAdvancedSettingsView: View {
                 ), axis: .vertical)
                 .lineLimit(2...6)
                 
+            }
+            
+            Section {
                 Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
+            } header: {
+                Text("系统时间注入")
+            } footer: {
                 Text("开启后会在系统提示中注入 <time> 标签，并包含当前设备时间。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -117,7 +123,7 @@ struct ModelAdvancedSettingsView: View {
                         Picker("语音识别模型", selection: $selectedSpeechModel) {
                             Text("未选择").tag(Optional<RunnableModel>.none)
                             ForEach(speechModels) { runnable in
-                                Text("\(runnable.model.displayName) · \(runnable.provider.name)")
+                                Text("\(runnable.model.displayName) | \(runnable.provider.name)")
                                     .tag(Optional<RunnableModel>.some(runnable))
                             }
                         }

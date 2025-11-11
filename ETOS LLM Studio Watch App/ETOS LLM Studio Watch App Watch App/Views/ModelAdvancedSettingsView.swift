@@ -75,11 +75,15 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ), axis: .vertical)
                 .lineLimit(5...10)
-                
-                Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
-                Text("开启后会在系统提示中插入 <time> 块，提供当前时间线索。")
+            }
+            
+            Section(
+                header: Text("系统时间注入"),
+                footer: Text("开启后会在系统提示中插入 <time> 块，提供当前时间线索。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
+            ) {
+                Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
             }
             
             Section(header: Text("会话设置")) {
@@ -151,7 +155,7 @@ struct ModelAdvancedSettingsView: View {
                         Picker("语音模型", selection: $selectedSpeechModel) {
                             Text("未选择").tag(Optional<RunnableModel>.none)
                             ForEach(speechModels) { runnable in
-                                Text(runnable.model.displayName)
+                                Text("\(runnable.model.displayName) | \(runnable.provider.name)")
                                     .tag(Optional<RunnableModel>.some(runnable))
                             }
                         }

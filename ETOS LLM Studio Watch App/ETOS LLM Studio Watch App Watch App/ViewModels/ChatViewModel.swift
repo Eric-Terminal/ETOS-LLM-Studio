@@ -96,11 +96,18 @@ class ChatViewModel: ObservableObject {
         }
     }
     
+    var historyLoadChunkSize: Int {
+        incrementalHistoryBatchSize
+    }
+    
     // MARK: - 私有属性
     
     private var extendedSession: WKExtendedRuntimeSession?
     private let chatService: ChatService
     private var cancellables = Set<AnyCancellable>()
+    private var additionalHistoryLoaded: Int = 0
+    private var lastSessionID: UUID?
+    private let incrementalHistoryBatchSize = 5
     private var audioRecorder: AVAudioRecorder?
     private var speechRecordingURL: URL?
     private var recordingStartDate: Date?
@@ -577,14 +584,42 @@ class ChatViewModel: ObservableObject {
     
     func updateDisplayedMessages() {
         let filtered = visibleMessages(from: allMessagesForSession)
+        
+        if lastSessionID != currentSession?.id {
+            lastSessionID = currentSession?.id
+            additionalHistoryLoaded = 0
+        }
+        
         let lazyCount = lazyLoadMessageCount
         if lazyCount > 0 && filtered.count > lazyCount {
-            messages = Array(filtered.suffix(lazyCount))
-            isHistoryFullyLoaded = false
+            let limit = lazyCount + additionalHistoryLoaded
+            if filtered.count > limit {
+                messages = Array(filtered.suffix(limit))
+                isHistoryFullyLoaded = false
+            } else {
+                messages = filtered
+                isHistoryFullyLoaded = true
+                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, filtered.count - lazyCount))
+            }
         } else {
             messages = filtered
             isHistoryFullyLoaded = true
+            additionalHistoryLoaded = 0
         }
+    }
+    
+    func loadEntireHistory() {
+        let filtered = visibleMessages(from: allMessagesForSession)
+        additionalHistoryLoaded = max(0, filtered.count - lazyLoadMessageCount)
+        messages = filtered
+        isHistoryFullyLoaded = true
+    }
+    
+    func loadMoreHistoryChunk(count: Int? = nil) {
+        guard !isHistoryFullyLoaded else { return }
+        let increment = count ?? incrementalHistoryBatchSize
+        additionalHistoryLoaded += increment
+        updateDisplayedMessages()
     }
 
     func saveCurrentSessionDetails() {

@@ -168,13 +168,39 @@ public struct ChatMessage: Identifiable, Codable, Hashable {
     public var content: String
     public var reasoningContent: String? // 用于存放推理过程等附加信息
     public var toolCalls: [InternalToolCall]? // AI发出的工具调用指令
+    public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
 
-    public init(id: UUID = UUID(), role: MessageRole, content: String, reasoningContent: String? = nil, toolCalls: [InternalToolCall]? = nil) {
+    public init(
+        id: UUID = UUID(),
+        role: MessageRole,
+        content: String,
+        reasoningContent: String? = nil,
+        toolCalls: [InternalToolCall]? = nil,
+        tokenUsage: MessageTokenUsage? = nil
+    ) {
         self.id = id
         self.role = role
         self.content = content
         self.reasoningContent = reasoningContent
         self.toolCalls = toolCalls
+        self.tokenUsage = tokenUsage
+    }
+}
+
+/// 消息所关联的一次 API 调用的 Token 统计
+public struct MessageTokenUsage: Codable, Hashable {
+    public var promptTokens: Int?
+    public var completionTokens: Int?
+    public var totalTokens: Int?
+    
+    public init(promptTokens: Int?, completionTokens: Int?, totalTokens: Int?) {
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.totalTokens = totalTokens
+    }
+    
+    public var hasData: Bool {
+        promptTokens != nil || completionTokens != nil || totalTokens != nil
     }
 }
 

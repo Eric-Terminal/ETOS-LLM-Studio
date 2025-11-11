@@ -95,13 +95,13 @@ struct ContentView: View {
             
             let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
             if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
+                let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
                 Button(action: {
                     withAnimation {
-                        viewModel.messages = viewModel.allMessagesForSession
-                        viewModel.isHistoryFullyLoaded = true
+                        viewModel.loadMoreHistoryChunk()
                     }
                 }) {
-                    Label("显示剩余 \(remainingCount) 条记录", systemImage: "arrow.up.circle")
+                    Label("向上加载 \(chunk) 条记录", systemImage: "arrow.up.circle")
                 }
                 .buttonStyle(.bordered)
                 .listRowBackground(Color.clear)
@@ -125,20 +125,8 @@ struct ContentView: View {
         .background(Color.clear)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                let settingsButton = Button(action: { viewModel.activeSheet = .settings }) {
+                Button(action: { viewModel.activeSheet = .settings }) {
                     Image(systemName: "gearshape.fill")
-                }
-                .buttonStyle(.plain)
-                .padding(8)
-                
-                if isLiquidGlassEnabled {
-                    if #available(watchOS 26.0, *) {
-                        settingsButton.glassEffect(in: Circle())
-                    } else {
-                        settingsButton
-                    }
-                } else {
-                    settingsButton
                 }
             }
         }

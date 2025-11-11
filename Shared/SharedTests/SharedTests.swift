@@ -228,7 +228,7 @@ struct MemoryManagerTests {
 
     @Test("Search Memories")
     func testSearchMemories() async throws {
-        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator(), chunkSize: 50)
         await memoryManager.waitForInitialization()
         await cleanup(memoryManager: memoryManager)
 
@@ -243,6 +243,31 @@ struct MemoryManagerTests {
         #expect(searchResults.count == 1)
         #expect(searchResults.first?.content == "The user's favorite programming language is Swift.")
 
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Search Memories Deduplicates Chunks And Returns Originals")
+    func testSearchMemoriesDeduplicates() async throws {
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator(), chunkSize: 10)
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        let longMemory = Array(repeating: "Swift rocks!", count: 30).joined(separator: " ")
+        let secondMemory = "The user enjoys cycling in Shanghai."
+        let thirdMemory = "They also brew espresso every morning."
+        
+        await memoryManager.addMemory(content: longMemory)
+        await memoryManager.addMemory(content: secondMemory)
+        await memoryManager.addMemory(content: thirdMemory)
+        
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let searchResults = await memoryManager.searchMemories(query: "Swift rocks! tips", topK: 2)
+        
+        #expect(searchResults.count == 2, "Should return the requested number of unique memories when available.")
+        #expect(Set(searchResults.map(\.id)).count == 2, "Returned memories must be unique.")
+        #expect(searchResults.contains(where: { $0.content == longMemory }), "Chunked memory should surface as its full original text.")
+        
         await cleanup(memoryManager: memoryManager)
     }
 }

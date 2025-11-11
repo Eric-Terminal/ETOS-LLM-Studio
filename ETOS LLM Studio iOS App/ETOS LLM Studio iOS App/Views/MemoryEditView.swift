@@ -18,11 +18,12 @@ struct MemoryEditView: View {
             }
         }
         .navigationTitle("编辑记忆")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button("退出") { dismiss() }
+                Button("取消") { dismiss() }
             }
-            ToolbarItem(placement: .confirmationAction) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("保存") {
                     Task {
                         await viewModel.updateMemory(item: memory)

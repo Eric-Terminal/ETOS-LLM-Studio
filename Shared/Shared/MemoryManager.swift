@@ -304,8 +304,24 @@ public class MemoryManager {
                 preferredModelID: preferredEmbeddingModelIdentifier()
             )
             guard let queryEmbedding = embeddings.first else { return [] }
-            let results = similarityIndex.search(usingQueryEmbedding: queryEmbedding, top: topK)
-            return results.map { MemoryItem(from: $0) }
+            let totalChunks = similarityIndex.indexItems.count
+            guard totalChunks > 0 else { return [] }
+            
+            var requestedCount = min(max(topK * 3, topK), totalChunks)
+            var resolvedMemories: [MemoryItem] = []
+            var previousRequested = 0
+            
+            while requestedCount > previousRequested {
+                let results = similarityIndex.search(usingQueryEmbedding: queryEmbedding, top: requestedCount)
+                resolvedMemories = resolveUniqueMemories(from: results, limit: topK)
+                if resolvedMemories.count >= topK || requestedCount >= totalChunks {
+                    break
+                }
+                previousRequested = requestedCount
+                requestedCount = min(requestedCount + topK, totalChunks)
+            }
+            
+            return resolvedMemories
         } catch {
             logger.error("❌ 记忆检索失败：\(error.localizedDescription)")
             return []
@@ -541,6 +557,39 @@ public class MemoryManager {
             "chunkIndex": String(chunkIndex),
             "chunkId": chunkId
         ]
+    }
+    
+    private func resolveUniqueMemories(from results: [SearchResult], limit: Int) -> [MemoryItem] {
+        guard limit > 0 else { return [] }
+        var uniqueMemories: [MemoryItem] = []
+        var seenParentIDs = Set<UUID>()
+        var seenChunkIDs = Set<String>()
+        
+        for result in results {
+            if let parentIdString = result.metadata["parentMemoryId"],
+               let parentId = UUID(uuidString: parentIdString) {
+                guard !seenParentIDs.contains(parentId) else { continue }
+                if let memory = cachedMemories.first(where: { $0.id == parentId }) {
+                    uniqueMemories.append(memory)
+                    seenParentIDs.insert(parentId)
+                } else {
+                    logger.error("⚠️ 找不到 parentMemoryId=\(parentId.uuidString) 对应的原文，使用分块文本作为回退。")
+                    uniqueMemories.append(MemoryItem(from: result))
+                    seenParentIDs.insert(parentId)
+                }
+            } else {
+                logger.error("⚠️ 分块缺少 parentMemoryId 元数据，使用分块文本作为回退。")
+                guard !seenChunkIDs.contains(result.id) else { continue }
+                uniqueMemories.append(MemoryItem(from: result))
+                seenChunkIDs.insert(result.id)
+            }
+            
+            if uniqueMemories.count >= limit {
+                break
+            }
+        }
+        
+        return uniqueMemories
     }
 }
 

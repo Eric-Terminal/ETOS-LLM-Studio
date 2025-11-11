@@ -1035,12 +1035,17 @@ public class ChatService {
             var toolCallBuilders: [Int: (id: String?, name: String?, arguments: String)] = [:]
             var toolCallOrder: [Int] = []
             var toolCallIndexByID: [String: Int] = [:]
+            var latestTokenUsage: MessageTokenUsage?
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
                 
                 var messages = messagesForSessionSubject.value
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                    if let usage = part.tokenUsage {
+                        latestTokenUsage = usage
+                        messages[index].tokenUsage = usage
+                    }
                     if let contentPart = part.content {
                         messages[index].content += contentPart
                     }
@@ -1109,6 +1114,9 @@ public class ChatService {
                     if !finalToolCalls.isEmpty {
                         messages[index].toolCalls = finalToolCalls
                     }
+                }
+                if let latestTokenUsage {
+                    messages[index].tokenUsage = latestTokenUsage
                 }
                 finalAssistantMessage = messages[index]
                 messagesForSessionSubject.send(messages)
@@ -1182,7 +1190,8 @@ public class ChatService {
                 role: newMessage.role,
                 content: newMessage.content,
                 reasoningContent: newMessage.reasoningContent,
-                toolCalls: mergedToolCalls // 确保 toolCalls 保持最新或沿用历史数据
+                toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
+                tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage
             )
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)

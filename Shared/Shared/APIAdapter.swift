@@ -25,6 +25,7 @@ public struct ChatMessagePart {
     public var content: String?
     public var reasoningContent: String?
     public var toolCallDeltas: [ToolCallDelta]?
+    public var tokenUsage: MessageTokenUsage?
 }
 
 
@@ -122,6 +123,12 @@ public class OpenAIAdapter: APIAdapter {
             let delta: Message?   // 用于流式
         }
         let choices: [Choice]
+        struct Usage: Decodable {
+            let prompt_tokens: Int?
+            let completion_tokens: Int?
+            let total_tokens: Int?
+        }
+        let usage: Usage?
     }
     
     private struct OpenAITranscriptionResponse: Decodable {
@@ -193,6 +200,14 @@ public class OpenAIAdapter: APIAdapter {
         finalPayload.merge(commonPayload) { (_, new) in new }
         finalPayload["model"] = model.model.modelName
         finalPayload["messages"] = apiMessages
+        
+        if let shouldStream = finalPayload["stream"] as? Bool, shouldStream {
+            var streamOptions = finalPayload["stream_options"] as? [String: Any] ?? [:]
+            if streamOptions["include_usage"] == nil {
+                streamOptions["include_usage"] = true
+            }
+            finalPayload["stream_options"] = streamOptions
+        }
         
         // **翻译官的核心工作 (工具翻译)**:
         if let tools = tools, !tools.isEmpty {
@@ -298,7 +313,8 @@ public class OpenAIAdapter: APIAdapter {
             role: MessageRole(rawValue: message.role ?? "assistant") ?? .assistant,
             content: message.content ?? "",
             reasoningContent: message.reasoning_content, // 映射解析出的字段
-            toolCalls: internalToolCalls
+            toolCalls: internalToolCalls,
+            tokenUsage: makeTokenUsage(from: apiResponse.usage)
         )
     }
     
@@ -335,7 +351,13 @@ public class OpenAIAdapter: APIAdapter {
                 toolCallDeltas = nil
             }
             
-            return ChatMessagePart(content: delta.content, reasoningContent: delta.reasoning_content, toolCallDeltas: toolCallDeltas) // 映射解析出的字段
+            let tokenUsage = makeTokenUsage(from: chunk.usage)
+            return ChatMessagePart(
+                content: delta.content,
+                reasoningContent: delta.reasoning_content,
+                toolCallDeltas: toolCallDeltas,
+                tokenUsage: tokenUsage
+            ) // 映射解析出的字段
         } catch {
             logger.warning("流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")
             return nil
@@ -430,6 +452,18 @@ public class OpenAIAdapter: APIAdapter {
             }
             throw error
         }
+    }
+
+    private func makeTokenUsage(from usage: OpenAIResponse.Usage?) -> MessageTokenUsage? {
+        guard let usage = usage else { return nil }
+        if usage.prompt_tokens == nil && usage.completion_tokens == nil && usage.total_tokens == nil {
+            return nil
+        }
+        return MessageTokenUsage(
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            totalTokens: usage.total_tokens
+        )
     }
 }
 

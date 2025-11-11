@@ -7,6 +7,7 @@ struct MemorySettingsView: View {
     @State private var isReembeddingMemories = false
     @State private var showReembedConfirmation = false
     @State private var reembedAlert: MemoryReembedAlert?
+    @State private var editingMemory: MemoryItem?
     @AppStorage("memoryTopK") private var memoryTopK: Int = 3
     
     private var embeddingModelBinding: Binding<RunnableModel?> {
@@ -95,8 +96,8 @@ struct MemorySettingsView: View {
                     )
                 } else {
                     ForEach(viewModel.memories) { memory in
-                        NavigationLink {
-                            MemoryEditView(memory: memory).environmentObject(viewModel)
+                        Button {
+                            editingMemory = memory
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(memory.content)
@@ -106,6 +107,7 @@ struct MemorySettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .buttonStyle(.plain)
                     }
                     .onDelete(perform: deleteItems)
                 }
@@ -143,6 +145,12 @@ struct MemorySettingsView: View {
         .sheet(isPresented: $isAddingMemory) {
             NavigationStack {
                 AddMemorySheet()
+                    .environmentObject(viewModel)
+            }
+        }
+        .sheet(item: $editingMemory) { memory in
+            NavigationStack {
+                MemoryEditView(memory: memory)
                     .environmentObject(viewModel)
             }
         }
