@@ -68,7 +68,7 @@ struct MemorySettingsView: View {
                     .foregroundStyle(.secondary)
             }
             
-            Section("数据维护") {
+            Section {
                 Button(role: .destructive) {
                     showReembedConfirmation = true
                 } label: {
@@ -81,13 +81,15 @@ struct MemorySettingsView: View {
                     }
                 }
                 .disabled(isReembeddingMemories)
+            } header: {
+                Text("数据维护")
             } footer: {
                 Text("会清理旧的向量数据库并为所有记忆重新生成嵌入。完成后历史检索将使用最新数据。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             
-            Section("记忆列表") {
+            Section {
                 if viewModel.memories.isEmpty {
                     ContentUnavailableView(
                         "暂无记忆",
@@ -111,6 +113,8 @@ struct MemorySettingsView: View {
                     }
                     .onDelete(perform: deleteItems)
                 }
+            } header: {
+                Text("记忆列表")
             }
         }
         .navigationTitle("记忆库管理")
