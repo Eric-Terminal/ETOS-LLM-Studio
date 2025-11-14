@@ -85,7 +85,7 @@ public struct Model: Codable, Identifiable, Hashable {
     }
     
     public var id: UUID
-    public var modelName: String // 技术名称, 例如: "deepseek-chat"
+    public var modelName: String // 模型ID，例如: "deepseek-chat"
     public var displayName: String
     public var isActivated: Bool
     public var overrideParameters: [String: JSONValue]

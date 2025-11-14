@@ -120,14 +120,19 @@ struct ModelAdvancedSettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("语音识别模型", selection: $selectedSpeechModel) {
-                            Text("未选择").tag(Optional<RunnableModel>.none)
-                            ForEach(speechModels) { runnable in
-                                Text("\(runnable.model.displayName) | \(runnable.provider.name)")
-                                    .tag(Optional<RunnableModel>.some(runnable))
+                        NavigationLink {
+                            SpeechModelSelectionView(
+                                speechModels: speechModels,
+                                selectedSpeechModel: $selectedSpeechModel
+                            )
+                        } label: {
+                            HStack {
+                                Text("语音识别模型")
+                                Spacer()
+                                Text(selectedSpeechModelLabel)
+                                    .foregroundStyle(.secondary)
                             }
                         }
-                        .pickerStyle(.menu)
                         
                         let description = sendSpeechAsAudio
                         ? "语音会直接附带音频给当前模型，同时后台用该模型转写文本。"
@@ -140,5 +145,59 @@ struct ModelAdvancedSettingsView: View {
             }
         }
         .navigationTitle("高级模型设置")
+    }
+    
+    private var selectedSpeechModelLabel: String {
+        guard let model = selectedSpeechModel else {
+            return "未选择"
+        }
+        return "\(model.model.displayName) | \(model.provider.name)"
+    }
+}
+
+private struct SpeechModelSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var speechModels: [RunnableModel]
+    @Binding var selectedSpeechModel: RunnableModel?
+    
+    var body: some View {
+        List {
+            Button {
+                select(nil)
+            } label: {
+                selectionRow(title: "未选择", isSelected: selectedSpeechModel == nil)
+            }
+            
+            ForEach(speechModels) { runnable in
+                Button {
+                    select(runnable)
+                } label: {
+                    let isSelected = selectedSpeechModel?.id == runnable.id
+                    selectionRow(
+                        title: "\(runnable.model.displayName) | \(runnable.provider.name)",
+                        isSelected: isSelected
+                    )
+                }
+            }
+        }
+        .navigationTitle("语音识别模型")
+    }
+    
+    private func select(_ model: RunnableModel?) {
+        selectedSpeechModel = model
+        dismiss()
+    }
+    
+    @ViewBuilder
+    private func selectionRow(title: String, isSelected: Bool) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.tint)
+            }
+        }
     }
 }

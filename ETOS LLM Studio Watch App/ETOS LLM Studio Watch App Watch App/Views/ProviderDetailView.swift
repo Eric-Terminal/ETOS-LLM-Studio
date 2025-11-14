@@ -24,24 +24,26 @@ struct ProviderDetailView: View {
     var body: some View {
         ZStack {
             List {
-                ForEach($provider.models) { $model in
-                    if isInEditMode {
+                if isInEditMode {
+                    ForEach($provider.models) { $model in
                         NavigationLink(destination: ModelSettingsView(model: $model)) {
                             Text(model.displayName)
                         }
-                    } else {
-                        HStack {
-                            // 导航到设置是次要操作，主要操作是开关
-                            NavigationLink(destination: ModelSettingsView(model: $model)) {
+                    }
+                    .onDelete(perform: prepareDeleteModel)
+                } else {
+                    ForEach($provider.models) { $model in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
                                 Text(model.displayName)
+                                Spacer()
+                                Toggle("激活", isOn: $model.isActivated)
+                                    .labelsHidden()
                             }
-                            Spacer()
-                            Toggle("激活", isOn: $model.isActivated)
-                                .labelsHidden()
                         }
                     }
+                    .onDelete(perform: prepareDeleteModel)
                 }
-                .onDelete(perform: prepareDeleteModel)
             }
             
             if isFetchingModels {
@@ -164,8 +166,8 @@ private struct ModelAddView: View {
         NavigationStack {
             Form {
                 Section(header: Text("新模型信息")) {
-                    TextField("模型 ID (e.g., gpt-4o)", text: $modelName)
-                    TextField("显示名称 (可选)", text: $displayName)
+                    TextField("模型ID (e.g., gpt-4o)", text: $modelName)
+                    TextField("模型名称 (可选)", text: $displayName)
                 }
                 Section {
                     Button("添加模型") {

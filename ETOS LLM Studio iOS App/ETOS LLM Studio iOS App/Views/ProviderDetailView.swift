@@ -13,14 +13,17 @@ struct ProviderDetailView: View {
     
     var body: some View {
         List {
-            ForEach($provider.models) { $model in
-                if isEditingModels {
+            if isEditingModels {
+                ForEach($provider.models) { $model in
                     NavigationLink {
                         ModelSettingsView(model: $model)
                     } label: {
                         Text(model.displayName)
                     }
-                } else {
+                }
+                .onDelete(perform: prepareDeleteModel)
+            } else {
+                ForEach($provider.models) { $model in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(model.displayName)
@@ -28,13 +31,10 @@ struct ProviderDetailView: View {
                             Toggle("激活", isOn: $model.isActivated)
                                 .labelsHidden()
                         }
-                        Text(model.modelName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
+                .onDelete(perform: prepareDeleteModel)
             }
-            .onDelete(perform: prepareDeleteModel)
         }
         .overlay {
             if isFetchingModels {
@@ -161,8 +161,8 @@ private struct ModelAddView: View {
     var body: some View {
         Form {
             Section("新模型信息") {
-                TextField("模型 ID", text: $modelName)
-                TextField("显示名称", text: $displayName)
+                TextField("模型ID", text: $modelName)
+                TextField("模型名称", text: $displayName)
             }
         }
         .navigationTitle("添加模型")

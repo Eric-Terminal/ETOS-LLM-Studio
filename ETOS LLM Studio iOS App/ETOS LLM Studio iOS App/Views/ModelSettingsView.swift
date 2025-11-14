@@ -7,8 +7,8 @@ struct ModelSettingsView: View {
     var body: some View {
         Form {
             Section("基础信息") {
-                TextField("显示名称", text: $model.displayName)
-                TextField("技术名称", text: $model.modelName)
+                TextField("模型名称", text: $model.displayName)
+                TextField("模型ID", text: $model.modelName)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(.footnote.monospaced())
