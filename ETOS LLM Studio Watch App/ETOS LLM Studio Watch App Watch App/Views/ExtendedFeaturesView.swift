@@ -13,20 +13,43 @@ import Shared
 public struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     
-    // 使用 AppStorage 来持久化记忆功能的开关状态
-    @AppStorage("enableMemory") private var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
-    
     public init() {}
     
     public var body: some View {
         List {
             Section {
-                Toggle("启用记忆功能", isOn: $enableMemory)
-            } header: {
-                Text("长期记忆")
+                NavigationLink {
+                    LongTermMemoryFeatureView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("长期记忆系统", systemImage: "brain.head.profile")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
             } footer: {
-                Text("启用后，AI将拥有长期记忆能力。它会在每次对话前自动检索相关记忆，并能通过工具主动学习和保存新信息。")
+                Text("让 AI 根据历史偏好与事件持续优化回答。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .navigationTitle("拓展功能")
+    }
+}
+
+// MARK: - 长期记忆设置
+
+private struct LongTermMemoryFeatureView: View {
+    @EnvironmentObject var viewModel: ChatViewModel
+    
+    @AppStorage("enableMemory") private var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    
+    var body: some View {
+        List {
+            Section {
+                Toggle("启用记忆功能", isOn: $enableMemory)
+            } footer: {
+                Text("启用后，AI 将拥有长期记忆能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -34,10 +57,8 @@ public struct ExtendedFeaturesView: View {
             if enableMemory {
                 Section {
                     Toggle("是否记录新的记忆", isOn: $enableMemoryWrite)
-                } header: {
-                    Text("记忆写入")
                 } footer: {
-                    Text("关闭后仅读取记忆，不会请求保存新内容。")
+                    Text("关闭后仅读取记忆，不保存新内容。")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }
@@ -45,17 +66,15 @@ public struct ExtendedFeaturesView: View {
                 Section {
                     if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
                         NavigationLink(destination: MemorySettingsView().environmentObject(viewModel)) {
-                            Label("记忆库管理", systemImage: "brain.head.profile")
+                            Label("记忆库管理", systemImage: "folder.badge.gearshape")
                         }
                     } else {
-                        Label("记忆库管理 (系统版本过低)", systemImage: "brain.head.profile")
+                        Label("记忆库管理 (系统版本过低)", systemImage: "folder.badge.gearshape")
                             .foregroundColor(.gray)
                     }
-                } header: {
-                    Text("记忆库管理")
                 }
             }
         }
-        .navigationTitle("拓展功能")
+        .navigationTitle("长期记忆系统")
     }
 }

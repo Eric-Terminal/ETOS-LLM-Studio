@@ -47,12 +47,12 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableBackground") var enableBackground: Bool = true
     @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0
     @AppStorage("backgroundOpacity") var backgroundOpacity: Double = 0.7
-    @AppStorage("aiTemperature") var aiTemperature: Double = 0.7
-    @AppStorage("aiTopP") var aiTopP: Double = 1.0
+    @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
+    @AppStorage("aiTopP") var aiTopP: Double = 0.95
     @AppStorage("systemPrompt") var systemPrompt: String = ""
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
-    @AppStorage("enableStreaming") var enableStreaming: Bool = false
-    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 25
+    @AppStorage("enableStreaming") var enableStreaming: Bool = true
+    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 0
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = ""
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
@@ -63,7 +63,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
-    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
+    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     
     // MARK: - Public Properties
     

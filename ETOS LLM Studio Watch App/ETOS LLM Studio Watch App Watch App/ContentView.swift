@@ -195,7 +195,11 @@ struct ContentView: View {
         }
         
         return Button(action: scrollAction) {
-            let icon = Image(systemName: "arrow.down.circle.fill")
+            let icon = Image(systemName: "arrow.down.circle")
+                .font(.system(size: 22, weight: .semibold))
+                .frame(width: 48, height: 48)
+                .contentShape(Circle())
+            
             if isLiquidGlassEnabled {
                 if #available(watchOS 26.0, *) {
                     icon.glassEffect(.clear, in: Circle())
@@ -207,7 +211,7 @@ struct ContentView: View {
             }
         }
         .buttonStyle(.plain)
-        .padding(.bottom, 10)
+        .padding(.bottom, 4)
         .transition(.scale.combined(with: .opacity))
     }
     

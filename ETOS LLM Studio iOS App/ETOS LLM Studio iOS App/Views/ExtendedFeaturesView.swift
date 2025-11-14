@@ -3,6 +3,34 @@ import Shared
 
 struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel
+    
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    LongTermMemoryFeatureView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("长期记忆系统", systemImage: "brain.head.profile")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("让 AI 根据历史偏好与事件持续优化回答。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("拓展功能")
+        .listStyle(.insetGrouped)
+    }
+}
+
+// MARK: - 长期记忆设置
+
+private struct LongTermMemoryFeatureView: View {
+    @EnvironmentObject var viewModel: ChatViewModel
+    
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
     
@@ -10,8 +38,6 @@ struct ExtendedFeaturesView: View {
         Form {
             Section {
                 Toggle("启用记忆功能", isOn: $enableMemory)
-            } header: {
-                Text("长期记忆")
             } footer: {
                 Text("启用后，AI 会在响应前自动检索相关记忆，并可选择写入新的记忆片段。")
                     .font(.footnote)
@@ -21,8 +47,6 @@ struct ExtendedFeaturesView: View {
             if enableMemory {
                 Section {
                     Toggle("允许写入新的记忆", isOn: $enableMemoryWrite)
-                } header: {
-                    Text("记忆写入")
                 } footer: {
                     Text("关闭后仅读取记忆，不会请求保存新内容。")
                         .font(.footnote)
@@ -33,13 +57,11 @@ struct ExtendedFeaturesView: View {
                     NavigationLink {
                         MemorySettingsView().environmentObject(viewModel)
                     } label: {
-                        Label("记忆库管理", systemImage: "brain.head.profile")
+                        Label("记忆库管理", systemImage: "folder.badge.gearshape")
                     }
-                } header: {
-                    Text("记忆库管理")
                 }
             }
         }
-        .navigationTitle("拓展功能")
+        .navigationTitle("长期记忆系统")
     }
 }
