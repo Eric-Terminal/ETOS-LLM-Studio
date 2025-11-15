@@ -81,4 +81,4 @@ ETOS LLM Studio Watch App/Assets.xcassets/Background*.imageset/
 
 # Ignored by user request
 similarity-search-kit/
-DEVELOPMENT*.md
+DEVELOPMENT*.md\n# MCP Config templates\nassets/mcp_configs/

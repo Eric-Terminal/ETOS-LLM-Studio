@@ -20,6 +20,20 @@ struct ExtendedFeaturesView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            
+            Section {
+                NavigationLink {
+                    MCPIntegrationView()
+                } label: {
+                    Label("MCP 工具集成", systemImage: "network")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .navigationTitle("拓展功能")
         .listStyle(.insetGrouped)

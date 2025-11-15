@@ -491,7 +491,13 @@ public class ChatService {
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
-            let tools = (enableMemory && enableMemoryWrite) ? [self.saveMemoryTool] : nil
+        var resolvedTools: [InternalToolDefinition] = []
+        if enableMemory && enableMemoryWrite {
+            resolvedTools.append(self.saveMemoryTool)
+        }
+        let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+        resolvedTools.append(contentsOf: mcpTools)
+        let tools = resolvedTools.isEmpty ? nil : resolvedTools
             await self.executeMessageRequest(
                 messages: messages,
                 loadingMessageID: loadingMessage.id,
@@ -571,6 +577,21 @@ public class ChatService {
                 content = "错误：无法解析 save_memory 的参数。"
                 displayResult = content
                 logger.error("  - ❌ 无法解析 save_memory 的参数: \(toolCall.arguments)")
+            }
+            
+        case _ where toolCall.toolName.hasPrefix(MCPManager.toolNamePrefix):
+            let toolLabel = await MainActor.run {
+                MCPManager.shared.displayLabel(for: toolCall.toolName)
+            } ?? toolCall.toolName
+            do {
+                let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
+                content = result
+                displayResult = result
+                logger.info("  - ✅ MCP 工具调用成功: \(toolCall.toolName)")
+            } catch {
+                content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                displayResult = content
+                logger.error("  - ❌ MCP 工具调用失败: \(error.localizedDescription)")
             }
             
         default:
@@ -1014,7 +1035,7 @@ public class ChatService {
                 messages: updatedMessages, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
-                enableStreaming: false, enhancedPrompt: nil, tools: nil, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
+                enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
                 audioAttachment: nil
             )

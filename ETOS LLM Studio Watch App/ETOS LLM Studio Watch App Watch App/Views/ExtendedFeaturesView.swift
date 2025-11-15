@@ -31,6 +31,20 @@ public struct ExtendedFeaturesView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
+            
+            Section {
+                NavigationLink {
+                    MCPIntegrationView()
+                } label: {
+                    Label("MCP 工具集成", systemImage: "network")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("在手表上查看 MCP Server 状态，长按条目可通过 iPhone 端进行完整管理。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
         }
         .navigationTitle("拓展功能")
     }
