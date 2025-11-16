@@ -167,6 +167,8 @@ final class ChatViewModel: ObservableObject {
                     isSendingMessage = true
                 case .finished, .error, .cancelled:
                     isSendingMessage = false
+                @unknown default:
+                    isSendingMessage = false
                 }
             }
             .store(in: &cancellables)

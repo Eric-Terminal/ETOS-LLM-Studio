@@ -91,7 +91,7 @@ struct MCPIntegrationView: View {
                 }
             }
 
-            Section("代理设置") {
+            Section {
                 Toggle("启用 MCP 代理", isOn: Binding(
                     get: { manager.proxySettings.isEnabled },
                     set: { manager.setProxyEnabled($0) }
@@ -104,7 +104,10 @@ struct MCPIntegrationView: View {
                     Button("保存代理地址") {
                         manager.updateProxyBaseURL(proxyURLInput.trimmingCharacters(in: .whitespacesAndNewlines))
                     }
+                    .disabled(proxyURLInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+            } header: {
+                Text("代理设置")
             } footer: {
                 Text("通过代理将请求转发到目标 MCP Server，以绕过 ATS 对证书/域名的限制。默认使用 mcp.ericterminal.com。")
                     .font(.footnote)
@@ -236,7 +239,7 @@ struct MCPIntegrationView: View {
                 Image(systemName: "plus")
             }
         }
-        .onChange(of: manager.proxySettings.baseURLString) { newValue in
+        .onChange(of: manager.proxySettings.baseURLString) { _, newValue in
             proxyURLInput = newValue
         }
         .sheet(isPresented: $isPresentingEditor, onDismiss: { serverToEdit = nil }) {
@@ -408,7 +411,7 @@ private struct MCPServerDetailView: View {
                 Section("服务器能力") {
                     Text(info.name + (info.version.map { " \($0)" } ?? ""))
                     if let capabilities = info.capabilities, !capabilities.isEmpty {
-                        Text("Capabilities: \(capabilities.keys.joined(separator: \", \"))")
+                        Text("Capabilities: \(capabilities.keys.joined(separator: ", "))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

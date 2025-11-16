@@ -75,7 +75,7 @@ struct ChatView: View {
                             composerFocused = false
                         }
                     )
-                    .onChange(of: viewModel.messages.count) { _ in
+                    .onChange(of: viewModel.messages.count) { _, _ in
                         guard !viewModel.messages.isEmpty else { return }
                         scrollToBottom(proxy: proxy)
                     }
@@ -416,18 +416,20 @@ private struct MessageInfoSheet: View {
     }
     
     /// 将消息角色转换为易读的中文描述
-    private func roleDescription(_ role: MessageRole) -> String {
-        switch role {
-        case .system:
-            return "系统"
-        case .user:
-            return "用户"
-        case .assistant:
-            return "助手"
-        case .tool:
-            return "工具"
-        case .error:
-            return "错误"
+        private func roleDescription(_ role: MessageRole) -> String {
+            switch role {
+            case .system:
+                return "系统"
+            case .user:
+                return "用户"
+            case .assistant:
+                return "助手"
+            case .tool:
+                return "工具"
+            case .error:
+                return "错误"
+            @unknown default:
+                return "未知"
+            }
         }
     }
-}

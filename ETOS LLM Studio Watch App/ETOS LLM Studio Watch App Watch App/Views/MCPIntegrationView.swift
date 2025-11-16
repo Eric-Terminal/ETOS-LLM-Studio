@@ -134,7 +134,7 @@ struct MCPIntegrationView: View {
             }
         }
         .navigationTitle("MCP")
-        .onChange(of: manager.proxySettings.baseURLString) { newValue in
+        .onChange(of: manager.proxySettings.baseURLString) { _, newValue in
             proxyURLInput = newValue
         }
     }

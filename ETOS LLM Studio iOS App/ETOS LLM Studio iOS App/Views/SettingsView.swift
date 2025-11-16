@@ -14,7 +14,7 @@ struct SettingsView: View {
                                 .tag(model as RunnableModel?)
                         }
                     }
-                    .onChange(of: viewModel.selectedModel) { newValue in
+                    .onChange(of: viewModel.selectedModel) { _, newValue in
                         ChatService.shared.setSelectedModel(newValue)
                     }
                     

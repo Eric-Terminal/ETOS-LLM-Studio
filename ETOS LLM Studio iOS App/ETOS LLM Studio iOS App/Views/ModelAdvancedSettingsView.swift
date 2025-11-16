@@ -77,7 +77,7 @@ struct ModelAdvancedSettingsView: View {
                     Text("Temperature \(String(format: "%.2f", aiTemperature))")
                         .font(.subheadline)
                     Slider(value: $aiTemperature, in: 0...2, step: 0.05)
-                        .onChange(of: aiTemperature) { value in
+                        .onChange(of: aiTemperature) { _, value in
                             aiTemperature = (value * 100).rounded() / 100
                         }
                 }
@@ -86,7 +86,7 @@ struct ModelAdvancedSettingsView: View {
                     Text("Top P \(String(format: "%.2f", aiTopP))")
                         .font(.subheadline)
                     Slider(value: $aiTopP, in: 0...1, step: 0.05)
-                        .onChange(of: aiTopP) { value in
+                        .onChange(of: aiTopP) { _, value in
                             aiTopP = (value * 100).rounded() / 100
                         }
                 }

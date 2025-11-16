@@ -72,7 +72,7 @@ struct ProviderDetailView: View {
                 ModelAddView(provider: $provider)
             }
         }
-        .onChange(of: provider) { _ in
+        .onChange(of: provider) { _, _ in
             saveChanges()
         }
         .alert("获取模型失败", isPresented: $showErrorAlert) {

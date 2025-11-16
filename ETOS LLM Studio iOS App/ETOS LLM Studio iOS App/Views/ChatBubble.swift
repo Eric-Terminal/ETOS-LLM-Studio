@@ -118,7 +118,9 @@ struct ChatBubble: View {
             return enableBackground ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color.accentColor)
         case .error:
             return AnyShapeStyle(Color.red.opacity(0.15))
-        default:
+        case .assistant, .system, .tool:
+            return enableBackground ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(UIColor.secondarySystemBackground))
+        @unknown default:
             return enableBackground ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(UIColor.secondarySystemBackground))
         }
     }
@@ -143,6 +145,9 @@ struct ChatBubble: View {
         case .error:
             symbol = "exclamationmark.triangle.fill"
             color = .red
+        @unknown default:
+            symbol = "questionmark.circle"
+            color = .gray
         }
         
         return Image(systemName: symbol)

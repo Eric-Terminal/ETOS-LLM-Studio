@@ -14,7 +14,7 @@ struct ModelBehaviorSettingsView: View {
             Section("参数表达式") {
                 ForEach($expressionEntries) { $entry in
                     ExpressionRow(entry: $entry, onDelete: { deleteEntry(entry.id) })
-                        .onChange(of: entry.text) { _ in
+                        .onChange(of: entry.text) { _, _ in
                             validateEntry(withId: entry.id)
                         }
                 }

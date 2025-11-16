@@ -56,7 +56,7 @@ struct MemorySettingsView: View {
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
-                        .onChange(of: memoryTopK) { newValue in
+                        .onChange(of: memoryTopK) { _, newValue in
                             memoryTopK = max(0, newValue)
                         }
                 }
