@@ -29,7 +29,7 @@ public final class InspirationService {
     
     public let localQuotes: [String] = [
         "正在翻阅星际备忘录…",
-        "Never gonna give you up.",
+        "Never gonna give you up～",
         "耐心一点，智慧正在碰撞火花。",
         "等待是另一种输入。",
         "准备好，一句名言可能改变答案。",

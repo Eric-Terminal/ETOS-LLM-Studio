@@ -10,7 +10,6 @@
 // ============================================================================
 
 import SwiftUI
-import Combine
 import MarkdownUI
 import Shared
 
@@ -31,7 +30,9 @@ struct ChatBubble: View {
     @State private var currentQuoteIndex = Int.random(in: 0..<max(InspirationService.shared.localQuotes.count, 1))
     @State private var remoteQuotes: [String] = []
     @State private var isFetchingRemoteQuote = false
-    private let quoteTimer = Timer.publish(every: 4, tolerance: 0.5, on: .main, in: .common).autoconnect()
+    @State private var lastWaitingMessageId: UUID?
+    @State private var cachedQuote: String?
+    @State private var currentQuotePool: [String] = []
 
     // MARK: - 视图主体
     
@@ -55,18 +56,16 @@ struct ChatBubble: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
-        .onReceive(quoteTimer) { _ in
-            guard shouldShowPlayfulThinking else { return }
-            let quotes = availableThinkingQuotes
-            guard !quotes.isEmpty else { return }
-            currentQuoteIndex = (currentQuoteIndex + 1) % quotes.count
-        }
         .onAppear {
+            prepareQuoteForWaitingMessageIfNeeded()
             requestRemoteQuoteIfNeeded()
         }
         .onPlayfulThinkingChange(shouldShowPlayfulThinking) { isWaiting in
             if isWaiting {
+                prepareQuoteForWaitingMessageIfNeeded()
                 requestRemoteQuoteIfNeeded()
+            } else {
+                lastWaitingMessageId = nil
             }
         }
     }
@@ -136,7 +135,7 @@ struct ChatBubble: View {
             
             // 如果有附加信息（思考或工具），且有实际内容，则添加主分隔线
             if (hasReasoning || hasToolCalls) && !message.content.isEmpty {
-               Divider().background(Color.gray)
+                Divider().background(Color.gray)
             }
             
             // 消息内容区域
@@ -163,14 +162,23 @@ struct ChatBubble: View {
         }
         .padding(10)
 
-        if enableLiquidGlass {
-            if #available(watchOS 26.0, *) {
-                content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+        Group {
+            if enableLiquidGlass {
+                if #available(watchOS 26.0, *) {
+                    content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                } else {
+                    assistantBubbleFallback(content)
+                }
             } else {
                 assistantBubbleFallback(content)
             }
-        } else {
-            assistantBubbleFallback(content)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard shouldShowPlayfulThinking else { return }
+            if !consumeCachedQuoteIfAvailable() {
+                advanceThinkingQuote()
+            }
         }
     }
     
@@ -304,17 +312,63 @@ private extension ChatBubble {
     }
     
     var availableThinkingQuotes: [String] {
-        let sanitizedRemote = remoteQuotes
+        if !currentQuotePool.isEmpty {
+            return currentQuotePool
+        }
+        let fallbackRemote = remoteQuotes
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        let base = InspirationService.shared.localQuotes
-        return sanitizedRemote + base
+        if !fallbackRemote.isEmpty {
+            return fallbackRemote
+        }
+        return InspirationService.shared.localQuotes
+    }
+    
+    func advanceThinkingQuote() {
+        if currentQuotePool.isEmpty {
+            rebuildQuotePoolWithWeightedLocal(force: true)
+        }
+        let quotes = availableThinkingQuotes
+        guard !quotes.isEmpty else { return }
+        currentQuoteIndex = (currentQuoteIndex + 1) % quotes.count
+    }
+    
+    func prepareQuoteForWaitingMessageIfNeeded() {
+        guard shouldShowPlayfulThinking else { return }
+        guard lastWaitingMessageId != message.id else { return }
+        lastWaitingMessageId = message.id
+        rebuildQuotePoolWithWeightedLocal(force: true)
+        if !consumeCachedQuoteIfAvailable() {
+            advanceThinkingQuote()
+        }
+    }
+    
+    func consumeCachedQuoteIfAvailable() -> Bool {
+        guard let cached = cachedQuote else { return false }
+        cachedQuote = nil
+        insertRemoteQuoteIfNeeded(cached)
+        currentQuoteIndex = 0
+        requestRemoteQuoteIfNeeded()
+        return true
+    }
+    
+    func insertRemoteQuoteIfNeeded(_ text: String) {
+        let sanitized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sanitized.isEmpty else { return }
+        if !remoteQuotes.contains(sanitized) {
+            remoteQuotes.insert(sanitized, at: 0)
+            if remoteQuotes.count > 5 {
+                remoteQuotes = Array(remoteQuotes.prefix(5))
+            }
+        }
+        rebuildQuotePoolWithWeightedLocal(force: true)
     }
     
     @MainActor
     func requestRemoteQuoteIfNeeded() {
         guard shouldShowPlayfulThinking else { return }
         guard !isFetchingRemoteQuote else { return }
+        guard cachedQuote == nil else { return }
         isFetchingRemoteQuote = true
         Task {
             let quote = await InspirationService.shared.fetchRandomQuote()
@@ -323,14 +377,32 @@ private extension ChatBubble {
                 guard let quote else { return }
                 let text = quote.displayText.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { return }
-                if !remoteQuotes.contains(text) {
-                    remoteQuotes.insert(text, at: 0)
-                    if remoteQuotes.count > 5 {
-                        remoteQuotes = Array(remoteQuotes.prefix(5))
-                    }
-                    currentQuoteIndex = 0
+                if cachedQuote == nil && !remoteQuotes.contains(text) {
+                    cachedQuote = text
                 }
             }
+        }
+    }
+    
+    func rebuildQuotePoolWithWeightedLocal(force: Bool = false) {
+        let sanitizedRemote = remoteQuotes
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let locals = InspirationService.shared.localQuotes
+        var pool: [String] = []
+        
+        if sanitizedRemote.isEmpty {
+            pool = locals
+        } else {
+            pool = sanitizedRemote
+            if Double.random(in: 0..<1) < 0.01, let localPick = locals.randomElement() {
+                pool.insert(localPick, at: 0)
+            }
+        }
+        
+        if force || pool != currentQuotePool {
+            currentQuotePool = pool
+            currentQuoteIndex = 0
         }
     }
 }
