@@ -55,6 +55,7 @@ class ChatViewModel: ObservableObject {
     @Published var showSpeechErrorAlert: Bool = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
+    @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
     
     // MARK: - 用户偏好设置 (AppStorage)
     
@@ -238,13 +239,26 @@ class ChatViewModel: ObservableObject {
     
     func sendMessage() {
         logger.info("✉️ [ViewModel] sendMessage called.")
-        let userMessageContent = userInput
-        guard !userMessageContent.isEmpty, !isSendingMessage else { return }
+        let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasText = !userMessageContent.isEmpty
+        let hasAudio = pendingAudioAttachment != nil
+        
+        // 必须有文字或音频附件才能发送
+        guard (hasText || hasAudio), !isSendingMessage else { return }
+        
+        let audioToSend = pendingAudioAttachment
         userInput = ""
+        pendingAudioAttachment = nil
+        
+        // 构建消息内容
+        var messageContent = userMessageContent
+        if messageContent.isEmpty && audioToSend != nil {
+            messageContent = "[语音消息]"
+        }
         
         Task {
             await chatService.sendAndProcessMessage(
-                content: userMessageContent,
+                content: messageContent,
                 aiTemperature: aiTemperature,
                 aiTopP: aiTopP,
                 systemPrompt: systemPrompt,
@@ -253,9 +267,15 @@ class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                includeSystemTime: includeSystemTimeInPrompt
+                includeSystemTime: includeSystemTimeInPrompt,
+                audioAttachment: audioToSend
             )
         }
+    }
+    
+    /// 清除待发送的音频附件
+    func clearPendingAudioAttachment() {
+        pendingAudioAttachment = nil
     }
     
     func addErrorMessage(_ content: String) {
@@ -408,16 +428,6 @@ class ChatViewModel: ObservableObject {
             return
         }
         
-        if sendSpeechAsAudio && isSendingMessage {
-            presentSpeechError("上一条消息仍在发送，请稍后再试。")
-            try? FileManager.default.removeItem(at: url)
-            audioRecorder = nil
-            speechRecordingURL = nil
-            isSpeechRecorderPresented = false
-            resetRecordingVisuals()
-            return
-        }
-        
         speechTranscriptionInProgress = true
         if sendSpeechAsAudio {
             isSpeechRecorderPresented = false
@@ -434,25 +444,11 @@ class ChatViewModel: ObservableObject {
             do {
                 let data = try Data(contentsOf: url)
                 if sendSpeechAsAudio {
+                    // 不立即发送，而是暂存为待发送附件
                     let attachment = AudioAttachment(data: data, mimeType: "audio/wav", format: "wav", fileName: url.lastPathComponent)
-                    var messageText = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if messageText.isEmpty {
-                        messageText = "[语音消息]"
+                    await MainActor.run {
+                        pendingAudioAttachment = attachment
                     }
-                    userInput = ""
-                    await chatService.sendAndProcessMessage(
-                        content: messageText,
-                        aiTemperature: aiTemperature,
-                        aiTopP: aiTopP,
-                        systemPrompt: systemPrompt,
-                        maxChatHistory: maxChatHistory,
-                        enableStreaming: enableStreaming,
-                        enhancedPrompt: currentSession?.enhancedPrompt,
-                        enableMemory: enableMemory,
-                        enableMemoryWrite: enableMemoryWrite,
-                        includeSystemTime: includeSystemTimeInPrompt,
-                        audioAttachment: attachment
-                    )
                 } else {
                     guard let speechModel = selectedSpeechModel else {
                         throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: "尚未选择语音转文字模型。"])

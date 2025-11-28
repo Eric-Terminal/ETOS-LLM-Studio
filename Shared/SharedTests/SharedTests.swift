@@ -308,7 +308,7 @@ struct OpenAIAdapterTests {
         let tools = [saveMemoryTool]
         let messages = [ChatMessage(role: .user, content: "Hello")]
         
-        guard let request = adapter.buildChatRequest(for: dummyModel, commonPayload: [:], messages: messages, tools: tools, audioAttachment: nil), 
+        guard let request = adapter.buildChatRequest(for: dummyModel, commonPayload: [:], messages: messages, tools: tools, audioAttachments: [:]), 
               let httpBody = request.httpBody,
               let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any] else {
             Issue.record("Failed to build or parse request payload.")
@@ -342,7 +342,7 @@ fileprivate class MockAPIAdapter: APIAdapter {
     var receivedTools: [InternalToolDefinition]?
     var responseToReturn: ChatMessage?
     
-    func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachment: AudioAttachment?) -> URLRequest? {
+    func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment]) -> URLRequest? {
         self.receivedMessages = messages
         self.receivedTools = tools
         

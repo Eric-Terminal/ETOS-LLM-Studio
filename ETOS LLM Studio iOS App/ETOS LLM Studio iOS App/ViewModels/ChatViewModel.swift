@@ -41,6 +41,16 @@ final class ChatViewModel: ObservableObject {
     @Published var speechModels: [RunnableModel] = []
     @Published var selectedSpeechModel: RunnableModel?
     
+    // MARK: - Attachment State
+    
+    @Published var pendingAudioAttachment: AudioAttachment? = nil
+    @Published var pendingImageAttachments: [ImageAttachment] = []
+    @Published var isRecordingAudio: Bool = false
+    @Published var recordingDuration: TimeInterval = 0
+    @Published var showAttachmentPicker: Bool = false
+    @Published var showImagePicker: Bool = false
+    @Published var showAudioRecorder: Bool = false
+    
     // MARK: - User Preferences (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
@@ -207,12 +217,32 @@ final class ChatViewModel: ObservableObject {
     
     func sendMessage() {
         let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !userMessageContent.isEmpty, !isSendingMessage else { return }
+        let hasText = !userMessageContent.isEmpty
+        let hasAudio = pendingAudioAttachment != nil
+        let hasImages = !pendingImageAttachments.isEmpty
+        
+        // 必须有文字或附件才能发送
+        guard (hasText || hasAudio || hasImages), !isSendingMessage else { return }
+        
+        let audioToSend = pendingAudioAttachment
+        let imagesToSend = pendingImageAttachments
         userInput = ""
+        pendingAudioAttachment = nil
+        pendingImageAttachments = []
+        
+        // 构建消息内容
+        var messageContent = userMessageContent
+        if messageContent.isEmpty {
+            if hasAudio {
+                messageContent = "[语音消息]"
+            } else if hasImages {
+                messageContent = "[图片]"
+            }
+        }
         
         Task {
             await chatService.sendAndProcessMessage(
-                content: userMessageContent,
+                content: messageContent,
                 aiTemperature: aiTemperature,
                 aiTopP: aiTopP,
                 systemPrompt: systemPrompt,
@@ -221,9 +251,46 @@ final class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                includeSystemTime: includeSystemTimeInPrompt
+                includeSystemTime: includeSystemTimeInPrompt,
+                audioAttachment: audioToSend,
+                imageAttachments: imagesToSend
             )
         }
+    }
+    
+    /// 是否可以发送消息（有文字或附件）
+    var canSendMessage: Bool {
+        let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty
+        return (hasText || hasAttachments) && !isSendingMessage
+    }
+    
+    /// 清除音频附件
+    func clearPendingAudioAttachment() {
+        pendingAudioAttachment = nil
+    }
+    
+    /// 清除指定图片附件
+    func removePendingImageAttachment(_ attachment: ImageAttachment) {
+        pendingImageAttachments.removeAll { $0.id == attachment.id }
+    }
+    
+    /// 清除所有附件
+    func clearAllAttachments() {
+        pendingAudioAttachment = nil
+        pendingImageAttachments = []
+    }
+    
+    /// 添加图片附件
+    func addImageAttachment(_ image: UIImage) {
+        if let attachment = ImageAttachment.from(image: image) {
+            pendingImageAttachments.append(attachment)
+        }
+    }
+    
+    /// 设置音频附件
+    func setAudioAttachment(_ attachment: AudioAttachment) {
+        pendingAudioAttachment = attachment
     }
     
     func setSelectedSpeechModel(_ model: RunnableModel?) {

@@ -216,50 +216,84 @@ struct ContentView: View {
     }
     
     private var inputBubble: some View {
+        // 是否可以发送：有文字或有音频附件
+        let canSend = !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil
+        
         let coreBubble = Group {
-            if isLiquidGlassEnabled {
-                HStack(spacing: 10) {
-                    let textField = TextField("输入...", text: $viewModel.userInput)
-                        .textFieldStyle(.plain)
-                        .padding(.horizontal, 0)
-                        .padding(.vertical, 0)
-                    
-                    if #available(watchOS 26.0, *) {
-                        textField.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 16))
-                    } else {
-                        textField
+            VStack(spacing: 6) {
+                // 音频附件预览
+                if let audio = viewModel.pendingAudioAttachment {
+                    HStack(spacing: 6) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.blue)
+                        
+                        Text(audio.fileName)
+                            .font(.system(size: 10))
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                        
+                        Button {
+                            viewModel.clearPendingAudioAttachment()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-
-                    let sendButton = Button(action: viewModel.sendMessage) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 18, weight: .medium))
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: 38, height: 38)
-                    .disabled(viewModel.userInput.isEmpty || viewModel.isSendingMessage)
-                    
-                    if #available(watchOS 26.0, *) {
-                        sendButton.glassEffect(.clear, in: Circle())
-                    } else {
-                        sendButton
-                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color(white: 0.2))
+                    .cornerRadius(8)
                 }
-                .frame(height: 38)
-            } else {
-                HStack(spacing: 12) {
-                    TextField("输入...", text: $viewModel.userInput)
-                        .textFieldStyle(.plain)
+                
+                if isLiquidGlassEnabled {
+                    HStack(spacing: 10) {
+                        let textField = TextField("输入...", text: $viewModel.userInput)
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 0)
+                            .padding(.vertical, 0)
+                        
+                        if #available(watchOS 26.0, *) {
+                            textField.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 16))
+                        } else {
+                            textField
+                        }
 
-                    Button(action: viewModel.sendMessage) {
-                        Image(systemName: "arrow.up")
+                        let sendButton = Button(action: viewModel.sendMessage) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 18, weight: .medium))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: 38, height: 38)
+                        .disabled(!canSend || viewModel.isSendingMessage)
+                        
+                        if #available(watchOS 26.0, *) {
+                            sendButton.glassEffect(.clear, in: Circle())
+                        } else {
+                            sendButton
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .fixedSize()
-                    .disabled(viewModel.userInput.isEmpty || viewModel.isSendingMessage)
+                    .frame(height: 38)
+                } else {
+                    HStack(spacing: 12) {
+                        TextField("输入...", text: $viewModel.userInput)
+                            .textFieldStyle(.plain)
+
+                        Button(action: viewModel.sendMessage) {
+                            Image(systemName: "arrow.up")
+                        }
+                        .buttonStyle(.plain)
+                        .fixedSize()
+                        .disabled(!canSend || viewModel.isSendingMessage)
+                    }
+                    .padding(10)
+                    .background(viewModel.enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial))
+                    .cornerRadius(12)
                 }
-                .padding(10)
-                .background(viewModel.enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial))
-                .cornerRadius(12)
             }
         }
         .padding(.horizontal)
@@ -276,9 +310,10 @@ struct ContentView: View {
         
         return coreBubble
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                if !viewModel.userInput.isEmpty {
+                if !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil {
                     Button(role: .destructive) {
                         viewModel.clearUserInput()
+                        viewModel.clearPendingAudioAttachment()
                     } label: {
                         Label("清空输入", systemImage: "trash")
                     }

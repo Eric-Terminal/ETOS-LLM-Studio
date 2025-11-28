@@ -26,6 +26,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let backgrounds = SyncOptions(rawValue: 1 << 2)
     public static let memories = SyncOptions(rawValue: 1 << 3)
     public static let mcpServers = SyncOptions(rawValue: 1 << 4)
+    public static let audioFiles = SyncOptions(rawValue: 1 << 5)  // 音频文件同步选项
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -64,6 +65,19 @@ public struct SyncedBackground: Codable {
     }
 }
 
+/// 音频文件同步载荷
+public struct SyncedAudio: Codable {
+    public var filename: String
+    public var data: Data
+    public var checksum: String
+    
+    public init(filename: String, data: Data) {
+        self.filename = filename
+        self.data = data
+        self.checksum = data.sha256Hex
+    }
+}
+
 /// 同步包，依据选项包含不同的数据集合
 public struct SyncPackage: Codable {
     public var options: SyncOptions
@@ -72,9 +86,10 @@ public struct SyncPackage: Codable {
     public var backgrounds: [SyncedBackground]
     public var memories: [MemoryItem]
     public var mcpServers: [MCPServerConfiguration]
+    public var audioFiles: [SyncedAudio]
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles
     }
     
     public init(
@@ -83,7 +98,8 @@ public struct SyncPackage: Codable {
         sessions: [SyncedSession] = [],
         backgrounds: [SyncedBackground] = [],
         memories: [MemoryItem] = [],
-        mcpServers: [MCPServerConfiguration] = []
+        mcpServers: [MCPServerConfiguration] = [],
+        audioFiles: [SyncedAudio] = []
     ) {
         self.options = options
         self.providers = providers
@@ -91,6 +107,7 @@ public struct SyncPackage: Codable {
         self.backgrounds = backgrounds
         self.memories = memories
         self.mcpServers = mcpServers
+        self.audioFiles = audioFiles
     }
     
     public init(from decoder: Decoder) throws {
@@ -101,6 +118,7 @@ public struct SyncPackage: Codable {
         backgrounds = try container.decodeIfPresent([SyncedBackground].self, forKey: .backgrounds) ?? []
         memories = try container.decodeIfPresent([MemoryItem].self, forKey: .memories) ?? []
         mcpServers = try container.decodeIfPresent([MCPServerConfiguration].self, forKey: .mcpServers) ?? []
+        audioFiles = try container.decodeIfPresent([SyncedAudio].self, forKey: .audioFiles) ?? []
     }
 }
 
@@ -116,6 +134,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedMemories: Int
     public var importedMCPServers: Int
     public var skippedMCPServers: Int
+    public var importedAudioFiles: Int
+    public var skippedAudioFiles: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -127,7 +147,9 @@ public struct SyncMergeSummary: Equatable {
         importedMemories: 0,
         skippedMemories: 0,
         importedMCPServers: 0,
-        skippedMCPServers: 0
+        skippedMCPServers: 0,
+        importedAudioFiles: 0,
+        skippedAudioFiles: 0
     )
 }
 

@@ -11,6 +11,8 @@ import SwiftUI
 import MarkdownUI
 import Shared
 import UIKit
+import PhotosUI
+import AVFoundation
 
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
@@ -240,11 +242,16 @@ struct ChatView: View {
     
     @ViewBuilder
     private func contextMenu(for message: ChatMessage) -> some View {
-        Button {
-            editingMessage = message
-            editingContent = message.content
-        } label: {
-            Label("编辑", systemImage: "pencil")
+        // 有音频或图片附件的消息不显示编辑按钮
+        let hasAttachments = message.audioFileName != nil || (message.imageFileNames?.isEmpty == false)
+        
+        if !hasAttachments {
+            Button {
+                editingMessage = message
+                editingContent = message.content
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
         }
         
         if viewModel.canRetry(message: message) {
@@ -303,15 +310,46 @@ private extension ChatView {
 // MARK: - Composer
 
 private struct MessageComposerView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
     @Binding var text: String
     let isSending: Bool
     let sendAction: () -> Void
     let focus: FocusState<Bool>.Binding
     
+    @State private var showAttachmentMenu = false
+    @State private var showImagePicker = false
+    @State private var showAudioRecorder = false
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
+            // 附件预览区域
+            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
+                attachmentPreviewBar
+            }
+            
             Divider()
+            
             HStack(alignment: .center, spacing: 12) {
+                // 附件按钮
+                Menu {
+                    Button {
+                        showImagePicker = true
+                    } label: {
+                        Label("选择图片", systemImage: "photo")
+                    }
+                    
+                    Button {
+                        showAudioRecorder = true
+                    } label: {
+                        Label("录制语音", systemImage: "mic")
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.tint)
+                }
+                
                 TextField("输入...", text: $text, axis: .vertical)
                     .lineLimit(1...4)
                     .textFieldStyle(.roundedBorder)
@@ -324,13 +362,239 @@ private struct MessageComposerView: View {
                         .font(.system(size: 20, weight: .semibold))
                 }
                 .buttonStyle(.borderless)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                .disabled(!viewModel.canSendMessage)
                 .help("发送当前消息")
             }
             .padding(.horizontal)
-            .padding(.bottom, 12)
+            .padding(.vertical, 10)
         }
         .background(.thinMaterial)
+        .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
+        .onChange(of: selectedPhotos) { _, newItems in
+            Task {
+                for item in newItems {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        await MainActor.run {
+                            viewModel.addImageAttachment(image)
+                        }
+                    }
+                }
+                selectedPhotos = []
+            }
+        }
+        .sheet(isPresented: $showAudioRecorder) {
+            AudioRecorderSheet { attachment in
+                viewModel.setAudioAttachment(attachment)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var attachmentPreviewBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // 图片预览
+                ForEach(viewModel.pendingImageAttachments) { attachment in
+                    ZStack(alignment: .topTrailing) {
+                        if let thumbnail = attachment.thumbnailImage {
+                            Image(uiImage: thumbnail)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 60, height: 60)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        
+                        Button {
+                            viewModel.removePendingImageAttachment(attachment)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.white, .black.opacity(0.6))
+                        }
+                        .offset(x: 4, y: -4)
+                    }
+                }
+                
+                // 音频预览
+                if let audio = viewModel.pendingAudioAttachment {
+                    HStack(spacing: 6) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.tint)
+                        
+                        Text(audio.fileName)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .frame(maxWidth: 80)
+                        
+                        Button {
+                            viewModel.clearPendingAudioAttachment()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
+    }
+}
+
+// MARK: - Audio Recorder Sheet
+
+private struct AudioRecorderSheet: View {
+    let onComplete: (AudioAttachment) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var isRecording = false
+    @State private var recordingDuration: TimeInterval = 0
+    @State private var audioRecorder: AVAudioRecorder?
+    @State private var recordingURL: URL?
+    @State private var timer: Timer?
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 30) {
+                Spacer()
+                
+                // 录音时长显示
+                Text(formatDuration(recordingDuration))
+                    .font(.system(size: 48, weight: .light, design: .monospaced))
+                    .foregroundStyle(isRecording ? .red : .primary)
+                
+                // 录音按钮
+                Button {
+                    if isRecording {
+                        stopRecording()
+                    } else {
+                        startRecording()
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(isRecording ? Color.red : Color.accentColor)
+                            .frame(width: 80, height: 80)
+                        
+                        Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(.white)
+                    }
+                }
+                
+                if isRecording {
+                    Text("正在录音...")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("点击开始录音")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+            }
+            .navigationTitle("录制语音")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        cancelRecording()
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        finishRecording()
+                    }
+                    .disabled(recordingURL == nil || isRecording)
+                }
+            }
+        }
+        .onDisappear {
+            cancelRecording()
+        }
+    }
+    
+    private func startRecording() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default)
+            try session.setActive(true)
+            
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatLinearPCM),
+                AVSampleRateKey: 16000.0,
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false
+            ]
+            
+            audioRecorder = try AVAudioRecorder(url: url, settings: settings)
+            audioRecorder?.prepareToRecord()
+            audioRecorder?.record()
+            
+            recordingURL = url
+            isRecording = true
+            recordingDuration = 0
+            
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                recordingDuration += 0.1
+            }
+        } catch {
+            print("录音启动失败: \(error.localizedDescription)")
+        }
+    }
+    
+    private func stopRecording() {
+        timer?.invalidate()
+        timer = nil
+        audioRecorder?.stop()
+        isRecording = false
+    }
+    
+    private func cancelRecording() {
+        stopRecording()
+        if let url = recordingURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        recordingURL = nil
+    }
+    
+    private func finishRecording() {
+        stopRecording()
+        guard let url = recordingURL,
+              let data = try? Data(contentsOf: url) else {
+            dismiss()
+            return
+        }
+        
+        let attachment = AudioAttachment(
+            data: data,
+            mimeType: "audio/wav",
+            format: "wav",
+            fileName: url.lastPathComponent
+        )
+        
+        try? FileManager.default.removeItem(at: url)
+        onComplete(attachment)
+        dismiss()
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        let tenths = Int((duration.truncatingRemainder(dividingBy: 1)) * 10)
+        return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
     }
 }
 

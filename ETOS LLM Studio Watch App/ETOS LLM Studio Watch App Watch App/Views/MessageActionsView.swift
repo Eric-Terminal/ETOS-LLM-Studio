@@ -31,13 +31,18 @@ struct MessageActionsView: View {
     // MARK: - 视图主体
     
     var body: some View {
+        // 有音频或图片附件的消息不显示编辑按钮
+        let hasAttachments = message.audioFileName != nil || (message.imageFileNames?.isEmpty == false)
+        
         Form {
             Section {
-                Button {
-                    onEdit()
-                    dismiss()
-                } label: {
-                    Label("编辑消息", systemImage: "pencil")
+                if !hasAttachments {
+                    Button {
+                        onEdit()
+                        dismiss()
+                    } label: {
+                        Label("编辑消息", systemImage: "pencil")
+                    }
                 }
 
                 if canRetry {

@@ -41,8 +41,10 @@ public protocol APIAdapter {
     ///   - commonPayload: 包含如 `temperature`, `top_p`, `stream` 等通用参数的字典。
     ///   - messages: **使用标准 `ChatMessage` 模型的消息历史记录。**
     ///   - tools: 一个可选的 `InternalToolDefinition` 数组，定义了可供 AI 使用的工具。
+    ///   - audioAttachments: 一个字典，将消息 ID 映射到对应的音频附件，支持历史消息中的音频持续发送。
+    ///   - imageAttachments: 一个字典，将消息 ID 映射到对应的图片附件列表，支持视觉模型。
     /// - Returns: 一个配置好的 `URLRequest` 对象，如果构建失败则返回 `nil`。
-    func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachment: AudioAttachment?) -> URLRequest?
+    func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest?
     
     /// 构建一个用于获取模型列表的网络请求。
     /// - Parameter provider: 需要查询的 `Provider`。
@@ -146,7 +148,7 @@ public class OpenAIAdapter: APIAdapter {
 
     // MARK: - 协议方法实现
 
-    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachment: AudioAttachment?) -> URLRequest? {
+    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest? {
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -164,28 +166,54 @@ public class OpenAIAdapter: APIAdapter {
         }
         request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
         
-        let apiMessages: [[String: Any]] = messages.enumerated().map { index, msg in
+        let apiMessages: [[String: Any]] = messages.map { msg in
             var dict: [String: Any] = ["role": msg.role.rawValue]
-            let isLastUserMessage = index == messages.indices.last && msg.role == .user
             
-            if let audioAttachment, isLastUserMessage {
+            // 检查该消息是否有关联的音频或图片附件
+            let audioAttachment = audioAttachments[msg.id]
+            let msgImageAttachments = imageAttachments[msg.id] ?? []
+            let hasMultiContent = (audioAttachment != nil || !msgImageAttachments.isEmpty) && msg.role == .user
+            
+            if hasMultiContent {
                 var contentParts: [[String: Any]] = []
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
+                
+                // 添加文本内容
+                if !trimmed.isEmpty && trimmed != "[语音消息]" && trimmed != "[图片]" {
                     contentParts.append([
-                        "type": "input_text",
+                        "type": "text",
                         "text": trimmed
                     ])
                 }
-                let base64Audio = audioAttachment.data.base64EncodedString()
-                contentParts.append([
-                    "type": "input_audio",
-                    "input_audio": [
-                        "data": base64Audio,
-                        "format": audioAttachment.format
-                    ]
-                ])
-                dict["content"] = contentParts
+                
+                // 添加图片内容 (OpenAI Vision 格式)
+                for imageAttachment in msgImageAttachments {
+                    contentParts.append([
+                        "type": "image_url",
+                        "image_url": [
+                            "url": imageAttachment.dataURL
+                        ]
+                    ])
+                }
+                
+                // 添加音频内容
+                if let audioAttachment = audioAttachment {
+                    let base64Audio = audioAttachment.data.base64EncodedString()
+                    contentParts.append([
+                        "type": "input_audio",
+                        "input_audio": [
+                            "data": base64Audio,
+                            "format": audioAttachment.format
+                        ]
+                    ])
+                }
+                
+                // 如果有内容部分，使用数组格式；否则使用简单文本
+                if !contentParts.isEmpty {
+                    dict["content"] = contentParts
+                } else {
+                    dict["content"] = msg.content
+                }
             } else {
                 dict["content"] = msg.content
             }
@@ -220,23 +248,41 @@ public class OpenAIAdapter: APIAdapter {
             finalPayload["tool_choice"] = "auto"
         }
         
-        let containsAudioAttachment = audioAttachment != nil
+        let containsAudioAttachment = !audioAttachments.isEmpty
+        let containsImageAttachment = !imageAttachments.isEmpty
+        let containsMediaAttachment = containsAudioAttachment || containsImageAttachment
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
             if let httpBody = request.httpBody {
-                if containsAudioAttachment {
+                if containsMediaAttachment {
                     var sanitizedPayload = finalPayload
                     if var messages = sanitizedPayload["messages"] as? [[String: Any]] {
                         for index in messages.indices {
                             guard var contentArray = messages[index]["content"] as? [[String: Any]] else { continue }
                             for contentIndex in contentArray.indices {
                                 var contentItem = contentArray[contentIndex]
-                                guard let type = contentItem["type"] as? String, type == "input_audio" else { continue }
-                                guard var audioInfo = contentItem["input_audio"] as? [String: Any],
-                                      let rawData = audioInfo["data"] as? String else { continue }
-                                audioInfo["data"] = "[base64 omitted: \(rawData.count) chars]"
-                                contentItem["input_audio"] = audioInfo
+                                guard let type = contentItem["type"] as? String else { continue }
+                                
+                                // 隐藏音频 base64
+                                if type == "input_audio" {
+                                    if var audioInfo = contentItem["input_audio"] as? [String: Any],
+                                       let rawData = audioInfo["data"] as? String {
+                                        audioInfo["data"] = "[base64 omitted: \(rawData.count) chars]"
+                                        contentItem["input_audio"] = audioInfo
+                                    }
+                                }
+                                
+                                // 隐藏图片 base64
+                                if type == "image_url" {
+                                    if var imageInfo = contentItem["image_url"] as? [String: Any],
+                                       let url = imageInfo["url"] as? String,
+                                       url.hasPrefix("data:") {
+                                        imageInfo["url"] = "[base64 image omitted: \(url.count) chars]"
+                                        contentItem["image_url"] = imageInfo
+                                    }
+                                }
+                                
                                 contentArray[contentIndex] = contentItem
                             }
                             messages[index]["content"] = contentArray
@@ -246,9 +292,9 @@ public class OpenAIAdapter: APIAdapter {
                     
                     if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
                        let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
-                        logger.debug("构建的聊天请求体 (已隐藏音频 Base64):\n---\n\(sanitizedString)\n---")
+                        logger.debug("构建的聊天请求体 (已隐藏媒体 Base64):\n---\n\(sanitizedString)\n---")
                     } else if let jsonString = String(data: httpBody, encoding: .utf8) {
-                        logger.debug("构建的聊天请求体 (无法完全隐藏音频，输出原始体的 hash): \(jsonString.hashValue)")
+                        logger.debug("构建的聊天请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
                     }
                 } else if let jsonString = String(data: httpBody, encoding: .utf8) {
                     logger.debug("构建的聊天请求体 (Raw Request Body):\n---\n\(jsonString)\n---")

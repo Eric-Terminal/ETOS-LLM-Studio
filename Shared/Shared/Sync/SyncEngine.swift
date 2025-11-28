@@ -23,6 +23,7 @@ public enum SyncEngine {
         var backgrounds: [SyncedBackground] = []
         var memories: [MemoryItem] = []
         var mcpServers: [MCPServerConfiguration] = []
+        var audioFiles: [SyncedAudio] = []
         
         if options.contains(.providers) {
             providers = ConfigLoader.loadProviders()
@@ -57,13 +58,26 @@ public enum SyncEngine {
             mcpServers = MCPServerStore.loadServers()
         }
         
+        // 音频文件同步：收集所有音频文件
+        if options.contains(.audioFiles) {
+            let directory = Persistence.getAudioDirectory()
+            let fileManager = FileManager.default
+            if let fileURLs = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+                audioFiles = fileURLs.compactMap { url in
+                    guard let data = try? Data(contentsOf: url) else { return nil }
+                    return SyncedAudio(filename: url.lastPathComponent, data: data)
+                }
+            }
+        }
+        
         return SyncPackage(
             options: options,
             providers: providers,
             sessions: sessions,
             backgrounds: backgrounds,
             memories: memories,
-            mcpServers: mcpServers
+            mcpServers: mcpServers,
+            audioFiles: audioFiles
         )
     }
     
@@ -110,6 +124,13 @@ public enum SyncEngine {
             let result = mergeMCPServers(package.mcpServers)
             summary.importedMCPServers = result.imported
             summary.skippedMCPServers = result.skipped
+        }
+        
+        // 音频文件同步
+        if package.options.contains(.audioFiles) {
+            let result = mergeAudioFiles(package.audioFiles)
+            summary.importedAudioFiles = result.imported
+            summary.skippedAudioFiles = result.skipped
         }
         
         return summary
@@ -360,6 +381,52 @@ public enum SyncEngine {
                 MCPServerStore.save(server)
                 local.append(server)
                 imported += 1
+            }
+        }
+        
+        return (imported, skipped)
+    }
+    
+    // MARK: - Audio Files
+    
+    private static func mergeAudioFiles(
+        _ incoming: [SyncedAudio]
+    ) -> (imported: Int, skipped: Int) {
+        guard !incoming.isEmpty else { return (0, 0) }
+        
+        var imported = 0
+        var skipped = 0
+        
+        // 获取现有音频文件的校验和用于快速去重
+        let existingFileNames = Set(Persistence.getAllAudioFileNames())
+        var existingChecksums = Set<String>()
+        for fileName in existingFileNames {
+            if let data = Persistence.loadAudio(fileName: fileName) {
+                existingChecksums.insert(data.sha256Hex)
+            }
+        }
+        
+        for audio in incoming {
+            // 检查是否已存在相同校验和的文件
+            if existingChecksums.contains(audio.checksum) {
+                skipped += 1
+                continue
+            }
+            
+            // 文件名冲突时生成新文件名
+            var targetFileName = audio.filename
+            if existingFileNames.contains(audio.filename) {
+                let ext = (audio.filename as NSString).pathExtension
+                let name = (audio.filename as NSString).deletingPathExtension
+                targetFileName = "\(name)_\(UUID().uuidString.prefix(8)).\(ext)"
+            }
+            
+            // 保存音频文件
+            if Persistence.saveAudio(audio.data, fileName: targetFileName) != nil {
+                imported += 1
+                existingChecksums.insert(audio.checksum)
+            } else {
+                skipped += 1
             }
         }
         

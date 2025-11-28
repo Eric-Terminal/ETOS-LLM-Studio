@@ -287,6 +287,11 @@ public class ChatService {
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
         var currentSessions = chatSessionsSubject.value
         for session in sessionsToDelete {
+            // 删除消息文件前先加载消息，清理关联的音频和图片文件
+            let messages = Persistence.loadMessages(for: session.id)
+            Persistence.deleteAudioFiles(for: messages)
+            Persistence.deleteImageFiles(for: messages)
+            
             let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
             try? FileManager.default.removeItem(at: fileURL)
             logger.info("🗑️ 删除了会话的消息文件: \(session.name)")
@@ -315,8 +320,20 @@ public class ChatService {
         let newSession = ChatSession(id: UUID(), name: "分支: \(sourceSession.name)", topicPrompt: sourceSession.topicPrompt, enhancedPrompt: sourceSession.enhancedPrompt, isTemporary: false)
         logger.info("🌿 创建了分支会话: \(newSession.name)")
         if copyMessages {
-            let sourceMessages = Persistence.loadMessages(for: sourceSession.id)
+            var sourceMessages = Persistence.loadMessages(for: sourceSession.id)
             if !sourceMessages.isEmpty {
+                // 复制关联的音频文件，并更新消息中的音频文件名引用
+                for i in sourceMessages.indices {
+                    if let originalFileName = sourceMessages[i].audioFileName,
+                       let audioData = Persistence.loadAudio(fileName: originalFileName) {
+                        let ext = (originalFileName as NSString).pathExtension
+                        let newFileName = "\(UUID().uuidString).\(ext)"
+                        if Persistence.saveAudio(audioData, fileName: newFileName) != nil {
+                            sourceMessages[i].audioFileName = newFileName
+                            logger.info("  - 复制了音频文件: \(originalFileName) -> \(newFileName)")
+                        }
+                    }
+                }
                 Persistence.saveMessages(sourceMessages, for: newSession.id)
                 logger.info("  - 复制了 \(sourceMessages.count) 条消息到新会话。" )
             }
@@ -333,7 +350,17 @@ public class ChatService {
     public func deleteLastMessage(for session: ChatSession) {
         var messages = Persistence.loadMessages(for: session.id)
         if !messages.isEmpty {
-            messages.removeLast()
+            let lastMessage = messages.removeLast()
+            // 清理被删除消息关联的音频文件
+            if let audioFileName = lastMessage.audioFileName {
+                Persistence.deleteAudio(fileName: audioFileName)
+            }
+            // 清理被删除消息关联的图片文件
+            if let imageFileNames = lastMessage.imageFileNames {
+                for fileName in imageFileNames {
+                    Persistence.deleteImage(fileName: fileName)
+                }
+            }
             Persistence.saveMessages(messages, for: session.id)
             logger.info("🗑️ 删除了会话的最后一条消息: \(session.name)")
             if session.id == currentSessionSubject.value?.id {
@@ -345,6 +372,18 @@ public class ChatService {
     public func deleteMessage(_ message: ChatMessage) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
+        
+        // 清理被删除消息关联的音频文件
+        if let audioFileName = message.audioFileName {
+            Persistence.deleteAudio(fileName: audioFileName)
+        }
+        
+        // 清理被删除消息关联的图片文件
+        if let imageFileNames = message.imageFileNames {
+            for fileName in imageFileNames {
+                Persistence.deleteImage(fileName: fileName)
+            }
+        }
         
         messages.removeAll { $0.id == message.id }
         
@@ -433,7 +472,8 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
-        audioAttachment: AudioAttachment? = nil
+        audioAttachment: AudioAttachment? = nil,
+        imageAttachments: [ImageAttachment] = []
     ) async {
         guard var currentSession = currentSessionSubject.value else {
             addErrorMessage("错误: 没有当前会话。" )
@@ -443,17 +483,46 @@ public class ChatService {
 
         // 准备用户消息和UI占位消息
         let audioPlaceholder = "[语音消息]"
+        let imagePlaceholder = "[图片]"
         var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        var usedAudioPlaceholder = false
-        if audioAttachment != nil {
+        var savedAudioFileName: String? = nil
+        var savedImageFileNames: [String] = []
+        
+        if let audioAttachment {
+            // 保存音频文件到持久化目录，使用时间戳命名
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+            let timestamp = dateFormatter.string(from: Date())
+            let audioFileName = "语音_\(timestamp).\(audioAttachment.format)"
+            if Persistence.saveAudio(audioAttachment.data, fileName: audioFileName) != nil {
+                savedAudioFileName = audioFileName
+                logger.info("🎙️ 音频文件已保存: \(audioFileName)")
+            }
+            
             if messageContent.isEmpty {
                 messageContent = audioPlaceholder
-                usedAudioPlaceholder = true
-            } else if messageContent == audioPlaceholder {
-                usedAudioPlaceholder = true
             }
         }
-        let userMessage = ChatMessage(role: .user, content: messageContent)
+        
+        // 保存图片附件
+        for imageAttachment in imageAttachments {
+            let imageFileName = imageAttachment.fileName
+            if Persistence.saveImage(imageAttachment.data, fileName: imageFileName) != nil {
+                savedImageFileNames.append(imageFileName)
+                logger.info("🖼️ 图片文件已保存: \(imageFileName)")
+            }
+        }
+        
+        if messageContent.isEmpty && !savedImageFileNames.isEmpty {
+            messageContent = imagePlaceholder
+        }
+        
+        let userMessage = ChatMessage(
+            role: .user,
+            content: messageContent,
+            audioFileName: savedAudioFileName,
+            imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
+        )
         let loadingMessage = ChatMessage(role: .assistant, content: "") // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
         
@@ -462,16 +531,9 @@ public class ChatService {
         messages.append(loadingMessage)
         messagesForSessionSubject.send(messages)
         
-        if usedAudioPlaceholder, let audioAttachment {
-            Task {
-                await self.handleBackgroundTranscription(
-                    audioAttachment: audioAttachment,
-                    placeholder: audioPlaceholder,
-                    messageID: userMessage.id,
-                    sessionID: currentSession.id
-                )
-            }
-        }
+        // 注意：当音频作为附件直接发送给模型时，不再需要后台转文字
+        // 因为每次发送消息都会重新加载音频文件并以 base64 发送
+        // UI 上通过 audioFileName 属性标识这是一条语音消息
         
         // 处理临时会话的转换
         if currentSession.isTemporary {
@@ -523,7 +585,7 @@ public class ChatService {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
-                audioAttachment: audioAttachment
+                currentAudioAttachment: audioAttachment
             )
         }
         currentRequestTask = requestTask
@@ -667,7 +729,7 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
-        audioAttachment: AudioAttachment?
+        currentAudioAttachment: AudioAttachment? // 当前消息的音频附件（用于首次发送，尚未保存到文件）
     ) async {
         // 自动查：执行记忆搜索
         var memories: [MemoryItem] = []
@@ -728,9 +790,46 @@ public class ChatService {
         }
         messagesToSend.append(contentsOf: chatHistory)
         
+        // 构建音频附件字典：从历史消息中加载已保存的音频文件
+        var audioAttachments: [UUID: AudioAttachment] = [:]
+        for msg in messagesToSend {
+            // 如果是当前消息且有传入的音频附件，优先使用传入的（避免重复读取刚保存的文件）
+            if let currentAudio = currentAudioAttachment, msg.id == userMessage?.id {
+                audioAttachments[msg.id] = currentAudio
+            } else if let audioFileName = msg.audioFileName,
+                      let audioData = Persistence.loadAudio(fileName: audioFileName) {
+                // 从文件名推断格式
+                let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
+                let mimeType = "audio/\(fileExtension)"
+                let attachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+                audioAttachments[msg.id] = attachment
+                logger.info("🎙️ 已加载历史音频: \(audioFileName) 用于消息 \(msg.id)")
+            }
+        }
+        
+        // 构建图片附件字典：从历史消息中加载已保存的图片文件
+        var imageAttachments: [UUID: [ImageAttachment]] = [:]
+        for msg in messagesToSend {
+            guard let imageFileNames = msg.imageFileNames, !imageFileNames.isEmpty else { continue }
+            var attachments: [ImageAttachment] = []
+            for fileName in imageFileNames {
+                if let imageData = Persistence.loadImage(fileName: fileName) {
+                    // 从文件名推断 MIME 类型
+                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
+                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                    attachments.append(attachment)
+                    logger.info("🖼️ 已加载历史图片: \(fileName) 用于消息 \(msg.id)")
+                }
+            }
+            if !attachments.isEmpty {
+                imageAttachments[msg.id] = attachments
+            }
+        }
+        
         let commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
         
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachment: audioAttachment) else {
+        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachments: audioAttachments, imageAttachments: imageAttachments) else {
             addErrorMessage("错误: 无法构建 API 请求。" )
             requestStatusSubject.send(.error)
             return
@@ -830,12 +929,9 @@ public class ChatService {
     
     private func handleBackgroundTranscription(audioAttachment: AudioAttachment, placeholder: String, messageID: UUID, sessionID: UUID) async {
         guard let speechModel = resolveSelectedSpeechModel() else {
-            logger.error("❌ 语音转文字失败: 未配置可用的语音模型。")
-            if await MainActor.run(body: { currentSessionSubject.value?.id == sessionID }) {
-                await MainActor.run {
-                    self.addErrorMessage("语音转文字失败：尚未配置语音模型。请在设置中选择一个模型。")
-                }
-            }
+            // 当开启直接发送音频给模型时，后台转文字是可选的增强功能
+            // 没有配置语音模型时只记录日志，不显示错误打扰用户
+            logger.info("ℹ️ 后台语音转文字跳过: 未配置语音模型。消息将保持为 [语音消息] 显示。")
             return
         }
         
@@ -851,12 +947,8 @@ public class ChatService {
             let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
             
             guard !transcript.isEmpty else {
-                logger.error("❌ 语音转文字失败：识别结果为空。")
-                if await MainActor.run(body: { currentSessionSubject.value?.id == sessionID }) {
-                    await MainActor.run {
-                        self.addErrorMessage("语音转文字失败：识别结果为空。请稍后重试。")
-                    }
-                }
+                // 转写结果为空时静默处理，不显示错误
+                logger.warning("⚠️ 后台语音转文字返回空结果，消息将保持为 [语音消息] 显示。")
                 return
             }
             
@@ -869,12 +961,9 @@ public class ChatService {
                 )
             }
         } catch {
-            logger.error("❌ 语音转文字失败：\(error.localizedDescription)")
-            if await MainActor.run(body: { currentSessionSubject.value?.id == sessionID }) {
-                await MainActor.run {
-                    self.addErrorMessage("语音转文字失败：\(error.localizedDescription)")
-                }
-            }
+            // 后台转文字失败时静默处理，不显示错误打扰用户
+            // 因为音频已经成功发送给模型了，转文字只是可选的UI增强
+            logger.warning("⚠️ 后台语音转文字失败: \(error.localizedDescription)。消息将保持为 [语音消息] 显示。")
         }
     }
     
@@ -1063,7 +1152,7 @@ public class ChatService {
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
                 enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
-                audioAttachment: nil
+                currentAudioAttachment: nil
             )
         } else {
             // 5. 如果只有非阻塞式工具并且 AI 已经给出正文，则在这里结束请求
@@ -1432,7 +1521,7 @@ ISO8601：\(isoTime)
         
         // 5. 构建并发送API请求 (非流式)
         let payload: [String: Any] = ["temperature": 0.5, "stream": false]
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: payload, messages: titleRequestMessages, tools: nil, audioAttachment: nil) else {
+        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: payload, messages: titleRequestMessages, tools: nil, audioAttachments: [:], imageAttachments: [:]) else {
             logger.error("构建标题生成请求失败。")
             return
         }

@@ -7,11 +7,14 @@
 // - 根据角色（用户/AI/错误）显示不同样式的气泡
 // - 支持 Markdown 渲染
 // - 思考过程的展开/折叠状态由外部传入的绑定控制
+// - 支持语音消息播放
 // ============================================================================
 
 import SwiftUI
 import MarkdownUI
 import Shared
+import AVFoundation
+import Combine
 
 /// 聊天消息气泡组件
 struct ChatBubble: View {
@@ -25,6 +28,8 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    
+    @StateObject private var audioPlayer = WatchAudioPlayerManager()
 
     // MARK: - 视图主体
     
@@ -54,7 +59,14 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private var userBubble: some View {
-        let content = renderContent(message.content)
+        let content = Group {
+            // 如果是语音消息，显示播放控件
+            if let audioFileName = message.audioFileName {
+                audioPlayerView(fileName: audioFileName, isUser: true)
+            } else {
+                renderContent(message.content)
+            }
+        }
             .padding(10)
             .foregroundColor(.white)
 
@@ -158,6 +170,53 @@ struct ChatBubble: View {
         } else {
             Text(content)
         }
+    }
+    
+    @ViewBuilder
+    private func audioPlayerView(fileName: String, isUser: Bool) -> some View {
+        let foregroundColor = isUser ? Color.white : Color.primary
+        let secondaryColor = isUser ? Color.white.opacity(0.7) : Color.secondary
+        let isCurrentFile = audioPlayer.currentFileName == fileName
+        
+        VStack(alignment: .leading, spacing: 4) {
+            // 播放按钮 + 文件名
+            HStack(spacing: 6) {
+                Button {
+                    audioPlayer.togglePlayback(fileName: fileName)
+                } label: {
+                    Image(systemName: audioPlayer.isPlaying && isCurrentFile ? "stop.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(foregroundColor)
+                }
+                .buttonStyle(.plain)
+                
+                Text(fileName)
+                    .font(.system(size: 9))
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(1)
+            }
+            
+            // 进度条 + 时间
+            if isCurrentFile && audioPlayer.duration > 0 {
+                ProgressView(value: audioPlayer.progress)
+                    .progressViewStyle(.linear)
+                    .tint(foregroundColor)
+                
+                HStack {
+                    Text(formatTime(audioPlayer.currentTime))
+                    Spacer()
+                    Text(formatTime(audioPlayer.duration))
+                }
+                .font(.system(size: 9))
+                .foregroundStyle(secondaryColor)
+            }
+        }
+    }
+    
+    private func formatTime(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
     
     @ViewBuilder
@@ -266,5 +325,97 @@ private extension ChatBubble {
     var currentThinkingText: String {
         guard shouldShowThinkingIndicator else { return "" }
         return "正在思考..."
+    }
+}
+
+// MARK: - Watch Audio Player Manager
+
+class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    @Published var isPlaying = false
+    @Published var currentFileName: String?
+    @Published var currentTime: TimeInterval = 0
+    @Published var duration: TimeInterval = 0
+    
+    var progress: Double {
+        guard duration > 0 else { return 0 }
+        return currentTime / duration
+    }
+    
+    private var audioPlayer: AVAudioPlayer?
+    private var progressTimer: Timer?
+    
+    func togglePlayback(fileName: String) {
+        if isPlaying && currentFileName == fileName {
+            stop()
+        } else {
+            play(fileName: fileName)
+        }
+    }
+    
+    func play(fileName: String) {
+        stop()
+        
+        guard let data = Persistence.loadAudio(fileName: fileName) else {
+            print("❌ 无法加载音频文件: \(fileName)")
+            return
+        }
+        
+        do {
+            // 使用 .ambient 类别，会遵循系统静音设置
+            // 静音模式下不会发出声音，避免尴尬
+            try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+            
+            audioPlayer = try AVAudioPlayer(data: data)
+            audioPlayer?.delegate = self
+            audioPlayer?.prepareToPlay()
+            
+            duration = audioPlayer?.duration ?? 0
+            currentTime = 0
+            
+            audioPlayer?.play()
+            
+            currentFileName = fileName
+            isPlaying = true
+            
+            startProgressTimer()
+        } catch {
+            print("❌ 播放音频失败: \(error.localizedDescription)")
+        }
+    }
+    
+    func stop() {
+        stopProgressTimer()
+        audioPlayer?.stop()
+        audioPlayer = nil
+        isPlaying = false
+        currentTime = 0
+    }
+    
+    private func startProgressTimer() {
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self, let player = self.audioPlayer else { return }
+            DispatchQueue.main.async {
+                self.currentTime = player.currentTime
+            }
+        }
+    }
+    
+    private func stopProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+    }
+    
+    // AVAudioPlayerDelegate
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        DispatchQueue.main.async {
+            self.stopProgressTimer()
+            self.isPlaying = false
+            self.currentTime = self.duration
+        }
+    }
+    
+    deinit {
+        stop()
     }
 }

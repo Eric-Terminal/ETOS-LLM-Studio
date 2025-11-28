@@ -169,6 +169,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable {
     public var reasoningContent: String? // 用于存放推理过程等附加信息
     public var toolCalls: [InternalToolCall]? // AI发出的工具调用指令
     public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
+    public var audioFileName: String? // 关联的音频文件名，存储在 AudioFiles 目录下
+    public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
 
     public init(
         id: UUID = UUID(),
@@ -176,7 +178,9 @@ public struct ChatMessage: Identifiable, Codable, Hashable {
         content: String,
         reasoningContent: String? = nil,
         toolCalls: [InternalToolCall]? = nil,
-        tokenUsage: MessageTokenUsage? = nil
+        tokenUsage: MessageTokenUsage? = nil,
+        audioFileName: String? = nil,
+        imageFileNames: [String]? = nil
     ) {
         self.id = id
         self.role = role
@@ -184,6 +188,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable {
         self.reasoningContent = reasoningContent
         self.toolCalls = toolCalls
         self.tokenUsage = tokenUsage
+        self.audioFileName = audioFileName
+        self.imageFileNames = imageFileNames
     }
 }
 
