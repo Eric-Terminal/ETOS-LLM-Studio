@@ -25,14 +25,6 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
-    
-    @AppStorage("enableStreaming") private var enableStreaming = false
-    @State private var currentQuoteIndex = Int.random(in: 0..<max(InspirationService.shared.localQuotes.count, 1))
-    @State private var remoteQuotes: [String] = []
-    @State private var isFetchingRemoteQuote = false
-    @State private var lastWaitingMessageId: UUID?
-    @State private var cachedQuote: String?
-    @State private var currentQuotePool: [String] = []
 
     // MARK: - 视图主体
     
@@ -56,18 +48,6 @@ struct ChatBubble: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
-        .onAppear {
-            prepareQuoteForWaitingMessageIfNeeded()
-            requestRemoteQuoteIfNeeded()
-        }
-        .onPlayfulThinkingChange(shouldShowPlayfulThinking) { isWaiting in
-            if isWaiting {
-                prepareQuoteForWaitingMessageIfNeeded()
-                requestRemoteQuoteIfNeeded()
-            } else {
-                lastWaitingMessageId = nil
-            }
-        }
     }
     
     // MARK: - 气泡视图
@@ -145,18 +125,11 @@ struct ChatBubble: View {
             
             // 加载指示器
             if shouldShowThinkingIndicator {
-                HStack(spacing: shouldShowPlayfulThinking ? 0 : 4) {
-                    if shouldShowPlayfulThinking {
-                        Text(currentThinkingText)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .animation(.easeInOut(duration: 0.25), value: currentThinkingText)
-                    } else {
-                        ProgressView().controlSize(.small)
-                        Text(currentThinkingText)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.small)
+                    Text(currentThinkingText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -174,12 +147,6 @@ struct ChatBubble: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            guard shouldShowPlayfulThinking else { return }
-            if !consumeCachedQuoteIfAvailable() {
-                advanceThinkingQuote()
-            }
-        }
     }
     
     // MARK: - 辅助视图
@@ -296,130 +263,8 @@ private extension ChatBubble {
         message.role == .assistant && message.content.isEmpty && (message.reasoningContent ?? "").isEmpty
     }
     
-    var shouldShowPlayfulThinking: Bool {
-        shouldShowThinkingIndicator && !enableStreaming
-    }
-    
     var currentThinkingText: String {
         guard shouldShowThinkingIndicator else { return "" }
-        guard shouldShowPlayfulThinking else {
-            return "正在思考..."
-        }
-        let quotes = availableThinkingQuotes
-        guard !quotes.isEmpty else { return "正在思考..." }
-        let safeIndex = currentQuoteIndex % quotes.count
-        return quotes[safeIndex]
-    }
-    
-    var availableThinkingQuotes: [String] {
-        if !currentQuotePool.isEmpty {
-            return currentQuotePool
-        }
-        let fallbackRemote = remoteQuotes
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        if !fallbackRemote.isEmpty {
-            return fallbackRemote
-        }
-        return InspirationService.shared.localQuotes
-    }
-    
-    func advanceThinkingQuote() {
-        if currentQuotePool.isEmpty {
-            rebuildQuotePoolWithWeightedLocal(force: true)
-        }
-        let quotes = availableThinkingQuotes
-        guard !quotes.isEmpty else { return }
-        currentQuoteIndex = (currentQuoteIndex + 1) % quotes.count
-    }
-    
-    func prepareQuoteForWaitingMessageIfNeeded() {
-        guard shouldShowPlayfulThinking else { return }
-        guard lastWaitingMessageId != message.id else { return }
-        lastWaitingMessageId = message.id
-        rebuildQuotePoolWithWeightedLocal(force: true)
-        if !consumeCachedQuoteIfAvailable() {
-            advanceThinkingQuote()
-        }
-    }
-    
-    func consumeCachedQuoteIfAvailable() -> Bool {
-        guard let cached = cachedQuote else { return false }
-        cachedQuote = nil
-        insertRemoteQuoteIfNeeded(cached)
-        currentQuoteIndex = 0
-        requestRemoteQuoteIfNeeded()
-        return true
-    }
-    
-    func insertRemoteQuoteIfNeeded(_ text: String) {
-        let sanitized = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sanitized.isEmpty else { return }
-        if !remoteQuotes.contains(sanitized) {
-            remoteQuotes.insert(sanitized, at: 0)
-            if remoteQuotes.count > 5 {
-                remoteQuotes = Array(remoteQuotes.prefix(5))
-            }
-        }
-        rebuildQuotePoolWithWeightedLocal(force: true)
-    }
-    
-    @MainActor
-    func requestRemoteQuoteIfNeeded() {
-        guard shouldShowPlayfulThinking else { return }
-        guard !isFetchingRemoteQuote else { return }
-        guard cachedQuote == nil else { return }
-        isFetchingRemoteQuote = true
-        Task {
-            let quote = await InspirationService.shared.fetchRandomQuote()
-            await MainActor.run {
-                isFetchingRemoteQuote = false
-                guard let quote else { return }
-                let text = quote.displayText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !text.isEmpty else { return }
-                if cachedQuote == nil && !remoteQuotes.contains(text) {
-                    cachedQuote = text
-                }
-            }
-        }
-    }
-    
-    func rebuildQuotePoolWithWeightedLocal(force: Bool = false) {
-        let sanitizedRemote = remoteQuotes
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let locals = InspirationService.shared.localQuotes
-        var pool: [String] = []
-        
-        if sanitizedRemote.isEmpty {
-            pool = locals
-        } else {
-            pool = sanitizedRemote
-            if Double.random(in: 0..<1) < 0.01, let localPick = locals.randomElement() {
-                pool.insert(localPick, at: 0)
-            }
-        }
-        
-        if force || pool != currentQuotePool {
-            currentQuotePool = pool
-            currentQuoteIndex = 0
-        }
-    }
-}
-
-// MARK: - 辅助 View 扩展
-
-private extension View {
-    @ViewBuilder
-    func onPlayfulThinkingChange(_ value: Bool, action: @escaping (Bool) -> Void) -> some View {
-        if #available(watchOS 10.0, *) {
-            self.onChange(of: value, initial: false) { _, newValue in
-                action(newValue)
-            }
-        } else {
-            self.onChange(of: value) { newValue in
-                action(newValue)
-            }
-        }
+        return "正在思考..."
     }
 }
