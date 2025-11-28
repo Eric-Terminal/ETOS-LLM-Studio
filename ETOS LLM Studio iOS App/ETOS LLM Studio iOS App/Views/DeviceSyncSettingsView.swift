@@ -7,6 +7,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.sessions") private var syncSessions = true
     @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
     @AppStorage("sync.options.memories") private var syncMemories = false
+    @AppStorage("sync.options.mcpServers") private var syncMCPServers = true
     
     var body: some View {
         List {
@@ -15,6 +16,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("同步会话", isOn: $syncSessions)
                 Toggle("同步背景图片", isOn: $syncBackgrounds)
                 Toggle("同步记忆（仅合并文本）", isOn: $syncMemories)
+                Toggle("同步 MCP 服务器", isOn: $syncMCPServers)
             }
             
             Section("同步操作") {
@@ -46,6 +48,7 @@ struct DeviceSyncSettingsView: View {
         if syncSessions { option.insert(.sessions) }
         if syncBackgrounds { option.insert(.backgrounds) }
         if syncMemories { option.insert(.memories) }
+        if syncMCPServers { option.insert(.mcpServers) }
         return option
     }
     
@@ -102,6 +105,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedMemories > 0 {
             parts.append("记忆 +\(summary.importedMemories)")
+        }
+        if summary.importedMCPServers > 0 {
+            parts.append("MCP +\(summary.importedMCPServers)")
         }
         return parts.isEmpty ? "两端数据一致" : parts.joined(separator: "，")
     }

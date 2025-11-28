@@ -25,6 +25,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let sessions = SyncOptions(rawValue: 1 << 1)
     public static let backgrounds = SyncOptions(rawValue: 1 << 2)
     public static let memories = SyncOptions(rawValue: 1 << 3)
+    public static let mcpServers = SyncOptions(rawValue: 1 << 4)
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -70,9 +71,10 @@ public struct SyncPackage: Codable {
     public var sessions: [SyncedSession]
     public var backgrounds: [SyncedBackground]
     public var memories: [MemoryItem]
+    public var mcpServers: [MCPServerConfiguration]
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories
+        case options, providers, sessions, backgrounds, memories, mcpServers
     }
     
     public init(
@@ -80,13 +82,15 @@ public struct SyncPackage: Codable {
         providers: [Provider] = [],
         sessions: [SyncedSession] = [],
         backgrounds: [SyncedBackground] = [],
-        memories: [MemoryItem] = []
+        memories: [MemoryItem] = [],
+        mcpServers: [MCPServerConfiguration] = []
     ) {
         self.options = options
         self.providers = providers
         self.sessions = sessions
         self.backgrounds = backgrounds
         self.memories = memories
+        self.mcpServers = mcpServers
     }
     
     public init(from decoder: Decoder) throws {
@@ -96,6 +100,7 @@ public struct SyncPackage: Codable {
         sessions = try container.decodeIfPresent([SyncedSession].self, forKey: .sessions) ?? []
         backgrounds = try container.decodeIfPresent([SyncedBackground].self, forKey: .backgrounds) ?? []
         memories = try container.decodeIfPresent([MemoryItem].self, forKey: .memories) ?? []
+        mcpServers = try container.decodeIfPresent([MCPServerConfiguration].self, forKey: .mcpServers) ?? []
     }
 }
 
@@ -109,6 +114,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedBackgrounds: Int
     public var importedMemories: Int
     public var skippedMemories: Int
+    public var importedMCPServers: Int
+    public var skippedMCPServers: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -118,7 +125,9 @@ public struct SyncMergeSummary: Equatable {
         importedBackgrounds: 0,
         skippedBackgrounds: 0,
         importedMemories: 0,
-        skippedMemories: 0
+        skippedMemories: 0,
+        importedMCPServers: 0,
+        skippedMCPServers: 0
     )
 }
 
@@ -160,6 +169,15 @@ extension ChatSession {
         name == other.name &&
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt
+    }
+}
+
+extension MCPServerConfiguration {
+    /// 判断两个 MCP 服务器配置是否逻辑等价（忽略 ID）
+    func isEquivalent(to other: MCPServerConfiguration) -> Bool {
+        displayName == other.displayName &&
+        notes == other.notes &&
+        transport == other.transport
     }
 }
 

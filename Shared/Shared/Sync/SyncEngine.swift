@@ -22,6 +22,7 @@ public enum SyncEngine {
         var sessions: [SyncedSession] = []
         var backgrounds: [SyncedBackground] = []
         var memories: [MemoryItem] = []
+        var mcpServers: [MCPServerConfiguration] = []
         
         if options.contains(.providers) {
             providers = ConfigLoader.loadProviders()
@@ -52,12 +53,17 @@ public enum SyncEngine {
             memories = rawStore.loadMemories()
         }
         
+        if options.contains(.mcpServers) {
+            mcpServers = MCPServerStore.loadServers()
+        }
+        
         return SyncPackage(
             options: options,
             providers: providers,
             sessions: sessions,
             backgrounds: backgrounds,
-            memories: memories
+            memories: memories,
+            mcpServers: mcpServers
         )
     }
     
@@ -98,6 +104,12 @@ public enum SyncEngine {
             let result = await mergeMemories(package.memories, memoryManager: manager)
             summary.importedMemories = result.imported
             summary.skippedMemories = result.skipped
+        }
+        
+        if package.options.contains(.mcpServers) {
+            let result = mergeMCPServers(package.mcpServers)
+            summary.importedMCPServers = result.imported
+            summary.skippedMCPServers = result.skipped
         }
         
         return summary
@@ -309,6 +321,49 @@ public enum SyncEngine {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .lowercased()
+    }
+    
+    // MARK: - MCP Servers
+    
+    private static func mergeMCPServers(
+        _ incoming: [MCPServerConfiguration]
+    ) -> (imported: Int, skipped: Int) {
+        guard !incoming.isEmpty else { return (0, 0) }
+        
+        var local = MCPServerStore.loadServers()
+        var imported = 0
+        var skipped = 0
+        
+        for var server in incoming {
+            let hasSameID = local.firstIndex { $0.id == server.id }
+            let hasEquivalent = local.firstIndex { $0.isEquivalent(to: server) }
+            
+            switch (hasSameID, hasEquivalent) {
+            case (.some(let index), _):
+                if local[index] == server {
+                    // 完全相同，跳过
+                    skipped += 1
+                    continue
+                }
+                // ID 相同但内容不同，生成新副本避免覆盖
+                server.id = UUID()
+                server.displayName.append("（同步）")
+                MCPServerStore.save(server)
+                local.append(server)
+                imported += 1
+                
+            case (nil, .some(_)):
+                // 已存在等价配置，忽略
+                skipped += 1
+                
+            case (nil, nil):
+                MCPServerStore.save(server)
+                local.append(server)
+                imported += 1
+            }
+        }
+        
+        return (imported, skipped)
     }
 
     // MARK: - Helpers

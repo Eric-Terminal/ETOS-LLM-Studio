@@ -22,11 +22,12 @@ struct ModelBehaviorSettingsView: View {
         Form {
             Section(header: Text("参数表达式")) {
                 ForEach($expressionEntries) { $entry in
-                    ExpressionRow(entry: $entry, onDelete: { deleteEntry(entry.id) })
+                    ExpressionRow(entry: $entry)
                         .onChange(of: entry.text, initial: false) { _, _ in
                             validateEntry(withId: entry.id)
                         }
                 }
+                .onDelete(perform: deleteEntries)
                 
                 Button {
                     addEmptyEntry()
@@ -74,8 +75,8 @@ extension ModelBehaviorSettingsView {
         expressionEntries.append(ExpressionEntry(text: ""))
     }
     
-    private func deleteEntry(_ id: UUID) {
-        expressionEntries.removeAll { $0.id == id }
+    private func deleteEntries(at offsets: IndexSet) {
+        expressionEntries.remove(atOffsets: offsets)
         if expressionEntries.isEmpty {
             addEmptyEntry()
         }
@@ -138,7 +139,6 @@ extension ModelBehaviorSettingsView {
 
 private struct ExpressionRow: View {
     @Binding var entry: ModelBehaviorSettingsView.ExpressionEntry
-    let onDelete: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -150,10 +150,6 @@ private struct ExpressionRow: View {
                 Text(error)
                     .font(.footnote)
                     .foregroundStyle(.red)
-            }
-            
-            Button(role: .destructive, action: onDelete) {
-                Label("删除", systemImage: "trash")
             }
         }
     }

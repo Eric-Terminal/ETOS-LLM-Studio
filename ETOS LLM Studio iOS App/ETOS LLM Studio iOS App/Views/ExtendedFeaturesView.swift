@@ -12,8 +12,6 @@ struct ExtendedFeaturesView: View {
                         .environmentObject(viewModel)
                 } label: {
                     Label("长期记忆系统", systemImage: "brain.head.profile")
-                        .font(.headline)
-                        .padding(.vertical, 4)
                 }
             } footer: {
                 Text("让 AI 根据历史偏好与事件持续优化回答。")
@@ -25,9 +23,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     MCPIntegrationView()
                 } label: {
-                    Label("MCP 工具集成", systemImage: "network")
-                        .font(.headline)
-                        .padding(.vertical, 4)
+                    Label("MCP 工具集成(试验性)", systemImage: "network")
                 }
             } footer: {
                 Text("连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。")

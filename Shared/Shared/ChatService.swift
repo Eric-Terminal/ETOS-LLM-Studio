@@ -21,6 +21,15 @@ public struct RunnableModel: Identifiable, Hashable {
         self.provider = provider
         self.model = model
     }
+    
+    // 只根据 ID 判断相等性，避免参数变化导致 Picker 匹配失败
+    public static func == (lhs: RunnableModel, rhs: RunnableModel) -> Bool {
+        lhs.id == rhs.id
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
 public class ChatService {
@@ -541,18 +550,35 @@ public class ChatService {
     
     /// 定义 `save_memory` 工具
     internal var saveMemoryTool: InternalToolDefinition {
+        let toolDescription = """
+        将信息写入长期记忆，仅在「这条信息在后续很多次对话中都可能有用」时调用。
+
+        【必须满足至少一条才可调用】
+        1. 用户的稳定偏好：口味、写作/编码风格、喜欢/不喜欢的输出格式、长期习惯（如默认语言、格式）。
+        2. 用户的身份与长期背景：职业角色、长期项目或研究方向、长期合作对象。
+        3. 用户明确要求记住：包含"记住…以后…都…"、"从现在开始你要记得…"等表达。
+
+        【严禁调用的情况(除非用户明确要求你记住)】
+        - 一次性任务或会话细节（某次会议数据、单个文件内容等）；
+        - 短期信息（今天的临时待办、本次对话才用一次的参数）；
+        - 敏感信息：精确地址、身份证号、银行卡、健康状况、政治立场等；
+        - 第三方隐私信息（他人全名 + 个人细节）。
+        """
+        
+        let contentDescription = "需要记住的内容，要求：压缩成一句或几句话；进行抽象概括，不要原封不动复制对话；使之可在不同场景下复用。"
+        
         let parameters = JSONValue.dictionary([
             "type": .string("object"),
             "properties": .dictionary([
                 "content": .dictionary([
                     "type": .string("string"),
-                    "description": .string("需要长期记住的具体信息内容。")
+                    "description": .string(contentDescription)
                 ])
             ]),
             "required": .array([.string("content")])
         ])
         // 将此工具标记为非阻塞式
-        return InternalToolDefinition(name: "save_memory", description: "将一段重要的信息存入长期记忆库，以便将来回忆。", parameters: parameters, isBlocking: false)
+        return InternalToolDefinition(name: "save_memory", description: toolDescription, parameters: parameters, isBlocking: false)
     }
     
     /// 处理单个工具调用
@@ -1257,6 +1283,7 @@ public class ChatService {
         if includeSystemTime {
             parts.append("""
 <time>
+# 以下是用户发送最后一条消息时的系统时间，每轮对话都会动态更新。
 \(formattedSystemTimeDescription())
 </time>
 """)
