@@ -868,7 +868,31 @@ public class ChatService {
         messagesForSessionSubject.send(historyBeforeRetry)
         Persistence.saveMessages(historyBeforeRetry, for: currentSession.id)
         
-        // 4. 使用原消息内容，调用主要的发送函数，重用其完整逻辑
+        // 4. 恢复原消息的音频附件（如果有）
+        var audioAttachment: AudioAttachment? = nil
+        if let audioFileName = lastUserMessage.audioFileName,
+           let audioData = Persistence.loadAudio(fileName: audioFileName) {
+            let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
+            let mimeType = "audio/\(fileExtension)"
+            audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+            logger.info("🔄 重试时恢复音频附件: \(audioFileName)")
+        }
+        
+        // 5. 恢复原消息的图片附件（如果有）
+        var imageAttachments: [ImageAttachment] = []
+        if let imageFileNames = lastUserMessage.imageFileNames {
+            for fileName in imageFileNames {
+                if let imageData = Persistence.loadImage(fileName: fileName) {
+                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
+                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                    imageAttachments.append(attachment)
+                    logger.info("🔄 重试时恢复图片附件: \(fileName)")
+                }
+            }
+        }
+        
+        // 6. 使用原消息内容和附件，调用主要的发送函数，重用其完整逻辑
         await sendAndProcessMessage(
             content: lastUserMessage.content,
             aiTemperature: aiTemperature,
@@ -879,7 +903,9 @@ public class ChatService {
             enhancedPrompt: enhancedPrompt,
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
-            includeSystemTime: includeSystemTime
+            includeSystemTime: includeSystemTime,
+            audioAttachment: audioAttachment,
+            imageAttachments: imageAttachments
         )
     }
     

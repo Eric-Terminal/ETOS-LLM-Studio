@@ -106,7 +106,8 @@ struct SettingsView: View {
                         backgroundOpacity: $viewModel.backgroundOpacity,
                         enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
                         currentBackgroundImage: $viewModel.currentBackgroundImage,
-                        enableLiquidGlass: $viewModel.enableLiquidGlass, // 传递绑定
+                        backgroundContentMode: $viewModel.backgroundContentMode,
+                        enableLiquidGlass: $viewModel.enableLiquidGlass,
                         allBackgrounds: viewModel.backgroundImages
                     )) {
                         Label("显示与外观", systemImage: "photo.on.rectangle")

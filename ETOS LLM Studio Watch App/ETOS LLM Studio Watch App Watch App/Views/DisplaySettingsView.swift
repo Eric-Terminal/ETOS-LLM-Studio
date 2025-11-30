@@ -19,6 +19,7 @@ struct DisplaySettingsView: View {
     @Binding var backgroundOpacity: Double
     @Binding var enableAutoRotateBackground: Bool
     @Binding var currentBackgroundImage: String
+    @Binding var backgroundContentMode: String // "fill" 或 "fit"
     @Binding var enableLiquidGlass: Bool // 新增绑定
     
     // MARK: - 属性
@@ -43,6 +44,12 @@ struct DisplaySettingsView: View {
                 Toggle("显示背景", isOn: $enableBackground)
                 
                 if enableBackground {
+                    // 背景填充模式选择
+                    Picker("填充模式", selection: $backgroundContentMode) {
+                        Text("填充 (居中裁剪)").tag("fill")
+                        Text("适应 (完整显示)").tag("fit")
+                    }
+                    
                     VStack(alignment: .leading) {
                         Text("背景模糊: \(String(format: "%.1f", backgroundBlur))")
                         Slider(value: $backgroundBlur, in: 0...25, step: 0.5)

@@ -35,9 +35,17 @@ struct ContentView: View {
         ZStack {
             // 背景图
             if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageUIImage {
+                // 适应模式时先铺黑底，再居中显示图片
+                if viewModel.backgroundContentMode == "fit" {
+                    Color.black
+                        .edgesIgnoringSafeArea(.all)
+                }
+                
                 Image(uiImage: bgImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
                     .edgesIgnoringSafeArea(.all)
                     .blur(radius: viewModel.backgroundBlur)
                     .opacity(viewModel.backgroundOpacity)
