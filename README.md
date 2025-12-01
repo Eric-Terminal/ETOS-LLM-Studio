@@ -2,7 +2,7 @@
 
 [![Swift](https://img.shields.io/badge/Swift-5-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20watchOS-blue.svg)](https://developer.apple.com/watchos/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE.txt)
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.txt)
 
 **一个功能强大、高度可定制的原生 AI 聊天客户端，专为 iOS 和 Apple Watch 设计。**
 
@@ -215,7 +215,7 @@
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE.txt](LICENSE.txt) 文件了解详情。
+本项目采用 GNU GPLv3 许可证 - 查看 [LICENSE.txt](LICENSE.txt) 文件了解详情。
 
 ## 🙏 致谢
 
