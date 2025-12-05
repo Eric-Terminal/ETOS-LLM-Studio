@@ -35,28 +35,51 @@ public struct MCPAvailableResource: Identifiable, Hashable {
     }
 }
 
+public struct MCPAvailablePrompt: Identifiable, Hashable {
+    public let id: String
+    public let server: MCPServerConfiguration
+    public let prompt: MCPPromptDescription
+    public let internalName: String
+
+    public init(server: MCPServerConfiguration, prompt: MCPPromptDescription, internalName: String) {
+        self.server = server
+        self.prompt = prompt
+        self.internalName = internalName
+        self.id = internalName
+    }
+}
+
 public struct MCPServerStatus: Equatable {
     public var connectionState: MCPManager.ConnectionState
     public var info: MCPServerInfo?
     public var tools: [MCPToolDescription]
     public var resources: [MCPResourceDescription]
+    public var prompts: [MCPPromptDescription]
+    public var roots: [MCPRoot]
     public var isBusy: Bool
     public var isSelectedForChat: Bool
+    public var logLevel: MCPLogLevel
 
     public init(
         connectionState: MCPManager.ConnectionState = .idle,
         info: MCPServerInfo? = nil,
         tools: [MCPToolDescription] = [],
         resources: [MCPResourceDescription] = [],
+        prompts: [MCPPromptDescription] = [],
+        roots: [MCPRoot] = [],
         isBusy: Bool = false,
-        isSelectedForChat: Bool = false
+        isSelectedForChat: Bool = false,
+        logLevel: MCPLogLevel = .info
     ) {
         self.connectionState = connectionState
         self.info = info
         self.tools = tools
         self.resources = resources
+        self.prompts = prompts
+        self.roots = roots
         self.isBusy = isBusy
         self.isSelectedForChat = isSelectedForChat
+        self.logLevel = logLevel
     }
 }
 
@@ -78,13 +101,19 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var serverStatuses: [UUID: MCPServerStatus] = [:]
     @Published public private(set) var tools: [MCPAvailableTool] = []
     @Published public private(set) var resources: [MCPAvailableResource] = []
+    @Published public private(set) var prompts: [MCPAvailablePrompt] = []
+    @Published public private(set) var logEntries: [MCPLogEntry] = []
     @Published public private(set) var lastOperationOutput: String?
     @Published public private(set) var lastOperationError: String?
     @Published public private(set) var isBusy: Bool = false
     @Published public private(set) var proxySettings: MCPProxySettings
 
+    public weak var samplingHandler: MCPSamplingHandler?
+
     private var clients: [UUID: MCPClient] = [:]
+    private var streamingTransports: [UUID: MCPStreamingTransport] = [:]
     private var routedTools: [String: RoutedTool] = [:]
+    private var routedPrompts: [String: RoutedPrompt] = [:]
     private var debugBusyCount = 0
     private let proxyEnabledKey = "mcpProxyEnabled"
     private let proxyBaseURLKey = "mcpProxyBaseURL"
@@ -133,12 +162,22 @@ public final class MCPManager: ObservableObject {
             $0.info = nil
             $0.tools = []
             $0.resources = []
+            $0.prompts = []
+            $0.roots = []
         }
 
         let proxyConfig = proxySettings.isValid ? proxySettings : nil
         let transport = server.makeTransport(proxy: proxyConfig)
         let client = MCPClient(transport: transport)
         clients[server.id] = client
+
+        // 设置流式传输（如果支持）
+        if let streamingTransport = transport as? MCPStreamingTransport {
+            streamingTransport.notificationDelegate = self
+            streamingTransport.samplingHandler = samplingHandler
+            streamingTransports[server.id] = streamingTransport
+            streamingTransport.connectSSE()
+        }
 
         Task {
             do {
@@ -163,6 +202,8 @@ public final class MCPManager: ObservableObject {
                     self.lastOperationError = error.localizedDescription
                     self.lastOperationOutput = nil
                     self.clients[server.id] = nil
+                    self.streamingTransports[server.id]?.disconnect()
+                    self.streamingTransports[server.id] = nil
                 }
             }
         }
@@ -170,11 +211,15 @@ public final class MCPManager: ObservableObject {
 
     public func disconnect(server: MCPServerConfiguration) {
         clients[server.id] = nil
+        streamingTransports[server.id]?.disconnect()
+        streamingTransports[server.id] = nil
         updateStatus(for: server.id) {
             $0.connectionState = .idle
             $0.info = nil
             $0.tools = []
             $0.resources = []
+            $0.prompts = []
+            $0.roots = []
             $0.isBusy = false
             $0.isSelectedForChat = false
         }
@@ -225,12 +270,20 @@ public final class MCPManager: ObservableObject {
         do {
             async let toolsTask = client.listTools()
             async let resourcesTask = client.listResources()
+            async let promptsTask = client.listPrompts()
+            async let rootsTask = client.listRoots()
+            
             let tools = try await toolsTask
             let resources = try await resourcesTask
+            let prompts = (try? await promptsTask) ?? []
+            let roots = (try? await rootsTask) ?? []
+            
             await MainActor.run {
                 self.updateStatus(for: serverID) {
                     $0.tools = tools
                     $0.resources = resources
+                    $0.prompts = prompts
+                    $0.roots = roots
                     $0.isBusy = false
                 }
             }
@@ -298,6 +351,95 @@ public final class MCPManager: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Prompts
+
+    public func getPrompt(on serverID: UUID, name: String, arguments: [String: String]?) {
+        guard let client = clients[serverID] else {
+            lastOperationError = "服务器未连接。"
+            lastOperationOutput = nil
+            return
+        }
+        lastOperationError = nil
+        lastOperationOutput = nil
+        setDebugBusy(true)
+
+        Task {
+            do {
+                let result = try await client.getPrompt(name: name, arguments: arguments)
+                await MainActor.run {
+                    self.lastOperationOutput = self.formatPromptResult(result)
+                    self.setDebugBusy(false)
+                }
+            } catch {
+                await MainActor.run {
+                    self.lastOperationError = error.localizedDescription
+                    self.setDebugBusy(false)
+                }
+            }
+        }
+    }
+
+    public func getPromptFromChat(promptName: String, arguments: [String: String]?) async throws -> MCPGetPromptResult {
+        guard let routed = routedPrompts[promptName] else {
+            throw MCPChatBridgeError.unknownPrompt
+        }
+        guard let client = clients[routed.server.id], case .ready = status(for: routed.server).connectionState else {
+            throw MCPClientError.notConnected
+        }
+        return try await client.getPrompt(name: routed.prompt.name, arguments: arguments)
+    }
+
+    private func formatPromptResult(_ result: MCPGetPromptResult) -> String {
+        var output = ""
+        if let desc = result.description {
+            output += "描述：\(desc)\n\n"
+        }
+        output += "消息：\n"
+        for (index, message) in result.messages.enumerated() {
+            output += "[\(index + 1)] \(message.role):\n"
+            switch message.content {
+            case .text(let text):
+                output += text
+            case .image(let data, let mimeType):
+                output += "[图片: \(mimeType), \(data.count) bytes]"
+            case .resource(let uri, let mimeType, let text):
+                output += "[资源: \(uri)"
+                if let mimeType { output += ", \(mimeType)" }
+                if let text { output += "]\n\(text)" } else { output += "]" }
+            }
+            output += "\n\n"
+        }
+        return output
+    }
+
+    // MARK: - Logging
+
+    public func setLogLevel(on serverID: UUID, level: MCPLogLevel) {
+        guard let client = clients[serverID] else {
+            lastOperationError = "服务器未连接。"
+            return
+        }
+        
+        Task {
+            do {
+                try await client.setLogLevel(level)
+                await MainActor.run {
+                    self.updateStatus(for: serverID) {
+                        $0.logLevel = level
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.lastOperationError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    public func clearLogEntries() {
+        logEntries.removeAll()
     }
 
     // MARK: - Chat Integration
@@ -371,7 +513,9 @@ public final class MCPManager: ObservableObject {
     private func rebuildAggregates() {
         var aggregatedTools: [MCPAvailableTool] = []
         var aggregatedResources: [MCPAvailableResource] = []
-        var newRouting: [String: RoutedTool] = [:]
+        var aggregatedPrompts: [MCPAvailablePrompt] = []
+        var newToolRouting: [String: RoutedTool] = [:]
+        var newPromptRouting: [String: RoutedPrompt] = [:]
 
         for server in servers {
             guard let status = serverStatuses[server.id],
@@ -381,18 +525,26 @@ public final class MCPManager: ObservableObject {
             for tool in status.tools {
                 let name = internalToolName(for: server, tool: tool)
                 aggregatedTools.append(MCPAvailableTool(server: server, tool: tool, internalName: name))
-                newRouting[name] = RoutedTool(internalName: name, server: server, tool: tool)
+                newToolRouting[name] = RoutedTool(internalName: name, server: server, tool: tool)
             }
 
             for resource in status.resources {
                 let name = internalResourceName(for: server, resource: resource)
                 aggregatedResources.append(MCPAvailableResource(server: server, resource: resource, internalName: name))
             }
+
+            for prompt in status.prompts {
+                let name = internalPromptName(for: server, prompt: prompt)
+                aggregatedPrompts.append(MCPAvailablePrompt(server: server, prompt: prompt, internalName: name))
+                newPromptRouting[name] = RoutedPrompt(internalName: name, server: server, prompt: prompt)
+            }
         }
 
         tools = aggregatedTools
         resources = aggregatedResources
-        routedTools = newRouting
+        prompts = aggregatedPrompts
+        routedTools = newToolRouting
+        routedPrompts = newPromptRouting
     }
 
     private func setDebugBusy(_ active: Bool) {
@@ -435,11 +587,54 @@ public final class MCPManager: ObservableObject {
         "\(Self.resourceNamePrefix)\(server.id.uuidString)/\(resource.resourceId)"
     }
 
+    private nonisolated static var promptNamePrefix: String { "mcpprompt://" }
+
+    private func internalPromptName(for server: MCPServerConfiguration, prompt: MCPPromptDescription) -> String {
+        "\(Self.promptNamePrefix)\(server.id.uuidString)/\(prompt.name)"
+    }
+
     private func decodeJSONDictionary(from text: String) throws -> [String: JSONValue] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [:] }
         let data = Data(trimmed.utf8)
         return try JSONDecoder().decode([String: JSONValue].self, from: data)
+    }
+}
+
+// MARK: - MCPNotificationDelegate
+
+extension MCPManager: MCPNotificationDelegate {
+    public nonisolated func didReceiveNotification(_ notification: MCPNotification) {
+        Task { @MainActor in
+            switch notification.method {
+            case MCPNotificationType.toolsListChanged.rawValue,
+                 MCPNotificationType.resourcesListChanged.rawValue,
+                 MCPNotificationType.promptsListChanged.rawValue:
+                // 自动刷新元数据
+                self.refreshMetadata()
+            case MCPNotificationType.rootsListChanged.rawValue:
+                self.refreshMetadata()
+            default:
+                break
+            }
+        }
+    }
+
+    public nonisolated func didReceiveLogMessage(_ entry: MCPLogEntry) {
+        Task { @MainActor in
+            self.logEntries.append(entry)
+            // 保持最多 500 条日志
+            if self.logEntries.count > 500 {
+                self.logEntries.removeFirst(self.logEntries.count - 500)
+            }
+        }
+    }
+
+    public nonisolated func didReceiveProgress(_ progress: MCPProgressParams) {
+        // 可以在这里实现进度追踪，目前仅记录
+        Task { @MainActor in
+            // 可以通过 @Published 属性暴露给 UI
+        }
     }
 }
 
@@ -449,13 +644,22 @@ private struct RoutedTool {
     let tool: MCPToolDescription
 }
 
+private struct RoutedPrompt {
+    let internalName: String
+    let server: MCPServerConfiguration
+    let prompt: MCPPromptDescription
+}
+
 public enum MCPChatBridgeError: LocalizedError {
     case unknownTool
+    case unknownPrompt
 
     public var errorDescription: String? {
         switch self {
         case .unknownTool:
             return "未找到匹配的 MCP 工具。"
+        case .unknownPrompt:
+            return "未找到匹配的 MCP 提示词模板。"
         }
     }
 }

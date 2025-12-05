@@ -154,6 +154,57 @@ struct MCPIntegrationView: View {
                     }
                 }
             }
+
+            if !manager.prompts.isEmpty {
+                Section("提示词模板 (\(manager.prompts.count))") {
+                    ForEach(manager.prompts) { available in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(available.prompt.name)
+                                .font(.headline)
+                            Text("来源：\(available.server.displayName)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if let desc = available.prompt.description, !desc.isEmpty {
+                                Text(desc)
+                                    .font(.footnote)
+                            }
+                            if let args = available.prompt.arguments, !args.isEmpty {
+                                Text("参数：\(args.map { $0.name }.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
+            if !manager.logEntries.isEmpty {
+                Section {
+                    ForEach(manager.logEntries.suffix(20).reversed(), id: \.self) { entry in
+                        HStack {
+                            logLevelIcon(entry.level)
+                            VStack(alignment: .leading, spacing: 2) {
+                                if let logger = entry.logger {
+                                    Text(logger)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let data = entry.data {
+                                    Text(data.prettyPrintedCompact())
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .lineLimit(3)
+                                }
+                            }
+                        }
+                    }
+                    Button("清空日志", role: .destructive) {
+                        manager.clearLogEntries()
+                    }
+                } header: {
+                    Text("服务器日志 (最近 20 条)")
+                }
+            }
             
             Section("快速调试") {
                 VStack(alignment: .leading, spacing: 8) {
@@ -309,6 +360,29 @@ struct MCPIntegrationView: View {
         guard !trimmed.isEmpty else { return [:] }
         let data = Data(trimmed.utf8)
         return try JSONDecoder().decode([String: JSONValue].self, from: data)
+    }
+
+    private func logLevelIcon(_ level: MCPLogLevel) -> some View {
+        let (icon, color): (String, Color) = {
+            switch level {
+            case .debug:
+                return ("ant", .gray)
+            case .info:
+                return ("info.circle", .blue)
+            case .notice:
+                return ("bell", .cyan)
+            case .warning:
+                return ("exclamationmark.triangle", .yellow)
+            case .error:
+                return ("xmark.circle", .red)
+            case .critical, .alert, .emergency:
+                return ("exclamationmark.octagon", .red)
+            @unknown default:
+                return ("questionmark.circle", .gray)
+            }
+        }()
+        return Image(systemName: icon)
+            .foregroundStyle(color)
     }
     
     private func statusDescription(for server: MCPServerConfiguration) -> String {

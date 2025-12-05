@@ -54,6 +54,16 @@ public enum JSONValue: Codable, Hashable {
         case .array(let v): return v.map { $0.toAny() }
         }
     }
+
+    public func prettyPrintedCompact() -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        if let data = try? encoder.encode(self),
+           let string = String(data: data, encoding: .utf8) {
+            return string
+        }
+        return "\(self)"
+    }
 }
 
 
