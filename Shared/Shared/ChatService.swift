@@ -347,6 +347,75 @@ public class ChatService {
         return newSession
     }
     
+    /// 从指定消息处创建分支会话
+    /// - Parameters:
+    ///   - sourceSession: 源会话
+    ///   - upToMessage: 包含此消息及之前的所有消息
+    ///   - copyPrompts: 是否复制话题提示词和增强提示词
+    /// - Returns: 新创建的分支会话
+    @discardableResult
+    public func branchSessionFromMessage(from sourceSession: ChatSession, upToMessage: ChatMessage, copyPrompts: Bool) -> ChatSession {
+        let newSession = ChatSession(
+            id: UUID(),
+            name: "分支: \(sourceSession.name)",
+            topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
+            enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
+            isTemporary: false
+        )
+        logger.info("🌿 从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）" : "（不含提示词）")")
+        
+        let sourceMessages = Persistence.loadMessages(for: sourceSession.id)
+        if let messageIndex = sourceMessages.firstIndex(where: { $0.id == upToMessage.id }) {
+            // 只保留到指定消息的消息（包含该消息）
+            var messagesToCopy = Array(sourceMessages[0...messageIndex])
+            
+            // 复制关联的音频和图片文件
+            for i in messagesToCopy.indices {
+                // 复制音频文件
+                if let originalFileName = messagesToCopy[i].audioFileName,
+                   let audioData = Persistence.loadAudio(fileName: originalFileName) {
+                    let ext = (originalFileName as NSString).pathExtension
+                    let newFileName = "\(UUID().uuidString).\(ext)"
+                    if Persistence.saveAudio(audioData, fileName: newFileName) != nil {
+                        messagesToCopy[i].audioFileName = newFileName
+                        logger.info("  - 复制了音频文件: \(originalFileName) -> \(newFileName)")
+                    }
+                }
+                
+                // 复制图片文件
+                if let originalImageFileNames = messagesToCopy[i].imageFileNames, !originalImageFileNames.isEmpty {
+                    var newImageFileNames: [String] = []
+                    for originalImageFileName in originalImageFileNames {
+                        if let imageData = Persistence.loadImage(fileName: originalImageFileName) {
+                            let ext = (originalImageFileName as NSString).pathExtension
+                            let newImageFileName = "\(UUID().uuidString).\(ext)"
+                            if Persistence.saveImage(imageData, fileName: newImageFileName) != nil {
+                                newImageFileNames.append(newImageFileName)
+                                logger.info("  - 复制了图片文件: \(originalImageFileName) -> \(newImageFileName)")
+                            }
+                        }
+                    }
+                    if !newImageFileNames.isEmpty {
+                        messagesToCopy[i].imageFileNames = newImageFileNames
+                    }
+                }
+            }
+            
+            Persistence.saveMessages(messagesToCopy, for: newSession.id)
+            logger.info("  - 复制了 \(messagesToCopy.count) 条消息到新会话（截止到指定消息）。" )
+        } else {
+            logger.warning("  - 未找到指定的消息，创建空分支会话。")
+        }
+        
+        var updatedSessions = chatSessionsSubject.value
+        updatedSessions.insert(newSession, at: 0)
+        chatSessionsSubject.send(updatedSessions)
+        setCurrentSession(newSession)
+        Persistence.saveChatSessions(updatedSessions)
+        logger.info("💾 保存了会话列表。" )
+        return newSession
+    }
+    
     public func deleteLastMessage(for session: ChatSession) {
         var messages = Persistence.loadMessages(for: session.id)
         if !messages.isEmpty {

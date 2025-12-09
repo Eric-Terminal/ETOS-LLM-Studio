@@ -407,6 +407,14 @@ final class ChatViewModel: ObservableObject {
         chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
     }
     
+    @discardableResult
+    func branchSessionFromMessage(upToMessage: ChatMessage, copyPrompts: Bool) -> ChatSession {
+        guard let session = currentSession else {
+            fatalError("No current session to branch from")
+        }
+        return chatService.branchSessionFromMessage(from: session, upToMessage: upToMessage, copyPrompts: copyPrompts)
+    }
+    
     func deleteLastMessage(for session: ChatSession) {
         chatService.deleteLastMessage(for: session)
     }

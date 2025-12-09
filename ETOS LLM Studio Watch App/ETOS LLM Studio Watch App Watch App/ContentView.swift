@@ -185,6 +185,9 @@ struct ContentView: View {
                     onDelete: {
                         viewModel.deleteMessage(message)
                     },
+                    onBranch: { copyPrompts in
+                        _ = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: copyPrompts)
+                    },
                     messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                     totalMessages: viewModel.allMessagesForSession.count
                 )

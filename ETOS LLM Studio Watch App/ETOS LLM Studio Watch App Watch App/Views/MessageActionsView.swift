@@ -19,6 +19,7 @@ struct MessageActionsView: View {
     let onEdit: () -> Void
     let onRetry: () -> Void
     let onDelete: () -> Void
+    let onBranch: (Bool) -> Void
     
     let messageIndex: Int?
     let totalMessages: Int
@@ -27,6 +28,7 @@ struct MessageActionsView: View {
     
     @Environment(\.dismiss) var dismiss
     @State private var showDeleteConfirm = false
+    @State private var showBranchOptions = false
 
     // MARK: - 视图主体
     
@@ -52,6 +54,12 @@ struct MessageActionsView: View {
                     } label: {
                         Label("重试", systemImage: "arrow.clockwise")
                     }
+                }
+                
+                Button {
+                    showBranchOptions = true
+                } label: {
+                    Label("从此处创建分支", systemImage: "arrow.triangle.branch")
                 }
             }
             
@@ -109,6 +117,21 @@ struct MessageActionsView: View {
             Button("取消", role: .cancel) { }
         } message: {
             Text("删除后无法恢复这条消息。")
+        }
+        .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
+            Button("仅复制消息历史") {
+                onBranch(false)
+                dismiss()
+            }
+            Button("复制消息历史和提示词") {
+                onBranch(true)
+                dismiss()
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            if let index = messageIndex {
+                Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
+            }
         }
     }
 }

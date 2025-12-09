@@ -20,6 +20,8 @@ struct ChatView: View {
     @State private var editingMessage: ChatMessage?
     @State private var editingContent: String = ""
     @State private var messageInfo: MessageInfoPayload?
+    @State private var showBranchOptions = false
+    @State private var messageToBranch: ChatMessage?
     @FocusState private var composerFocused: Bool
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
@@ -147,6 +149,29 @@ struct ChatView: View {
             .sheet(item: $messageInfo) { info in
                 MessageInfoSheet(payload: info)
             }
+            .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
+                Button("仅复制消息历史") {
+                    if let message = messageToBranch {
+                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: false)
+                        viewModel.setCurrentSession(newSession)
+                    }
+                    messageToBranch = nil
+                }
+                Button("复制消息历史和提示词") {
+                    if let message = messageToBranch {
+                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: true)
+                        viewModel.setCurrentSession(newSession)
+                    }
+                    messageToBranch = nil
+                }
+                Button("取消", role: .cancel) {
+                    messageToBranch = nil
+                }
+            } message: {
+                if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
+                    Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
+                }
+            }
         }
     }
     
@@ -261,6 +286,15 @@ struct ChatView: View {
                 Label("重试响应", systemImage: "arrow.clockwise")
             }
         }
+        
+        Button {
+            messageToBranch = message
+            showBranchOptions = true
+        } label: {
+            Label("从此处创建分支", systemImage: "arrow.triangle.branch")
+        }
+        
+        Divider()
         
         Button(role: .destructive) {
             viewModel.deleteMessage(message)
