@@ -179,8 +179,8 @@ struct ContentView: View {
                         viewModel.messageToEdit = message
                         viewModel.activeSheet = .editMessage
                     },
-                    onRetry: {
-                        viewModel.retryLastMessage()
+                    onRetry: { message in
+                        viewModel.retryMessage(message)
                     },
                     onDelete: {
                         viewModel.deleteMessage(message)

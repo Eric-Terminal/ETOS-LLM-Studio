@@ -281,9 +281,9 @@ struct ChatView: View {
         
         if viewModel.canRetry(message: message) {
             Button {
-                viewModel.retryLastMessage()
+                viewModel.retryMessage(message)
             } label: {
-                Label("重试响应", systemImage: "arrow.clockwise")
+                Label("重试", systemImage: "arrow.clockwise")
             }
         }
         

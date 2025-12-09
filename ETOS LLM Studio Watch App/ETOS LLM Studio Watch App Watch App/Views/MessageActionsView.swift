@@ -17,7 +17,7 @@ struct MessageActionsView: View {
     let message: ChatMessage
     let canRetry: Bool
     let onEdit: () -> Void
-    let onRetry: () -> Void
+    let onRetry: (ChatMessage) -> Void
     let onDelete: () -> Void
     let onBranch: (Bool) -> Void
     
@@ -49,7 +49,7 @@ struct MessageActionsView: View {
 
                 if canRetry {
                     Button {
-                        onRetry()
+                        onRetry(message)
                         dismiss()
                     } label: {
                         Label("重试", systemImage: "arrow.clockwise")

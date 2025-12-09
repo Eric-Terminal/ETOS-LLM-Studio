@@ -911,6 +911,134 @@ public class ChatService {
         }
     }
 
+    /// 重试指定消息，支持任意位置的消息重试
+    /// - 对于 user 消息：删除该消息之后到下一个 user 之前的所有内容，然后重新发送
+    /// - 对于 assistant 消息：删除该消息之后到下一个 assistant 之前的所有内容，然后从上一个 user 重新请求
+    public func retryMessage(
+        _ message: ChatMessage,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        enableStreaming: Bool,
+        enhancedPrompt: String?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool
+    ) async {
+        guard let currentSession = currentSessionSubject.value else { return }
+        await cancelOngoingRequest()
+        let messages = messagesForSessionSubject.value
+        
+        guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
+            logger.warning("⚠️ 未找到要重试的消息")
+            return
+        }
+        
+        logger.info("🔄 重试消息: \(String(describing: message.role)) - 索引 \(messageIndex)")
+        
+        var historyBeforeRetry: [ChatMessage]
+        var messageToResend: ChatMessage?
+        
+        if message.role == .user {
+            // User 消息重试：删除该 user 之后到下一个 user 之前的所有内容（不包括两个 user）
+            // 然后重新发送这条 user 消息
+            
+            // 找到下一个 user 消息的位置
+            let nextUserIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
+            
+            if let nextIndex = nextUserIndex {
+                // 有下一个 user，保留该 user 及之后的内容
+                historyBeforeRetry = Array(messages[..<messageIndex]) + Array(messages[nextIndex...])
+                logger.info("  - 删除索引 \(messageIndex) 到 \(nextIndex - 1) 之间的 \(nextIndex - messageIndex) 条消息")
+            } else {
+                // 没有下一个 user，删除该 user 及之后的所有内容
+                historyBeforeRetry = Array(messages.prefix(upTo: messageIndex))
+                logger.info("  - 删除索引 \(messageIndex) 及之后的所有消息")
+            }
+            
+            messageToResend = message
+            
+        } else if message.role == .assistant {
+            // Assistant 消息重试：删除该 assistant 之后到下一个 assistant 之前的所有内容
+            // 然后从上一个 user 重新请求
+            
+            // 找到上一个 user 消息
+            guard let previousUserIndex = messages[..<messageIndex].lastIndex(where: { $0.role == .user }) else {
+                logger.warning("⚠️ 未找到该 assistant 消息之前的 user 消息，无法重试")
+                return
+            }
+            
+            let previousUserMessage = messages[previousUserIndex]
+            
+            // 找到下一个 assistant 消息的位置
+            let nextAssistantIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .assistant })
+            
+            if let nextIndex = nextAssistantIndex {
+                // 有下一个 assistant，保留该 assistant 及之后的内容
+                historyBeforeRetry = Array(messages[...previousUserIndex]) + Array(messages[nextIndex...])
+                logger.info("  - 删除索引 \(previousUserIndex + 1) 到 \(nextIndex - 1) 之间的消息，从 user[\(previousUserIndex)] 重新请求")
+            } else {
+                // 没有下一个 assistant，删除该 user 之后的所有内容
+                historyBeforeRetry = Array(messages[...previousUserIndex])
+                logger.info("  - 删除索引 \(previousUserIndex + 1) 及之后的所有消息，从 user[\(previousUserIndex)] 重新请求")
+            }
+            
+            messageToResend = previousUserMessage
+            
+        } else {
+            // 其他类型的消息（system, tool, error）不支持重试
+            logger.warning("⚠️ 不支持重试 \(String(describing: message.role)) 类型的消息")
+            return
+        }
+        
+        guard let messageToSend = messageToResend else { return }
+        
+        // 更新实时消息列表
+        messagesForSessionSubject.send(historyBeforeRetry)
+        Persistence.saveMessages(historyBeforeRetry, for: currentSession.id)
+        
+        // 恢复原消息的音频附件（如果有）
+        var audioAttachment: AudioAttachment? = nil
+        if let audioFileName = messageToSend.audioFileName,
+           let audioData = Persistence.loadAudio(fileName: audioFileName) {
+            let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
+            let mimeType = "audio/\(fileExtension)"
+            audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+            logger.info("🔄 重试时恢复音频附件: \(audioFileName)")
+        }
+        
+        // 恢复原消息的图片附件（如果有）
+        var imageAttachments: [ImageAttachment] = []
+        if let imageFileNames = messageToSend.imageFileNames {
+            for fileName in imageFileNames {
+                if let imageData = Persistence.loadImage(fileName: fileName) {
+                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
+                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                    imageAttachments.append(attachment)
+                    logger.info("🔄 重试时恢复图片附件: \(fileName)")
+                }
+            }
+        }
+        
+        // 使用原消息内容和附件，调用主要的发送函数
+        await sendAndProcessMessage(
+            content: messageToSend.content,
+            aiTemperature: aiTemperature,
+            aiTopP: aiTopP,
+            systemPrompt: systemPrompt,
+            maxChatHistory: maxChatHistory,
+            enableStreaming: enableStreaming,
+            enhancedPrompt: enhancedPrompt,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            includeSystemTime: includeSystemTime,
+            audioAttachment: audioAttachment,
+            imageAttachments: imageAttachments
+        )
+    }
+    
     public func retryLastMessage(
         aiTemperature: Double,
         aiTopP: Double,

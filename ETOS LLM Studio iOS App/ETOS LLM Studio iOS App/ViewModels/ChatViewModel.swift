@@ -363,6 +363,23 @@ final class ChatViewModel: ObservableObject {
         chatService.addErrorMessage(content)
     }
     
+    func retryMessage(_ message: ChatMessage) {
+        Task {
+            await chatService.retryMessage(
+                message,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: currentSession?.enhancedPrompt,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
+            )
+        }
+    }
+    
     func retryLastMessage() {
         Task {
             await chatService.retryLastMessage(
@@ -446,7 +463,26 @@ final class ChatViewModel: ObservableObject {
         messageToEdit = nil
     }
     
+    func retryMessage(_ message: ChatMessage) {
+        Task {
+            await chatService.retryMessage(
+                message,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: currentSession?.enhancedPrompt,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
+            )
+        }
+    }
+    
     func canRetry(message: ChatMessage) -> Bool {
+        // 所有 user 和 assistant 消息都可以重试
+        // 但如果正在发送，只允许重试最后一条或倍数第二条
         if isSendingMessage {
             guard let lastMessage = allMessagesForSession.last else { return false }
             if lastMessage.id == message.id { return true }
@@ -456,13 +492,8 @@ final class ChatViewModel: ObservableObject {
             return false
         }
         
-        guard
-            let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }),
-            let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == message.id })
-        else {
-            return false
-        }
-        return messageIndex >= lastUserMessageIndex
+        // 不在发送时，所有 user 和 assistant 消息都可以重试
+        return message.role == .user || message.role == .assistant
     }
     
     func saveCurrentSessionDetails() {

@@ -283,6 +283,23 @@ class ChatViewModel: ObservableObject {
         chatService.addErrorMessage(content)
     }
     
+    func retryMessage(_ message: ChatMessage) {
+        Task {
+            await chatService.retryMessage(
+                message,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: currentSession?.enhancedPrompt,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
+            )
+        }
+    }
+    
     func retryLastMessage() {
         // 移除 isSendingMessage 保护，允许中断当前正在发送的请求。
         // ChatService 中的 retryLastMessage 会处理重置消息历史的逻辑。
@@ -643,7 +660,8 @@ class ChatViewModel: ObservableObject {
     }
     
     func canRetry(message: ChatMessage) -> Bool {
-        // 如果消息正在发送中，允许对最后一条助手消息以及对应的用户消息进行重试。
+        // 所有 user 和 assistant 消息都可以重试
+        // 但如果正在发送，只允许重试最后一条或倍数第二条
         if isSendingMessage {
             guard let lastMessage = allMessagesForSession.last else { return false }
             if lastMessage.id == message.id { return true }
@@ -653,14 +671,8 @@ class ChatViewModel: ObservableObject {
             return false
         }
 
-        // 在非发送状态下的原始逻辑。
-        guard let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }) else {
-            return false
-        }
-        
-        guard let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == message.id }) else {
-            return false
-        }
+        // 不在发送时，所有 user 和 assistant 消息都可以重试
+        return message.role == .user || message.role == .assistant
         
         return messageIndex >= lastUserMessageIndex
     }
