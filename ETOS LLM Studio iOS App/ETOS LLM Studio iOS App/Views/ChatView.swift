@@ -23,158 +23,145 @@ struct ChatView: View {
     @State private var showBranchOptions = false
     @State private var messageToBranch: ChatMessage?
     @FocusState private var composerFocused: Bool
+    @AppStorage("chat.composer.draft") private var draftText: String = ""
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                backgroundLayer
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 16) {
-                            sessionHeader
-                            ForEach(viewModel.messages) { message in
-                                ChatBubble(
-                                    message: message,
-                                    isReasoningExpanded: Binding(
-                                        get: { viewModel.reasoningExpandedState[message.id, default: false] },
-                                        set: { viewModel.reasoningExpandedState[message.id] = $0 }
-                                    ),
-                                    isToolCallsExpanded: Binding(
-                                        get: { viewModel.toolCallsExpandedState[message.id, default: false] },
-                                        set: { viewModel.toolCallsExpandedState[message.id] = $0 }
-                                    ),
-                                    enableMarkdown: viewModel.enableMarkdown,
-                                    enableBackground: viewModel.enableBackground
-                                )
-                                .id(message.id)
-                                .contextMenu {
-                                    contextMenu(for: message)
-                                }
-                                .onAppear {
-                                    if message.id == viewModel.messages.last?.id {
-                                        showScrollToBottom = false
-                                    }
-                                }
-                                .onDisappear {
-                                    if message.id == viewModel.messages.last?.id {
-                                        showScrollToBottom = true
-                                    }
-                                }
-                        }
-                        
-                        Color.clear
-                            .frame(height: 1)
-                            .id(scrollBottomAnchorID)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 140)
-                    .scrollIndicators(.hidden)
-                }
-                    .scrollDismissesKeyboard(.interactively)
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            composerFocused = false
-                        }
-                    )
-                    .onChange(of: viewModel.messages.count) { _, _ in
-                        guard !viewModel.messages.isEmpty else { return }
-                        scrollToBottom(proxy: proxy)
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        if showScrollToBottom {
-                            Button {
-                                scrollToBottom(proxy: proxy)
-                            } label: {
-                                Image(systemName: "arrow.down.circle.fill")
-                                    .font(.system(size: 22, weight: .medium))
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundStyle(.tint)
-                                    .padding(10)
-                                    .background(.regularMaterial, in: Circle())
+        ZStack {
+            backgroundLayer
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        sessionHeader
+                        ForEach(viewModel.messages) { message in
+                            ChatBubble(
+                                message: message,
+                                isReasoningExpanded: Binding(
+                                    get: { viewModel.reasoningExpandedState[message.id, default: false] },
+                                    set: { viewModel.reasoningExpandedState[message.id] = $0 }
+                                ),
+                                isToolCallsExpanded: Binding(
+                                    get: { viewModel.toolCallsExpandedState[message.id, default: false] },
+                                    set: { viewModel.toolCallsExpandedState[message.id] = $0 }
+                                ),
+                                enableMarkdown: viewModel.enableMarkdown,
+                                enableBackground: viewModel.enableBackground
+                            )
+                            .id(message.id)
+                            .contextMenu {
+                                contextMenu(for: message)
                             }
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 140)
-                            .transition(.scale.combined(with: .opacity))
-                            .accessibilityLabel("滚动到底部")
+                            .onAppear {
+                                if message.id == viewModel.messages.last?.id {
+                                    showScrollToBottom = false
+                                }
+                            }
+                            .onDisappear {
+                                if message.id == viewModel.messages.last?.id {
+                                    showScrollToBottom = true
+                                }
+                            }
                         }
                     }
+                    
+                    Color.clear
+                        .frame(height: 1)
+                        .id(scrollBottomAnchorID)
                 }
-            }
-            .navigationTitle(viewModel.currentSession?.name ?? "新的对话")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button {
-                            viewModel.createNewSession()
-                        } label: {
-                            Label("开始新会话", systemImage: "plus.message")
-                        }
-                        
-                        Button {
-                            composerFocused = true
-                        } label: {
-                            Label("快速输入", systemImage: "keyboard")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+                .padding(.horizontal, 16)
+                .padding(.bottom, 140)
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        composerFocused = false
                     }
-                    .accessibilityLabel("聊天操作菜单")
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                MessageComposerView(
-                    text: $viewModel.userInput,
-                    isSending: viewModel.isSendingMessage,
-                    sendAction: {
-                        viewModel.sendMessage()
-                    },
-                    focus: $composerFocused
                 )
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .background(.ultraThinMaterial)
-            }
-            .sheet(item: $editingMessage) { message in
-                NavigationStack {
-                    EditMessageSheet(
-                        originalMessage: message,
-                        text: $editingContent
-                    ) { newContent in
-                        viewModel.commitEditedMessage(message, content: newContent)
+                .onChange(of: viewModel.messages.count) { _, _ in
+                    guard !viewModel.messages.isEmpty else { return }
+                    guard !showScrollToBottom else { return }
+                    scrollToBottom(proxy: proxy)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if showScrollToBottom {
+                        Button {
+                            scrollToBottom(proxy: proxy)
+                        } label: {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: 22, weight: .medium))
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.tint)
+                                .padding(10)
+                                .background(.regularMaterial, in: Circle())
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 140)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel("滚动到底部")
                     }
                 }
-                .presentationDetents([.medium, .large])
             }
-            .sheet(item: $messageInfo) { info in
-                MessageInfoSheet(payload: info)
+        }
+        .safeAreaInset(edge: .bottom) {
+            MessageComposerView(
+                text: Binding(
+                    get: { draftText },
+                    set: { newValue in
+                        draftText = newValue
+                        viewModel.userInput = newValue
+                    }
+                ),
+                isSending: viewModel.isSendingMessage,
+                sendAction: {
+                    guard viewModel.canSendMessage else { return }
+                    viewModel.sendMessage()
+                    draftText = ""
+                },
+                focus: $composerFocused
+            )
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .background(.ultraThinMaterial)
+        }
+        .onAppear {
+            viewModel.userInput = draftText
+        }
+        .sheet(item: $editingMessage) { message in
+            NavigationStack {
+                EditMessageSheet(
+                    originalMessage: message,
+                    text: $editingContent
+                ) { newContent in
+                    viewModel.commitEditedMessage(message, content: newContent)
+                }
             }
-            .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
-                Button("仅复制消息历史") {
-                    if let message = messageToBranch {
-                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: false)
-                        viewModel.setCurrentSession(newSession)
-                    }
-                    messageToBranch = nil
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $messageInfo) { info in
+            MessageInfoSheet(payload: info)
+        }
+        .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
+            Button("仅复制消息历史") {
+                if let message = messageToBranch {
+                    let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: false)
+                    viewModel.setCurrentSession(newSession)
                 }
-                Button("复制消息历史和提示词") {
-                    if let message = messageToBranch {
-                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: true)
-                        viewModel.setCurrentSession(newSession)
-                    }
-                    messageToBranch = nil
+                messageToBranch = nil
+            }
+            Button("复制消息历史和提示词") {
+                if let message = messageToBranch {
+                    let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: true)
+                    viewModel.setCurrentSession(newSession)
                 }
-                Button("取消", role: .cancel) {
-                    messageToBranch = nil
-                }
-            } message: {
-                if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
-                    Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
-                }
+                messageToBranch = nil
+            }
+            Button("取消", role: .cancel) {
+                messageToBranch = nil
+            }
+        } message: {
+            if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
+                Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
             }
         }
     }
@@ -231,29 +218,26 @@ struct ChatView: View {
                 
                 Spacer()
 
-                VStack(spacing: 8) {
+                Menu {
                     Button {
                         viewModel.createNewSession()
                     } label: {
-                        Label("新会话", systemImage: "plus.message")
-                            .labelStyle(.iconOnly)
-                            .font(.system(size: 16, weight: .semibold))
-                            .padding(10)
-                            .background(.thinMaterial, in: Circle())
+                        Label("开始新会话", systemImage: "plus.message")
                     }
-                    .accessibilityLabel("开始新会话")
                     
                     Button {
                         composerFocused = true
                     } label: {
-                        Label("聚焦输入", systemImage: "cursorarrow.rays")
-                            .labelStyle(.iconOnly)
-                            .font(.system(size: 16, weight: .semibold))
-                            .padding(10)
-                            .background(.thinMaterial, in: Circle())
+                        Label("快速输入", systemImage: "keyboard")
                     }
-                    .accessibilityLabel("聚焦到输入框")
+                } label: {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .padding(10)
+                        .background(.thinMaterial, in: Circle())
                 }
+                .accessibilityLabel("聊天操作菜单")
             }
             
             modelSelectorCard
@@ -431,6 +415,18 @@ struct ChatView: View {
         } label: {
             Label("复制内容", systemImage: "doc.on.doc")
         }
+
+        Button {
+            UIPasteboard.general.string = plainText(fromMarkdown: message.content)
+        } label: {
+            Label("复制为纯文本", systemImage: "doc.plaintext")
+        }
+
+        Button {
+            UIPasteboard.general.string = message.content
+        } label: {
+            Label("复制为 Markdown", systemImage: "doc.richtext")
+        }
         
         if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
             Button {
@@ -461,6 +457,22 @@ private extension ChatView {
             action()
         }
     }
+
+    func plainText(fromMarkdown markdown: String) -> String {
+        if let attributed = try? AttributedString(
+            markdown: markdown,
+            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
+        ) {
+            return String(attributed.characters)
+        }
+        return markdown
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "*", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "#", with: "")
+            .replacingOccurrences(of: ">", with: "")
+    }
 }
 
 // MARK: - Composer
@@ -475,6 +487,7 @@ private struct MessageComposerView: View {
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var imagePreview: ImagePreviewPayload?
     
     private var sendButtonColor: Color {
         viewModel.canSendMessage ? Color.accentColor : Color.secondary.opacity(0.5)
@@ -523,8 +536,15 @@ private struct MessageComposerView: View {
                             .fill(Color(uiColor: .secondarySystemBackground))
                     )
                     .focused(focus)
+                    .submitLabel(.send)
+                    .onSubmit {
+                        guard viewModel.canSendMessage else { return }
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        sendAction()
+                    }
                 
                 Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     sendAction()
                 } label: {
                     Image(systemName: sendIconName)
@@ -571,6 +591,15 @@ private struct MessageComposerView: View {
                 viewModel.setAudioAttachment(attachment)
             }
         }
+        .sheet(item: $imagePreview) { payload in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                Image(uiImage: payload.image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(24)
+            }
+        }
     }
     
     @ViewBuilder
@@ -581,11 +610,20 @@ private struct MessageComposerView: View {
                 ForEach(viewModel.pendingImageAttachments) { attachment in
                     ZStack(alignment: .topTrailing) {
                         if let thumbnail = attachment.thumbnailImage {
-                            Image(uiImage: thumbnail)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 60, height: 60)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            Button {
+                                if let fullImage = attachment.fullImage {
+                                    imagePreview = ImagePreviewPayload(image: fullImage)
+                                } else {
+                                    imagePreview = ImagePreviewPayload(image: thumbnail)
+                                }
+                            } label: {
+                                Image(uiImage: thumbnail)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
                         }
                         
                         Button {
@@ -628,6 +666,11 @@ private struct MessageComposerView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
         }
+    }
+
+    private struct ImagePreviewPayload: Identifiable {
+        let id = UUID()
+        let image: UIImage
     }
 }
 // MARK: - Audio Recorder Sheet

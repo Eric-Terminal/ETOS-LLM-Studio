@@ -20,23 +20,30 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selection) {
-            ChatView()
-                .tabItem {
-                    Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
-                }
-                .tag(Tab.chat)
+            NavigationStack {
+                ChatView()
+                    .toolbar(.hidden, for: .navigationBar)
+            }
+            .tabItem {
+                Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
+            }
+            .tag(Tab.chat)
             
-            SessionListView()
-                .tabItem {
-                    Label("会话", systemImage: "list.bullet")
-                }
-                .tag(Tab.sessions)
+            NavigationStack {
+                SessionListView()
+            }
+            .tabItem {
+                Label("会话", systemImage: "list.bullet")
+            }
+            .tag(Tab.sessions)
             
-            SettingsView()
-                .tabItem {
-                    Label("设置", systemImage: "gearshape.fill")
-                }
-                .tag(Tab.settings)
+            NavigationStack {
+                SettingsView()
+            }
+            .tabItem {
+                Label("设置", systemImage: "gearshape.fill")
+            }
+            .tag(Tab.settings)
         }
     }
 }

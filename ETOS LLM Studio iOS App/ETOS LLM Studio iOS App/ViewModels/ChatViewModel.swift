@@ -476,7 +476,7 @@ final class ChatViewModel: ObservableObject {
         }
         
         // 不在发送时，所有 user 和 assistant 消息都可以重试
-        return message.role == .user || message.role == .assistant
+        return message.role == .user || message.role == .assistant || message.role == .error
     }
     
     func saveCurrentSessionDetails() {

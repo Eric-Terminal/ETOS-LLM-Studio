@@ -11,6 +11,7 @@
 import SwiftUI
 import MarkdownUI
 import Shared
+import UIKit
 import AVFoundation
 import Combine
 
@@ -22,6 +23,7 @@ struct ChatBubble: View {
     let enableBackground: Bool
     
     @StateObject private var audioPlayer = AudioPlayerManager()
+    @State private var imagePreview: ImagePreviewPayload?
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -45,12 +47,25 @@ struct ChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+        .sheet(item: $imagePreview) { payload in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                Image(uiImage: payload.image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(24)
+            }
+        }
     }
     
     // MARK: - Content
     
     @ViewBuilder
     private var contentStack: some View {
+        if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+            imageAttachmentsView(fileNames: imageFileNames)
+        }
+        
         if let reasoning = message.reasoningContent,
            !reasoning.isEmpty {
             DisclosureGroup(isExpanded: $isReasoningExpanded) {
@@ -108,6 +123,47 @@ struct ChatBubble: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+    
+    @ViewBuilder
+    private func imageAttachmentsView(fileNames: [String]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(fileNames, id: \.self) { fileName in
+                    if let image = loadImage(fileName: fileName) {
+                        Button {
+                            imagePreview = ImagePreviewPayload(image: image)
+                        } label: {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 140, height: 140)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                            .frame(width: 140, height: 140)
+                            .overlay(
+                                VStack(spacing: 6) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 22, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                    Text("图片丢失")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            )
+                    }
+                }
+            }
+        }
+    }
+    
+    private func loadImage(fileName: String) -> UIImage? {
+        guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
+        return UIImage(data: data)
     }
     
     @ViewBuilder
@@ -234,6 +290,11 @@ struct ChatBubble: View {
             )
             .shadow(color: color.opacity(0.2), radius: 8, y: 4)
     }
+}
+
+private struct ImagePreviewPayload: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
 
 // MARK: - Audio Player Manager
