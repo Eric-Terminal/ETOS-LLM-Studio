@@ -32,10 +32,8 @@ struct ChatView: View {
                 backgroundLayer
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .trailing, spacing: 12, pinnedViews: []) {
-                            modelSelectorBar
-                            historyBanner
-                            
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            sessionHeader
                             ForEach(viewModel.messages) { message in
                                 ChatBubble(
                                     message: message,
@@ -71,7 +69,8 @@ struct ChatView: View {
                             .id(scrollBottomAnchorID)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 120)
+                    .padding(.bottom, 140)
+                    .scrollIndicators(.hidden)
                 }
                     .scrollDismissesKeyboard(.interactively)
                     .simultaneousGesture(
@@ -104,6 +103,9 @@ struct ChatView: View {
                 }
             }
             .navigationTitle(viewModel.currentSession?.name ?? "新的对话")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
@@ -121,7 +123,7 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
-                    .accessibilityLabel("快速操作")
+                    .accessibilityLabel("聊天操作菜单")
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -133,6 +135,8 @@ struct ChatView: View {
                     },
                     focus: $composerFocused
                 )
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
                 .background(.ultraThinMaterial)
             }
             .sheet(item: $editingMessage) { message in
@@ -178,23 +182,116 @@ struct ChatView: View {
     // MARK: - Background
     
     private var backgroundLayer: some View {
-        Group {
-            if viewModel.enableBackground,
-               let image = viewModel.currentBackgroundImageUIImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+        ZStack {
+            Group {
+                if viewModel.enableBackground,
+                   let image = viewModel.currentBackgroundImageUIImage {
+                    GeometryReader { geo in
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipped()
+                            .blur(radius: viewModel.backgroundBlur)
+                            .opacity(viewModel.backgroundOpacity)
+                            .overlay(Color.black.opacity(0.08))
+                    }
                     .ignoresSafeArea()
-                    .blur(radius: viewModel.backgroundBlur)
-                    .opacity(viewModel.backgroundOpacity)
-                    .overlay(Color.black.opacity(0.1))
-            } else {
-                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+                } else {
+                    Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+                }
             }
+            
+            LinearGradient(
+                colors: [
+                    Color.accentColor.opacity(0.12),
+                    Color.purple.opacity(0.08),
+                    Color.blue.opacity(0.06)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
         }
     }
     
 // MARK: - Components
+    
+    private var sessionHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(viewModel.currentSession?.name ?? "新的对话")
+                        .font(.title3.bold())
+                        .foregroundStyle(.primary)
+                    Text(headerSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+
+                VStack(spacing: 8) {
+                    Button {
+                        viewModel.createNewSession()
+                    } label: {
+                        Label("新会话", systemImage: "plus.message")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 16, weight: .semibold))
+                            .padding(10)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("开始新会话")
+                    
+                    Button {
+                        composerFocused = true
+                    } label: {
+                        Label("聚焦输入", systemImage: "cursorarrow.rays")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 16, weight: .semibold))
+                            .padding(10)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("聚焦到输入框")
+                }
+            }
+            
+            modelSelectorCard
+            
+            historyBanner
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor.opacity(0.24),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .opacity(viewModel.enableBackground ? 0.5 : 1)
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08))
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 14, y: 10)
+        .padding(.top, 12)
+    }
+    
+    private var headerSubtitle: String {
+        let modelName = viewModel.selectedModel?.model.displayName ?? "未选择模型"
+        let visibleCount = viewModel.messages.count
+        let totalCount = viewModel.allMessagesForSession.count
+        let countText = totalCount == 0 ? "等待开始" : "已显示 \(visibleCount)/\(totalCount) 条"
+        return "\(modelName) | \(countText)"
+    }
 
     @ViewBuilder
     private var historyBanner: some View {
@@ -206,20 +303,25 @@ struct ChatView: View {
                     viewModel.loadMoreHistoryChunk()
                 }
             } label: {
-                Label("向上加载 \(chunk) 条记录", systemImage: "arrow.uturn.left.circle")
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.uturn.left.circle")
+                    Text("向上加载 \(chunk) 条记录")
+                }
             }
-            .font(.footnote)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(.regularMaterial, in: Capsule())
-            .padding(.top, 12)
+            .font(.footnote.weight(.semibold))
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground).opacity(0.8))
+            )
         } else {
             EmptyView()
         }
     }
 
     @ViewBuilder
-    private var modelSelectorBar: some View {
+    private var modelSelectorCard: some View {
         if !viewModel.activatedModels.isEmpty {
             let selection = Binding<String?>(
                 get: { viewModel.selectedModel?.id },
@@ -229,10 +331,8 @@ struct ChatView: View {
                     viewModel.setSelectedModel(target)
                 }
             )
-            VStack(alignment: .leading, spacing: 8) {
-                Text("当前模型")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            
+            Menu {
                 Picker("选择模型", selection: selection) {
                     Text("选择模型")
                         .tag(Optional<String>.none)
@@ -241,27 +341,49 @@ struct ChatView: View {
                             Text(runnable.model.displayName)
                             Text(runnable.provider.name)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
                         }
                         .tag(Optional<String>.some(runnable.id))
                     }
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .padding(.vertical, 8)
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.2))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("当前模型")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(viewModel.selectedModel?.model.displayName ?? "选择模型")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        if let providerName = viewModel.selectedModel?.provider.name {
+                            Text(providerName)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 10)
                 .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    Color(uiColor: .secondarySystemBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(uiColor: .secondarySystemBackground).opacity(0.9))
                 )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .padding(.top, 12)
-            .padding(.bottom, 4)
         }
     }
     
@@ -350,22 +472,25 @@ private struct MessageComposerView: View {
     let sendAction: () -> Void
     let focus: FocusState<Bool>.Binding
     
-    @State private var showAttachmentMenu = false
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
+    private var sendButtonColor: Color {
+        viewModel.canSendMessage ? Color.accentColor : Color.secondary.opacity(0.5)
+    }
+    
+    private var sendIconName: String {
+        isSending ? "paperplane.circle.fill" : "paperplane.fill"
+    }
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // 附件预览区域
+        VStack(spacing: 12) {
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
                 attachmentPreviewBar
             }
             
-            Divider()
-            
             HStack(alignment: .center, spacing: 12) {
-                // 附件按钮
                 Menu {
                     Button {
                         showImagePicker = true
@@ -379,30 +504,54 @@ private struct MessageComposerView: View {
                         Label("录制语音", systemImage: "mic")
                     }
                 } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.tint)
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(12)
+                        .background(
+                            Circle()
+                                .fill(Color.accentColor.opacity(0.12))
+                        )
                 }
                 
                 TextField("输入...", text: $text, axis: .vertical)
                     .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color(uiColor: .secondarySystemBackground))
+                    )
                     .focused(focus)
                 
                 Button {
                     sendAction()
                 } label: {
-                    Image(systemName: isSending ? "paperplane.circle.fill" : "paperplane.fill")
-                        .font(.system(size: 20, weight: .semibold))
+                    Image(systemName: sendIconName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(12)
+                        .background(
+                            Circle()
+                                .fill(sendButtonColor)
+                        )
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .disabled(!viewModel.canSendMessage)
                 .help("发送当前消息")
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
         }
-        .background(.thinMaterial)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(uiColor: .systemBackground).opacity(0.92))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color.white.opacity(0.08))
+                )
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 18, y: 10)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
@@ -481,7 +630,6 @@ private struct MessageComposerView: View {
         }
     }
 }
-
 // MARK: - Audio Recorder Sheet
 
 private struct AudioRecorderSheet: View {

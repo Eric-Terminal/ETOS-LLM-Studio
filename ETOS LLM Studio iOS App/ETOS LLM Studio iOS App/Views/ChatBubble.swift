@@ -27,24 +27,24 @@ struct ChatBubble: View {
         HStack(alignment: .top, spacing: 12) {
             if message.role == .assistant || message.role == .system || message.role == .tool {
                 roleBadge
-            } else {
-                Spacer(minLength: 32)
             }
             
             VStack(alignment: .leading, spacing: 8) {
                 contentStack
             }
             .padding(14)
-            .background(bubbleBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(bubbleStrokeColor, lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.06), radius: 12, y: 8)
             
             if message.role == .user {
                 roleBadge
-            } else {
-                Spacer(minLength: 32)
             }
         }
+        .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
     }
     
     // MARK: - Content
@@ -182,6 +182,19 @@ struct ChatBubble: View {
         }
     }
     
+    private var bubbleStrokeColor: Color {
+        switch message.role {
+        case .user:
+            return Color.white.opacity(0.35)
+        case .assistant, .system, .tool:
+            return Color.black.opacity(0.05)
+        case .error:
+            return Color.red.opacity(0.2)
+        @unknown default:
+            return Color.black.opacity(0.05)
+        }
+    }
+    
     private var roleBadge: some View {
         let symbol: String
         let color: Color
@@ -208,10 +221,18 @@ struct ChatBubble: View {
         }
         
         return Image(systemName: symbol)
-            .font(.system(size: 14, weight: .bold))
+            .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(color)
-            .padding(8)
-            .background(color.opacity(message.role == .user ? 0.15 : 0.08), in: Circle())
+            .padding(10)
+            .background(
+                Circle()
+                    .fill(Color(uiColor: .systemBackground).opacity(0.92))
+                    .overlay(
+                        Circle()
+                            .stroke(color.opacity(message.role == .user ? 0.35 : 0.2), lineWidth: 1)
+                    )
+            )
+            .shadow(color: color.opacity(0.2), radius: 8, y: 4)
     }
 }
 
