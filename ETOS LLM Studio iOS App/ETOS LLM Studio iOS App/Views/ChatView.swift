@@ -564,13 +564,12 @@ private struct AudioRecorderSheet: View {
             try session.setCategory(.playAndRecord, mode: .default)
             try session.setActive(true)
             
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
             let settings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatLinearPCM),
-                AVSampleRateKey: 16000.0,
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100.0,
                 AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false
+                AVEncoderBitRateKey: 64000
             ]
             
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
@@ -614,8 +613,8 @@ private struct AudioRecorderSheet: View {
         
         let attachment = AudioAttachment(
             data: data,
-            mimeType: "audio/wav",
-            format: "wav",
+            mimeType: "audio/m4a",
+            format: "m4a",
             fileName: url.lastPathComponent
         )
         

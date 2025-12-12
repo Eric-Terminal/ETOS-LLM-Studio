@@ -363,23 +363,6 @@ final class ChatViewModel: ObservableObject {
         chatService.addErrorMessage(content)
     }
     
-    func retryMessage(_ message: ChatMessage) {
-        Task {
-            await chatService.retryMessage(
-                message,
-                aiTemperature: aiTemperature,
-                aiTopP: aiTopP,
-                systemPrompt: systemPrompt,
-                maxChatHistory: maxChatHistory,
-                enableStreaming: enableStreaming,
-                enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                includeSystemTime: includeSystemTimeInPrompt
-            )
-        }
-    }
-    
     func retryLastMessage() {
         Task {
             await chatService.retryLastMessage(

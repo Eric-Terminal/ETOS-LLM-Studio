@@ -556,6 +556,8 @@ public class ChatService {
         var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
+        var userMessages: [ChatMessage] = []
+        var primaryUserMessage: ChatMessage?
         
         if let audioAttachment {
             // 保存音频文件到持久化目录，使用时间戳命名
@@ -586,17 +588,49 @@ public class ChatService {
             messageContent = imagePlaceholder
         }
         
-        let userMessage = ChatMessage(
-            role: .user,
-            content: messageContent,
-            audioFileName: savedAudioFileName,
-            imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
-        )
+        // 构建用户消息列表：
+        // - 若同时含语音和文字，拆分为两个独立气泡，方便单独删除
+        // - 若只有一种内容，保持原有单条消息行为
+        if let savedAudioFileName {
+            let audioMessage = ChatMessage(
+                role: .user,
+                content: messageContent.isEmpty ? audioPlaceholder : audioPlaceholder,
+                audioFileName: savedAudioFileName,
+                imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
+            )
+            userMessages.append(audioMessage)
+        }
+        
+        if !messageContent.isEmpty {
+            // 当同时有语音与文字时，避免重复附带图片到文字消息（保持图片随首条消息）
+            let imageNamesForText = savedAudioFileName == nil ? (savedImageFileNames.isEmpty ? nil : savedImageFileNames) : nil
+            let textMessage = ChatMessage(
+                role: .user,
+                content: messageContent,
+                audioFileName: nil,
+                imageFileNames: imageNamesForText
+            )
+            userMessages.append(textMessage)
+        }
+        
+        // 兜底：如果没有生成任何用户消息，直接报错返回
+        guard !userMessages.isEmpty else {
+            addErrorMessage("错误: 待发送消息为空。" )
+            requestStatusSubject.send(.error)
+            return
+        }
+        
+        // 用于命名会话/记忆检索的代表消息：优先文字，其次第一条消息
+        if let textMessage = userMessages.first(where: { $0.audioFileName == nil && !$0.content.isEmpty }) {
+            primaryUserMessage = textMessage
+        } else {
+            primaryUserMessage = userMessages.first
+        }
         let loadingMessage = ChatMessage(role: .assistant, content: "") // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
         
         var messages = messagesForSessionSubject.value
-        messages.append(userMessage)
+        messages.append(contentsOf: userMessages)
         messages.append(loadingMessage)
         messagesForSessionSubject.send(messages)
         
@@ -605,9 +639,9 @@ public class ChatService {
         // UI 上通过 audioFileName 属性标识这是一条语音消息
         
         // 处理临时会话的转换
-        if currentSession.isTemporary {
+        if currentSession.isTemporary, let sessionTitleSource = primaryUserMessage {
             wasTemporarySession = true // 标记此为首次交互
-            currentSession.name = String(userMessage.content.prefix(20))
+            currentSession.name = String(sessionTitleSource.content.prefix(20))
             currentSession.isTemporary = false
             currentSessionSubject.send(currentSession)
             var updatedSessions = chatSessionsSubject.value
@@ -642,7 +676,7 @@ public class ChatService {
                 messages: messages,
                 loadingMessageID: loadingMessage.id,
                 currentSessionID: currentSession.id,
-                userMessage: userMessage,
+                userMessage: primaryUserMessage,
                 wasTemporarySession: wasTemporarySession,
                 aiTemperature: aiTemperature,
                 aiTopP: aiTopP,

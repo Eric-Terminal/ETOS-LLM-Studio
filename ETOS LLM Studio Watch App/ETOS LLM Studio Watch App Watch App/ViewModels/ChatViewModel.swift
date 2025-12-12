@@ -401,15 +401,12 @@ class ChatViewModel: ObservableObject {
             if let existingURL = speechRecordingURL {
                 try? FileManager.default.removeItem(at: existingURL)
             }
-            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).wav")
+            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).m4a")
             let settings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatLinearPCM),
-                AVSampleRateKey: 16000,
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100,
                 AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsNonInterleaved: false
+                AVEncoderBitRateKey: 64000
             ]
             
             audioRecorder = try AVAudioRecorder(url: targetURL, settings: settings)
@@ -463,7 +460,7 @@ class ChatViewModel: ObservableObject {
                 let data = try Data(contentsOf: url)
                 if sendSpeechAsAudio {
                     // 不立即发送，而是暂存为待发送附件
-                    let attachment = AudioAttachment(data: data, mimeType: "audio/wav", format: "wav", fileName: url.lastPathComponent)
+                    let attachment = AudioAttachment(data: data, mimeType: "audio/m4a", format: "m4a", fileName: url.lastPathComponent)
                     await MainActor.run {
                         pendingAudioAttachment = attachment
                     }
@@ -475,7 +472,7 @@ class ChatViewModel: ObservableObject {
                         using: speechModel,
                         audioData: data,
                         fileName: url.lastPathComponent,
-                        mimeType: "audio/wav"
+                        mimeType: "audio/m4a"
                     )
                     appendTranscribedText(transcript)
                 }
