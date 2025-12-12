@@ -66,6 +66,23 @@ public enum JSONValue: Codable, Hashable {
     }
 }
 
+/// 兼容 OpenAI 风格的模型列表响应
+public struct ModelListResponse: Decodable {
+    public struct ModelData: Decodable {
+        public let id: String
+        public let object: String?
+        public let created: Int?
+        public let ownedBy: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case id, object, created
+            case ownedBy = "owned_by"
+        }
+    }
+    
+    public let data: [ModelData]
+}
+
 
 /// 代表一个用户自定义的 API 服务提供商
 public struct Provider: Codable, Identifiable, Hashable {

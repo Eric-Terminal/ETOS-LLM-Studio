@@ -1883,11 +1883,3 @@ ISO8601：\(isoTime)
         }
     }
 }
-
-// 临时的，为了编译通过。这个结构体应该在某个地方有正式定义。
-struct ModelListResponse: Decodable {
-    struct ModelData: Decodable {
-        let id: String
-    }
-    let data: [ModelData]
-}
