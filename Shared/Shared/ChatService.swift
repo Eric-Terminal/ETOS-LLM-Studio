@@ -912,8 +912,8 @@ public class ChatService {
     }
 
     /// 重试指定消息，支持任意位置的消息重试
-    /// - 对于 user 消息：删除该消息之后到下一个 user 之前的所有内容，然后重新发送
-    /// - 对于 assistant 消息：删除该消息之后到下一个 assistant 之前的所有内容，然后从上一个 user 重新请求
+    /// - 对于 user 消息：删除该 user 与下一个 user 之间的内容，保留下游对话，重新发送该 user。
+    /// - 对于 assistant/error 消息：回溯到上一个 user 重新生成回复，保留下一个 assistant 之后的内容。
     public func retryMessage(
         _ message: ChatMessage,
         aiTemperature: Double,
@@ -936,67 +936,56 @@ public class ChatService {
         }
         
         logger.info("🔄 重试消息: \(String(describing: message.role)) - 索引 \(messageIndex)")
+
+        // 决定重试时要重发的 user 消息，以及保留下来的前缀/后缀
+        let anchorUserIndex: Int
+        let tailStartIndex: Int?
+        let messageToSend: ChatMessage
         
-        var historyBeforeRetry: [ChatMessage]
-        var messageToResend: ChatMessage?
-        
-        if message.role == .user {
-            // User 消息重试：删除该 user 之后到下一个 user 之前的所有内容（不包括两个 user）
-            // 然后重新发送这条 user 消息
-            
-            // 找到下一个 user 消息的位置
-            let nextUserIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
-            
-            if let nextIndex = nextUserIndex {
-                // 有下一个 user，保留该 user 及之后的内容
-                historyBeforeRetry = Array(messages[..<messageIndex]) + Array(messages[nextIndex...])
-                logger.info("  - 删除索引 \(messageIndex) 到 \(nextIndex - 1) 之间的 \(nextIndex - messageIndex) 条消息")
-            } else {
-                // 没有下一个 user，删除该 user 及之后的所有内容
-                historyBeforeRetry = Array(messages.prefix(upTo: messageIndex))
-                logger.info("  - 删除索引 \(messageIndex) 及之后的所有消息")
-            }
-            
-            messageToResend = message
-            
-        } else if message.role == .assistant {
-            // Assistant 消息重试：删除该 assistant 之后到下一个 assistant 之前的所有内容
-            // 然后从上一个 user 重新请求
-            
-            // 找到上一个 user 消息
+        switch message.role {
+        case .user:
+            // user 重试：仅删除该 user 与下一个 user 之间的内容，保留后续对话
+            anchorUserIndex = messageIndex
+            messageToSend = message
+            tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
+        case .assistant, .error:
+            // assistant/error 重试：回到上一个 user，从那里重新生成回复，保留下一个 assistant 之后的历史
             guard let previousUserIndex = messages[..<messageIndex].lastIndex(where: { $0.role == .user }) else {
-                logger.warning("⚠️ 未找到该 assistant 消息之前的 user 消息，无法重试")
+                logger.warning("⚠️ 未找到该 \(message.role.rawValue) 消息之前的 user 消息，无法重试")
                 return
             }
-            
-            let previousUserMessage = messages[previousUserIndex]
-            
-            // 找到下一个 assistant 消息的位置
-            let nextAssistantIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .assistant })
-            
-            if let nextIndex = nextAssistantIndex {
-                // 有下一个 assistant，保留该 assistant 及之后的内容
-                historyBeforeRetry = Array(messages[...previousUserIndex]) + Array(messages[nextIndex...])
-                logger.info("  - 删除索引 \(previousUserIndex + 1) 到 \(nextIndex - 1) 之间的消息，从 user[\(previousUserIndex)] 重新请求")
-            } else {
-                // 没有下一个 assistant，删除该 user 之后的所有内容
-                historyBeforeRetry = Array(messages[...previousUserIndex])
-                logger.info("  - 删除索引 \(previousUserIndex + 1) 及之后的所有消息，从 user[\(previousUserIndex)] 重新请求")
-            }
-            
-            messageToResend = previousUserMessage
-            
-        } else {
-            // 其他类型的消息（system, tool, error）不支持重试
+            anchorUserIndex = previousUserIndex
+            messageToSend = messages[previousUserIndex]
+            tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .assistant })
+        default:
             logger.warning("⚠️ 不支持重试 \(String(describing: message.role)) 类型的消息")
             return
         }
         
-        guard let messageToSend = messageToResend else { return }
+        // 生成重试时的前缀与需要恢复的后缀
+        let leadingMessages = Array(messages.prefix(upTo: anchorUserIndex))
+        let trailingMessages: [ChatMessage]
+        if let tailIndex = tailStartIndex {
+            trailingMessages = Array(messages[tailIndex...])
+            logger.info("  - 保留后续 \(trailingMessages.count) 条消息，等待重试完成后恢复。")
+        } else {
+            trailingMessages = []
+            logger.info("  - 没有需要保留的后续消息。")
+        }
         
-        // 更新实时消息列表
-        messagesForSessionSubject.send(historyBeforeRetry)
-        Persistence.saveMessages(historyBeforeRetry, for: currentSession.id)
+        // 构造新的消息列表：
+        // - requestMessages: 发送给模型的历史（不包含保留尾部）
+        // - persistedMessages: UI/持久化显示的历史（包含尾部，防止崩溃丢失）
+        let loadingMessage = ChatMessage(role: .assistant, content: "")
+        var requestMessages = leadingMessages
+        requestMessages.append(messageToSend)
+        requestMessages.append(loadingMessage)
+        
+        var persistedMessages = requestMessages
+        persistedMessages.append(contentsOf: trailingMessages)
+        
+        messagesForSessionSubject.send(persistedMessages)
+        Persistence.saveMessages(persistedMessages, for: currentSession.id)
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -1022,9 +1011,12 @@ public class ChatService {
             }
         }
         
-        // 使用原消息内容和附件，调用主要的发送函数
-        await sendAndProcessMessage(
-            content: messageToSend.content,
+        // 使用原消息内容和附件，调用主要的发送函数（不移除保留尾部）
+        await startRequestWithPresetMessages(
+            messages: requestMessages,
+            loadingMessageID: loadingMessage.id,
+            currentSession: currentSession,
+            userMessage: messageToSend,
             aiTemperature: aiTemperature,
             aiTopP: aiTopP,
             systemPrompt: systemPrompt,
@@ -1034,9 +1026,82 @@ public class ChatService {
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
             includeSystemTime: includeSystemTime,
-            audioAttachment: audioAttachment,
-            imageAttachments: imageAttachments
+            currentAudioAttachment: audioAttachment
         )
+    }
+
+    /// 在重试场景下复用现有消息列表发起请求，避免移除尾部对话
+    private func startRequestWithPresetMessages(
+        messages: [ChatMessage],
+        loadingMessageID: UUID,
+        currentSession: ChatSession,
+        userMessage: ChatMessage?,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        enableStreaming: Bool,
+        enhancedPrompt: String?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
+        currentAudioAttachment: AudioAttachment?
+    ) async {
+        requestStatusSubject.send(.started)
+        
+        currentRequestSessionID = currentSession.id
+        currentLoadingMessageID = loadingMessageID
+        let requestToken = UUID()
+        currentRequestToken = requestToken
+        
+        let requestTask = Task<Void, Error> { [weak self] in
+            guard let self else { return }
+            var resolvedTools: [InternalToolDefinition] = []
+            if enableMemory && enableMemoryWrite {
+                resolvedTools.append(self.saveMemoryTool)
+            }
+            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: mcpTools)
+            let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            
+            await self.executeMessageRequest(
+                messages: messages,
+                loadingMessageID: loadingMessageID,
+                currentSessionID: currentSession.id,
+                userMessage: userMessage,
+                wasTemporarySession: false,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: enhancedPrompt,
+                tools: tools,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
+                currentAudioAttachment: currentAudioAttachment
+            )
+        }
+        
+        currentRequestTask = requestTask
+        
+        defer {
+            if currentRequestToken == requestToken {
+                currentRequestTask = nil
+                currentRequestToken = nil
+                currentRequestSessionID = nil
+                currentLoadingMessageID = nil
+            }
+        }
+        
+        do {
+            try await requestTask.value
+        } catch is CancellationError {
+            logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
+        } catch {
+            logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+        }
     }
     
     public func retryLastMessage(
