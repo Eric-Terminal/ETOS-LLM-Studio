@@ -17,6 +17,7 @@ import AVFoundation
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var showScrollToBottom = false
+    @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
     @State private var editingContent: String = ""
     @State private var messageInfo: MessageInfoPayload?
@@ -28,140 +29,143 @@ struct ChatView: View {
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     
     var body: some View {
-        ZStack {
-            backgroundLayer
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
-                        sessionHeader
-                        ForEach(viewModel.messages) { message in
-                            ChatBubble(
-                                message: message,
-                                isReasoningExpanded: Binding(
-                                    get: { viewModel.reasoningExpandedState[message.id, default: false] },
-                                    set: { viewModel.reasoningExpandedState[message.id] = $0 }
-                                ),
-                                isToolCallsExpanded: Binding(
-                                    get: { viewModel.toolCallsExpandedState[message.id, default: false] },
-                                    set: { viewModel.toolCallsExpandedState[message.id] = $0 }
-                                ),
-                                enableMarkdown: viewModel.enableMarkdown,
-                                enableBackground: viewModel.enableBackground
-                            )
-                            .id(message.id)
-                            .contextMenu {
-                                contextMenu(for: message)
-                            }
-                            .onAppear {
-                                if message.id == viewModel.messages.last?.id {
-                                    showScrollToBottom = false
+        NavigationStack {
+            ZStack {
+                // Z-Index 0: 背景壁纸层（穿透安全区）
+                backgroundLayer
+                    .ignoresSafeArea()
+                
+                // Z-Index 1: 消息列表（内容滚动到玻璃下）
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12, pinnedViews: []) {
+                            // 顶部留白
+                            Color.clear.frame(height: 60)
+                            
+                            modelSelectorBar
+                            historyBanner
+                            
+                            ForEach(viewModel.messages) { message in
+                                ChatBubble(
+                                    message: message,
+                                    isReasoningExpanded: Binding(
+                                        get: { viewModel.reasoningExpandedState[message.id, default: false] },
+                                        set: { viewModel.reasoningExpandedState[message.id] = $0 }
+                                    ),
+                                    isToolCallsExpanded: Binding(
+                                        get: { viewModel.toolCallsExpandedState[message.id, default: false] },
+                                        set: { viewModel.toolCallsExpandedState[message.id] = $0 }
+                                    ),
+                                    enableMarkdown: viewModel.enableMarkdown,
+                                    enableBackground: viewModel.enableBackground
+                                )
+                                .id(message.id)
+                                .contextMenu {
+                                    contextMenu(for: message)
+                                }
+                                .onAppear {
+                                    if message.id == viewModel.messages.last?.id {
+                                        showScrollToBottom = false
+                                    }
+                                }
+                                .onDisappear {
+                                    if message.id == viewModel.messages.last?.id {
+                                        showScrollToBottom = true
+                                    }
                                 }
                             }
-                            .onDisappear {
-                                if message.id == viewModel.messages.last?.id {
-                                    showScrollToBottom = true
-                                }
+                            
+                            Color.clear
+                                .frame(height: 1)
+                                .id(scrollBottomAnchorID)
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .scrollIndicators(.hidden)
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            composerFocused = false
+                        }
+                    )
+                    .onChange(of: viewModel.messages.count) { _, _ in
+                        guard !viewModel.messages.isEmpty else { return }
+                        scrollToBottom(proxy: proxy)
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if showScrollToBottom {
+                            Button {
+                                scrollToBottom(proxy: proxy)
+                            } label: {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .font(.system(size: 22, weight: .medium))
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundStyle(.tint)
+                                    .padding(10)
+                                    .background(.regularMaterial, in: Circle())
                             }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 90)
+                            .transition(.scale.combined(with: .opacity))
+                            .accessibilityLabel("滚动到底部")
                         }
                     }
-                    
-                    Color.clear
-                        .frame(height: 1)
-                        .id(scrollBottomAnchorID)
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 140)
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        composerFocused = false
+                    // Telegram 风格：顶部模糊玻璃导航栏
+                    .safeAreaInset(edge: .top) {
+                        liquidGlassNavBar
                     }
-                )
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    guard !viewModel.messages.isEmpty else { return }
-                    guard !showScrollToBottom else { return }
-                    scrollToBottom(proxy: proxy)
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if showScrollToBottom {
-                        Button {
-                            scrollToBottom(proxy: proxy)
-                        } label: {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .font(.system(size: 22, weight: .medium))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(.tint)
-                                .padding(10)
-                                .background(.regularMaterial, in: Circle())
-                        }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 140)
-                        .transition(.scale.combined(with: .opacity))
-                        .accessibilityLabel("滚动到底部")
+                    // Telegram 风格：底部模糊玻璃输入栏
+                    .safeAreaInset(edge: .bottom) {
+                        liquidGlassInputBar
                     }
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            MessageComposerView(
-                text: Binding(
-                    get: { draftText },
-                    set: { newValue in
-                        draftText = newValue
-                        viewModel.userInput = newValue
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
+            .navigationDestination(item: $navigationDestination) { destination in
+                switch destination {
+                case .sessions:
+                    SessionListView()
+                case .settings:
+                    SettingsView()
+                }
+            }
+            .sheet(item: $editingMessage) { message in
+                NavigationStack {
+                    EditMessageSheet(
+                        originalMessage: message,
+                        text: $editingContent
+                    ) { newContent in
+                        viewModel.commitEditedMessage(message, content: newContent)
                     }
-                ),
-                isSending: viewModel.isSendingMessage,
-                sendAction: {
-                    guard viewModel.canSendMessage else { return }
-                    viewModel.sendMessage()
-                    draftText = ""
-                },
-                focus: $composerFocused
-            )
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .background(.ultraThinMaterial)
-        }
-        .onAppear {
-            viewModel.userInput = draftText
-        }
-        .sheet(item: $editingMessage) { message in
-            NavigationStack {
-                EditMessageSheet(
-                    originalMessage: message,
-                    text: $editingContent
-                ) { newContent in
-                    viewModel.commitEditedMessage(message, content: newContent)
                 }
+                .presentationDetents([.medium, .large])
             }
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(item: $messageInfo) { info in
-            MessageInfoSheet(payload: info)
-        }
-        .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
-            Button("仅复制消息历史") {
-                if let message = messageToBranch {
-                    let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: false)
-                    viewModel.setCurrentSession(newSession)
+            .sheet(item: $messageInfo) { info in
+                MessageInfoSheet(payload: info)
+            }
+            .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
+                Button("仅复制消息历史") {
+                    if let message = messageToBranch {
+                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: false)
+                        viewModel.setCurrentSession(newSession)
+                    }
+                    messageToBranch = nil
                 }
-                messageToBranch = nil
-            }
-            Button("复制消息历史和提示词") {
-                if let message = messageToBranch {
-                    let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: true)
-                    viewModel.setCurrentSession(newSession)
+                Button("复制消息历史和提示词") {
+                    if let message = messageToBranch {
+                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: true)
+                        viewModel.setCurrentSession(newSession)
+                    }
+                    messageToBranch = nil
                 }
-                messageToBranch = nil
-            }
-            Button("取消", role: .cancel) {
-                messageToBranch = nil
-            }
-        } message: {
-            if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
-                Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
+                Button("取消", role: .cancel) {
+                    messageToBranch = nil
+                }
+            } message: {
+                if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
+                    Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
+                }
             }
         }
     }
@@ -169,112 +173,138 @@ struct ChatView: View {
     // MARK: - Background
     
     private var backgroundLayer: some View {
-        ZStack {
-            Group {
-                if viewModel.enableBackground,
-                   let image = viewModel.currentBackgroundImageUIImage {
-                    GeometryReader { geo in
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                            .blur(radius: viewModel.backgroundBlur)
-                            .opacity(viewModel.backgroundOpacity)
-                            .overlay(Color.black.opacity(0.08))
-                    }
+        Group {
+            if viewModel.enableBackground,
+               let image = viewModel.currentBackgroundImageUIImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
                     .ignoresSafeArea()
-                } else {
-                    Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
-                }
+                    .blur(radius: viewModel.backgroundBlur)
+                    .opacity(viewModel.backgroundOpacity)
+                    .overlay(Color.black.opacity(0.1))
+            } else {
+                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
             }
-            
-            LinearGradient(
-                colors: [
-                    Color.accentColor.opacity(0.12),
-                    Color.purple.opacity(0.08),
-                    Color.blue.opacity(0.06)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
         }
     }
     
 // MARK: - Components
-    
-    private var sessionHeader: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(viewModel.currentSession?.name ?? "新的对话")
-                        .font(.title3.bold())
-                        .foregroundStyle(.primary)
-                    Text(headerSubtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+
+    // MARK: - Telegram 风格：液态玻璃导航栏
+    @ViewBuilder
+    private var liquidGlassNavBar: some View {
+        HStack {
+            Text(viewModel.currentSession?.name ?? "新的对话")
+                .font(.headline)
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Menu {
+                Button {
+                    viewModel.createNewSession()
+                } label: {
+                    Label("开始新会话", systemImage: "plus.message")
                 }
                 
-                Spacer()
-
-                Menu {
-                    Button {
-                        viewModel.createNewSession()
-                    } label: {
-                        Label("开始新会话", systemImage: "plus.message")
-                    }
-                    
-                    Button {
-                        composerFocused = true
-                    } label: {
-                        Label("快速输入", systemImage: "keyboard")
-                    }
+                Button {
+                    composerFocused = true
                 } label: {
-                    Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .padding(10)
-                        .background(.thinMaterial, in: Circle())
+                    Label("快速输入", systemImage: "keyboard")
                 }
-                .accessibilityLabel("聊天操作菜单")
+                
+                Divider()
+                
+                Button {
+                    navigationDestination = .sessions
+                } label: {
+                    Label("会话列表", systemImage: "list.bullet")
+                }
+                
+                Button {
+                    navigationDestination = .settings
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
-            
-            modelSelectorCard
-            
-            historyBanner
+            .accessibilityLabel("快速操作")
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    LinearGradient(
-                        colors: [
-                            Color.accentColor.opacity(0.24),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .opacity(viewModel.enableBackground ? 0.5 : 1)
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08))
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 14, y: 10)
-        .padding(.top, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
     }
     
-    private var headerSubtitle: String {
-        let modelName = viewModel.selectedModel?.model.displayName ?? "未选择模型"
-        let visibleCount = viewModel.messages.count
-        let totalCount = viewModel.allMessagesForSession.count
-        let countText = totalCount == 0 ? "等待开始" : "已显示 \(visibleCount)/\(totalCount) 条"
-        return "\(modelName) | \(countText)"
+    // MARK: - Telegram 风格：液态玻璃输入栏
+    @ViewBuilder
+    private var liquidGlassInputBar: some View {
+        MessageComposerView(
+            text: Binding(
+                get: { draftText },
+                set: { newValue in
+                    draftText = newValue
+                    viewModel.userInput = newValue
+                }
+            ),
+            isSending: viewModel.isSendingMessage,
+            sendAction: {
+                guard viewModel.canSendMessage else { return }
+                viewModel.sendMessage()
+                draftText = ""
+            },
+            focus: $composerFocused
+        )
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+        .onAppear {
+            viewModel.userInput = draftText
+        }
+    }
+
+    @ViewBuilder
+    private var customHeader: some View {
+        HStack {
+            Text(viewModel.currentSession?.name ?? "新的对话")
+                .font(.title2.bold())
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Menu {
+                Button {
+                    viewModel.createNewSession()
+                } label: {
+                    Label("开始新会话", systemImage: "plus.message")
+                }
+                
+                Button {
+                    composerFocused = true
+                } label: {
+                    Label("快速输入", systemImage: "keyboard")
+                }
+                
+                Divider()
+                
+                Button {
+                    navigationDestination = .sessions
+                } label: {
+                    Label("会话列表", systemImage: "list.bullet")
+                }
+                
+                Button {
+                    navigationDestination = .settings
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel("快速操作")
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
@@ -287,25 +317,20 @@ struct ChatView: View {
                     viewModel.loadMoreHistoryChunk()
                 }
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.uturn.left.circle")
-                    Text("向上加载 \(chunk) 条记录")
-                }
+                Label("向上加载 \(chunk) 条记录", systemImage: "arrow.uturn.left.circle")
             }
-            .font(.footnote.weight(.semibold))
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemBackground).opacity(0.8))
-            )
+            .font(.footnote)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial, in: Capsule())
+            .padding(.top, 12)
         } else {
             EmptyView()
         }
     }
 
     @ViewBuilder
-    private var modelSelectorCard: some View {
+    private var modelSelectorBar: some View {
         if !viewModel.activatedModels.isEmpty {
             let selection = Binding<String?>(
                 get: { viewModel.selectedModel?.id },
@@ -315,8 +340,10 @@ struct ChatView: View {
                     viewModel.setSelectedModel(target)
                 }
             )
-            
-            Menu {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("当前模型")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Picker("选择模型", selection: selection) {
                     Text("选择模型")
                         .tag(Optional<String>.none)
@@ -325,49 +352,27 @@ struct ChatView: View {
                             Text(runnable.model.displayName)
                             Text(runnable.provider.name)
                                 .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                         .tag(Optional<String>.some(runnable.id))
                     }
                 }
-            } label: {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.accentColor.opacity(0.2))
-                            .frame(width: 36, height: 36)
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("当前模型")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(viewModel.selectedModel?.model.displayName ?? "选择模型")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        if let providerName = viewModel.selectedModel?.provider.name {
-                            Text(providerName)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 10)
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .padding(.vertical, 8)
                 .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(uiColor: .secondarySystemBackground).opacity(0.9))
+                    Color(uiColor: .secondarySystemBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.top, 12)
+            .padding(.bottom, 4)
         }
     }
     
@@ -415,18 +420,6 @@ struct ChatView: View {
         } label: {
             Label("复制内容", systemImage: "doc.on.doc")
         }
-
-        Button {
-            UIPasteboard.general.string = plainText(fromMarkdown: message.content)
-        } label: {
-            Label("复制为纯文本", systemImage: "doc.plaintext")
-        }
-
-        Button {
-            UIPasteboard.general.string = message.content
-        } label: {
-            Label("复制为 Markdown", systemImage: "doc.richtext")
-        }
         
         if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
             Button {
@@ -457,22 +450,6 @@ private extension ChatView {
             action()
         }
     }
-
-    func plainText(fromMarkdown markdown: String) -> String {
-        if let attributed = try? AttributedString(
-            markdown: markdown,
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
-        ) {
-            return String(attributed.characters)
-        }
-        return markdown
-            .replacingOccurrences(of: "`", with: "")
-            .replacingOccurrences(of: "**", with: "")
-            .replacingOccurrences(of: "*", with: "")
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "#", with: "")
-            .replacingOccurrences(of: ">", with: "")
-    }
 }
 
 // MARK: - Composer
@@ -484,94 +461,115 @@ private struct MessageComposerView: View {
     let sendAction: () -> Void
     let focus: FocusState<Bool>.Binding
     
+    @State private var showAttachmentMenu = false
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
-    @State private var imagePreview: ImagePreviewPayload?
-    
-    private var sendButtonColor: Color {
-        viewModel.canSendMessage ? Color.accentColor : Color.secondary.opacity(0.5)
-    }
-    
-    private var sendIconName: String {
-        isSending ? "paperplane.circle.fill" : "paperplane.fill"
-    }
     
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
+            // 附件预览区域
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
                 attachmentPreviewBar
+                    .padding(.horizontal, 12)
             }
             
             HStack(alignment: .center, spacing: 12) {
-                Menu {
+                // 加号按钮（圆形）
+                if #available(iOS 26.0, *) {
                     Button {
-                        showImagePicker = true
+                        showAttachmentMenu = true
                     } label: {
-                        Label("选择图片", systemImage: "photo")
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
                     }
-                    
+                    .glassEffect(.clear, in: Circle())
+                    .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
+                        Button("选择图片") {
+                            showImagePicker = true
+                        }
+                        Button("录制语音") {
+                            showAudioRecorder = true
+                        }
+                    }
+                } else {
                     Button {
-                        showAudioRecorder = true
+                        showAttachmentMenu = true
                     } label: {
-                        Label("录制语音", systemImage: "mic")
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
                     }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .padding(12)
-                        .background(
-                            Circle()
-                                .fill(Color.accentColor.opacity(0.12))
-                        )
+                    .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
+                        Button("选择图片") {
+                            showImagePicker = true
+                        }
+                        Button("录制语音") {
+                            showAudioRecorder = true
+                        }
+                    }
                 }
                 
-                TextField("输入...", text: $text, axis: .vertical)
-                    .lineLimit(1...4)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                // 输入框（拉长的药丸型）
+                if #available(iOS 26.0, *) {
+                    HStack(spacing: 8) {
+                        TextField("Message", text: $text, axis: .vertical)
+                            .lineLimit(1...6)
+                            .textFieldStyle(.plain)
+                            .focused(focus)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
+                    .glassEffect(.clear, in: Capsule())
+                } else {
+                    HStack(spacing: 8) {
+                        TextField("Message", text: $text, axis: .vertical)
+                            .lineLimit(1...6)
+                            .textFieldStyle(.plain)
+                            .focused(focus)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
                     .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(uiColor: .secondarySystemBackground))
+                        Capsule()
+                            .fill(Color(uiColor: .secondarySystemFill))
                     )
-                    .focused(focus)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        guard viewModel.canSendMessage else { return }
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        sendAction()
-                    }
-                
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    sendAction()
-                } label: {
-                    Image(systemName: sendIconName)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(12)
-                        .background(
-                            Circle()
-                                .fill(sendButtonColor)
-                        )
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    )
                 }
-                .buttonStyle(.plain)
-                .disabled(!viewModel.canSendMessage)
-                .help("发送当前消息")
+                
+                // 发送箭头（圆形）
+                if #available(iOS 26.0, *) {
+                    Button {
+                        sendAction()
+                    } label: {
+                        Image(systemName: isSending ? "stop.circle.fill" : "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .glassEffect(.clear, in: Circle())
+                    .disabled(!viewModel.canSendMessage)
+                } else {
+                    Button {
+                        sendAction()
+                    } label: {
+                        Image(systemName: isSending ? "stop.circle.fill" : "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(!viewModel.canSendMessage)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color(uiColor: .systemBackground).opacity(0.92))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(Color.white.opacity(0.08))
-                )
-        )
-        .shadow(color: Color.black.opacity(0.08), radius: 18, y: 10)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
@@ -591,15 +589,6 @@ private struct MessageComposerView: View {
                 viewModel.setAudioAttachment(attachment)
             }
         }
-        .sheet(item: $imagePreview) { payload in
-            ZStack {
-                Color.black.ignoresSafeArea()
-                Image(uiImage: payload.image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(24)
-            }
-        }
     }
     
     @ViewBuilder
@@ -610,20 +599,11 @@ private struct MessageComposerView: View {
                 ForEach(viewModel.pendingImageAttachments) { attachment in
                     ZStack(alignment: .topTrailing) {
                         if let thumbnail = attachment.thumbnailImage {
-                            Button {
-                                if let fullImage = attachment.fullImage {
-                                    imagePreview = ImagePreviewPayload(image: fullImage)
-                                } else {
-                                    imagePreview = ImagePreviewPayload(image: thumbnail)
-                                }
-                            } label: {
-                                Image(uiImage: thumbnail)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 60, height: 60)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .buttonStyle(.plain)
+                            Image(uiImage: thumbnail)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 60, height: 60)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
                         
                         Button {
@@ -667,12 +647,8 @@ private struct MessageComposerView: View {
             .padding(.vertical, 8)
         }
     }
-
-    private struct ImagePreviewPayload: Identifiable {
-        let id = UUID()
-        let image: UIImage
-    }
 }
+
 // MARK: - Audio Recorder Sheet
 
 private struct AudioRecorderSheet: View {

@@ -290,6 +290,55 @@ struct ChatBubble: View {
             )
             .shadow(color: color.opacity(0.2), radius: 8, y: 4)
     }
+    
+    // MARK: - Image Attachments
+    
+    @ViewBuilder
+    private func imageAttachmentsView(fileNames: [String]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(fileNames, id: \.self) { fileName in
+                    if let image = loadImage(fileName: fileName) {
+                        Button {
+                            imagePreview = image
+                        } label: {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 120, height: 120)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.secondary.opacity(0.1))
+                            .frame(width: 120, height: 120)
+                            .overlay(
+                                VStack(spacing: 4) {
+                                    Image(systemName: "photo")
+                                        .font(.title2)
+                                    Text("图片丢失")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(.secondary)
+                            )
+                    }
+                }
+            }
+        }
+    }
+    
+    private func loadImage(fileName: String) -> UIImage? {
+        guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
+        return UIImage(data: data)
+    }
+}
+
+// MARK: - Image Preview Wrapper
+
+struct ImagePreviewWrapper: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
 
 private struct ImagePreviewPayload: Identifiable {

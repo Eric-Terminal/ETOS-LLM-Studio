@@ -22,7 +22,6 @@ struct ContentView: View {
         TabView(selection: $selection) {
             NavigationStack {
                 ChatView()
-                    .toolbar(.hidden, for: .navigationBar)
             }
             .tabItem {
                 Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
@@ -46,4 +45,9 @@ struct ContentView: View {
             .tag(Tab.settings)
         }
     }
+}
+
+enum ChatNavigationDestination: Hashable {
+    case sessions
+    case settings
 }
