@@ -972,29 +972,30 @@ public class ChatService {
         logger.info("🔄 重试消息: \(String(describing: message.role)) - 索引 \(messageIndex)")
 
         // 决定重试时要重发的 user 消息，以及保留下来的前缀/后缀
+        // 核心逻辑：无论重试什么消息，都找到对应的 user 消息重新发送
         let anchorUserIndex: Int
-        let tailStartIndex: Int?
         let messageToSend: ChatMessage
         
         switch message.role {
         case .user:
-            // user 重试：仅删除该 user 与下一个 user 之间的内容，保留后续对话
+            // user 重试：直接重试该 user 消息
             anchorUserIndex = messageIndex
             messageToSend = message
-            tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
         case .assistant, .error:
-            // assistant/error 重试：回到上一个 user，从那里重新生成回复，保留下一个 assistant 之后的历史
+            // assistant/error 重试：回到上一个 user，本质等同于重试那个 user
             guard let previousUserIndex = messages[..<messageIndex].lastIndex(where: { $0.role == .user }) else {
                 logger.warning("⚠️ 未找到该 \(message.role.rawValue) 消息之前的 user 消息，无法重试")
                 return
             }
             anchorUserIndex = previousUserIndex
             messageToSend = messages[previousUserIndex]
-            tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .assistant })
         default:
             logger.warning("⚠️ 不支持重试 \(String(describing: message.role)) 类型的消息")
             return
         }
+        
+        // 统一逻辑：删除 anchorUser 与下一个 user 之间的内容，保留下一个 user 及之后的对话
+        let tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
         
         // 生成重试时的前缀与需要恢复的后缀
         let leadingMessages = Array(messages.prefix(upTo: anchorUserIndex))
