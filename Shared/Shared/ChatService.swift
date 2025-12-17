@@ -961,7 +961,8 @@ public class ChatService {
         includeSystemTime: Bool
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
-        await cancelOngoingRequest()
+        
+        // 先获取当前消息列表，避免取消请求时状态变化
         let messages = messagesForSessionSubject.value
         
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
@@ -1019,8 +1020,12 @@ public class ChatService {
         var persistedMessages = requestMessages
         persistedMessages.append(contentsOf: trailingMessages)
         
+        // 先更新 UI 显示新的 loading message，避免闪烁
         messagesForSessionSubject.send(persistedMessages)
         Persistence.saveMessages(persistedMessages, for: currentSession.id)
+        
+        // 再取消旧的请求（如果有）
+        await cancelOngoingRequest()
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil

@@ -465,7 +465,7 @@ final class ChatViewModel: ObservableObject {
     
     func canRetry(message: ChatMessage) -> Bool {
         // 所有 user 和 assistant 消息都可以重试
-        // 但如果正在发送，只允许重试最后一条或倍数第二条
+        // 但如果正在发送，只允许重试最后一条或倒数第二条
         if isSendingMessage {
             guard let lastMessage = allMessagesForSession.last else { return false }
             if lastMessage.id == message.id { return true }
