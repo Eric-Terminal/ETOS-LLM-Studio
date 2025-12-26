@@ -189,10 +189,50 @@ public enum MessageRole: String, Codable {
 
 /// 聊天消息数据结构 (App的"官方语言")
 /// 这是一个纯粹的数据模型，不包含任何UI状态
+/// 支持多版本历史记录功能 - 重试时保留旧版本，用户可在版本间切换
 public struct ChatMessage: Identifiable, Codable, Hashable {
     public var id: UUID
     public var role: MessageRole
-    public var content: String
+    
+    // MARK: - 多版本内容存储
+    /// 所有版本的内容数组（内部存储）
+    private var contentVersions: [String]
+    /// 当前显示的版本索引（基于0）
+    private var currentVersionIndex: Int
+    
+    /// 当前显示的内容（计算属性，向后兼容）
+    public var content: String {
+        get {
+            guard !contentVersions.isEmpty else { return "" }
+            let index = min(max(0, currentVersionIndex), contentVersions.count - 1)
+            return contentVersions[index]
+        }
+        set {
+            if contentVersions.isEmpty {
+                contentVersions = [newValue]
+                currentVersionIndex = 0
+            } else {
+                let index = min(max(0, currentVersionIndex), contentVersions.count - 1)
+                contentVersions[index] = newValue
+            }
+        }
+    }
+    
+    /// 是否有多个版本
+    public var hasMultipleVersions: Bool {
+        contentVersions.count > 1
+    }
+    
+    /// 获取所有版本
+    public func getAllVersions() -> [String] {
+        return contentVersions
+    }
+    
+    /// 获取当前版本索引
+    public func getCurrentVersionIndex() -> Int {
+        return currentVersionIndex
+    }
+    
     public var reasoningContent: String? // 用于存放推理过程等附加信息
     public var toolCalls: [InternalToolCall]? // AI发出的工具调用指令
     public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
@@ -211,12 +251,99 @@ public struct ChatMessage: Identifiable, Codable, Hashable {
     ) {
         self.id = id
         self.role = role
-        self.content = content
+        self.contentVersions = [content]
+        self.currentVersionIndex = 0
         self.reasoningContent = reasoningContent
         self.toolCalls = toolCalls
         self.tokenUsage = tokenUsage
         self.audioFileName = audioFileName
         self.imageFileNames = imageFileNames
+    }
+    
+    // MARK: - 版本管理方法
+    
+    /// 添加新版本到历史记录
+    public mutating func addVersion(_ newContent: String) {
+        contentVersions.append(newContent)
+        currentVersionIndex = contentVersions.count - 1
+    }
+    
+    /// 删除指定版本
+    public mutating func removeVersion(at index: Int) {
+        guard contentVersions.indices.contains(index), contentVersions.count > 1 else { return }
+        
+        contentVersions.remove(at: index)
+        
+        // 调整当前索引
+        if currentVersionIndex >= index {
+            currentVersionIndex = max(0, currentVersionIndex - 1)
+        }
+        // 确保索引在有效范围内
+        currentVersionIndex = min(currentVersionIndex, contentVersions.count - 1)
+    }
+    
+    /// 切换到指定版本
+    public mutating func switchToVersion(_ index: Int) {
+        if contentVersions.indices.contains(index) {
+            currentVersionIndex = index
+        }
+    }
+    
+    // MARK: - Codable 支持（向后兼容）
+    
+    enum CodingKeys: String, CodingKey {
+        case id, role, content, currentVersionIndex
+        case reasoningContent, toolCalls, tokenUsage
+        case audioFileName, imageFileNames
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.role = try container.decode(MessageRole.self, forKey: .role)
+        
+        // 读取 content 字段：可能是字符串（旧版）或数组（新版）
+        if let contentArray = try? container.decode([String].self, forKey: .content) {
+            // 新版：数组格式
+            self.contentVersions = contentArray.isEmpty ? [""] : contentArray
+            self.currentVersionIndex = (try? container.decode(Int.self, forKey: .currentVersionIndex)) ?? 0
+            // 确保索引有效
+            self.currentVersionIndex = min(max(0, self.currentVersionIndex), self.contentVersions.count - 1)
+        } else if let singleContent = try? container.decode(String.self, forKey: .content) {
+            // 旧版：字符串格式
+            self.contentVersions = [singleContent]
+            self.currentVersionIndex = 0
+        } else {
+            // 默认空内容
+            self.contentVersions = [""]
+            self.currentVersionIndex = 0
+        }
+        
+        self.reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
+        self.toolCalls = try container.decodeIfPresent([InternalToolCall].self, forKey: .toolCalls)
+        self.tokenUsage = try container.decodeIfPresent(MessageTokenUsage.self, forKey: .tokenUsage)
+        self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
+        self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(role, forKey: .role)
+        
+        // 保存 content：如果只有一个版本，保存为字符串；多个版本保存为数组
+        if contentVersions.count == 1 {
+            try container.encode(contentVersions[0], forKey: .content)
+        } else {
+            try container.encode(contentVersions, forKey: .content)
+            try container.encode(currentVersionIndex, forKey: .currentVersionIndex)
+        }
+        
+        try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
+        try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
+        try container.encodeIfPresent(tokenUsage, forKey: .tokenUsage)
+        try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
+        try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
     }
 }
 

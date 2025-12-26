@@ -407,10 +407,40 @@ struct ChatView: View {
         
         Divider()
         
+        // 版本管理菜单项
+        if message.hasMultipleVersions {
+            Menu {
+                ForEach(0..<message.getAllVersions().count, id: \.self) { index in
+                    Button {
+                        viewModel.switchToVersion(index, of: message)
+                    } label: {
+                        HStack {
+                            Text("版本 \(index + 1)")
+                            if index == message.getCurrentVersionIndex() {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label("切换版本 (\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count))", systemImage: "clock.arrow.circlepath")
+            }
+            
+            if message.getAllVersions().count > 1 {
+                Button(role: .destructive) {
+                    viewModel.deleteCurrentVersion(of: message)
+                } label: {
+                    Label("删除当前版本", systemImage: "trash")
+                }
+            }
+            
+            Divider()
+        }
+        
         Button(role: .destructive) {
             viewModel.deleteMessage(message)
         } label: {
-            Label("删除消息", systemImage: "trash")
+            Label(message.hasMultipleVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
         }
         
         Divider()

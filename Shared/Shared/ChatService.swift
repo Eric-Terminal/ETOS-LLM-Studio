@@ -68,6 +68,8 @@ public class ChatService {
     private var currentRequestSessionID: UUID?
     /// 当前请求生成的加载占位消息 ID，方便在取消时移除。
     private var currentLoadingMessageID: UUID?
+    /// 重试时要添加新版本的assistant消息ID（如果有）
+    private var retryTargetMessageID: UUID?
     private var providers: [Provider]
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
@@ -469,6 +471,13 @@ public class ChatService {
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: currentSession.id)
         logger.info("✏️ 已更新消息内容: \(message.id.uuidString)")
+    }
+    
+    /// 更新整个消息列表（用于版本管理等批量操作）
+    public func updateMessages(_ messages: [ChatMessage], for sessionID: UUID) {
+        messagesForSessionSubject.send(messages)
+        Persistence.saveMessages(messages, for: sessionID)
+        logger.info("✏️ 已更新会话消息列表: \(sessionID.uuidString)")
     }
     
     public func updateSession(_ session: ChatSession) {
@@ -995,11 +1004,33 @@ public class ChatService {
             return
         }
         
-        // 统一逻辑：删除 anchorUser 与下一个 user 之间的内容，保留下一个 user 及之后的对话
-        let tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
+        // 统一逻辑：保留 anchorUser 到被重试消息之间的内容作为历史版本，保留下一个 user 及之后的对话
+        let tailStartIndex: Int?
+        if messageIndex + 1 < messages.count {
+            tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
+        } else {
+            tailStartIndex = nil
+        }
         
         // 生成重试时的前缀与需要恢复的后缀
         let leadingMessages = Array(messages.prefix(upTo: anchorUserIndex))
+        
+        // 找到被重试的 assistant 消息（如果重试 assistant/error）
+        var assistantToUpdate: ChatMessage?
+        var assistantUpdateIndex: Int?
+        if message.role == .assistant || message.role == .error {
+            assistantToUpdate = message
+            assistantUpdateIndex = messageIndex
+        } else {
+            // 如果重试 user 消息，找到它后面第一个 assistant
+            if anchorUserIndex + 1 < messages.count {
+                if let nextAssistantIndex = messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .assistant || $0.role == .error }) {
+                    assistantToUpdate = messages[nextAssistantIndex]
+                    assistantUpdateIndex = nextAssistantIndex
+                }
+            }
+        }
+        
         let trailingMessages: [ChatMessage]
         if let tailIndex = tailStartIndex {
             trailingMessages = Array(messages[tailIndex...])
@@ -1017,7 +1048,26 @@ public class ChatService {
         requestMessages.append(messageToSend)
         requestMessages.append(loadingMessage)
         
-        var persistedMessages = requestMessages
+        // 移除旧的 assistant 到下一个 user 之间的消息（不包括被重试的消息本身）
+        var middleMessages: [ChatMessage] = []
+        if anchorUserIndex + 1 < messageIndex {
+            middleMessages = Array(messages[(anchorUserIndex + 1)..<messageIndex])
+            if let assistantIdx = assistantUpdateIndex, assistantIdx > anchorUserIndex && assistantIdx < messageIndex {
+                middleMessages.removeAll { $0.id == assistantToUpdate?.id }
+            }
+        }
+        
+        var persistedMessages = leadingMessages
+        persistedMessages.append(messageToSend)
+        persistedMessages.append(contentsOf: middleMessages)
+        if let existingAssistant = assistantToUpdate {
+            persistedMessages.append(existingAssistant)
+            // 记录要添加版本的消息ID
+            retryTargetMessageID = existingAssistant.id
+        } else {
+            retryTargetMessageID = nil
+        }
+        persistedMessages.append(loadingMessage)
         persistedMessages.append(contentsOf: trailingMessages)
         
         // 先更新 UI 显示新的 loading message，避免闪烁
@@ -1640,7 +1690,40 @@ public class ChatService {
     /// 将最终确定的消息更新到消息列表中
     private func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) {
         var messages = messagesForSessionSubject.value
-        if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+        
+        // 检查是否是重试场景，需要添加新版本
+        if let targetID = retryTargetMessageID,
+           let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
+            // 找到目标assistant消息，添加新版本
+            var targetMessage = messages[targetIndex]
+            targetMessage.addVersion(newMessage.content)
+            
+            // 如果有推理内容，也添加到新版本
+            if let newReasoning = newMessage.reasoningContent, !newReasoning.isEmpty {
+                targetMessage.reasoningContent = (targetMessage.reasoningContent ?? "") + "\n\n[新版本推理]\n" + newReasoning
+            }
+            
+            // 更新 token 使用情况
+            if let newUsage = newMessage.tokenUsage {
+                targetMessage.tokenUsage = newUsage
+            }
+            
+            messages[targetIndex] = targetMessage
+            
+            // 移除 loading message
+            if let loadingIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                messages.remove(at: loadingIndex)
+            }
+            
+            // 清除重试标记
+            retryTargetMessageID = nil
+            
+            messagesForSessionSubject.send(messages)
+            Persistence.saveMessages(messages, for: sessionID)
+            
+            logger.info("✅ 已将新内容添加为版本到消息 \(targetID)")
+        } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+            // 正常流程：替换loading message
             let preservedToolCalls = messages[index].toolCalls
             let mergedToolCalls: [InternalToolCall]? = {
                 if let newCalls = newMessage.toolCalls, !newCalls.isEmpty {

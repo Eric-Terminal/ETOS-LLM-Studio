@@ -19,6 +19,8 @@ struct MessageActionsView: View {
     let onEdit: () -> Void
     let onRetry: (ChatMessage) -> Void
     let onDelete: () -> Void
+    let onDeleteCurrentVersion: () -> Void
+    let onSwitchVersion: (Int) -> Void
     let onBranch: (Bool) -> Void
     
     let messageIndex: Int?
@@ -28,6 +30,7 @@ struct MessageActionsView: View {
     
     @Environment(\.dismiss) var dismiss
     @State private var showDeleteConfirm = false
+    @State private var showDeleteVersionConfirm = false
     @State private var showBranchOptions = false
 
     // MARK: - 视图主体
@@ -63,11 +66,38 @@ struct MessageActionsView: View {
                 }
             }
             
+            // 版本管理菜单
+            if message.hasMultipleVersions {
+                Section("版本管理") {
+                    Picker("选择版本", selection: Binding(
+                        get: { message.getCurrentVersionIndex() },
+                        set: { newIndex in
+                            onSwitchVersion(newIndex)
+                            dismiss()
+                        }
+                    )) {
+                        ForEach(0..<message.getAllVersions().count, id: \.self) { index in
+                            Text("版本 \(index + 1)")
+                                .tag(index)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                    
+                    if message.getAllVersions().count > 1 {
+                        Button(role: .destructive) {
+                            showDeleteVersionConfirm = true
+                        } label: {
+                            Label("删除当前版本", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            
             Section {
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
-                    Label("删除消息", systemImage: "trash.fill")
+                    Label(message.hasMultipleVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
                 }
             }
             
@@ -78,6 +108,16 @@ struct MessageActionsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Text("第 \(index + 1) / \(totalMessages) 条")
+                            .font(.caption2)
+                    }
+                }
+                
+                if message.hasMultipleVersions {
+                    VStack(alignment: .leading) {
+                        Text("版本信息")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("当前显示第 \(message.getCurrentVersionIndex() + 1) / \(message.getAllVersions().count) 版")
                             .font(.caption2)
                     }
                 }
@@ -116,7 +156,16 @@ struct MessageActionsView: View {
             }
             Button("取消", role: .cancel) { }
         } message: {
-            Text("删除后无法恢复这条消息。")
+            Text(message.hasMultipleVersions ? "删除后将无法恢复这条消息的所有版本。" : "删除后无法恢复这条消息。")
+        }
+        .alert("确认删除当前版本", isPresented: $showDeleteVersionConfirm) {
+            Button("删除", role: .destructive) {
+                onDeleteCurrentVersion()
+                dismiss()
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("删除后将无法恢复此版本的内容。")
         }
         .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
             Button("仅复制消息历史") {

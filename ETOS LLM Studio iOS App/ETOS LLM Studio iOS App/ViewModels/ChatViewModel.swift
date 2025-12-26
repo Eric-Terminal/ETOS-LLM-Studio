@@ -484,6 +484,75 @@ final class ChatViewModel: ObservableObject {
         chatService.updateSession(session)
     }
     
+    // MARK: - Message Version Management
+    
+    /// 切换到指定消息的上一个版本
+    func switchToPreviousVersion(of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id),
+              updatedMessage.hasMultipleVersions else { return }
+        
+        let newIndex = max(0, updatedMessage.getCurrentVersionIndex() - 1)
+        updatedMessage.switchToVersion(newIndex)
+        updateMessage(updatedMessage)
+    }
+    
+    /// 切换到指定消息的下一个版本
+    func switchToNextVersion(of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id),
+              updatedMessage.hasMultipleVersions else { return }
+        
+        let newIndex = min(updatedMessage.getAllVersions().count - 1, updatedMessage.getCurrentVersionIndex() + 1)
+        updatedMessage.switchToVersion(newIndex)
+        updateMessage(updatedMessage)
+    }
+    
+    /// 切换到指定版本
+    func switchToVersion(_ index: Int, of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+        updatedMessage.switchToVersion(index)
+        updateMessage(updatedMessage)
+    }
+    
+    /// 删除指定消息的当前版本（如果只剩一个版本则删除整个消息）
+    func deleteCurrentVersion(of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+        
+        if updatedMessage.getAllVersions().count <= 1 {
+            // 只剩一个版本，删除整个消息
+            deleteMessage(updatedMessage)
+        } else {
+            // 删除当前版本
+            updatedMessage.removeVersion(at: updatedMessage.getCurrentVersionIndex())
+            updateMessage(updatedMessage)
+        }
+    }
+    
+    /// 删除整个消息（所有版本）
+    func deleteMessage(_ message: ChatMessage) {
+        chatService.deleteMessage(message)
+    }
+    
+    /// 添加新版本到消息（用于重试功能）
+    func addVersionToMessage(_ message: ChatMessage, newContent: String) {
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+        updatedMessage.addVersion(newContent)
+        updateMessage(updatedMessage)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func findMessage(by id: UUID) -> ChatMessage? {
+        allMessagesForSession.first { $0.id == id }
+    }
+    
+    private func updateMessage(_ message: ChatMessage) {
+        guard let index = allMessagesForSession.firstIndex(where: { $0.id == message.id }) else { return }
+        var updatedMessages = allMessagesForSession
+        updatedMessages[index] = message
+        chatService.updateMessages(updatedMessages, for: currentSession?.id ?? UUID())
+        saveCurrentSessionDetails()
+    }
+    
     func updateDisplayedMessages() {
         let filtered = visibleMessages(from: allMessagesForSession)
         

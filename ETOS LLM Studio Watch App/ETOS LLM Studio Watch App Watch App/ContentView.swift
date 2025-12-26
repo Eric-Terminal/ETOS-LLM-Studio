@@ -185,6 +185,12 @@ struct ContentView: View {
                     onDelete: {
                         viewModel.deleteMessage(message)
                     },
+                    onDeleteCurrentVersion: {
+                        viewModel.deleteCurrentVersion(of: message)
+                    },
+                    onSwitchVersion: { index in
+                        viewModel.switchToVersion(index, of: message)
+                    },
                     onBranch: { copyPrompts in
                         _ = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: copyPrompts)
                     },

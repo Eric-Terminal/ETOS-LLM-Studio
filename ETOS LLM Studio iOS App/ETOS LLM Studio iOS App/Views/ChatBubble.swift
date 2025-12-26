@@ -24,6 +24,7 @@ struct ChatBubble: View {
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
+    @EnvironmentObject private var viewModel: ChatViewModel
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -33,6 +34,11 @@ struct ChatBubble: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 contentStack
+                
+                // 版本指示器（仅当有多个版本时显示）
+                if message.hasMultipleVersions {
+                    versionIndicator
+                }
             }
             .padding(14)
             .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -56,6 +62,45 @@ struct ChatBubble: View {
                     .padding(24)
             }
         }
+    }
+    
+    // MARK: - Version Indicator
+    
+    @ViewBuilder
+    private var versionIndicator: some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.switchToPreviousVersion(of: message)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(message.getCurrentVersionIndex() > 0 ? Color.accentColor : Color.secondary.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(message.getCurrentVersionIndex() == 0)
+            
+            Text("\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count)")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            
+            Button {
+                viewModel.switchToNextVersion(of: message)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? Color.accentColor : Color.secondary.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(Color.secondary.opacity(0.08))
+        )
     }
     
     // MARK: - Content
