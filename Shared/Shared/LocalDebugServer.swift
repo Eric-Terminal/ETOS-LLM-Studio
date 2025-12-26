@@ -110,7 +110,7 @@ public class LocalDebugServer: ObservableObject {
     }
     
     private func receiveRequest(on connection: NWConnection) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 52428800) { [weak self] data, _, isComplete, error in
             guard let self = self, let data = data, !data.isEmpty else {
                 if isComplete {
                     connection.cancel()
