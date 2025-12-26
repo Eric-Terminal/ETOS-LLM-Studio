@@ -380,7 +380,9 @@ class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate
             
             startProgressTimer()
         } catch {
+            #if DEBUG
             print("❌ 播放音频失败: \(error.localizedDescription)")
+            #endif
         }
     }
     

@@ -518,6 +518,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBonjourServices = _http._tcp;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以提供调试服务器功能";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
@@ -557,6 +558,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBonjourServices = _http._tcp;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以提供调试服务器功能";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";

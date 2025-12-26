@@ -120,7 +120,7 @@ public final class MCPManager: ObservableObject {
 
     private init() {
         let defaults = UserDefaults.standard
-        let storedEnabled = defaults.object(forKey: proxyEnabledKey) as? Bool ?? true
+        let storedEnabled = defaults.object(forKey: proxyEnabledKey) as? Bool ?? false
         let storedBaseURL = defaults.string(forKey: proxyBaseURLKey) ?? MCPProxySettings.defaultBaseURLString
         self.proxySettings = MCPProxySettings(isEnabled: storedEnabled, baseURLString: storedBaseURL)
         reloadServers()

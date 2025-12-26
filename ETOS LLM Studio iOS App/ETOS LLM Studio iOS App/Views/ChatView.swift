@@ -781,7 +781,7 @@ private struct AudioRecorderSheet: View {
                 recordingDuration += 0.1
             }
         } catch {
-            print("录音启动失败: \(error.localizedDescription)")
+            // 录音启动失败
         }
     }
     

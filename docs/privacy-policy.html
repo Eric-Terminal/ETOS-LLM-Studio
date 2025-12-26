@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETOS LLM Studio - 隐私政策</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f7;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #1d1d1f;
+        }
+        
+        .update-date {
+            font-size: 14px;
+            color: #86868b;
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            color: #1d1d1f;
+        }
+        
+        p {
+            margin-bottom: 20px;
+            color: #1d1d1f;
+        }
+        
+        ul {
+            margin-left: 20px;
+            margin-bottom: 20px;
+        }
+        
+        li {
+            margin-bottom: 10px;
+        }
+        
+        strong {
+            font-weight: 600;
+        }
+        
+        .footer {
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid #d2d2d7;
+            text-align: center;
+            color: #86868b;
+            font-size: 14px;
+        }
+        
+        a {
+            color: #0071e3;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 28px;
+            }
+            
+            h2 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>隐私政策</h1>
+        <p class="update-date">最后更新：2025年12月27日</p>
+        
+        <h2>数据收集</h2>
+        <p>ETOS LLM Studio 不会收集、存储或传输任何个人数据到我们的服务器。所有数据均存储在您的设备本地。我们尊重并保护您的隐私权。</p>
+        
+        <h2>本地数据存储</h2>
+        <p>应用在您的设备上存储以下数据：</p>
+        <ul>
+            <li><strong>聊天记录</strong> - 您与 AI 的对话历史，完全存储在设备本地沙盒中</li>
+            <li><strong>API 配置</strong> - 您添加的 API 提供商和密钥信息，存储在应用沙盒中并受iOS系统文件保护机制保护</li>
+            <li><strong>记忆数据</strong> - RAG 系统的向量化记忆，使用设备端向量化技术</li>
+            <li><strong>应用设置</strong> - 您的偏好设置和自定义配置</li>
+            <li><strong>附件文件</strong> - 您发送的图片和音频附件</li>
+        </ul>
+        <p>这些数据仅存储在您的设备上，应用开发者无法访问。</p>
+        
+        <h2>第三方服务</h2>
+        <p>当您使用 AI 聊天功能时，您的消息将发送到您配置的 API 提供商（如 OpenAI、Anthropic、Google 等）。这些服务商的隐私政策适用于他们处理您数据的方式。</p>
+        <p>重要提示：</p>
+        <ul>
+            <li>您可以自由选择任何兼容的 API 提供商</li>
+            <li>所有网络通信均通过 HTTPS 加密传输</li>
+            <li>我们不会拦截或记录您与第三方服务的通信内容</li>
+            <li>请仔细阅读您所选择的 API 提供商的隐私政策</li>
+        </ul>
+        
+        <h2>照片库访问</h2>
+        <p>当您选择发送图片给 AI 模型时，应用会请求访问您的照片库。这些图片：</p>
+        <ul>
+            <li>仅用于发送给您配置的 API 提供商进行图像识别</li>
+            <li>不会被上传到我们的服务器</li>
+            <li>您可以随时在系统设置中撤销照片库访问权限</li>
+        </ul>
+        
+        <h2>麦克风访问</h2>
+        <p>应用请求麦克风权限用于语音输入功能。录制的音频：</p>
+        <ul>
+            <li>可以发送给支持语音识别的 API 提供商</li>
+            <li>可以保存在设备本地作为对话附件</li>
+            <li>不会在未经您同意的情况下发送到任何服务器</li>
+        </ul>
+        
+        <h2>本地网络访问</h2>
+        <p>应用包含"局域网调试"功能，允许您通过本地网络访问应用沙盒目录。此功能：</p>
+        <ul>
+            <li>需要您手动启动，默认关闭</li>
+            <li>使用随机生成的6位PIN码保护</li>
+            <li>仅在同一局域网内可访问</li>
+            <li>严格限制在应用沙盒Documents目录内</li>
+            <li>主要用于开发者调试和高级用户的文件管理</li>
+        </ul>
+        
+        <h2>iCloud 同步</h2>
+        <p>如果您启用了设备同步功能，部分数据（如会话列表、提供商配置）可能通过 iCloud 在您的设备之间同步。此时：</p>
+        <ul>
+            <li>数据同步遵循 Apple iCloud 的端到端加密机制</li>
+            <li>Apple 的 <a href="https://www.apple.com/legal/privacy/" target="_blank">iCloud 隐私政策</a>适用于此类数据传输</li>
+            <li>您可以在应用设置中关闭同步功能</li>
+        </ul>
+        
+        <h2>数据安全</h2>
+        <p>我们采取以下措施保护您的数据安全：</p>
+        <ul>
+            <li>所有网络通信使用 HTTPS/TLS 加密</li>
+            <li>应用使用标准加密技术，无需特殊出口许可</li>
+            <li>应用数据存储在iOS沙盒中，受系统级访问控制保护</li>
+            <li>应用遵循 Apple 的沙盒安全机制，其他应用无法访问您的数据</li>
+        </ul>
+        
+        <h2>儿童隐私</h2>
+        <p>ETOS LLM Studio 不针对13岁以下儿童设计，我们不会故意收集儿童的个人信息。</p>
+        
+        <h2>隐私政策更新</h2>
+        <p>我们可能会不时更新本隐私政策。更新后的政策将在应用内和本网页上发布，并标注更新日期。重大变更会通过应用内通知告知用户。</p>
+        
+        <h2>联系我们</h2>
+        <p>如有隐私相关问题或建议，请通过以下方式联系我们：</p>
+        <ul>
+            <li>GitHub Issues: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues" target="_blank">github.com/Eric-Terminal/ETOS-LLM-Studio/issues</a></li>
+            <li>项目主页: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio" target="_blank">github.com/Eric-Terminal/ETOS-LLM-Studio</a></li>
+        </ul>
+        
+        <div class="footer">
+            <p>&copy; 2025-2026 Eric-Terminal. All rights reserved.</p>
+            <p>开源项目 | GPLv3 许可证</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -398,7 +398,7 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
             
             startTimer()
         } catch {
-            print("❌ 播放音频失败: \(error.localizedDescription)")
+            // 播放音频失败
         }
     }
     
