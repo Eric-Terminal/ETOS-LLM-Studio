@@ -17,148 +17,86 @@ public struct LocalDebugView: View {
     public init() {}
     
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                // 服务器状态
-                if server.isRunning {
-                    VStack(spacing: 6) {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.title2)
-                            .foregroundColor(.green)
-                        Text("运行中")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    }
-                } else {
-                    VStack(spacing: 6) {
-                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                        Text("未运行")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+        List {
+            // 服务器状态
+            Section {
+                HStack {
+                    Circle()
+                        .fill(server.isRunning ? Color.green : Color.secondary)
+                        .frame(width: 8, height: 8)
+                    Text(server.isRunning ? "运行中" : "已停止")
+                        .font(.caption)
+                        .foregroundStyle(server.isRunning ? .green : .secondary)
                 }
                 
-                Divider()
-                
-                // IP 地址
-                if server.isRunning {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("IP", systemImage: "network")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text(server.localIP)
-                            .font(.system(.caption, design: .monospaced))
-                            .fontWeight(.medium)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    // PIN 码
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("PIN", systemImage: "key.fill")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text(server.pin)
-                            .font(.system(.title3, design: .monospaced))
-                            .fontWeight(.bold)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    // 访问地址
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("http://\(server.localIP):8080")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.blue)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                
-                // 错误信息
-                if let error = server.errorMessage {
-                    VStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red)
-                        Text(error)
-                            .font(.caption2)
-                            .foregroundColor(.red)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.top, 4)
-                }
-                
-                Divider()
-                
-                // 控制按钮
-                Button(action: {
+                Button(server.isRunning ? "停止" : "启动") {
                     if server.isRunning {
                         stopServer()
                     } else {
                         startServer()
                     }
-                }) {
-                    HStack {
-                        Image(systemName: server.isRunning ? "stop.circle.fill" : "play.circle.fill")
-                        Text(server.isRunning ? "停止" : "启动")
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(server.isRunning ? Color.red : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
                 }
-                .buttonStyle(.plain)
+                .foregroundStyle(server.isRunning ? .red : .blue)
                 
-                // 文档按钮
-                Button(action: {
-                    showingDocs = true
-                }) {
-                    HStack {
-                        Image(systemName: "book.fill")
-                        Text("查看文档")
-                    }
-                    .font(.caption)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(Color.secondary.opacity(0.2))
-                    .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-                
-                // 提示信息
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("功能", systemImage: "info.circle")
+                if let error = server.errorMessage {
+                    Text(error)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
-                    Text("在局域网内通过命令行远程操作 Documents 目录")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.top, 8)
-                
-                // 安全提醒
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("安全", systemImage: "shield.fill")
-                        .font(.caption2)
-                        .foregroundColor(.orange)
-                    Text("仅在可信任的局域网中使用")
-                        .font(.caption2)
-                        .foregroundColor(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.red)
                 }
             }
-            .padding()
+            
+            // 连接信息
+            if server.isRunning {
+                Section("连接") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("IP")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(server.localIP)
+                            .font(.caption.monospaced())
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("PIN")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(server.pin)
+                            .font(.title3.monospaced().weight(.semibold))
+                            .foregroundStyle(.blue)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("URL")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("http://\(server.localIP):8080")
+                            .font(.system(size: 9).monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            
+            // 文档
+            Section {
+                Button {
+                    showingDocs = true
+                } label: {
+                    Label("API 文档", systemImage: "book")
+                        .font(.caption)
+                }
+            } footer: {
+                Text("仅在可信网络使用 · PIN 随机生成 · 用完及时停止")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .navigationTitle("局域网调试")
+        .navigationTitle("调试")
         .sheet(isPresented: $showingDocs) {
-            NavigationView {
+            NavigationStack {
                 WatchDocumentationView()
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
-            // 离开界面时自动停止服务器
             if newPhase != .active && server.isRunning {
                 stopServer()
             }
@@ -167,7 +105,6 @@ public struct LocalDebugView: View {
     
     private func startServer() {
         server.start(port: 8080)
-        // watchOS 保持屏幕常亮
         WKInterfaceDevice.current().isBatteryMonitoringEnabled = true
     }
     
@@ -183,122 +120,113 @@ private struct WatchDocumentationView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("API 端点")
-                    .font(.headline)
-                
-                Group {
-                    WatchAPICard(
-                        method: "GET",
-                        endpoint: "/api/list",
-                        description: "列出目录"
-                    )
-                    
-                    WatchAPICard(
-                        method: "GET",
-                        endpoint: "/api/download",
-                        description: "下载文件"
-                    )
-                    
-                    WatchAPICard(
-                        method: "POST",
-                        endpoint: "/api/upload",
-                        description: "上传文件"
-                    )
-                    
-                    WatchAPICard(
-                        method: "POST",
-                        endpoint: "/api/delete",
-                        description: "删除文件"
-                    )
-                    
-                    WatchAPICard(
-                        method: "POST",
-                        endpoint: "/api/mkdir",
-                        description: "创建目录"
-                    )
-                }
-                
-                Divider()
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("认证")
-                        .font(.headline)
-                    Text("所有请求需包含 Header:")
-                        .font(.caption2)
-                    Text("X-Debug-PIN: <PIN码>")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundColor(.blue)
-                }
-                
-                Divider()
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("示例 (curl)")
-                        .font(.headline)
-                    Text("""
-                    curl -X GET \\
-                      http://IP:8080/api/list \\
-                      -H "X-Debug-PIN: 123456" \\
-                      -d '{"path": "."}'
-                    """)
-                    .font(.system(.caption2, design: .monospaced))
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(6)
-                }
+        List {
+            Section("基础") {
+                InfoItem(label: "端口", value: "8080")
+                InfoItem(label: "Header", value: "X-Debug-PIN")
             }
-            .padding()
+            
+            Section("端点") {
+                EndpointItem(method: "GET", path: "/api/list", desc: "列出目录")
+                EndpointItem(method: "GET", path: "/api/download", desc: "下载文件")
+                EndpointItem(method: "POST", path: "/api/upload", desc: "上传文件")
+                EndpointItem(method: "POST", path: "/api/delete", desc: "删除")
+                EndpointItem(method: "POST", path: "/api/mkdir", desc: "创建目录")
+            }
+            
+            Section("示例") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Group {
+                        Text("列出目录:")
+                            .font(.caption2.weight(.medium))
+                        Text("""
+                        curl -X GET \\
+                          http://IP:8080/api/list \\
+                          -H "X-Debug-PIN: PIN" \\
+                          -d '{"path": "."}'
+                        """)
+                    }
+                    
+                    Group {
+                        Text("下载文件:")
+                            .font(.caption2.weight(.medium))
+                            .padding(.top, 4)
+                        Text("""
+                        curl -X GET \\
+                          http://IP:8080/api/download \\
+                          -H "X-Debug-PIN: PIN" \\
+                          -d '{"path": "file.txt"}'
+                        """)
+                    }
+                    
+                    Group {
+                        Text("上传文件:")
+                            .font(.caption2.weight(.medium))
+                            .padding(.top, 4)
+                        Text("""
+                        curl -X POST \\
+                          http://IP:8080/api/upload \\
+                          -H "X-Debug-PIN: PIN" \\
+                          -d '{"path": "file.txt", "data": "..."}'
+                        """)
+                    }
+                }
+                .font(.system(size: 8).monospaced())
+                .foregroundStyle(.secondary)
+            }
         }
         .navigationTitle("API 文档")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("关闭") {
-                    dismiss()
-                }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("完成") { dismiss() }
             }
         }
     }
 }
 
-private struct WatchAPICard: View {
+private struct InfoItem: View {
+    let label: String
+    let value: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.monospaced())
+        }
+    }
+}
+
+private struct EndpointItem: View {
     let method: String
-    let endpoint: String
-    let description: String
+    let path: String
+    let desc: String
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(spacing: 6) {
                 Text(method)
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(methodColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(3)
+                    .font(.system(size: 8).weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(methodColor, in: Capsule())
                 
-                Text(endpoint)
-                    .font(.system(.caption2, design: .monospaced))
+                Text(path)
+                    .font(.system(size: 10).monospaced())
             }
-            
-            Text(description)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Text(desc)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        .padding(8)
-        .background(Color.secondary.opacity(0.1))
-        .cornerRadius(6)
+        .padding(.vertical, 2)
     }
     
     private var methodColor: Color {
-        switch method {
-        case "GET": return .blue
-        case "POST": return .green
-        default: return .gray
-        }
+        method == "GET" ? .blue : .green
     }
 }
 

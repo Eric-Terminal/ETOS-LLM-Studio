@@ -182,7 +182,7 @@ private struct PrivacyPolicyView: View {
                 PolicySection(title: "本地数据存储", content: """
                 应用在您的设备上存储以下数据：
                 • 聊天记录 - 您与 AI 的对话历史
-                • API 配置 - 您添加的 API 提供商和密钥（加密存储）
+                • API 配置 - 您添加的 API 提供商和密钥
                 • 记忆数据 - RAG 系统的向量化记忆
                 • 应用设置 - 您的偏好设置
                 """)
@@ -223,7 +223,7 @@ private struct ProjectLinksView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("项目主页")
                         .font(.caption.weight(.semibold))
-                    Text("github.com/Eric-Terminal/ETOS-LLM-Studio")
+                    Text("https://github.com/Eric-Terminal/ETOS-LLM-Studio")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
