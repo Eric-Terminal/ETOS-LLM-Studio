@@ -9,6 +9,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct ProviderDetailView: View {
@@ -142,7 +143,10 @@ struct ProviderDetailView: View {
         if names.isEmpty {
             return "删除后无法恢复这些模型。"
         } else {
-            return "您将删除以下模型：\(names.joined(separator: "、"))。此操作无法撤销。"
+            return String(
+                format: NSLocalizedString("您将删除以下模型：%@。此操作无法撤销。", comment: ""),
+                names.joined(separator: NSLocalizedString("、", comment: ""))
+            )
         }
     }
     

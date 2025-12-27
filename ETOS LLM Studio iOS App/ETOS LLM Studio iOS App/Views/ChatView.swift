@@ -8,6 +8,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import MarkdownUI
 import Shared
 import UIKit
@@ -17,20 +18,31 @@ import AVFoundation
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var showScrollToBottom = false
+    @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
     @State private var editingContent: String = ""
     @State private var messageInfo: MessageInfoPayload?
+    @State private var showBranchOptions = false
+    @State private var messageToBranch: ChatMessage?
     @FocusState private var composerFocused: Bool
+    @AppStorage("chat.composer.draft") private var draftText: String = ""
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     
     var body: some View {
         NavigationStack {
             ZStack {
+                // Z-Index 0: 背景壁纸层（穿透安全区）
                 backgroundLayer
+                    .ignoresSafeArea()
+                
+                // Z-Index 1: 消息列表（内容滚动到玻璃下）
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .trailing, spacing: 12, pinnedViews: []) {
+                        LazyVStack(alignment: .leading, spacing: 12, pinnedViews: []) {
+                            // 顶部留白
+                            Color.clear.frame(height: 60)
+                            
                             modelSelectorBar
                             historyBanner
                             
@@ -62,16 +74,16 @@ struct ChatView: View {
                                         showScrollToBottom = true
                                     }
                                 }
+                            }
+                            
+                            Color.clear
+                                .frame(height: 1)
+                                .id(scrollBottomAnchorID)
                         }
-                        
-                        Color.clear
-                            .frame(height: 1)
-                            .id(scrollBottomAnchorID)
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 120)
-                }
                     .scrollDismissesKeyboard(.interactively)
+                    .scrollIndicators(.hidden)
                     .simultaneousGesture(
                         TapGesture().onEnded {
                             composerFocused = false
@@ -94,44 +106,30 @@ struct ChatView: View {
                                     .background(.regularMaterial, in: Circle())
                             }
                             .padding(.trailing, 20)
-                            .padding(.bottom, 140)
+                            .padding(.bottom, 90)
                             .transition(.scale.combined(with: .opacity))
                             .accessibilityLabel("滚动到底部")
                         }
                     }
-                }
-            }
-            .navigationTitle(viewModel.currentSession?.name ?? "新的对话")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button {
-                            viewModel.createNewSession()
-                        } label: {
-                            Label("开始新会话", systemImage: "plus.message")
-                        }
-                        
-                        Button {
-                            composerFocused = true
-                        } label: {
-                            Label("快速输入", systemImage: "keyboard")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+                    // Telegram 风格：顶部模糊玻璃导航栏
+                    .safeAreaInset(edge: .top) {
+                        liquidGlassNavBar
                     }
-                    .accessibilityLabel("快速操作")
+                    // Telegram 风格：底部模糊玻璃输入栏
+                    .safeAreaInset(edge: .bottom) {
+                        liquidGlassInputBar
+                    }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                MessageComposerView(
-                    text: $viewModel.userInput,
-                    isSending: viewModel.isSendingMessage,
-                    sendAction: {
-                        viewModel.sendMessage()
-                    },
-                    focus: $composerFocused
-                )
-                .background(.ultraThinMaterial)
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
+            .navigationDestination(item: $navigationDestination) { destination in
+                switch destination {
+                case .sessions:
+                    SessionListView()
+                case .settings:
+                    SettingsView()
+                }
             }
             .sheet(item: $editingMessage) { message in
                 NavigationStack {
@@ -146,6 +144,29 @@ struct ChatView: View {
             }
             .sheet(item: $messageInfo) { info in
                 MessageInfoSheet(payload: info)
+            }
+            .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
+                Button("仅复制消息历史") {
+                    if let message = messageToBranch {
+                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: false)
+                        viewModel.setCurrentSession(newSession)
+                    }
+                    messageToBranch = nil
+                }
+                Button("复制消息历史和提示词") {
+                    if let message = messageToBranch {
+                        let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: true)
+                        viewModel.setCurrentSession(newSession)
+                    }
+                    messageToBranch = nil
+                }
+                Button("取消", role: .cancel) {
+                    messageToBranch = nil
+                }
+            } message: {
+                if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
+                    Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
+                }
             }
         }
     }
@@ -171,6 +192,122 @@ struct ChatView: View {
     
 // MARK: - Components
 
+    // MARK: - Telegram 风格：液态玻璃导航栏
+    @ViewBuilder
+    private var liquidGlassNavBar: some View {
+        HStack {
+            Text(viewModel.currentSession?.name ?? "新的对话")
+                .font(.headline)
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Menu {
+                Button {
+                    viewModel.createNewSession()
+                } label: {
+                    Label("开始新会话", systemImage: "plus.message")
+                }
+                
+                Button {
+                    composerFocused = true
+                } label: {
+                    Label("快速输入", systemImage: "keyboard")
+                }
+                
+                Divider()
+                
+                Button {
+                    navigationDestination = .sessions
+                } label: {
+                    Label("会话列表", systemImage: "list.bullet")
+                }
+                
+                Button {
+                    navigationDestination = .settings
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel("快速操作")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+    }
+    
+    // MARK: - Telegram 风格：液态玻璃输入栏
+    @ViewBuilder
+    private var liquidGlassInputBar: some View {
+        MessageComposerView(
+            text: Binding(
+                get: { draftText },
+                set: { newValue in
+                    draftText = newValue
+                    viewModel.userInput = newValue
+                }
+            ),
+            isSending: viewModel.isSendingMessage,
+            sendAction: {
+                guard viewModel.canSendMessage else { return }
+                viewModel.sendMessage()
+                draftText = ""
+            },
+            focus: $composerFocused
+        )
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+        .onAppear {
+            viewModel.userInput = draftText
+        }
+    }
+
+    @ViewBuilder
+    private var customHeader: some View {
+        HStack {
+            Text(viewModel.currentSession?.name ?? "新的对话")
+                .font(.title2.bold())
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Menu {
+                Button {
+                    viewModel.createNewSession()
+                } label: {
+                    Label("开始新会话", systemImage: "plus.message")
+                }
+                
+                Button {
+                    composerFocused = true
+                } label: {
+                    Label("快速输入", systemImage: "keyboard")
+                }
+                
+                Divider()
+                
+                Button {
+                    navigationDestination = .sessions
+                } label: {
+                    Label("会话列表", systemImage: "list.bullet")
+                }
+                
+                Button {
+                    navigationDestination = .settings
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel("快速操作")
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 12)
+    }
+
     @ViewBuilder
     private var historyBanner: some View {
         let remaining = viewModel.allMessagesForSession.count - viewModel.messages.count
@@ -181,7 +318,10 @@ struct ChatView: View {
                     viewModel.loadMoreHistoryChunk()
                 }
             } label: {
-                Label("向上加载 \(chunk) 条记录", systemImage: "arrow.uturn.left.circle")
+                Label(
+                    String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk),
+                    systemImage: "arrow.uturn.left.circle"
+                )
             }
             .font(.footnote)
             .padding(.vertical, 8)
@@ -256,16 +396,62 @@ struct ChatView: View {
         
         if viewModel.canRetry(message: message) {
             Button {
-                viewModel.retryLastMessage()
+                viewModel.retryMessage(message)
             } label: {
-                Label("重试响应", systemImage: "arrow.clockwise")
+                Label("重试", systemImage: "arrow.clockwise")
             }
+        }
+        
+        Button {
+            messageToBranch = message
+            showBranchOptions = true
+        } label: {
+            Label("从此处创建分支", systemImage: "arrow.triangle.branch")
+        }
+        
+        Divider()
+        
+        // 版本管理菜单项
+        if message.hasMultipleVersions {
+            Menu {
+                ForEach(0..<message.getAllVersions().count, id: \.self) { index in
+                    Button {
+                        viewModel.switchToVersion(index, of: message)
+                    } label: {
+                        HStack {
+                            Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
+                            if index == message.getCurrentVersionIndex() {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label(
+                    String(
+                        format: NSLocalizedString("切换版本 (%d/%d)", comment: ""),
+                        message.getCurrentVersionIndex() + 1,
+                        message.getAllVersions().count
+                    ),
+                    systemImage: "clock.arrow.circlepath"
+                )
+            }
+            
+            if message.getAllVersions().count > 1 {
+                Button(role: .destructive) {
+                    viewModel.deleteCurrentVersion(of: message)
+                } label: {
+                    Label("删除当前版本", systemImage: "trash")
+                }
+            }
+            
+            Divider()
         }
         
         Button(role: .destructive) {
             viewModel.deleteMessage(message)
         } label: {
-            Label("删除消息", systemImage: "trash")
+            Label(message.hasMultipleVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
         }
         
         Divider()
@@ -322,53 +508,109 @@ private struct MessageComposerView: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             // 附件预览区域
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
                 attachmentPreviewBar
+                    .padding(.horizontal, 12)
             }
-            
-            Divider()
             
             HStack(alignment: .center, spacing: 12) {
-                // 附件按钮
-                Menu {
+                // 加号按钮（圆形）
+                if #available(iOS 26.0, *) {
                     Button {
-                        showImagePicker = true
+                        showAttachmentMenu = true
                     } label: {
-                        Label("选择图片", systemImage: "photo")
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
                     }
-                    
+                    .glassEffect(.clear, in: Circle())
+                    .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
+                        Button("选择图片") {
+                            showImagePicker = true
+                        }
+                        Button("录制语音") {
+                            showAudioRecorder = true
+                        }
+                    }
+                } else {
                     Button {
-                        showAudioRecorder = true
+                        showAttachmentMenu = true
                     } label: {
-                        Label("录制语音", systemImage: "mic")
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
                     }
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.tint)
+                    .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
+                        Button("选择图片") {
+                            showImagePicker = true
+                        }
+                        Button("录制语音") {
+                            showAudioRecorder = true
+                        }
+                    }
                 }
                 
-                TextField("输入...", text: $text, axis: .vertical)
-                    .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
-                    .focused(focus)
-                
-                Button {
-                    sendAction()
-                } label: {
-                    Image(systemName: isSending ? "paperplane.circle.fill" : "paperplane.fill")
-                        .font(.system(size: 20, weight: .semibold))
+                // 输入框（拉长的药丸型）
+                if #available(iOS 26.0, *) {
+                    HStack(spacing: 8) {
+                        TextField("Message", text: $text, axis: .vertical)
+                            .lineLimit(1...6)
+                            .textFieldStyle(.plain)
+                            .focused(focus)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
+                    .glassEffect(.clear, in: Capsule())
+                } else {
+                    HStack(spacing: 8) {
+                        TextField("Message", text: $text, axis: .vertical)
+                            .lineLimit(1...6)
+                            .textFieldStyle(.plain)
+                            .focused(focus)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                    }
+                    .background(
+                        Capsule()
+                            .fill(Color(uiColor: .secondarySystemFill))
+                    )
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    )
                 }
-                .buttonStyle(.borderless)
-                .disabled(!viewModel.canSendMessage)
-                .help("发送当前消息")
+                
+                // 发送箭头（圆形）
+                if #available(iOS 26.0, *) {
+                    Button {
+                        sendAction()
+                    } label: {
+                        Image(systemName: isSending ? "stop.circle.fill" : "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .glassEffect(.clear, in: Circle())
+                    .disabled(!viewModel.canSendMessage)
+                } else {
+                    Button {
+                        sendAction()
+                    } label: {
+                        Image(systemName: isSending ? "stop.circle.fill" : "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(!viewModel.canSendMessage)
+                }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .background(.thinMaterial)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
@@ -530,13 +772,12 @@ private struct AudioRecorderSheet: View {
             try session.setCategory(.playAndRecord, mode: .default)
             try session.setActive(true)
             
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
             let settings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatLinearPCM),
-                AVSampleRateKey: 16000.0,
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100.0,
                 AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false
+                AVEncoderBitRateKey: 64000
             ]
             
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
@@ -551,7 +792,7 @@ private struct AudioRecorderSheet: View {
                 recordingDuration += 0.1
             }
         } catch {
-            print("录音启动失败: \(error.localizedDescription)")
+            // 录音启动失败
         }
     }
     
@@ -580,8 +821,8 @@ private struct AudioRecorderSheet: View {
         
         let attachment = AudioAttachment(
             data: data,
-            mimeType: "audio/wav",
-            format: "wav",
+            mimeType: "audio/m4a",
+            format: "m4a",
             fileName: url.lastPathComponent
         )
         
@@ -660,7 +901,13 @@ private struct MessageInfoSheet: View {
                         Text(roleDescription(payload.message.role))
                     }
                     LabeledContent("列表位置") {
-                        Text("第 \(payload.displayIndex) / \(payload.totalCount) 条")
+                        Text(
+                            String(
+                                format: NSLocalizedString("第 %d / %d 条", comment: ""),
+                                payload.displayIndex,
+                                payload.totalCount
+                            )
+                        )
                     }
                 }
                 

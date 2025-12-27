@@ -9,6 +9,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct ProviderActionsView: View {
@@ -44,7 +45,12 @@ struct ProviderActionsView: View {
             }
             Button("取消", role: .cancel) { }
         }, message: {
-            Text("您确定要删除提供商 “\(provider.name)” 吗？此操作无法撤销。")
+            Text(
+                String(
+                    format: NSLocalizedString("您确定要删除提供商 “%@” 吗？此操作无法撤销。", comment: ""),
+                    provider.name
+                )
+            )
         })
     }
 

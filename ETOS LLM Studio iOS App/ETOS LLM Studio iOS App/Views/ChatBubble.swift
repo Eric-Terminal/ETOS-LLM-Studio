@@ -9,8 +9,10 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import MarkdownUI
 import Shared
+import UIKit
 import AVFoundation
 import Combine
 
@@ -22,35 +24,94 @@ struct ChatBubble: View {
     let enableBackground: Bool
     
     @StateObject private var audioPlayer = AudioPlayerManager()
+    @State private var imagePreview: ImagePreviewPayload?
+    @EnvironmentObject private var viewModel: ChatViewModel
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             if message.role == .assistant || message.role == .system || message.role == .tool {
                 roleBadge
-            } else {
-                Spacer(minLength: 32)
             }
             
             VStack(alignment: .leading, spacing: 8) {
                 contentStack
+                
+                // 版本指示器（仅当有多个版本时显示）
+                if message.hasMultipleVersions {
+                    versionIndicator
+                }
             }
             .padding(14)
-            .background(bubbleBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(bubbleStrokeColor, lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.06), radius: 12, y: 8)
             
             if message.role == .user {
                 roleBadge
-            } else {
-                Spacer(minLength: 32)
             }
         }
+        .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+        .sheet(item: $imagePreview) { payload in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                Image(uiImage: payload.image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(24)
+            }
+        }
+    }
+    
+    // MARK: - Version Indicator
+    
+    @ViewBuilder
+    private var versionIndicator: some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.switchToPreviousVersion(of: message)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(message.getCurrentVersionIndex() > 0 ? Color.accentColor : Color.secondary.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(message.getCurrentVersionIndex() == 0)
+            
+            Text("\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count)")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            
+            Button {
+                viewModel.switchToNextVersion(of: message)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? Color.accentColor : Color.secondary.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(Color.secondary.opacity(0.08))
+        )
     }
     
     // MARK: - Content
     
     @ViewBuilder
     private var contentStack: some View {
+        if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+            imageAttachmentsView(fileNames: imageFileNames)
+        }
+        
         if let reasoning = message.reasoningContent,
            !reasoning.isEmpty {
             DisclosureGroup(isExpanded: $isReasoningExpanded) {
@@ -108,6 +169,47 @@ struct ChatBubble: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+    
+    @ViewBuilder
+    private func imageAttachmentsView(fileNames: [String]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(fileNames, id: \.self) { fileName in
+                    if let image = loadImage(fileName: fileName) {
+                        Button {
+                            imagePreview = ImagePreviewPayload(image: image)
+                        } label: {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 140, height: 140)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                            .frame(width: 140, height: 140)
+                            .overlay(
+                                VStack(spacing: 6) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 22, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                    Text("图片丢失")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            )
+                    }
+                }
+            }
+        }
+    }
+    
+    private func loadImage(fileName: String) -> UIImage? {
+        guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
+        return UIImage(data: data)
     }
     
     @ViewBuilder
@@ -182,6 +284,19 @@ struct ChatBubble: View {
         }
     }
     
+    private var bubbleStrokeColor: Color {
+        switch message.role {
+        case .user:
+            return Color.white.opacity(0.35)
+        case .assistant, .system, .tool:
+            return Color.black.opacity(0.05)
+        case .error:
+            return Color.red.opacity(0.2)
+        @unknown default:
+            return Color.black.opacity(0.05)
+        }
+    }
+    
     private var roleBadge: some View {
         let symbol: String
         let color: Color
@@ -208,11 +323,31 @@ struct ChatBubble: View {
         }
         
         return Image(systemName: symbol)
-            .font(.system(size: 14, weight: .bold))
+            .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(color)
-            .padding(8)
-            .background(color.opacity(message.role == .user ? 0.15 : 0.08), in: Circle())
+            .padding(10)
+            .background(
+                Circle()
+                    .fill(Color(uiColor: .systemBackground).opacity(0.92))
+                    .overlay(
+                        Circle()
+                            .stroke(color.opacity(message.role == .user ? 0.35 : 0.2), lineWidth: 1)
+                    )
+            )
+            .shadow(color: color.opacity(0.2), radius: 8, y: 4)
     }
+}
+
+// MARK: - Image Preview Wrapper
+
+struct ImagePreviewWrapper: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
+private struct ImagePreviewPayload: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
 
 // MARK: - Audio Player Manager
@@ -245,7 +380,7 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         stop()
         
         guard let data = Persistence.loadAudio(fileName: fileName) else {
-            print("❌ 无法加载音频文件: \(fileName)")
+            print(String(format: NSLocalizedString("❌ 无法加载音频文件: %@", comment: ""), fileName))
             return
         }
         
@@ -264,7 +399,7 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
             
             startTimer()
         } catch {
-            print("❌ 播放音频失败: \(error.localizedDescription)")
+            // 播放音频失败
         }
     }
     

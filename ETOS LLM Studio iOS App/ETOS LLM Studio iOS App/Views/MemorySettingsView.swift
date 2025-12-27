@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import Shared
 
 struct MemorySettingsView: View {
@@ -90,14 +91,15 @@ struct MemorySettingsView: View {
             }
             
             Section {
-                if viewModel.memories.isEmpty {
+                let activeMemories = viewModel.memories.filter { !$0.isArchived }
+                if activeMemories.isEmpty {
                     ContentUnavailableView(
-                        "暂无记忆",
+                        NSLocalizedString("暂无激活的记忆", comment: ""),
                         systemImage: "brain.head.profile",
                         description: Text("发送对话时可以让 AI 通过工具主动写入新的记忆。")
                     )
                 } else {
-                    ForEach(viewModel.memories) { memory in
+                    ForEach(activeMemories) { memory in
                         Button {
                             editingMemory = memory
                         } label: {
@@ -110,11 +112,85 @@ struct MemorySettingsView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                if let index = viewModel.memories.firstIndex(where: { $0.id == memory.id }) {
+                                    Task {
+                                        await viewModel.deleteMemories(at: IndexSet(integer: index))
+                                    }
+                                }
+                            } label: {
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                            }
+                            
+                            Button {
+                                Task {
+                                    await viewModel.archiveMemory(memory)
+                                }
+                            } label: {
+                                Label(NSLocalizedString("归档", comment: ""), systemImage: "archivebox")
+                            }
+                            .tint(.orange)
+                        }
                     }
-                    .onDelete(perform: deleteItems)
                 }
             } header: {
-                Text("记忆列表")
+                Text(NSLocalizedString("激活的记忆", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("这些记忆会参与检索并发送给模型。", comment: ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Section {
+                let archivedMemories = viewModel.memories.filter { $0.isArchived }
+                if archivedMemories.isEmpty {
+                    Text(NSLocalizedString("没有被归档的记忆。", comment: ""))
+                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                } else {
+                    ForEach(archivedMemories) { memory in
+                        Button {
+                            editingMemory = memory
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(memory.content)
+                                    .lineLimit(2)
+                                    .foregroundStyle(.secondary)
+                                Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                if let index = viewModel.memories.firstIndex(where: { $0.id == memory.id }) {
+                                    Task {
+                                        await viewModel.deleteMemories(at: IndexSet(integer: index))
+                                    }
+                                }
+                            } label: {
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                            }
+                            
+                            Button {
+                                Task {
+                                    await viewModel.unarchiveMemory(memory)
+                                }
+                            } label: {
+                                Label(NSLocalizedString("恢复", comment: ""), systemImage: "arrow.uturn.backward")
+                            }
+                            .tint(.green)
+                        }
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("归档的记忆", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("这些记忆已被归档，不会参与检索。可以随时恢复。", comment: ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("记忆库管理")
@@ -238,7 +314,11 @@ private struct MemoryReembedAlert: Identifiable {
     var message: String {
         switch kind {
         case .success(let summary):
-            return "共处理 \(summary.processedMemories) 条记忆，生成 \(summary.chunkCount) 个分块。"
+            return String(
+                format: NSLocalizedString("共处理 %d 条记忆，生成 %d 个分块。", comment: ""),
+                summary.processedMemories,
+                summary.chunkCount
+            )
         case .failure(let message):
             return message
         }

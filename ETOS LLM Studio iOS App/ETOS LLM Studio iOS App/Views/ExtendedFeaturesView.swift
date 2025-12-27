@@ -29,8 +29,18 @@ struct ExtendedFeaturesView: View {
                 Text("连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            }
-        }
+            }            
+            Section {
+                NavigationLink {
+                    LocalDebugView()
+                } label: {
+                    Label("局域网调试", systemImage: "terminal")
+                }
+            } footer: {
+                Text("通过局域网远程访问和管理 Documents 目录,方便命令行工具操作。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }        }
         .navigationTitle("拓展功能")
         .listStyle(.insetGrouped)
     }

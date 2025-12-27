@@ -8,6 +8,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 
 struct DisplaySettingsView: View {
     
@@ -51,12 +52,12 @@ struct DisplaySettingsView: View {
                     }
                     
                     VStack(alignment: .leading) {
-                        Text("背景模糊: \(String(format: "%.1f", backgroundBlur))")
+                        Text(String(format: NSLocalizedString("背景模糊: %.1f", comment: ""), backgroundBlur))
                         Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
                     }
                     
                     VStack(alignment: .leading) {
-                        Text("背景不透明度: \(String(format: "%.2f", backgroundOpacity))")
+                        Text(String(format: NSLocalizedString("背景不透明度: %.2f", comment: ""), backgroundOpacity))
                         Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
                     }
                     

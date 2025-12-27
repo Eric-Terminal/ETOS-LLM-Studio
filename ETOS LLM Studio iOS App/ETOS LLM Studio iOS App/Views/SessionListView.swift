@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct SessionListView: View {
@@ -19,87 +20,85 @@ struct SessionListView: View {
     @State private var sessionInfo: SessionInfoPayload?
     
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Button {
-                        viewModel.createNewSession()
-                        focusOnLatest()
-                    } label: {
-                        Label("开启新对话", systemImage: "plus.circle.fill")
-                    }
-                }
-                
-                Section("会话") {
-                    ForEach(viewModel.chatSessions) { session in
-                        SessionRow(
-                            session: session,
-                            isCurrent: session.id == viewModel.currentSession?.id,
-                            isEditing: editingSessionID == session.id,
-                            draftName: editingSessionID == session.id ? $draftName : .constant(session.name),
-                            onCommit: { newName in
-                                viewModel.updateSessionName(session, newName: newName)
-                                editingSessionID = nil
-                            },
-                            onSelect: {
-                                viewModel.setCurrentSession(session)
-                            },
-                            onRename: {
-                                editingSessionID = session.id
-                                draftName = session.name
-                            },
-                            onBranch: { copyHistory in
-                                let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
-                                viewModel.setCurrentSession(newSession)
-                                focusOnLatest()
-                            },
-                            onDeleteLastMessage: {
-                                viewModel.deleteLastMessage(for: session)
-                            },
-                            onDelete: {
-                                sessionsToDelete = [session]
-                                showDeleteConfirmation = true
-                            },
-                            onCancelRename: {
-                                editingSessionID = nil
-                                draftName = session.name
-                            },
-                            onInfo: {
-                                sessionInfo = SessionInfoPayload(
-                                    session: session,
-                                    messageCount: viewModel.messageCount(for: session),
-                                    isCurrent: session.id == viewModel.currentSession?.id
-                                )
-                            }
-                        )
-                    }
-                    .onDelete { indexSet in
-                        let toDelete = indexSet.map { viewModel.chatSessions[$0] }
-                        sessionsToDelete = toDelete
-                        showDeleteConfirmation = true
-                    }
+        List {
+            Section {
+                Button {
+                    viewModel.createNewSession()
+                    focusOnLatest()
+                } label: {
+                    Label("开启新对话", systemImage: "plus.circle.fill")
                 }
             }
-            .navigationTitle("会话管理")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    EditButton()
+            
+            Section("会话") {
+                ForEach(viewModel.chatSessions) { session in
+                    SessionRow(
+                        session: session,
+                        isCurrent: session.id == viewModel.currentSession?.id,
+                        isEditing: editingSessionID == session.id,
+                        draftName: editingSessionID == session.id ? $draftName : .constant(session.name),
+                        onCommit: { newName in
+                            viewModel.updateSessionName(session, newName: newName)
+                            editingSessionID = nil
+                        },
+                        onSelect: {
+                            viewModel.setCurrentSession(session)
+                        },
+                        onRename: {
+                            editingSessionID = session.id
+                            draftName = session.name
+                        },
+                        onBranch: { copyHistory in
+                            let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
+                            viewModel.setCurrentSession(newSession)
+                            focusOnLatest()
+                        },
+                        onDeleteLastMessage: {
+                            viewModel.deleteLastMessage(for: session)
+                        },
+                        onDelete: {
+                            sessionsToDelete = [session]
+                            showDeleteConfirmation = true
+                        },
+                        onCancelRename: {
+                            editingSessionID = nil
+                            draftName = session.name
+                        },
+                        onInfo: {
+                            sessionInfo = SessionInfoPayload(
+                                session: session,
+                                messageCount: viewModel.messageCount(for: session),
+                                isCurrent: session.id == viewModel.currentSession?.id
+                            )
+                        }
+                    )
+                }
+                .onDelete { indexSet in
+                    let toDelete = indexSet.map { viewModel.chatSessions[$0] }
+                    sessionsToDelete = toDelete
+                    showDeleteConfirmation = true
                 }
             }
-            .alert("确认删除会话", isPresented: $showDeleteConfirmation) {
-                Button("删除", role: .destructive) {
-                    viewModel.deleteSessions(sessionsToDelete)
-                    sessionsToDelete.removeAll()
-                }
-                Button("取消", role: .cancel) {
-                    sessionsToDelete.removeAll()
-                }
-            } message: {
-                Text("删除后所有消息也将被移除，操作不可恢复。")
+        }
+        .navigationTitle("会话管理")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                EditButton()
             }
-            .sheet(item: $sessionInfo) { info in
-                SessionInfoSheet(payload: info)
+        }
+        .alert("确认删除会话", isPresented: $showDeleteConfirmation) {
+            Button("删除", role: .destructive) {
+                viewModel.deleteSessions(sessionsToDelete)
+                sessionsToDelete.removeAll()
             }
+            Button("取消", role: .cancel) {
+                sessionsToDelete.removeAll()
+            }
+        } message: {
+            Text("删除后所有消息也将被移除，操作不可恢复。")
+        }
+        .sheet(item: $sessionInfo) { info in
+            SessionInfoSheet(payload: info)
         }
     }
     
@@ -274,7 +273,7 @@ private struct SessionInfoSheet: View {
                             .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
                     }
                     LabeledContent("消息数量") {
-                        Text("\(payload.messageCount) 条")
+                        Text(String(format: NSLocalizedString("%d 条", comment: ""), payload.messageCount))
                     }
                 }
                 

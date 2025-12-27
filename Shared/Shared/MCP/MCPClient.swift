@@ -47,7 +47,33 @@ public final class MCPClient {
         let params = ResourceReadParams(resourceId: resourceId, query: query)
         return try await send(method: "mcp/resource/read", params: AnyEncodable(params))
     }
-    
+
+    // MARK: - Prompts
+
+    public func listPrompts() async throws -> [MCPPromptDescription] {
+        let prompts: [MCPPromptDescription] = try await send(method: "mcp/listPrompts")
+        return prompts
+    }
+
+    public func getPrompt(name: String, arguments: [String: String]?) async throws -> MCPGetPromptResult {
+        let params = GetPromptParams(name: name, arguments: arguments)
+        return try await send(method: "mcp/prompt/get", params: AnyEncodable(params))
+    }
+
+    // MARK: - Roots
+
+    public func listRoots() async throws -> [MCPRoot] {
+        let roots: [MCPRoot] = try await send(method: "mcp/roots/list")
+        return roots
+    }
+
+    // MARK: - Logging
+
+    public func setLogLevel(_ level: MCPLogLevel) async throws {
+        let params = SetLogLevelParams(level: level)
+        let _: EmptyResult = try await send(method: "mcp/logging/setLevel", params: AnyEncodable(params))
+    }
+
     // MARK: - 内部发送逻辑
     
     private func send<Result: Decodable>(method: String, params: AnyEncodable? = nil) async throws -> Result {
@@ -99,3 +125,14 @@ private struct ResourceReadParams: Codable {
     let resourceId: String
     let query: [String: JSONValue]?
 }
+
+private struct GetPromptParams: Codable {
+    let name: String
+    let arguments: [String: String]?
+}
+
+private struct SetLogLevelParams: Codable {
+    let level: MCPLogLevel
+}
+
+private struct EmptyResult: Codable {}

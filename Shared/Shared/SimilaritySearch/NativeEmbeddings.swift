@@ -17,8 +17,6 @@ public enum NativeEmbeddingType {
     case sentenceEmbedding
 }
 
-// TODO: 需要从 SimilaritySearchKit 移植 NativeTokenizer.swift 文件。
-
 public class NativeEmbeddings: EmbeddingsProtocol {
     public let model: ModelActor
     public let tokenizer: any TokenizerProtocol

@@ -44,6 +44,16 @@ public class MemoryManager {
     public var memoriesPublisher: AnyPublisher<[MemoryItem], Never> {
         internalMemoriesPublisher.eraseToAnyPublisher()
     }
+    
+    /// 嵌入错误发布者，用于通知UI层显示错误弹窗（如400硬错误）。
+    public var embeddingErrorPublisher: AnyPublisher<MemoryEmbeddingError, Never> {
+        internalEmbeddingErrorPublisher.eraseToAnyPublisher()
+    }
+    
+    /// 维度不匹配警告发布者，用于提示用户需要重新生成嵌入。
+    public var dimensionMismatchPublisher: AnyPublisher<(query: Int, index: Int), Never> {
+        internalDimensionMismatchPublisher.eraseToAnyPublisher()
+    }
 
     // MARK: - 私有属性
 
@@ -51,6 +61,8 @@ public class MemoryManager {
     private var similarityIndex: SimilarityIndex!
     private let rawStore = MemoryRawStore()
     private let internalMemoriesPublisher = CurrentValueSubject<[MemoryItem], Never>([])
+    private let internalEmbeddingErrorPublisher = PassthroughSubject<MemoryEmbeddingError, Never>()
+    private let internalDimensionMismatchPublisher = PassthroughSubject<(query: Int, index: Int), Never>()
     private let persistenceQueue = DispatchQueue(label: "com.etos.memory.persistence.queue")
     private var initializationTask: Task<Void, Never>!
     private var cachedMemories: [MemoryItem] = []
@@ -164,12 +176,19 @@ public class MemoryManager {
         let memory = MemoryItem(id: UUID(), content: trimmed, embedding: [], createdAt: Date())
         cacheMemory(memory)
         
+        // 如果没有配置嵌入模型，只保存原文，跳过嵌入生成
+        guard hasConfiguredEmbeddingModel() else {
+            logger.warning("⚠️ 尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
+            return
+        }
+        
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
             logger.info("✅ 已添加新的记忆。")
         } catch {
             logger.error("❌ 添加记忆失败：\(error.localizedDescription)")
+            notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
         }
     }
@@ -186,6 +205,12 @@ public class MemoryManager {
         let memory = MemoryItem(id: id, content: trimmed, embedding: [], createdAt: createdAt)
         cacheMemory(memory)
         
+        // 如果没有配置嵌入模型，只保存原文，跳过嵌入生成
+        guard hasConfiguredEmbeddingModel() else {
+            logger.warning("⚠️ 尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
+            return true
+        }
+        
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
@@ -193,6 +218,7 @@ public class MemoryManager {
             return true
         } catch {
             logger.error("❌ 恢复外部记忆失败：\(error.localizedDescription)")
+            notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
             return false
         }
@@ -212,6 +238,12 @@ public class MemoryManager {
         let updatedMemory = MemoryItem(id: item.id, content: trimmed, embedding: [], createdAt: item.createdAt)
         cacheMemory(updatedMemory)
         
+        // 如果没有配置嵌入模型，只更新原文，跳过嵌入生成
+        guard hasConfiguredEmbeddingModel() else {
+            logger.warning("⚠️ 尚未配置嵌入模型，记忆已更新但无法生成嵌入向量。")
+            return
+        }
+        
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             removeVectorEntries(for: [item.id])
@@ -219,6 +251,7 @@ public class MemoryManager {
             logger.info("✅ 已更新记忆项。")
         } catch {
             logger.error("❌ 更新记忆失败：\(error.localizedDescription)")
+            notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
         }
     }
@@ -234,6 +267,28 @@ public class MemoryManager {
         removeVectorEntries(for: idsToDelete)
         saveIndex()
         logger.info("🗑️ 已删除 \(items.count) 条记忆。")
+    }
+    
+    /// 归档记忆（被遗忘），不再参与检索，但保留原文和向量。
+    public func archiveMemory(_ item: MemoryItem) async {
+        await initializationTask.value
+        guard let index = cachedMemories.firstIndex(where: { $0.id == item.id }) else { return }
+        cachedMemories[index].isArchived = true
+        cachedMemories.sort(by: { $0.createdAt > $1.createdAt })
+        internalMemoriesPublisher.send(cachedMemories)
+        persistRawMemories()
+        logger.info("📦 记忆已归档：\(item.id.uuidString)")
+    }
+    
+    /// 恢复归档的记忆，使其重新参与检索。
+    public func unarchiveMemory(_ item: MemoryItem) async {
+        await initializationTask.value
+        guard let index = cachedMemories.firstIndex(where: { $0.id == item.id }) else { return }
+        cachedMemories[index].isArchived = false
+        cachedMemories.sort(by: { $0.createdAt > $1.createdAt })
+        internalMemoriesPublisher.send(cachedMemories)
+        persistRawMemories()
+        logger.info("🔓 记忆已恢复：\(item.id.uuidString)")
     }
     
     /// 获取所有记忆。
@@ -307,6 +362,14 @@ public class MemoryManager {
             let totalChunks = similarityIndex.indexItems.count
             guard totalChunks > 0 else { return [] }
             
+            // 检测维度不匹配
+            let indexDimension = similarityIndex.dimension
+            if indexDimension > 0 && indexDimension != queryEmbedding.count {
+                logger.fault("⚠️ 嵌入维度不匹配！查询维度: \(queryEmbedding.count), 索引维度: \(indexDimension)。需要重新生成全部嵌入。")
+                internalDimensionMismatchPublisher.send((query: queryEmbedding.count, index: indexDimension))
+                return []
+            }
+            
             var requestedCount = min(max(topK * 3, topK), totalChunks)
             var resolvedMemories: [MemoryItem] = []
             var previousRequested = 0
@@ -345,6 +408,12 @@ public class MemoryManager {
                 try validateEmbeddings(embeddings, matches: chunkTexts)
                 return embeddings
             } catch {
+                // 识别硬错误（400/401/403等），不应重试
+                if isHardError(error) {
+                    logger.fault("❌ 遇到硬错误，停止重试：\(error.localizedDescription)")
+                    throw error
+                }
+                
                 logger.error("❌ 嵌入生成失败（第 \(attempt) 次）：\(error.localizedDescription)")
                 if attempt >= embeddingRetryPolicy.maxAttempts {
                     logger.fault("❌ 超过最大嵌入重试次数，放弃本次记忆写入。")
@@ -427,6 +496,35 @@ public class MemoryManager {
         UserDefaults.standard.string(forKey: preferredEmbeddingModelKey)
     }
     
+    /// 检查是否配置了可用的嵌入模型
+    private func hasConfiguredEmbeddingModel() -> Bool {
+        let providers = ConfigLoader.loadProviders()
+        return !providers.isEmpty && providers.contains { !$0.models.isEmpty }
+    }
+    
+    /// 判断是否为硬错误（400/401/403等，不应重试）
+    private func isHardError(_ error: Error) -> Bool {
+        if let embeddingError = error as? MemoryEmbeddingError {
+            switch embeddingError {
+            case .httpStatus(let code, _):
+                // 4xx客户端错误通常是硬错误，不应重试
+                return (400...499).contains(code)
+            case .noAvailableModel, .adapterMissing, .requestBuildFailed:
+                return true
+            default:
+                return false
+            }
+        }
+        return false
+    }
+    
+    /// 如果是硬错误，发布通知供UI层显示
+    private func notifyEmbeddingErrorIfNeeded(_ error: Error) {
+        if let embeddingError = error as? MemoryEmbeddingError, isHardError(error) {
+            internalEmbeddingErrorPublisher.send(embeddingError)
+        }
+    }
+    
     private func persistRawMemories() {
         let memoriesToPersist = cachedMemories
         persistenceQueue.async { [weak self] in
@@ -455,6 +553,12 @@ public class MemoryManager {
     internal func reconcilePendingEmbeddings() async -> Int {
         let memoryIDs = Set(cachedMemories.map { $0.id })
         guard !memoryIDs.isEmpty else { return 0 }
+        
+        // 保护措施：没有配置嵌入模型时不要尝试补偿
+        guard hasConfiguredEmbeddingModel() else {
+            logger.info("⚠️ 尚未配置嵌入模型，跳过自动补偿嵌入。")
+            return 0
+        }
         
         removeOrphanedVectorEntries(validMemoryIDs: memoryIDs)
         let missingMemories = memoriesMissingEmbeddings(validMemoryIDs: memoryIDs)
@@ -495,6 +599,7 @@ public class MemoryManager {
             logger.info("🔁 已补齐记忆嵌入：\(memory.id.uuidString)。")
         } catch {
             logger.error("❌ 补写记忆嵌入失败：\(error.localizedDescription)")
+            notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: max(consistencyCheckDefaultDelay, embeddingRetryPolicy.initialDelay))
         }
     }
@@ -570,6 +675,8 @@ public class MemoryManager {
                let parentId = UUID(uuidString: parentIdString) {
                 guard !seenParentIDs.contains(parentId) else { continue }
                 if let memory = cachedMemories.first(where: { $0.id == parentId }) {
+                    // 过滤掉归档的记忆
+                    guard !memory.isArchived else { continue }
                     uniqueMemories.append(memory)
                     seenParentIDs.insert(parentId)
                 } else {
@@ -606,6 +713,9 @@ fileprivate extension MemoryItem {
         } else {
             self.createdAt = Date()
         }
+        
+        // 从旧数据迁移时，默认为激活状态
+        self.isArchived = false
     }
     
     init(from searchResult: SearchResult) {
@@ -618,5 +728,8 @@ fileprivate extension MemoryItem {
         } else {
             self.createdAt = Date()
         }
+        
+        // 搜索结果默认为激活状态
+        self.isArchived = false
     }
 }

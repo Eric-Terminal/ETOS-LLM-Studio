@@ -44,8 +44,20 @@ public struct ExtendedFeaturesView: View {
                 Text("在手表上查看 MCP Server 状态，长按条目可通过 iPhone 端进行完整管理。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
-            }
-        }
+            }            
+            Section {
+                NavigationLink {
+                    LocalDebugView()
+                } label: {
+                    Label("局域网调试", systemImage: "terminal")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("通过局域网远程访问和管理 Documents 目录。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }        }
         .navigationTitle("拓展功能")
     }
 }

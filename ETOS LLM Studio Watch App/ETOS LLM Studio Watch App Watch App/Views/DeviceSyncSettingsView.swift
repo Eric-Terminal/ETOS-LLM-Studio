@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import Shared
 
 struct DeviceSyncSettingsView: View {
@@ -95,20 +96,21 @@ struct DeviceSyncSettingsView: View {
     private func summaryDescription(_ summary: SyncMergeSummary) -> String {
         var parts: [String] = []
         if summary.importedProviders > 0 {
-            parts.append("提供商 +\(summary.importedProviders)")
+            parts.append(String(format: NSLocalizedString("提供商 +%d", comment: ""), summary.importedProviders))
         }
         if summary.importedSessions > 0 {
-            parts.append("会话 +\(summary.importedSessions)")
+            parts.append(String(format: NSLocalizedString("会话 +%d", comment: ""), summary.importedSessions))
         }
         if summary.importedBackgrounds > 0 {
-            parts.append("背景 +\(summary.importedBackgrounds)")
+            parts.append(String(format: NSLocalizedString("背景 +%d", comment: ""), summary.importedBackgrounds))
         }
         if summary.importedMemories > 0 {
-            parts.append("记忆 +\(summary.importedMemories)")
+            parts.append(String(format: NSLocalizedString("记忆 +%d", comment: ""), summary.importedMemories))
         }
         if summary.importedMCPServers > 0 {
-            parts.append("MCP +\(summary.importedMCPServers)")
+            parts.append(String(format: NSLocalizedString("MCP +%d", comment: ""), summary.importedMCPServers))
         }
-        return parts.isEmpty ? "两端数据一致" : parts.joined(separator: "，")
+        let separator = NSLocalizedString("，", comment: "")
+        return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
     }
 }

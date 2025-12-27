@@ -53,6 +53,11 @@ class ChatViewModel: ObservableObject {
     @Published var speechTranscriptionInProgress: Bool = false
     @Published var speechErrorMessage: String?
     @Published var showSpeechErrorAlert: Bool = false
+    @Published var showDimensionMismatchAlert: Bool = false
+    @Published var dimensionMismatchMessage: String = ""
+    @Published var showRetryErrorAlert: Bool = false
+    @Published var retryErrorTitle: String = ""
+    @Published var retryErrorMessage: String = ""
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
@@ -214,7 +219,22 @@ class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
             .store(in: &cancellables)
-
+        
+        MemoryManager.shared.dimensionMismatchPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] (queryDim, indexDim) in
+                self?.dimensionMismatchMessage = "嵌入维度不匹配！\n查询维度: \(queryDim)\n索引维度: \(indexDim)\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。"
+                self?.showDimensionMismatchAlert = true
+            }
+            .store(in: &cancellables)        
+        chatService.errorNotificationSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                self?.retryErrorTitle = notification.title
+                self?.retryErrorMessage = notification.message
+                self?.showRetryErrorAlert = true
+            }
+            .store(in: &cancellables)
         NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -231,7 +251,7 @@ class ChatViewModel: ObservableObject {
         guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
         let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""
-        logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage)")
+        logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage, privacy: .public)")
     }
     
     // MARK: - 公开方法 (视图操作)
@@ -281,6 +301,23 @@ class ChatViewModel: ObservableObject {
     
     func addErrorMessage(_ content: String) {
         chatService.addErrorMessage(content)
+    }
+    
+    func retryMessage(_ message: ChatMessage) {
+        Task {
+            await chatService.retryMessage(
+                message,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: currentSession?.enhancedPrompt,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTimeInPrompt
+            )
+        }
     }
     
     func retryLastMessage() {
@@ -384,15 +421,12 @@ class ChatViewModel: ObservableObject {
             if let existingURL = speechRecordingURL {
                 try? FileManager.default.removeItem(at: existingURL)
             }
-            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).wav")
+            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).m4a")
             let settings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatLinearPCM),
-                AVSampleRateKey: 16000,
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100,
                 AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsNonInterleaved: false
+                AVEncoderBitRateKey: 64000
             ]
             
             audioRecorder = try AVAudioRecorder(url: targetURL, settings: settings)
@@ -407,7 +441,12 @@ class ChatViewModel: ObservableObject {
             resetRecordingVisuals()
             startRecordingTimer()
         } catch {
-            presentSpeechError("开始录音失败: \(error.localizedDescription)")
+            presentSpeechError(
+                String(
+                    format: NSLocalizedString("开始录音失败: %@", comment: ""),
+                    error.localizedDescription
+                )
+            )
             isSpeechRecorderPresented = false
             stopRecordingTimer(resetVisuals: true)
             audioRecorder = nil
@@ -446,7 +485,7 @@ class ChatViewModel: ObservableObject {
                 let data = try Data(contentsOf: url)
                 if sendSpeechAsAudio {
                     // 不立即发送，而是暂存为待发送附件
-                    let attachment = AudioAttachment(data: data, mimeType: "audio/wav", format: "wav", fileName: url.lastPathComponent)
+                    let attachment = AudioAttachment(data: data, mimeType: "audio/m4a", format: "m4a", fileName: url.lastPathComponent)
                     await MainActor.run {
                         pendingAudioAttachment = attachment
                     }
@@ -458,7 +497,7 @@ class ChatViewModel: ObservableObject {
                         using: speechModel,
                         audioData: data,
                         fileName: url.lastPathComponent,
-                        mimeType: "audio/wav"
+                        mimeType: "audio/m4a"
                     )
                     appendTranscribedText(transcript)
                 }
@@ -536,6 +575,70 @@ class ChatViewModel: ObservableObject {
         chatService.deleteMessage(message)
     }
     
+    // MARK: - Message Version Management
+    
+    /// 切换到指定消息的上一个版本
+    func switchToPreviousVersion(of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id),
+              updatedMessage.hasMultipleVersions else { return }
+        
+        let newIndex = max(0, updatedMessage.getCurrentVersionIndex() - 1)
+        updatedMessage.switchToVersion(newIndex)
+        updateMessage(updatedMessage)
+    }
+    
+    /// 切换到指定消息的下一个版本
+    func switchToNextVersion(of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id),
+              updatedMessage.hasMultipleVersions else { return }
+        
+        let newIndex = min(updatedMessage.getAllVersions().count - 1, updatedMessage.getCurrentVersionIndex() + 1)
+        updatedMessage.switchToVersion(newIndex)
+        updateMessage(updatedMessage)
+    }
+    
+    /// 切换到指定版本
+    func switchToVersion(_ index: Int, of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+        updatedMessage.switchToVersion(index)
+        updateMessage(updatedMessage)
+    }
+    
+    /// 删除指定消息的当前版本（如果只剩一个版本则删除整个消息）
+    func deleteCurrentVersion(of message: ChatMessage) {
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+        
+        if updatedMessage.getAllVersions().count <= 1 {
+            // 只剩一个版本，删除整个消息
+            deleteMessage(updatedMessage)
+        } else {
+            // 删除当前版本
+            updatedMessage.removeVersion(at: updatedMessage.getCurrentVersionIndex())
+            updateMessage(updatedMessage)
+        }
+    }
+    
+    /// 添加新版本到消息（用于重试功能）
+    func addVersionToMessage(_ message: ChatMessage, newContent: String) {
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+        updatedMessage.addVersion(newContent)
+        updateMessage(updatedMessage)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func findMessage(by id: UUID) -> ChatMessage? {
+        allMessagesForSession.first { $0.id == id }
+    }
+    
+    private func updateMessage(_ message: ChatMessage) {
+        guard let index = allMessagesForSession.firstIndex(where: { $0.id == message.id }) else { return }
+        var updatedMessages = allMessagesForSession
+        updatedMessages[index] = message
+        chatService.updateMessages(updatedMessages, for: currentSession?.id ?? UUID())
+        saveCurrentSessionDetails()
+    }
+    
     func deleteSession(at offsets: IndexSet) {
         let sessionsToDelete = offsets.map { chatSessions[$0] }
         chatService.deleteSessions(sessionsToDelete)
@@ -548,6 +651,14 @@ class ChatViewModel: ObservableObject {
     @discardableResult
     func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
         return chatService.branchSession(from: sourceSession, copyMessages: copyMessages)
+    }
+    
+    @discardableResult
+    func branchSessionFromMessage(upToMessage: ChatMessage, copyPrompts: Bool) -> ChatSession {
+        guard let session = currentSession else {
+            fatalError("No current session to branch from")
+        }
+        return chatService.branchSessionFromMessage(from: session, upToMessage: upToMessage, copyPrompts: copyPrompts)
     }
     
     func deleteLastMessage(for session: ChatSession) {
@@ -566,6 +677,14 @@ class ChatViewModel: ObservableObject {
 
     func updateMemory(item: MemoryItem) async {
         await MemoryManager.shared.updateMemory(item: item)
+    }
+    
+    func archiveMemory(_ item: MemoryItem) async {
+        await MemoryManager.shared.archiveMemory(item)
+    }
+    
+    func unarchiveMemory(_ item: MemoryItem) async {
+        await MemoryManager.shared.unarchiveMemory(item)
     }
 
     func deleteMemories(at offsets: IndexSet) async {
@@ -635,7 +754,8 @@ class ChatViewModel: ObservableObject {
     }
     
     func canRetry(message: ChatMessage) -> Bool {
-        // 如果消息正在发送中，允许对最后一条助手消息以及对应的用户消息进行重试。
+        // 所有 user 和 assistant 消息都可以重试
+        // 但如果正在发送，只允许重试最后一条或倍数第二条
         if isSendingMessage {
             guard let lastMessage = allMessagesForSession.last else { return false }
             if lastMessage.id == message.id { return true }
@@ -645,16 +765,8 @@ class ChatViewModel: ObservableObject {
             return false
         }
 
-        // 在非发送状态下的原始逻辑。
-        guard let lastUserMessageIndex = allMessagesForSession.lastIndex(where: { $0.role == .user }) else {
-            return false
-        }
-        
-        guard let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == message.id }) else {
-            return false
-        }
-        
-        return messageIndex >= lastUserMessageIndex
+        // 不在发送时，所有 user 和 assistant 消息都可以重试
+        return message.role == .user || message.role == .assistant || message.role == .error
     }
     
     // MARK: - 私有方法 (内部逻辑)

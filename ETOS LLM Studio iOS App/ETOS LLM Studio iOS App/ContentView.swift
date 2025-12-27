@@ -20,23 +20,44 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selection) {
-            ChatView()
-                .tabItem {
-                    Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
-                }
-                .tag(Tab.chat)
+            NavigationStack {
+                ChatView()
+            }
+            .tabItem {
+                Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
+            }
+            .tag(Tab.chat)
             
-            SessionListView()
-                .tabItem {
-                    Label("会话", systemImage: "list.bullet")
-                }
-                .tag(Tab.sessions)
+            NavigationStack {
+                SessionListView()
+            }
+            .tabItem {
+                Label("会话", systemImage: "list.bullet")
+            }
+            .tag(Tab.sessions)
             
-            SettingsView()
-                .tabItem {
-                    Label("设置", systemImage: "gearshape.fill")
-                }
-                .tag(Tab.settings)
+            NavigationStack {
+                SettingsView()
+            }
+            .tabItem {
+                Label("设置", systemImage: "gearshape.fill")
+            }
+            .tag(Tab.settings)
+        }
+        .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(viewModel.dimensionMismatchMessage)
+        }
+        .alert(viewModel.retryErrorTitle, isPresented: $viewModel.showRetryErrorAlert) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(viewModel.retryErrorMessage)
         }
     }
+}
+
+enum ChatNavigationDestination: Hashable {
+    case sessions
+    case settings
 }

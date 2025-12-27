@@ -9,6 +9,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 /// 高级模型设置视图
@@ -96,7 +97,12 @@ struct ModelAdvancedSettingsView: View {
             
             Section(header: Text("参数调整")) {
                 VStack(alignment: .leading) {
-                    Text("模型温度 (Temperature): \(String(format: "%.2f", aiTemperature))")
+                    Text(
+                        String(
+                            format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
+                            aiTemperature
+                        )
+                    )
                     Slider(value: $aiTemperature, in: 0.0...2.0, step: 0.05)
                         .onChange(of: aiTemperature) {
                             aiTemperature = (aiTemperature * 100).rounded() / 100
@@ -104,7 +110,12 @@ struct ModelAdvancedSettingsView: View {
                 }
                 
                 VStack(alignment: .leading) {
-                    Text("核采样 (Top P): \(String(format: "%.2f", aiTopP))")
+                    Text(
+                        String(
+                            format: NSLocalizedString("核采样 (Top P): %.2f", comment: ""),
+                            aiTopP
+                        )
+                    )
                     Slider(value: $aiTopP, in: 0.0...1.0, step: 0.05)
                         .onChange(of: aiTopP) {
                             aiTopP = (aiTopP * 100).rounded() / 100

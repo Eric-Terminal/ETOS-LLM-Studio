@@ -10,6 +10,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import MarkdownUI
 import Shared
 
@@ -109,7 +110,10 @@ struct ContentView: View {
                         viewModel.loadMoreHistoryChunk()
                     }
                 }) {
-                    Label("向上加载 \(chunk) 条记录", systemImage: "arrow.up.circle")
+                    Label(
+                        String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk),
+                        systemImage: "arrow.up.circle"
+                    )
                 }
                 .buttonStyle(.bordered)
                 .listRowBackground(Color.clear)
@@ -179,11 +183,20 @@ struct ContentView: View {
                         viewModel.messageToEdit = message
                         viewModel.activeSheet = .editMessage
                     },
-                    onRetry: {
-                        viewModel.retryLastMessage()
+                    onRetry: { message in
+                        viewModel.retryMessage(message)
                     },
                     onDelete: {
                         viewModel.deleteMessage(message)
+                    },
+                    onDeleteCurrentVersion: {
+                        viewModel.deleteCurrentVersion(of: message)
+                    },
+                    onSwitchVersion: { index in
+                        viewModel.switchToVersion(index, of: message)
+                    },
+                    onBranch: { copyPrompts in
+                        _ = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: copyPrompts)
                     },
                     messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                     totalMessages: viewModel.allMessagesForSession.count
@@ -345,6 +358,16 @@ struct ContentView: View {
                 Button("好的", role: .cancel) { }
             } message: {
                 Text(viewModel.speechErrorMessage ?? "发生未知错误，请稍后重试。")
+            }
+            .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
+                Button("好的", role: .cancel) { }
+            } message: {
+                Text(viewModel.dimensionMismatchMessage)
+            }
+            .alert(viewModel.retryErrorTitle, isPresented: $viewModel.showRetryErrorAlert) {
+                Button("确定", role: .cancel) { }
+            } message: {
+                Text(viewModel.retryErrorMessage)
             }
     }
 }

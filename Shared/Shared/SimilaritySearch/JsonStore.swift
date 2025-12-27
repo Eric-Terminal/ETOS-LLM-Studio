@@ -51,7 +51,7 @@ public class JsonStore: VectorStoreProtocol {
             let jsonFiles = files.filter { $0.pathExtension == "json" }
             return jsonFiles
         } catch {
-            print("列出索引时出错: \(error)")
+            // 列出索引时出错
             return []
         }
     }

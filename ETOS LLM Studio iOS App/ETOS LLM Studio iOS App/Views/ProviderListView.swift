@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import Shared
 
 struct ProviderListView: View {
@@ -75,7 +76,7 @@ struct ProviderListView: View {
             }
         } message: {
             if let target = providerToDelete {
-                Text("删除“\(target.name)”后无法恢复。")
+                Text(String(format: NSLocalizedString("删除“%@”后无法恢复。", comment: ""), target.name))
             } else {
                 Text("此操作无法撤销。")
             }

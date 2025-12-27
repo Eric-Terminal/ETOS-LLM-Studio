@@ -56,6 +56,15 @@ public class ChatService {
         case error
         case cancelled
     }
+    
+    /// 错误通知，用于弹窗提示（主要用于重试失败场景）
+    public struct ErrorNotification {
+        public let title: String
+        public let message: String
+        public let statusCode: Int?
+    }
+    
+    public let errorNotificationSubject = PassthroughSubject<ErrorNotification, Never>()
 
     // MARK: - 私有状态
     
@@ -68,6 +77,8 @@ public class ChatService {
     private var currentRequestSessionID: UUID?
     /// 当前请求生成的加载占位消息 ID，方便在取消时移除。
     private var currentLoadingMessageID: UUID?
+    /// 重试时要添加新版本的assistant消息ID（如果有）
+    private var retryTargetMessageID: UUID?
     private var providers: [Provider]
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
@@ -347,6 +358,75 @@ public class ChatService {
         return newSession
     }
     
+    /// 从指定消息处创建分支会话
+    /// - Parameters:
+    ///   - sourceSession: 源会话
+    ///   - upToMessage: 包含此消息及之前的所有消息
+    ///   - copyPrompts: 是否复制话题提示词和增强提示词
+    /// - Returns: 新创建的分支会话
+    @discardableResult
+    public func branchSessionFromMessage(from sourceSession: ChatSession, upToMessage: ChatMessage, copyPrompts: Bool) -> ChatSession {
+        let newSession = ChatSession(
+            id: UUID(),
+            name: "分支: \(sourceSession.name)",
+            topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
+            enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
+            isTemporary: false
+        )
+        logger.info("🌿 从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）" : "（不含提示词）")")
+        
+        let sourceMessages = Persistence.loadMessages(for: sourceSession.id)
+        if let messageIndex = sourceMessages.firstIndex(where: { $0.id == upToMessage.id }) {
+            // 只保留到指定消息的消息（包含该消息）
+            var messagesToCopy = Array(sourceMessages[0...messageIndex])
+            
+            // 复制关联的音频和图片文件
+            for i in messagesToCopy.indices {
+                // 复制音频文件
+                if let originalFileName = messagesToCopy[i].audioFileName,
+                   let audioData = Persistence.loadAudio(fileName: originalFileName) {
+                    let ext = (originalFileName as NSString).pathExtension
+                    let newFileName = "\(UUID().uuidString).\(ext)"
+                    if Persistence.saveAudio(audioData, fileName: newFileName) != nil {
+                        messagesToCopy[i].audioFileName = newFileName
+                        logger.info("  - 复制了音频文件: \(originalFileName) -> \(newFileName)")
+                    }
+                }
+                
+                // 复制图片文件
+                if let originalImageFileNames = messagesToCopy[i].imageFileNames, !originalImageFileNames.isEmpty {
+                    var newImageFileNames: [String] = []
+                    for originalImageFileName in originalImageFileNames {
+                        if let imageData = Persistence.loadImage(fileName: originalImageFileName) {
+                            let ext = (originalImageFileName as NSString).pathExtension
+                            let newImageFileName = "\(UUID().uuidString).\(ext)"
+                            if Persistence.saveImage(imageData, fileName: newImageFileName) != nil {
+                                newImageFileNames.append(newImageFileName)
+                                logger.info("  - 复制了图片文件: \(originalImageFileName) -> \(newImageFileName)")
+                            }
+                        }
+                    }
+                    if !newImageFileNames.isEmpty {
+                        messagesToCopy[i].imageFileNames = newImageFileNames
+                    }
+                }
+            }
+            
+            Persistence.saveMessages(messagesToCopy, for: newSession.id)
+            logger.info("  - 复制了 \(messagesToCopy.count) 条消息到新会话（截止到指定消息）。" )
+        } else {
+            logger.warning("  - 未找到指定的消息，创建空分支会话。")
+        }
+        
+        var updatedSessions = chatSessionsSubject.value
+        updatedSessions.insert(newSession, at: 0)
+        chatSessionsSubject.send(updatedSessions)
+        setCurrentSession(newSession)
+        Persistence.saveChatSessions(updatedSessions)
+        logger.info("💾 保存了会话列表。" )
+        return newSession
+    }
+    
     public func deleteLastMessage(for session: ChatSession) {
         var messages = Persistence.loadMessages(for: session.id)
         if !messages.isEmpty {
@@ -402,6 +482,13 @@ public class ChatService {
         logger.info("✏️ 已更新消息内容: \(message.id.uuidString)")
     }
     
+    /// 更新整个消息列表（用于版本管理等批量操作）
+    public func updateMessages(_ messages: [ChatMessage], for sessionID: UUID) {
+        messagesForSessionSubject.send(messages)
+        Persistence.saveMessages(messages, for: sessionID)
+        logger.info("✏️ 已更新会话消息列表: \(sessionID.uuidString)")
+    }
+    
     public func updateSession(_ session: ChatSession) {
         guard !session.isTemporary else { return }
         var currentSessions = chatSessionsSubject.value
@@ -450,15 +537,75 @@ public class ChatService {
     public func addErrorMessage(_ content: String) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
-        // 找到并替换正在加载中的消息，或者直接添加新错误消息
+        
+        // 找到正在加载中的消息
         if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
-            messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: content)
+            // 检查是否在重试 assistant 场景（有保留的旧 assistant）
+            if retryTargetMessageID != nil {
+                // 重试 assistant 时出错：移除 loading message，保留原 assistant，发送弹窗通知
+                messages.remove(at: loadingIndex)
+                retryTargetMessageID = nil
+                
+                // 解析错误内容，提取状态码和简化消息
+                let (title, message, statusCode) = parseErrorContent(content)
+                errorNotificationSubject.send(ErrorNotification(title: title, message: message, statusCode: statusCode))
+                
+                logger.error("❌ 重试失败: \(content)")
+            } else {
+                // 正常场景：将 loading message 转为 error
+                messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: content)
+                logger.error("❌ 错误消息已添加: \(content)")
+            }
         } else {
+            // 没有 loading message，直接添加错误
             messages.append(ChatMessage(id: UUID(), role: .error, content: content))
+            logger.error("❌ 错误消息已添加: \(content)")
         }
+        
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: currentSession.id)
-        logger.error("❌ 错误消息已添加: \(content)")
+    }
+    
+    /// 解析错误内容，提取标题、消息和状态码，并检测 HTML 响应
+    private func parseErrorContent(_ content: String) -> (title: String, message: String, statusCode: Int?) {
+        var statusCode: Int? = nil
+        var title = "重试失败"
+        var message = content
+        
+        // 提取状态码
+        if let match = content.range(of: #"状态码\s+(\d+)"#, options: .regularExpression) {
+            let codeString = content[match].replacingOccurrences(of: #"状态码\s+"#, with: "", options: .regularExpression)
+            statusCode = Int(codeString)
+            if let code = statusCode {
+                title = "请求失败 (\(code))"
+            }
+        }
+        
+        // 检测并简化 HTML 响应（如 Cloudflare 错误页面）
+        if content.contains("<html") || content.contains("<!DOCTYPE") {
+            // 尝试提取 <title> 标签内容
+            if let titleMatch = content.range(of: #"<title>(.*?)</title>"#, options: [.regularExpression, .caseInsensitive]) {
+                let titleText = content[titleMatch]
+                    .replacingOccurrences(of: #"</?title>"#, with: "", options: [.regularExpression, .caseInsensitive])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !titleText.isEmpty {
+                    // 限制 title 长度
+                    let truncatedTitle = titleText.count > 100 ? String(titleText.prefix(100)) + "..." : titleText
+                    message = "服务器返回了网页响应\n\n页面标题: \(truncatedTitle)\n\n这通常表示遇到了 CDN 或防火墙拦截。"
+                } else {
+                    message = "服务器返回了 HTML 网页响应，这通常表示遇到了 CDN 或防火墙拦截。\n\n建议检查网络连接或 API 地址配置。"
+                }
+            } else {
+                message = "服务器返回了 HTML 网页响应，这通常表示遇到了 CDN 或防火墙拦截。\n\n建议检查网络连接或 API 地址配置。"
+            }
+        }
+        
+        // 限制消息长度，避免过长（对所有类型的错误都应用）
+        if message.count > 500 {
+            message = String(message.prefix(500)) + "...\n\n（消息已截断）"
+        }
+        
+        return (title, message, statusCode)
     }
         
     public func sendAndProcessMessage(
@@ -487,6 +634,8 @@ public class ChatService {
         var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
+        var userMessages: [ChatMessage] = []
+        var primaryUserMessage: ChatMessage?
         
         if let audioAttachment {
             // 保存音频文件到持久化目录，使用时间戳命名
@@ -517,17 +666,49 @@ public class ChatService {
             messageContent = imagePlaceholder
         }
         
-        let userMessage = ChatMessage(
-            role: .user,
-            content: messageContent,
-            audioFileName: savedAudioFileName,
-            imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
-        )
+        // 构建用户消息列表：
+        // - 若同时含语音和文字，拆分为两个独立气泡，方便单独删除
+        // - 若只有一种内容，保持原有单条消息行为
+        if let savedAudioFileName {
+            let audioMessage = ChatMessage(
+                role: .user,
+                content: messageContent.isEmpty ? audioPlaceholder : audioPlaceholder,
+                audioFileName: savedAudioFileName,
+                imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
+            )
+            userMessages.append(audioMessage)
+        }
+        
+        if !messageContent.isEmpty {
+            // 当同时有语音与文字时，避免重复附带图片到文字消息（保持图片随首条消息）
+            let imageNamesForText = savedAudioFileName == nil ? (savedImageFileNames.isEmpty ? nil : savedImageFileNames) : nil
+            let textMessage = ChatMessage(
+                role: .user,
+                content: messageContent,
+                audioFileName: nil,
+                imageFileNames: imageNamesForText
+            )
+            userMessages.append(textMessage)
+        }
+        
+        // 兜底：如果没有生成任何用户消息，直接报错返回
+        guard !userMessages.isEmpty else {
+            addErrorMessage("错误: 待发送消息为空。" )
+            requestStatusSubject.send(.error)
+            return
+        }
+        
+        // 用于命名会话/记忆检索的代表消息：优先文字，其次第一条消息
+        if let textMessage = userMessages.first(where: { $0.audioFileName == nil && !$0.content.isEmpty }) {
+            primaryUserMessage = textMessage
+        } else {
+            primaryUserMessage = userMessages.first
+        }
         let loadingMessage = ChatMessage(role: .assistant, content: "") // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
         
         var messages = messagesForSessionSubject.value
-        messages.append(userMessage)
+        messages.append(contentsOf: userMessages)
         messages.append(loadingMessage)
         messagesForSessionSubject.send(messages)
         
@@ -536,9 +717,9 @@ public class ChatService {
         // UI 上通过 audioFileName 属性标识这是一条语音消息
         
         // 处理临时会话的转换
-        if currentSession.isTemporary {
+        if currentSession.isTemporary, let sessionTitleSource = primaryUserMessage {
             wasTemporarySession = true // 标记此为首次交互
-            currentSession.name = String(userMessage.content.prefix(20))
+            currentSession.name = String(sessionTitleSource.content.prefix(20))
             currentSession.isTemporary = false
             currentSessionSubject.send(currentSession)
             var updatedSessions = chatSessionsSubject.value
@@ -573,7 +754,7 @@ public class ChatService {
                 messages: messages,
                 loadingMessageID: loadingMessage.id,
                 currentSessionID: currentSession.id,
-                userMessage: userMessage,
+                userMessage: primaryUserMessage,
                 wasTemporarySession: wasTemporarySession,
                 aiTemperature: aiTemperature,
                 aiTopP: aiTopP,
@@ -842,6 +1023,251 @@ public class ChatService {
         }
     }
 
+    /// 重试指定消息，支持任意位置的消息重试
+    /// - 对于 user 消息：删除该 user 与下一个 user 之间的内容，保留下游对话，重新发送该 user。
+    /// - 对于 assistant/error 消息：回溯到上一个 user 重新生成回复，保留下一个 assistant 之后的内容。
+    public func retryMessage(
+        _ message: ChatMessage,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        enableStreaming: Bool,
+        enhancedPrompt: String?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool
+    ) async {
+        guard let currentSession = currentSessionSubject.value else { return }
+        
+        // 先获取当前消息列表，避免取消请求时状态变化
+        let messages = messagesForSessionSubject.value
+        
+        guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
+            logger.warning("⚠️ 未找到要重试的消息")
+            return
+        }
+        
+        logger.info("🔄 重试消息: \(String(describing: message.role)) - 索引 \(messageIndex)")
+
+        // 决定重试时要重发的 user 消息，以及保留下来的前缀/后缀
+        // 核心逻辑：无论重试什么消息，都找到对应的 user 消息重新发送
+        let anchorUserIndex: Int
+        let messageToSend: ChatMessage
+        
+        switch message.role {
+        case .user:
+            // user 重试：直接重试该 user 消息
+            anchorUserIndex = messageIndex
+            messageToSend = message
+        case .assistant, .error:
+            // assistant/error 重试：回到上一个 user，本质等同于重试那个 user
+            guard let previousUserIndex = messages[..<messageIndex].lastIndex(where: { $0.role == .user }) else {
+                logger.warning("⚠️ 未找到该 \(message.role.rawValue) 消息之前的 user 消息，无法重试")
+                return
+            }
+            anchorUserIndex = previousUserIndex
+            messageToSend = messages[previousUserIndex]
+        default:
+            logger.warning("⚠️ 不支持重试 \(String(describing: message.role)) 类型的消息")
+            return
+        }
+        
+        // 统一逻辑：保留 anchorUser 到被重试消息之间的内容作为历史版本，保留下一个 user 及之后的对话
+        let tailStartIndex: Int?
+        if messageIndex + 1 < messages.count {
+            tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
+        } else {
+            tailStartIndex = nil
+        }
+        
+        // 生成重试时的前缀与需要恢复的后缀
+        let leadingMessages = Array(messages.prefix(upTo: anchorUserIndex))
+        
+        // 找到被重试的 assistant 消息（如果重试 assistant/error）
+        var assistantToUpdate: ChatMessage?
+        var assistantUpdateIndex: Int?
+        if message.role == .assistant || message.role == .error {
+            // 对于 error 消息，不保留为多版本，直接移除
+            // 只有正常的 assistant 消息才保留多版本历史
+            if message.role == .assistant {
+                assistantToUpdate = message
+                assistantUpdateIndex = messageIndex
+            }
+            // error 消息不设置 assistantToUpdate，会被直接移除
+        } else {
+            // 如果重试 user 消息，找到它后面第一个 assistant（不包括error）
+            if anchorUserIndex + 1 < messages.count {
+                if let nextAssistantIndex = messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .assistant }) {
+                    assistantToUpdate = messages[nextAssistantIndex]
+                    assistantUpdateIndex = nextAssistantIndex
+                }
+            }
+        }
+        
+        let trailingMessages: [ChatMessage]
+        if let tailIndex = tailStartIndex {
+            trailingMessages = Array(messages[tailIndex...])
+            logger.info("  - 保留后续 \(trailingMessages.count) 条消息，等待重试完成后恢复。")
+        } else {
+            trailingMessages = []
+            logger.info("  - 没有需要保留的后续消息。")
+        }
+        
+        // 构造新的消息列表：
+        // - requestMessages: 发送给模型的历史（不包含保留尾部）
+        // - persistedMessages: UI/持久化显示的历史（包含尾部，防止崩溃丢失）
+        let loadingMessage = ChatMessage(role: .assistant, content: "")
+        var requestMessages = leadingMessages
+        requestMessages.append(messageToSend)
+        requestMessages.append(loadingMessage)
+        
+        // 移除旧的 assistant 到下一个 user 之间的消息（不包括被重试的消息本身）
+        var middleMessages: [ChatMessage] = []
+        if anchorUserIndex + 1 < messageIndex {
+            middleMessages = Array(messages[(anchorUserIndex + 1)..<messageIndex])
+            if let assistantIdx = assistantUpdateIndex, assistantIdx > anchorUserIndex && assistantIdx < messageIndex {
+                middleMessages.removeAll { $0.id == assistantToUpdate?.id }
+            }
+        }
+        
+        var persistedMessages = leadingMessages
+        persistedMessages.append(messageToSend)
+        persistedMessages.append(contentsOf: middleMessages)
+        if let existingAssistant = assistantToUpdate {
+            persistedMessages.append(existingAssistant)
+            // 记录要添加版本的消息ID
+            retryTargetMessageID = existingAssistant.id
+        } else {
+            retryTargetMessageID = nil
+        }
+        persistedMessages.append(loadingMessage)
+        persistedMessages.append(contentsOf: trailingMessages)
+        
+        // 先更新 UI 显示新的 loading message，避免闪烁
+        messagesForSessionSubject.send(persistedMessages)
+        Persistence.saveMessages(persistedMessages, for: currentSession.id)
+        
+        // 再取消旧的请求（如果有）
+        await cancelOngoingRequest()
+        
+        // 恢复原消息的音频附件（如果有）
+        var audioAttachment: AudioAttachment? = nil
+        if let audioFileName = messageToSend.audioFileName,
+           let audioData = Persistence.loadAudio(fileName: audioFileName) {
+            let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
+            let mimeType = "audio/\(fileExtension)"
+            audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+            logger.info("🔄 重试时恢复音频附件: \(audioFileName)")
+        }
+        
+        // 恢复原消息的图片附件（如果有）
+        var imageAttachments: [ImageAttachment] = []
+        if let imageFileNames = messageToSend.imageFileNames {
+            for fileName in imageFileNames {
+                if let imageData = Persistence.loadImage(fileName: fileName) {
+                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
+                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                    imageAttachments.append(attachment)
+                    logger.info("🔄 重试时恢复图片附件: \(fileName)")
+                }
+            }
+        }
+        
+        // 使用原消息内容和附件，调用主要的发送函数（不移除保留尾部）
+        await startRequestWithPresetMessages(
+            messages: requestMessages,
+            loadingMessageID: loadingMessage.id,
+            currentSession: currentSession,
+            userMessage: messageToSend,
+            aiTemperature: aiTemperature,
+            aiTopP: aiTopP,
+            systemPrompt: systemPrompt,
+            maxChatHistory: maxChatHistory,
+            enableStreaming: enableStreaming,
+            enhancedPrompt: enhancedPrompt,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            includeSystemTime: includeSystemTime,
+            currentAudioAttachment: audioAttachment
+        )
+    }
+
+    /// 在重试场景下复用现有消息列表发起请求，避免移除尾部对话
+    private func startRequestWithPresetMessages(
+        messages: [ChatMessage],
+        loadingMessageID: UUID,
+        currentSession: ChatSession,
+        userMessage: ChatMessage?,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        enableStreaming: Bool,
+        enhancedPrompt: String?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
+        currentAudioAttachment: AudioAttachment?
+    ) async {
+        requestStatusSubject.send(.started)
+        
+        currentRequestSessionID = currentSession.id
+        currentLoadingMessageID = loadingMessageID
+        let requestToken = UUID()
+        currentRequestToken = requestToken
+        
+        let requestTask = Task<Void, Error> { [weak self] in
+            guard let self else { return }
+            var resolvedTools: [InternalToolDefinition] = []
+            if enableMemory && enableMemoryWrite {
+                resolvedTools.append(self.saveMemoryTool)
+            }
+            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: mcpTools)
+            let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            
+            await self.executeMessageRequest(
+                messages: messages,
+                loadingMessageID: loadingMessageID,
+                currentSessionID: currentSession.id,
+                userMessage: userMessage,
+                wasTemporarySession: false,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: enhancedPrompt,
+                tools: tools,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
+                currentAudioAttachment: currentAudioAttachment
+            )
+        }
+        
+        currentRequestTask = requestTask
+        
+        defer {
+            if currentRequestToken == requestToken {
+                currentRequestTask = nil
+                currentRequestToken = nil
+                currentRequestSessionID = nil
+                currentLoadingMessageID = nil
+            }
+        }
+        
+        do {
+            try await requestTask.value
+        } catch is CancellationError {
+            logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
+        } catch {
+            logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+        }
+    }
+    
     public func retryLastMessage(
         aiTemperature: Double,
         aiTopP: Double,
@@ -1338,7 +1764,40 @@ public class ChatService {
     /// 将最终确定的消息更新到消息列表中
     private func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) {
         var messages = messagesForSessionSubject.value
-        if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+        
+        // 检查是否是重试场景，需要添加新版本
+        if let targetID = retryTargetMessageID,
+           let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
+            // 找到目标assistant消息，添加新版本
+            var targetMessage = messages[targetIndex]
+            targetMessage.addVersion(newMessage.content)
+            
+            // 如果有推理内容，也添加到新版本
+            if let newReasoning = newMessage.reasoningContent, !newReasoning.isEmpty {
+                targetMessage.reasoningContent = (targetMessage.reasoningContent ?? "") + "\n\n[新版本推理]\n" + newReasoning
+            }
+            
+            // 更新 token 使用情况
+            if let newUsage = newMessage.tokenUsage {
+                targetMessage.tokenUsage = newUsage
+            }
+            
+            messages[targetIndex] = targetMessage
+            
+            // 移除 loading message
+            if let loadingIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                messages.remove(at: loadingIndex)
+            }
+            
+            // 清除重试标记
+            retryTargetMessageID = nil
+            
+            messagesForSessionSubject.send(messages)
+            Persistence.saveMessages(messages, for: sessionID)
+            
+            logger.info("✅ 已将新内容添加为版本到消息 \(targetID)")
+        } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+            // 正常流程：替换loading message
             let preservedToolCalls = messages[index].toolCalls
             let mergedToolCalls: [InternalToolCall]? = {
                 if let newCalls = newMessage.toolCalls, !newCalls.isEmpty {
@@ -1586,12 +2045,4 @@ ISO8601：\(isoTime)
             logger.error("生成会话标题时发生网络或解析错误: \(error.localizedDescription)")
         }
     }
-}
-
-// 临时的，为了编译通过。这个结构体应该在某个地方有正式定义。
-struct ModelListResponse: Decodable {
-    struct ModelData: Decodable {
-        let id: String
-    }
-    let data: [ModelData]
 }

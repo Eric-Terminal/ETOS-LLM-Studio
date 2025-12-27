@@ -9,6 +9,7 @@
 // ============================================================================ 
 
 import SwiftUI
+import Foundation
 import Shared
 
 /// 会话历史列表视图
@@ -100,7 +101,7 @@ struct SessionListView: View {
             }
         } message: {
             if let session = sessionToBranch {
-                Text("从“\(session.name)”创建新的分支对话。")
+                Text(String(format: NSLocalizedString("从“%@”创建新的分支对话。", comment: ""), session.name))
             }
         }
     }

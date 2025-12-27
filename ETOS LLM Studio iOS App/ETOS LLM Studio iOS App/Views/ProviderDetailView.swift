@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import Shared
 
 struct ProviderDetailView: View {
@@ -137,7 +138,10 @@ struct ProviderDetailView: View {
         if names.isEmpty {
             return "删除后无法恢复这些模型。"
         } else {
-            return "确认删除以下模型：\(names.joined(separator: "、"))。"
+            return String(
+                format: NSLocalizedString("确认删除以下模型：%@。", comment: ""),
+                names.joined(separator: NSLocalizedString("、", comment: ""))
+            )
         }
     }
     

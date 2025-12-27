@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct MCPIntegrationView: View {
@@ -63,7 +64,13 @@ struct MCPIntegrationView: View {
             Section("连接状态") {
                 let connected = manager.connectedServers().count
                 let selected = manager.selectedServers().count
-                Text("已连接 \(connected) 台，聊天使用 \(selected) 台。")
+                Text(
+                    String(
+                        format: NSLocalizedString("已连接 %d 台，聊天使用 %d 台。", comment: ""),
+                        connected,
+                        selected
+                    )
+                )
                     .font(.caption2)
                 Button("刷新") {
                     manager.refreshMetadata()
@@ -92,7 +99,10 @@ struct MCPIntegrationView: View {
             
             Section("能力概览") {
                 HStack {
-                    Label("工具 \(manager.tools.count)", systemImage: "hammer")
+                    Label(
+                        String(format: NSLocalizedString("工具 %d", comment: ""), manager.tools.count),
+                        systemImage: "hammer"
+                    )
                     Spacer()
                     NavigationLink("查看列表") {
                         MCPToolListView()
@@ -100,7 +110,10 @@ struct MCPIntegrationView: View {
                     .disabled(manager.tools.isEmpty)
                 }
                 HStack {
-                    Label("资源 \(manager.resources.count)", systemImage: "doc.plaintext")
+                    Label(
+                        String(format: NSLocalizedString("资源 %d", comment: ""), manager.resources.count),
+                        systemImage: "doc.plaintext"
+                    )
                     Spacer()
                     NavigationLink("查看列表") {
                         MCPResourceListView()
@@ -149,7 +162,7 @@ struct MCPIntegrationView: View {
         case .ready:
             return status.isSelectedForChat ? "聊天使用" : "已连接"
         case .failed(let reason):
-            return "失败：\(reason)"
+            return String(format: NSLocalizedString("失败：%@", comment: ""), reason)
         @unknown default:
             return "未知状态"
         }
@@ -275,7 +288,7 @@ private struct MCPServerDetailView: View {
         case .ready:
             return status.isSelectedForChat ? "聊天使用" : "已连接"
         case .failed(let reason):
-            return "失败：\(reason)"
+            return String(format: NSLocalizedString("失败：%@", comment: ""), reason)
         @unknown default:
             return "未知状态"
         }

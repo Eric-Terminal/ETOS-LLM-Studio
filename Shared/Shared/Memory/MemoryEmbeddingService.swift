@@ -13,7 +13,7 @@ public protocol MemoryEmbeddingGenerating {
     func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]]
 }
 
-enum MemoryEmbeddingError: LocalizedError {
+public enum MemoryEmbeddingError: LocalizedError {
     case emptyInput
     case noAvailableModel
     case adapterMissing(String)
@@ -22,7 +22,7 @@ enum MemoryEmbeddingError: LocalizedError {
     case invalidResponse
     case resultCountMismatch(expected: Int, actual: Int)
     
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .emptyInput:
             return "未提供任何待编码文本。"
@@ -43,12 +43,35 @@ enum MemoryEmbeddingError: LocalizedError {
             return "嵌入结果数量与输入不一致：预期 \(expected)，实际 \(actual)。"
         }
     }
+    
+    /// 判断是否为硬错误（不应该重试的错误）
+    public var isHardError: Bool {
+        switch self {
+        case .httpStatus(let code, _):
+            // 4xx 客户端错误通常是硬错误，不应重试
+            return (400...499).contains(code)
+        case .noAvailableModel, .adapterMissing, .requestBuildFailed:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    /// 获取HTTP状态码（如果是HTTP错误）
+    public var httpStatusCode: Int? {
+        if case .httpStatus(let code, _) = self {
+            return code
+        }
+        return nil
+    }
 }
 
 final class CloudEmbeddingService: MemoryEmbeddingGenerating {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "CloudEmbeddingService")
     private let adapters: [String: APIAdapter]
     private let urlSession: URLSession
+    private var cachedRunnableModels: [RunnableModel]?
+    private let cacheQueue = DispatchQueue(label: "com.etos.embeddings.cache")
     
     init(
         adapters: [String: APIAdapter] = [
@@ -96,14 +119,29 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
     }
     
     private func loadRunnableModels() -> [RunnableModel] {
-        let providers = ConfigLoader.loadProviders()
-        var runnable: [RunnableModel] = []
-        for provider in providers {
-            for model in provider.models {
-                runnable.append(RunnableModel(provider: provider, model: model))
+        // 使用缓存避免重复加载
+        return cacheQueue.sync {
+            if let cached = cachedRunnableModels {
+                return cached
             }
+            
+            let providers = ConfigLoader.loadProviders()
+            var runnable: [RunnableModel] = []
+            for provider in providers {
+                for model in provider.models {
+                    runnable.append(RunnableModel(provider: provider, model: model))
+                }
+            }
+            cachedRunnableModels = runnable
+            return runnable
         }
-        return runnable
+    }
+    
+    /// 清除缓存，当提供商配置发生变化时调用
+    func clearCache() {
+        cacheQueue.sync {
+            cachedRunnableModels = nil
+        }
     }
     
     private func resolveModel(preferredID: String?, from models: [RunnableModel]) -> RunnableModel {

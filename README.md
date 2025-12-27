@@ -70,7 +70,19 @@
 - ✏️ **消息编辑与重试**: 可以随时编辑已发送的消息或 AI 的回复，也可以一键重新生成 AI 的最后一次回复。
 
 </details>
+<details>
+<summary><strong>🔌 局域网调试功能</strong></summary>
 
+- 🌐 **HTTP 调试服务器**: 在 iOS 或 watchOS 上启动本地 HTTP 服务器,通过局域网远程访问应用沙盒。
+- 📁 **文件管理**: 支持浏览、下载、上传、删除 Documents 目录中的文件(Providers、MCP、Memory、ChatSession 等)。
+- 🔐 **PIN 码认证**: 每次启动自动生成随机 6 位 PIN 码,确保访问安全。
+- 💻 **命令行友好**: 提供完整的 RESTful API,支持 curl、Python 等工具进行操作。
+- 🔒 **安全限制**: 所有操作严格限制在应用沙盒的 Documents 目录内。
+- 💡 **屏幕常亮**: 服务器运行时自动保持屏幕常亮,防止意外中断。
+
+详细使用文档请参阅: [LOCAL_DEBUG.md](LOCAL_DEBUG.md)
+
+</details>
 ---
 
 ## 🚀 未来计划 (Roadmap)

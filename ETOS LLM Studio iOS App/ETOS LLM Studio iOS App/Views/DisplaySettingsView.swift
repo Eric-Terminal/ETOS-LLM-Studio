@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct DisplaySettingsView: View {
     @Binding var enableMarkdown: Bool
@@ -25,12 +26,12 @@ struct DisplaySettingsView: View {
                 
                 if enableBackground {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("模糊 \(String(format: "%.1f", backgroundBlur))")
+                        Text(String(format: NSLocalizedString("模糊 %.1f", comment: ""), backgroundBlur))
                         Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("不透明度 \(String(format: "%.2f", backgroundOpacity))")
+                        Text(String(format: NSLocalizedString("不透明度 %.2f", comment: ""), backgroundOpacity))
                         Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
                     }
                     
