@@ -589,7 +589,9 @@ public class ChatService {
                     .replacingOccurrences(of: #"</?title>"#, with: "", options: [.regularExpression, .caseInsensitive])
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !titleText.isEmpty {
-                    message = "服务器返回了网页响应\n\n页面标题: \(titleText)\n\n这通常表示遇到了 CDN 或防火墙拦截。"
+                    // 限制 title 长度
+                    let truncatedTitle = titleText.count > 100 ? String(titleText.prefix(100)) + "..." : titleText
+                    message = "服务器返回了网页响应\n\n页面标题: \(truncatedTitle)\n\n这通常表示遇到了 CDN 或防火墙拦截。"
                 } else {
                     message = "服务器返回了 HTML 网页响应，这通常表示遇到了 CDN 或防火墙拦截。\n\n建议检查网络连接或 API 地址配置。"
                 }
