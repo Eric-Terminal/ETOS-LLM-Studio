@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 public struct LocalDebugView: View {
@@ -75,6 +76,34 @@ public struct LocalDebugView: View {
                     }
                 }
             }
+
+            if server.isRunning, server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0 {
+                Section {
+                    if let pending = server.pendingOpenAIRequest {
+                        Text("模型 \(pending.model ?? "未知") · 消息 \(pending.messageCount)")
+                            .font(.caption2)
+                        Text(formatPendingTime(pending.receivedAt))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Button("保存到本地") {
+                            server.resolvePendingOpenAIRequest(save: true)
+                        }
+                        .font(.caption)
+                        Button("忽略") {
+                            server.resolvePendingOpenAIRequest(save: false)
+                        }
+                        .font(.caption)
+                    }
+                } header: {
+                    Text("OpenAI 捕获")
+                } footer: {
+                    if server.pendingOpenAIQueueCount > 1 {
+                        Text("剩余 \(server.pendingOpenAIQueueCount - 1) 条")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
             
             // 文档
             Section {
@@ -112,6 +141,13 @@ public struct LocalDebugView: View {
         server.stop()
         WKInterfaceDevice.current().isBatteryMonitoringEnabled = false
     }
+
+    private func formatPendingTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter.string(from: date)
+    }
 }
 
 // MARK: - 文档视图 (watchOS)
@@ -127,6 +163,7 @@ private struct WatchDocumentationView: View {
             }
             
             Section("端点") {
+                EndpointItem(method: "POST", path: "/v1/chat/completions", desc: "OpenAI 兼容请求(免 PIN)")
                 EndpointItem(method: "GET", path: "/api/list", desc: "列出目录")
                 EndpointItem(method: "GET", path: "/api/download", desc: "下载文件")
                 EndpointItem(method: "POST", path: "/api/upload", desc: "上传文件")

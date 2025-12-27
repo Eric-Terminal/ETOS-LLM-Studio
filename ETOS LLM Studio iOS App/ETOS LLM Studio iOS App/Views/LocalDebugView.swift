@@ -78,6 +78,35 @@ struct LocalDebugView: View {
                     }
                 }
             }
+
+            if server.isRunning, server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0 {
+                Section("OpenAI 捕获") {
+                    if let pending = server.pendingOpenAIRequest {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("收到请求：模型 \(pending.model ?? "未知") · 消息数 \(pending.messageCount)")
+                                .font(.subheadline)
+                            Text(formatPendingTime(pending.receivedAt))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Button("保存到本地") {
+                                server.resolvePendingOpenAIRequest(save: true)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            
+                            Button("忽略") {
+                                server.resolvePendingOpenAIRequest(save: false)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                } footer: {
+                    if server.pendingOpenAIQueueCount > 1 {
+                        Text("队列中还有 \(server.pendingOpenAIQueueCount - 1) 条未处理请求")
+                    }
+                }
+            }
             
             // API 文档
             Section {
@@ -126,6 +155,13 @@ struct LocalDebugView: View {
         server.stop()
         UIApplication.shared.isIdleTimerDisabled = false
     }
+
+    private func formatPendingTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年MM月dd日 HH:mm:ss"
+        return formatter.string(from: date)
+    }
 }
 
 // MARK: - 文档视图
@@ -144,6 +180,17 @@ private struct DocumentationView: View {
             }
             
             Section("API 端点") {
+                APIEndpointRow(
+                    method: "POST",
+                    path: "/v1/chat/completions",
+                    description: "OpenAI 兼容请求 (免 PIN，支持捕获保存)",
+                    example: """
+                    curl -X POST http://IP:8080/v1/chat/completions \\
+                      -H "Content-Type: application/json" \\
+                      -d '{\"model\":\"gpt-4\",\"messages\":[{\"role\":\"system\",\"content\":\"你是...\"},{\"role\":\"user\",\"content\":\"你好\"}]}'
+                    """
+                )
+                
                 APIEndpointRow(
                     method: "GET",
                     path: "/api/list",

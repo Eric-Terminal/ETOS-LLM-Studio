@@ -10,6 +10,7 @@
 import Foundation
 import Combine
 import Network
+import os.log
 #if os(iOS)
 import UIKit
 #elseif os(watchOS)
@@ -18,14 +19,25 @@ import WatchKit
 
 /// 局域网调试服务器
 public class LocalDebugServer: ObservableObject {
+    public struct OpenAIRequestSummary: Identifiable, Hashable {
+        public let id: UUID
+        public let model: String?
+        public let messageCount: Int
+        public let receivedAt: Date
+    }
+
     @Published public var isRunning = false
     @Published public var localIP: String = "未知"
     @Published public var pin: String = ""
     @Published public var errorMessage: String?
+    @Published public var pendingOpenAIRequest: OpenAIRequestSummary?
+    @Published public var pendingOpenAIQueueCount: Int = 0
     
+    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "LocalDebugServer")
     private var listener: NWListener?
     private var connections: [NWConnection] = []
     private let queue = DispatchQueue(label: "com.etos.localdebug", qos: .userInitiated)
+    private var pendingOpenAIRequests: [PendingOpenAIRequest] = []
     
     public init() {}
     
@@ -87,6 +99,8 @@ public class LocalDebugServer: ObservableObject {
         connections.removeAll()
         isRunning = false
         pin = ""
+        pendingOpenAIRequests.removeAll()
+        updatePendingOpenAIState()
     }
     
     // MARK: - 连接处理
@@ -144,7 +158,8 @@ public class LocalDebugServer: ObservableObject {
         }
         
         let method = components[0]
-        let path = components[1]
+        let rawPath = components[1]
+        let path = rawPath.split(separator: "?").first.map(String.init) ?? rawPath
         
         // 提取PIN码
         var receivedPIN: String?
@@ -165,8 +180,18 @@ public class LocalDebugServer: ObservableObject {
             }
         }
         
-        // 验证PIN (除了根路径的GET请求)
-        if !(method == "GET" && path == "/") {
+        let shouldRequirePIN: Bool = {
+            if method == "GET" && path == "/" {
+                return false
+            }
+            if method == "POST" && path == "/v1/chat/completions" {
+                return false
+            }
+            return true
+        }()
+        
+        // 验证PIN
+        if shouldRequirePIN {
             guard receivedPIN == pin else {
                 sendResponse(statusCode: 401, body: "Unauthorized: Invalid PIN", on: connection)
                 return
@@ -181,6 +206,8 @@ public class LocalDebugServer: ObservableObject {
         switch (method, path) {
         case ("GET", "/"):
             handleRoot(on: connection)
+        case ("GET", "/api/openai/pending"):
+            handleOpenAIPending(on: connection)
         case ("GET", "/api/list"):
             handleList(body: body, on: connection)
         case ("GET", "/api/download"):
@@ -191,6 +218,10 @@ public class LocalDebugServer: ObservableObject {
             handleDelete(body: body, on: connection)
         case ("POST", "/api/mkdir"):
             handleMkdir(body: body, on: connection)
+        case ("POST", "/api/openai/confirm"):
+            handleOpenAIConfirm(body: body, on: connection)
+        case ("POST", "/v1/chat/completions"):
+            handleOpenAIChatCompletions(body: body, on: connection)
         default:
             sendResponse(statusCode: 404, body: "Not Found", on: connection)
         }
@@ -207,15 +238,62 @@ public class LocalDebugServer: ObservableObject {
         <h1>ETOS LLM Studio 局域网调试</h1>
         <p>服务器运行中</p>
         <p>PIN: \(pin)</p>
+        <h2>OpenAI 兼容捕获</h2>
+        <div id="capture-status">暂无待处理的 OpenAI 请求。</div>
+        <div id="capture-actions" style="display:none;">
+          <p id="capture-summary"></p>
+          <button onclick="confirmCapture(true)">保存到本地</button>
+          <button onclick="confirmCapture(false)">忽略</button>
+        </div>
         <h2>API 端点:</h2>
         <ul>
+        <li>POST /v1/chat/completions - OpenAI 兼容请求 (免 PIN)</li>
         <li>GET /api/list - 列出目录内容</li>
         <li>GET /api/download - 下载文件</li>
         <li>POST /api/upload - 上传文件</li>
         <li>POST /api/delete - 删除文件/目录</li>
         <li>POST /api/mkdir - 创建目录</li>
         </ul>
-        <p>所有请求需要在Header中包含: <code>X-Debug-PIN: \(pin)</code></p>
+        <p>除 OpenAI 兼容请求外，所有请求需要在 Header 中包含: <code>X-Debug-PIN: \(pin)</code></p>
+        <script>
+        const pin = "\(pin)";
+        let pendingId = null;
+        async function pollPending() {
+          try {
+            const res = await fetch("/api/openai/pending", { headers: { "X-Debug-PIN": pin } });
+            if (!res.ok) return setTimeout(pollPending, 2000);
+            const data = await res.json();
+            const status = document.getElementById("capture-status");
+            const actions = document.getElementById("capture-actions");
+            const summary = document.getElementById("capture-summary");
+            if (data.pending && data.request) {
+              pendingId = data.request.id;
+              const when = new Date(data.request.receivedAt * 1000).toLocaleString();
+              summary.textContent = `收到请求：模型 ${data.request.model || "未知"}，消息数 ${data.request.messageCount}，时间 ${when}`;
+              actions.style.display = "block";
+              status.textContent = `待处理请求 ${data.queueSize} 条`;
+            } else {
+              pendingId = null;
+              actions.style.display = "none";
+              status.textContent = "暂无待处理的 OpenAI 请求。";
+            }
+          } catch {
+            // 忽略轮询错误
+          }
+          setTimeout(pollPending, 2000);
+        }
+        async function confirmCapture(save) {
+          if (!pendingId) return;
+          await fetch("/api/openai/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-PIN": pin },
+            body: JSON.stringify({ id: pendingId, save: save })
+          });
+          pendingId = null;
+          pollPending();
+        }
+        pollPending();
+        </script>
         </body>
         </html>
         """
@@ -415,6 +493,82 @@ public class LocalDebugServer: ObservableObject {
         }
     }
     
+    private func handleOpenAIChatCompletions(body: Data?, on connection: NWConnection) {
+        guard let body = body else {
+            sendJSONError("Missing request body", on: connection)
+            return
+        }
+        guard let pending = parseOpenAIChatCompletions(body: body) else {
+            sendJSONError("Invalid OpenAI request body", on: connection)
+            return
+        }
+        pendingOpenAIRequests.append(pending)
+        updatePendingOpenAIState()
+        logger.info("📥 捕获 OpenAI 请求: \(pending.id.uuidString, privacy: .public)")
+        sendOpenAIStubResponse(model: pending.model, on: connection)
+    }
+    
+    private func handleOpenAIPending(on connection: NWConnection) {
+        if let pending = pendingOpenAIRequests.first {
+            let response: [String: Any] = [
+                "pending": true,
+                "queueSize": pendingOpenAIRequests.count,
+                "request": [
+                    "id": pending.id.uuidString,
+                    "model": pending.model ?? "",
+                    "messageCount": pending.originalMessageCount,
+                    "receivedAt": pending.receivedAt.timeIntervalSince1970
+                ]
+            ]
+            sendJSONResponse(response, on: connection)
+        } else {
+            let response: [String: Any] = [
+                "pending": false,
+                "queueSize": 0
+            ]
+            sendJSONResponse(response, on: connection)
+        }
+    }
+    
+    private func handleOpenAIConfirm(body: Data?, on connection: NWConnection) {
+        guard let body = body,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let idString = json["id"] as? String,
+              let requestID = UUID(uuidString: idString),
+              let save = json["save"] as? Bool else {
+            sendJSONError("Missing or invalid parameters (id, save)", on: connection)
+            return
+        }
+        
+        guard let index = pendingOpenAIRequests.firstIndex(where: { $0.id == requestID }) else {
+            sendJSONError("Pending request not found", statusCode: 404, on: connection)
+            return
+        }
+        
+        let pending = pendingOpenAIRequests.remove(at: index)
+        if save {
+            saveCapturedOpenAIRequest(pending)
+        }
+        updatePendingOpenAIState()
+        let response: [String: Any] = [
+            "success": true,
+            "saved": save
+        ]
+        sendJSONResponse(response, on: connection)
+    }
+
+    public func resolvePendingOpenAIRequest(save: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard !self.pendingOpenAIRequests.isEmpty else { return }
+            let pending = self.pendingOpenAIRequests.removeFirst()
+            if save {
+                self.saveCapturedOpenAIRequest(pending)
+            }
+            self.updatePendingOpenAIState()
+        }
+    }
+    
     // MARK: - 响应助手
     
     private func sendJSONResponse(_ object: [String: Any], on connection: NWConnection) {
@@ -437,6 +591,36 @@ public class LocalDebugServer: ObservableObject {
             return
         }
         sendResponse(statusCode: statusCode, body: jsonString, contentType: "application/json", on: connection)
+    }
+    
+    private func sendOpenAIStubResponse(model: String?, on connection: NWConnection) {
+        let response: [String: Any] = [
+            "id": "local-debug-capture",
+            "object": "chat.completion",
+            "created": Int(Date().timeIntervalSince1970),
+            "model": model ?? "unknown",
+            "choices": [
+                [
+                    "index": 0,
+                    "message": [
+                        "role": "assistant",
+                        "content": ""
+                    ],
+                    "finish_reason": "stop"
+                ]
+            ],
+            "usage": [
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            ]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: response),
+              let jsonString = String(data: data, encoding: .utf8) else {
+            sendResponse(statusCode: 200, body: "{}", contentType: "application/json", on: connection)
+            return
+        }
+        sendResponse(statusCode: 200, body: jsonString, contentType: "application/json", on: connection)
     }
     
     private func sendResponse(statusCode: Int, body: String, contentType: String = "text/plain", on connection: NWConnection) {
@@ -504,5 +688,153 @@ public class LocalDebugServer: ObservableObject {
         
         freeifaddrs(ifaddr)
         return address
+    }
+}
+
+// MARK: - OpenAI 捕获解析
+
+private extension LocalDebugServer {
+    struct PendingOpenAIRequest {
+        let id: UUID
+        let receivedAt: Date
+        let model: String?
+        let systemPrompt: String?
+        let messages: [ChatMessage]
+        let originalMessageCount: Int
+    }
+    
+    func parseOpenAIChatCompletions(body: Data) -> PendingOpenAIRequest? {
+        guard let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let rawMessages = json["messages"] as? [[String: Any]] else {
+            return nil
+        }
+        let model = json["model"] as? String
+        var systemParts: [String] = []
+        var messages: [ChatMessage] = []
+        
+        for rawMessage in rawMessages {
+            let roleString = (rawMessage["role"] as? String) ?? "user"
+            let content = normalizeOpenAIContent(rawMessage["content"])
+            if roleString == "system" {
+                if !content.isEmpty {
+                    systemParts.append(content)
+                }
+                continue
+            }
+            let mappedRole: MessageRole
+            switch roleString {
+            case "assistant":
+                mappedRole = .assistant
+            case "tool", "function":
+                mappedRole = .tool
+            case "user":
+                mappedRole = .user
+            default:
+                mappedRole = .user
+            }
+            messages.append(ChatMessage(role: mappedRole, content: content))
+        }
+        
+        let systemPrompt = systemParts.isEmpty ? nil : systemParts.joined(separator: "\n\n")
+        return PendingOpenAIRequest(
+            id: UUID(),
+            receivedAt: Date(),
+            model: model,
+            systemPrompt: systemPrompt,
+            messages: messages,
+            originalMessageCount: rawMessages.count
+        )
+    }
+    
+    func normalizeOpenAIContent(_ content: Any?) -> String {
+        if let text = content as? String {
+            return text
+        }
+        if let parts = content as? [[String: Any]] {
+            var pieces: [String] = []
+            for part in parts {
+                if let text = part["text"] as? String {
+                    pieces.append(text)
+                    continue
+                }
+                let type = (part["type"] as? String) ?? ""
+                if type == "text" || type == "input_text", let text = part["text"] as? String {
+                    pieces.append(text)
+                } else if type == "image_url",
+                          let image = part["image_url"] as? [String: Any],
+                          let url = image["url"] as? String {
+                    pieces.append("[image: \(url)]")
+                } else if type == "input_image",
+                          let url = part["image_url"] as? String {
+                    pieces.append("[image: \(url)]")
+                } else if let value = part["value"] as? String {
+                    pieces.append(value)
+                }
+            }
+            return pieces.joined(separator: "\n")
+        }
+        if let dict = content as? [String: Any] {
+            if let text = dict["text"] as? String {
+                return text
+            }
+            if let value = dict["value"] as? String {
+                return value
+            }
+            if let url = dict["url"] as? String {
+                return url
+            }
+            if let data = try? JSONSerialization.data(withJSONObject: dict),
+               let text = String(data: data, encoding: .utf8) {
+                return text
+            }
+        }
+        return ""
+    }
+    
+    func saveCapturedOpenAIRequest(_ pending: PendingOpenAIRequest) {
+        let session = ChatSession(
+            id: UUID(),
+            name: formatSessionTitle(for: pending.receivedAt),
+            topicPrompt: pending.systemPrompt,
+            enhancedPrompt: nil,
+            isTemporary: false
+        )
+        Persistence.saveMessages(pending.messages, for: session.id)
+        var sessions = Persistence.loadChatSessions()
+        sessions.insert(session, at: 0)
+        Persistence.saveChatSessions(sessions)
+        
+        let chatService = ChatService.shared
+        Task { @MainActor in
+            var liveSessions = chatService.chatSessionsSubject.value
+            liveSessions.insert(session, at: 0)
+            chatService.chatSessionsSubject.send(liveSessions)
+        }
+    }
+    
+    func formatSessionTitle(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年MM月dd日 HH点mm分ss秒"
+        return formatter.string(from: date)
+    }
+
+    func updatePendingOpenAIState() {
+        let summary: OpenAIRequestSummary?
+        if let pending = pendingOpenAIRequests.first {
+            summary = OpenAIRequestSummary(
+                id: pending.id,
+                model: pending.model,
+                messageCount: pending.originalMessageCount,
+                receivedAt: pending.receivedAt
+            )
+        } else {
+            summary = nil
+        }
+        let count = pendingOpenAIRequests.count
+        Task { @MainActor in
+            self.pendingOpenAIRequest = summary
+            self.pendingOpenAIQueueCount = count
+        }
     }
 }
