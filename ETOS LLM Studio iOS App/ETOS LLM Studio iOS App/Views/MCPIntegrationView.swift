@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct MCPIntegrationView: View {
@@ -79,7 +80,13 @@ struct MCPIntegrationView: View {
             Section("连接概览") {
                 let connectedCount = manager.connectedServers().count
                 let selectedCount = manager.selectedServers().count
-                Text("已连接 \(connectedCount) 台，参与聊天 \(selectedCount) 台。")
+                Text(
+                    String(
+                        format: NSLocalizedString("已连接 %d 台，参与聊天 %d 台。", comment: ""),
+                        connectedCount,
+                        selectedCount
+                    )
+                )
                     .font(.footnote)
                 Button("刷新所有已连接服务器") {
                     manager.refreshMetadata()
@@ -114,19 +121,31 @@ struct MCPIntegrationView: View {
             }
             
             if !manager.tools.isEmpty {
-                Section("已公布工具 (\(manager.tools.count))") {
+                Section(
+                    String(format: NSLocalizedString("已公布工具 (%d)", comment: ""), manager.tools.count)
+                ) {
                     ForEach(manager.tools) { available in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(available.tool.toolId)
                                 .font(.headline)
-                            Text("来源：\(available.server.displayName)")
+                            Text(
+                                String(
+                                    format: NSLocalizedString("来源：%@", comment: ""),
+                                    available.server.displayName
+                                )
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             if let desc = available.tool.description, !desc.isEmpty {
                                 Text(desc)
                                     .font(.footnote)
                             }
-                            Text("内部名称：\(available.internalName)")
+                            Text(
+                                String(
+                                    format: NSLocalizedString("内部名称：%@", comment: ""),
+                                    available.internalName
+                                )
+                            )
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                                 .textSelection(.enabled)
@@ -137,12 +156,19 @@ struct MCPIntegrationView: View {
             }
             
             if !manager.resources.isEmpty {
-                Section("可用资源 (\(manager.resources.count))") {
+                Section(
+                    String(format: NSLocalizedString("可用资源 (%d)", comment: ""), manager.resources.count)
+                ) {
                     ForEach(manager.resources) { available in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(available.resource.resourceId)
                                 .font(.headline)
-                            Text("来源：\(available.server.displayName)")
+                            Text(
+                                String(
+                                    format: NSLocalizedString("来源：%@", comment: ""),
+                                    available.server.displayName
+                                )
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             if let desc = available.resource.description, !desc.isEmpty {
@@ -156,12 +182,19 @@ struct MCPIntegrationView: View {
             }
 
             if !manager.prompts.isEmpty {
-                Section("提示词模板 (\(manager.prompts.count))") {
+                Section(
+                    String(format: NSLocalizedString("提示词模板 (%d)", comment: ""), manager.prompts.count)
+                ) {
                     ForEach(manager.prompts) { available in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(available.prompt.name)
                                 .font(.headline)
-                            Text("来源：\(available.server.displayName)")
+                            Text(
+                                String(
+                                    format: NSLocalizedString("来源：%@", comment: ""),
+                                    available.server.displayName
+                                )
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             if let desc = available.prompt.description, !desc.isEmpty {
@@ -169,7 +202,12 @@ struct MCPIntegrationView: View {
                                     .font(.footnote)
                             }
                             if let args = available.prompt.arguments, !args.isEmpty {
-                                Text("参数：\(args.map { $0.name }.joined(separator: ", "))")
+                                Text(
+                                    String(
+                                        format: NSLocalizedString("参数：%@", comment: ""),
+                                        args.map { $0.name }.joined(separator: NSLocalizedString("，", comment: ""))
+                                    )
+                                )
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
@@ -306,7 +344,7 @@ struct MCPIntegrationView: View {
         do {
             let payload = try decodeJSONDictionary(from: toolPayloadInput)
             guard let serverID = resolveServerSelection(forTool: true) else {
-                localError = "请选择一个已连接的服务器。"
+                localError = NSLocalizedString("请选择一个已连接的服务器。", comment: "")
                 return
             }
             let toolID = toolIdInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -321,7 +359,7 @@ struct MCPIntegrationView: View {
         do {
             let payload = try decodeJSONDictionary(from: resourceQueryInput)
             guard let serverID = resolveServerSelection(forTool: false) else {
-                localError = "请选择一个已连接的服务器。"
+                localError = NSLocalizedString("请选择一个已连接的服务器。", comment: "")
                 return
             }
             let query = payload.isEmpty ? nil : payload
@@ -393,9 +431,11 @@ struct MCPIntegrationView: View {
         case .connecting:
             return "正在连接..."
         case .ready:
-            return status.isSelectedForChat ? "已连接并参与聊天" : "已连接"
+            return status.isSelectedForChat
+                ? NSLocalizedString("已连接并参与聊天", comment: "")
+                : NSLocalizedString("已连接", comment: "")
         case .failed(let reason):
-            return "失败：\(reason)"
+            return String(format: NSLocalizedString("失败：%@", comment: ""), reason)
         @unknown default:
             return "未知状态"
         }
@@ -493,7 +533,9 @@ private struct MCPServerDetailView: View {
             }
             
             if !status.tools.isEmpty {
-                Section("工具 (\(status.tools.count))") {
+                Section(
+                    String(format: NSLocalizedString("工具 (%d)", comment: ""), status.tools.count)
+                ) {
                     ForEach(status.tools) { tool in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(tool.toolId)
@@ -508,7 +550,9 @@ private struct MCPServerDetailView: View {
             }
             
             if !status.resources.isEmpty {
-                Section("资源 (\(status.resources.count))") {
+                Section(
+                    String(format: NSLocalizedString("资源 (%d)", comment: ""), status.resources.count)
+                ) {
                     ForEach(status.resources) { resource in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(resource.resourceId)

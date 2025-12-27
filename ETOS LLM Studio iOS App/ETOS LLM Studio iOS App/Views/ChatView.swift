@@ -8,6 +8,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import MarkdownUI
 import Shared
 import UIKit
@@ -418,7 +419,7 @@ struct ChatView: View {
                         viewModel.switchToVersion(index, of: message)
                     } label: {
                         HStack {
-                            Text("版本 \(index + 1)")
+                            Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
                             if index == message.getCurrentVersionIndex() {
                                 Image(systemName: "checkmark")
                             }
@@ -900,7 +901,13 @@ private struct MessageInfoSheet: View {
                         Text(roleDescription(payload.message.role))
                     }
                     LabeledContent("列表位置") {
-                        Text("第 \(payload.displayIndex) / \(payload.totalCount) 条")
+                        Text(
+                            String(
+                                format: NSLocalizedString("第 %d / %d 条", comment: ""),
+                                payload.displayIndex,
+                                payload.totalCount
+                            )
+                        )
                     }
                 }
                 

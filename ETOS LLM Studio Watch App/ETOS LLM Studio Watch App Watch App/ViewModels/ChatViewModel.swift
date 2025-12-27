@@ -231,7 +231,12 @@ class ChatViewModel: ObservableObject {
         guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
         let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""
-        logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage)")
+        logger.info(
+            String(
+                format: NSLocalizedString("  - 自动轮换背景。新背景: %@", comment: ""),
+                self.currentBackgroundImage
+            )
+        )
     }
     
     // MARK: - 公开方法 (视图操作)
@@ -421,7 +426,12 @@ class ChatViewModel: ObservableObject {
             resetRecordingVisuals()
             startRecordingTimer()
         } catch {
-            presentSpeechError("开始录音失败: \(error.localizedDescription)")
+            presentSpeechError(
+                String(
+                    format: NSLocalizedString("开始录音失败: %@", comment: ""),
+                    error.localizedDescription
+                )
+            )
             isSpeechRecorderPresented = false
             stopRecordingTimer(resetVisuals: true)
             audioRecorder = nil

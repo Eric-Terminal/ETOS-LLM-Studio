@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct LocalDebugView: View {
@@ -226,12 +227,7 @@ private struct DocumentationView: View {
                     Text("错误响应")
                         .font(.subheadline.weight(.medium))
                         .padding(.top, 4)
-                    Text("""
-                    {
-                      "success": false,
-                      "error": "错误信息"
-                    }
-                    """)
+                    Text(NSLocalizedString("debug_error_response_example", comment: ""))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .padding(8)

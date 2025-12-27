@@ -11,6 +11,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import MarkdownUI
 import Shared
 import AVFoundation
@@ -356,7 +357,7 @@ class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate
         stop()
         
         guard let data = Persistence.loadAudio(fileName: fileName) else {
-            print("❌ 无法加载音频文件: \(fileName)")
+            print(String(format: NSLocalizedString("❌ 无法加载音频文件: %@", comment: ""), fileName))
             return
         }
         
@@ -381,7 +382,12 @@ class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate
             startProgressTimer()
         } catch {
             #if DEBUG
-            print("❌ 播放音频失败: \(error.localizedDescription)")
+            print(
+                String(
+                    format: NSLocalizedString("❌ 播放音频失败: %@", comment: ""),
+                    error.localizedDescription
+                )
+            )
             #endif
         }
     }

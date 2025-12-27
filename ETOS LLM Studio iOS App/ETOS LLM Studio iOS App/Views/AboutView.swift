@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct AboutView: View {
     @Environment(\.openURL) private var openURL
@@ -156,13 +157,7 @@ private struct PrivacyPolicyView: View {
                     Text("ETOS LLM Studio 不会收集、存储或传输任何个人数据到我们的服务器。所有数据均存储在您的设备本地。")
                     
                     SectionHeader("本地数据存储")
-                    Text("""
-                    应用在您的设备上存储以下数据：
-                    • **聊天记录** - 您与 AI 的对话历史
-                    • **API 配置** - 您添加的 API 提供商和密钥
-                    • **记忆数据** - RAG 系统的向量化记忆
-                    • **应用设置** - 您的偏好设置
-                    """)
+                    Text(.init(NSLocalizedString("privacy_storage_details_markdown", comment: "")))
                     
                     SectionHeader("第三方服务")
                     Text("当您使用 AI 聊天功能时，您的消息将发送到您配置的 API 提供商（如 OpenAI、Anthropic 等）。请参阅相应服务商的隐私政策了解他们如何处理您的数据。")

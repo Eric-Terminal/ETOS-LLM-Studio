@@ -8,6 +8,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 public struct MemorySettingsView: View {
@@ -229,7 +230,11 @@ private struct MemoryReembedAlert: Identifiable {
     var message: String {
         switch kind {
         case .success(let summary):
-            return "已处理 \(summary.processedMemories) 条记忆，生成 \(summary.chunkCount) 个分块。"
+            return String(
+                format: NSLocalizedString("已处理 %d 条记忆，生成 %d 个分块。", comment: ""),
+                summary.processedMemories,
+                summary.chunkCount
+            )
         case .failure(let message):
             return message
         }
