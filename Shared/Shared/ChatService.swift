@@ -1823,21 +1823,27 @@ public class ChatService {
     private func parseThoughtTags(from text: String) -> (content: String, reasoning: String) {
         var finalContent = ""
         var finalReasoning = ""
-        let startTagRegex = try! NSRegularExpression(pattern: "<(thought|thinking|think)>(.*?)</\\1>", options: [.dotMatchesLineSeparators])
+        let startTagRegex: NSRegularExpression
+        do {
+            startTagRegex = try NSRegularExpression(pattern: "<(thought|thinking|think)>(.*?)</\\1>", options: [.dotMatchesLineSeparators])
+        } catch {
+            logger.error("无法解析 thought 标签正则: \(error.localizedDescription)")
+            return (text.trimmingCharacters(in: .whitespacesAndNewlines), "")
+        }
         let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
-        var lastMatchEnd = 0
+        var lastMatchEnd = text.startIndex
 
         startTagRegex.enumerateMatches(in: text, options: [], range: nsRange) { (match, _, _) in
             guard let match = match else { return }
-            let fullMatchRange = Range(match.range(at: 0), in: text)!
-            let contentBeforeMatch = String(text[text.index(text.startIndex, offsetBy: lastMatchEnd)..<fullMatchRange.lowerBound])
+            guard let fullMatchRange = Range(match.range(at: 0), in: text) else { return }
+            let contentBeforeMatch = String(text[lastMatchEnd..<fullMatchRange.lowerBound])
             finalContent += contentBeforeMatch
             if let reasoningRange = Range(match.range(at: 2), in: text) {
                 finalReasoning += (finalReasoning.isEmpty ? "" : "\n\n") + String(text[reasoningRange])
             }
-            lastMatchEnd = fullMatchRange.upperBound.utf16Offset(in: text)
+            lastMatchEnd = fullMatchRange.upperBound
         }
-        let remainingContent = String(text[text.index(text.startIndex, offsetBy: lastMatchEnd)...])
+        let remainingContent = String(text[lastMatchEnd...])
         finalContent += remainingContent
         return (finalContent.trimmingCharacters(in: .whitespacesAndNewlines), finalReasoning)
     }
