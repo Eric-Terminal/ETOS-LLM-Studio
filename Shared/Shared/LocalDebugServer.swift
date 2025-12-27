@@ -45,6 +45,12 @@ public class LocalDebugServer: ObservableObject {
     @MainActor
     public func start(port: UInt16 = 8080) {
         guard !isRunning else { return }
+        if let listener = listener {
+            listener.stateUpdateHandler = nil
+            listener.newConnectionHandler = nil
+            listener.cancel()
+            self.listener = nil
+        }
         
         do {
             // 生成随机6位PIN
@@ -94,7 +100,10 @@ public class LocalDebugServer: ObservableObject {
     /// 停止服务器
     @MainActor
     public func stop() {
+        listener?.stateUpdateHandler = nil
+        listener?.newConnectionHandler = nil
         listener?.cancel()
+        listener = nil
         connections.forEach { $0.cancel() }
         connections.removeAll()
         isRunning = false
@@ -233,18 +242,24 @@ public class LocalDebugServer: ObservableObject {
         let html = """
         <!DOCTYPE html>
         <html>
-        <head><meta charset="utf-8"><title>ETOS LLM Studio 调试服务器</title></head>
+        <head>
+          <meta charset="utf-8">
+          <title>ETOS LLM Studio 调试服务器</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; margin: 24px; line-height: 1.6; }
+            h1, h2 { margin-bottom: 8px; }
+            code, pre { background: #f5f5f7; border-radius: 6px; }
+            code { padding: 2px 4px; }
+            pre { padding: 12px; overflow-x: auto; }
+            .note { color: #555; }
+          </style>
+        </head>
         <body>
         <h1>ETOS LLM Studio 局域网调试</h1>
         <p>服务器运行中</p>
-        <p>PIN: \(pin)</p>
-        <h2>OpenAI 兼容捕获</h2>
-        <div id="capture-status">暂无待处理的 OpenAI 请求。</div>
-        <div id="capture-actions" style="display:none;">
-          <p id="capture-summary"></p>
-          <button onclick="confirmCapture(true)">保存到本地</button>
-          <button onclick="confirmCapture(false)">忽略</button>
-        </div>
+        <p>设备 IP: <code>\(localIP)</code></p>
+        <p>PIN 已隐藏，请在设备端查看。</p>
+        <p class="note">用途：通过浏览器复制命令来管理设备 Documents 目录；OpenAI 捕获的保存确认仅在设备端进行。</p>
         <h2>API 端点:</h2>
         <ul>
         <li>POST /v1/chat/completions - OpenAI 兼容请求 (免 PIN)</li>
@@ -254,46 +269,65 @@ public class LocalDebugServer: ObservableObject {
         <li>POST /api/delete - 删除文件/目录</li>
         <li>POST /api/mkdir - 创建目录</li>
         </ul>
-        <p>除 OpenAI 兼容请求外，所有请求需要在 Header 中包含: <code>X-Debug-PIN: \(pin)</code></p>
-        <script>
-        const pin = "\(pin)";
-        let pendingId = null;
-        async function pollPending() {
-          try {
-            const res = await fetch("/api/openai/pending", { headers: { "X-Debug-PIN": pin } });
-            if (!res.ok) return setTimeout(pollPending, 2000);
-            const data = await res.json();
-            const status = document.getElementById("capture-status");
-            const actions = document.getElementById("capture-actions");
-            const summary = document.getElementById("capture-summary");
-            if (data.pending && data.request) {
-              pendingId = data.request.id;
-              const when = new Date(data.request.receivedAt * 1000).toLocaleString();
-              summary.textContent = `收到请求：模型 ${data.request.model || "未知"}，消息数 ${data.request.messageCount}，时间 ${when}`;
-              actions.style.display = "block";
-              status.textContent = `待处理请求 ${data.queueSize} 条`;
-            } else {
-              pendingId = null;
-              actions.style.display = "none";
-              status.textContent = "暂无待处理的 OpenAI 请求。";
-            }
-          } catch {
-            // 忽略轮询错误
-          }
-          setTimeout(pollPending, 2000);
-        }
-        async function confirmCapture(save) {
-          if (!pendingId) return;
-          await fetch("/api/openai/confirm", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-PIN": pin },
-            body: JSON.stringify({ id: pendingId, save: save })
-          });
-          pendingId = null;
-          pollPending();
-        }
-        pollPending();
-        </script>
+        <p>除 OpenAI 兼容请求外，所有请求需要在 Header 中包含: <code>X-Debug-PIN: [PIN]</code></p>
+        <h2>快速使用</h2>
+        <p>已自动填充 IP（<code>\(localIP)</code>）。请将 <code>[PIN]</code> 替换为设备端显示的值。</p>
+        <h3>设置环境变量（推荐）</h3>
+        <pre>export ETOS_IP="\(localIP)"
+        export ETOS_PIN="[PIN]"</pre>
+        <p class="note">Windows (PowerShell):</p>
+        <pre>$env:ETOS_IP="\(localIP)"
+        $env:ETOS_PIN="[PIN]"</pre>
+        <h3>列出目录</h3>
+        <pre>curl -X GET http://$ETOS_IP:8080/api/list \\
+        -H "X-Debug-PIN: $ETOS_PIN" \\
+        -H "Content-Type: application/json" \\
+        -d '{"path": "."}'</pre>
+        <h3>下载文件</h3>
+        <p class="note">macOS/Linux:</p>
+        <pre>curl -X GET http://$ETOS_IP:8080/api/download \\
+        -H "X-Debug-PIN: $ETOS_PIN" \\
+        -H "Content-Type: application/json" \\
+        -d '{"path": "file.txt"}' > download.json
+        B64=$(grep -o '"data"[ ]*:[ ]*"[^"]*"' download.json | sed 's/.*"data"[ ]*:[ ]*"\\([^"]*\\)".*/\\1/')
+        printf "%s" "$B64" | base64 -D > file.txt  # macOS
+        printf "%s" "$B64" | base64 -d > file.txt  # Linux</pre>
+        <p class="note">Windows (PowerShell):</p>
+        <pre>Invoke-WebRequest -Uri "http://$env:ETOS_IP:8080/api/download" `
+        -Method GET `
+        -Headers @{ "X-Debug-PIN" = $env:ETOS_PIN; "Content-Type" = "application/json" } `
+        -Body '{"path":"file.txt"}' | Out-File download.json -Encoding utf8
+        $json = Get-Content download.json -Raw | ConvertFrom-Json
+        [IO.File]::WriteAllBytes("file.txt",[Convert]::FromBase64String($json.data))</pre>
+        <h3>上传文件</h3>
+        <p class="note">macOS/Linux:</p>
+        <pre>B64=$(base64 < file.txt | tr -d '\\n')
+        printf '{"path":"file.txt","data":"%s"}' "$B64" | curl -X POST http://$ETOS_IP:8080/api/upload \\
+        -H "X-Debug-PIN: $ETOS_PIN" \\
+        -H "Content-Type: application/json" \\
+        -d @-</pre>
+        <p class="note">Windows (PowerShell):</p>
+        <pre>$bytes = [IO.File]::ReadAllBytes("file.txt")
+        $b64 = [Convert]::ToBase64String($bytes)
+        $body = @{ path = "file.txt"; data = $b64 } | ConvertTo-Json -Compress
+        Invoke-WebRequest -Uri "http://$env:ETOS_IP:8080/api/upload" `
+        -Method POST `
+        -Headers @{ "X-Debug-PIN" = $env:ETOS_PIN; "Content-Type" = "application/json" } `
+        -Body $body</pre>
+        <h3>删除文件/目录</h3>
+        <pre>curl -X POST http://$ETOS_IP:8080/api/delete \\
+        -H "X-Debug-PIN: $ETOS_PIN" \\
+        -H "Content-Type: application/json" \\
+        -d '{"path": "file.txt"}'</pre>
+        <h3>创建目录</h3>
+        <pre>curl -X POST http://$ETOS_IP:8080/api/mkdir \\
+        -H "X-Debug-PIN: $ETOS_PIN" \\
+        -H "Content-Type: application/json" \\
+        -d '{"path": "NewFolder/Sub"}'</pre>
+        <h3>OpenAI 兼容请求</h3>
+        <pre>curl -X POST http://$ETOS_IP:8080/v1/chat/completions \\
+        -H "Content-Type: application/json" \\
+        -d '{"model":"gpt-4","messages":[{"role":"system","content":"你是..."} ,{"role":"user","content":"你好"}]}'</pre>
         </body>
         </html>
         """

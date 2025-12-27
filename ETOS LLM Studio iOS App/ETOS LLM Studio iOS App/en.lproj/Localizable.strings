@@ -175,6 +175,14 @@
 "资源 %d" = "Resources %d";
 "版本 %d" = "Version %d";
 "第 %d / %d 条" = "Item %d / %d";
+"可用浏览器访问: http://%@:8080/" = "Open in a browser: http://%@:8080/";
+"服务器运行时屏幕将保持常亮，需先停止服务器才能离开本页" = "Keep screen on while server runs; stop it before leaving this page.";
+"OpenAI 捕获" = "OpenAI Capture";
+"保存到本地" = "Save locally";
+"忽略" = "Ignore";
+"收到请求：模型 %@ · 消息数 %d" = "Request received: model %@ · messages %d";
+"队列中还有 %d 条未处理请求" = "%d request(s) still pending in queue";
+"OpenAI 兼容请求 (免 PIN，支持捕获保存)" = "OpenAI-compatible request (no PIN, capture supported)";
 "❌ 无法加载音频文件: %@" = "❌ Failed to load audio file: %@";
 "❌ 播放音频失败: %@" = "❌ Audio playback failed: %@";
 "删除“%@”后无法恢复。" = "“%@” can’t be restored after deletion.";

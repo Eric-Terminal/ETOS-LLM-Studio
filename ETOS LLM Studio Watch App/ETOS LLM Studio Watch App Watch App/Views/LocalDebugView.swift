@@ -39,6 +39,12 @@ public struct LocalDebugView: View {
                 }
                 .foregroundStyle(server.isRunning ? .red : .blue)
                 
+                if server.isRunning {
+                    Text(NSLocalizedString("运行中需先停止服务器才能离开本页", comment: ""))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                
                 if let error = server.errorMessage {
                     Text(error)
                         .font(.caption2)
@@ -80,7 +86,8 @@ public struct LocalDebugView: View {
             if server.isRunning, server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0 {
                 Section {
                     if let pending = server.pendingOpenAIRequest {
-                        Text("模型 \(pending.model ?? "未知") · 消息 \(pending.messageCount)")
+                        let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
+                        Text(String(format: NSLocalizedString("模型 %@ · 消息 %d", comment: ""), modelName, pending.messageCount))
                             .font(.caption2)
                         Text(formatPendingTime(pending.receivedAt))
                             .font(.caption2)
@@ -98,7 +105,7 @@ public struct LocalDebugView: View {
                     Text("OpenAI 捕获")
                 } footer: {
                     if server.pendingOpenAIQueueCount > 1 {
-                        Text("剩余 \(server.pendingOpenAIQueueCount - 1) 条")
+                        Text(String(format: NSLocalizedString("剩余 %d 条", comment: ""), server.pendingOpenAIQueueCount - 1))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -120,9 +127,10 @@ public struct LocalDebugView: View {
             }
         }
         .navigationTitle("调试")
+        .navigationBarBackButtonHidden(server.isRunning)
         .sheet(isPresented: $showingDocs) {
             NavigationStack {
-                WatchDocumentationView()
+                WatchDocumentationView(localIP: server.localIP)
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -154,12 +162,16 @@ public struct LocalDebugView: View {
 
 private struct WatchDocumentationView: View {
     @Environment(\.dismiss) private var dismiss
+    let localIP: String
     
     var body: some View {
         List {
             Section("基础") {
                 InfoItem(label: "端口", value: "8080")
                 InfoItem(label: "Header", value: "X-Debug-PIN")
+                Text(String(format: NSLocalizedString("可用浏览器访问: http://%@:8080/", comment: ""), localIP))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
             
             Section("端点") {
@@ -214,11 +226,6 @@ private struct WatchDocumentationView: View {
         }
         .navigationTitle("API 文档")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("完成") { dismiss() }
-            }
-        }
     }
 }
 
