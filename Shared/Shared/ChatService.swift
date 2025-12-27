@@ -56,6 +56,15 @@ public class ChatService {
         case error
         case cancelled
     }
+    
+    /// 错误通知，用于弹窗提示（主要用于重试失败场景）
+    public struct ErrorNotification {
+        public let title: String
+        public let message: String
+        public let statusCode: Int?
+    }
+    
+    public let errorNotificationSubject = PassthroughSubject<ErrorNotification, Never>()
 
     // MARK: - 私有状态
     
@@ -528,15 +537,73 @@ public class ChatService {
     public func addErrorMessage(_ content: String) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
-        // 找到并替换正在加载中的消息，或者直接添加新错误消息
+        
+        // 找到正在加载中的消息
         if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
-            messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: content)
+            // 检查是否在重试 assistant 场景（有保留的旧 assistant）
+            if retryTargetMessageID != nil {
+                // 重试 assistant 时出错：移除 loading message，保留原 assistant，发送弹窗通知
+                messages.remove(at: loadingIndex)
+                retryTargetMessageID = nil
+                
+                // 解析错误内容，提取状态码和简化消息
+                let (title, message, statusCode) = parseErrorContent(content)
+                errorNotificationSubject.send(ErrorNotification(title: title, message: message, statusCode: statusCode))
+                
+                logger.error("❌ 重试失败: \(content)")
+            } else {
+                // 正常场景：将 loading message 转为 error
+                messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: content)
+                logger.error("❌ 错误消息已添加: \(content)")
+            }
         } else {
+            // 没有 loading message，直接添加错误
             messages.append(ChatMessage(id: UUID(), role: .error, content: content))
+            logger.error("❌ 错误消息已添加: \(content)")
         }
+        
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: currentSession.id)
-        logger.error("❌ 错误消息已添加: \(content)")
+    }
+    
+    /// 解析错误内容，提取标题、消息和状态码，并检测 HTML 响应
+    private func parseErrorContent(_ content: String) -> (title: String, message: String, statusCode: Int?) {
+        var statusCode: Int? = nil
+        var title = "重试失败"
+        var message = content
+        
+        // 提取状态码
+        if let match = content.range(of: #"状态码\s+(\d+)"#, options: .regularExpression) {
+            let codeString = content[match].replacingOccurrences(of: #"状态码\s+"#, with: "", options: .regularExpression)
+            statusCode = Int(codeString)
+            if let code = statusCode {
+                title = "请求失败 (\(code))"
+            }
+        }
+        
+        // 检测并简化 HTML 响应（如 Cloudflare 错误页面）
+        if content.contains("<html") || content.contains("<!DOCTYPE") {
+            // 尝试提取 <title> 标签内容
+            if let titleMatch = content.range(of: #"<title>(.*?)</title>"#, options: [.regularExpression, .caseInsensitive]) {
+                let titleText = content[titleMatch]
+                    .replacingOccurrences(of: #"</?title>"#, with: "", options: [.regularExpression, .caseInsensitive])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !titleText.isEmpty {
+                    message = "服务器返回了网页响应\n\n页面标题: \(titleText)\n\n这通常表示遇到了 CDN 或防火墙拦截。"
+                } else {
+                    message = "服务器返回了 HTML 网页响应，这通常表示遇到了 CDN 或防火墙拦截。\n\n建议检查网络连接或 API 地址配置。"
+                }
+            } else {
+                message = "服务器返回了 HTML 网页响应，这通常表示遇到了 CDN 或防火墙拦截。\n\n建议检查网络连接或 API 地址配置。"
+            }
+        }
+        
+        // 限制消息长度，避免过长（对所有类型的错误都应用）
+        if message.count > 500 {
+            message = String(message.prefix(500)) + "...\n\n（消息已截断）"
+        }
+        
+        return (title, message, statusCode)
     }
         
     public func sendAndProcessMessage(
@@ -1019,12 +1086,17 @@ public class ChatService {
         var assistantToUpdate: ChatMessage?
         var assistantUpdateIndex: Int?
         if message.role == .assistant || message.role == .error {
-            assistantToUpdate = message
-            assistantUpdateIndex = messageIndex
+            // 对于 error 消息，不保留为多版本，直接移除
+            // 只有正常的 assistant 消息才保留多版本历史
+            if message.role == .assistant {
+                assistantToUpdate = message
+                assistantUpdateIndex = messageIndex
+            }
+            // error 消息不设置 assistantToUpdate，会被直接移除
         } else {
-            // 如果重试 user 消息，找到它后面第一个 assistant
+            // 如果重试 user 消息，找到它后面第一个 assistant（不包括error）
             if anchorUserIndex + 1 < messages.count {
-                if let nextAssistantIndex = messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .assistant || $0.role == .error }) {
+                if let nextAssistantIndex = messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .assistant }) {
                     assistantToUpdate = messages[nextAssistantIndex]
                     assistantUpdateIndex = nextAssistantIndex
                 }

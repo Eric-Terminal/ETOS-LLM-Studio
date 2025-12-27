@@ -52,6 +52,9 @@ final class ChatViewModel: ObservableObject {
     @Published var showAudioRecorder: Bool = false
     @Published var showDimensionMismatchAlert: Bool = false
     @Published var dimensionMismatchMessage: String = ""
+    @Published var showRetryErrorAlert: Bool = false
+    @Published var retryErrorTitle: String = ""
+    @Published var retryErrorMessage: String = ""
     
     // MARK: - User Preferences (AppStorage)
     
@@ -203,8 +206,15 @@ final class ChatViewModel: ObservableObject {
                 self?.dimensionMismatchMessage = "嵌入维度不匹配！\n查询维度: \(queryDim)\n索引维度: \(indexDim)\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。"
                 self?.showDimensionMismatchAlert = true
             }
+            .store(in: &cancellables)        
+        chatService.errorNotificationSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                self?.retryErrorTitle = notification.title
+                self?.retryErrorMessage = notification.message
+                self?.showRetryErrorAlert = true
+            }
             .store(in: &cancellables)
-
         NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
