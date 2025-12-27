@@ -8,6 +8,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct MessageActionsView: View {
@@ -77,7 +78,7 @@ struct MessageActionsView: View {
                         }
                     )) {
                         ForEach(0..<message.getAllVersions().count, id: \.self) { index in
-                            Text("版本 \(index + 1)")
+                            Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
                                 .tag(index)
                         }
                     }
@@ -107,7 +108,7 @@ struct MessageActionsView: View {
                         Text("会话位置")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("第 \(index + 1) / \(totalMessages) 条")
+                        Text(String(format: NSLocalizedString("第 %d / %d 条", comment: ""), index + 1, totalMessages))
                             .font(.caption2)
                     }
                 }
@@ -117,7 +118,13 @@ struct MessageActionsView: View {
                         Text("版本信息")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("当前显示第 \(message.getCurrentVersionIndex() + 1) / \(message.getAllVersions().count) 版")
+                        Text(
+                            String(
+                                format: NSLocalizedString("当前显示第 %d / %d 版", comment: ""),
+                                message.getCurrentVersionIndex() + 1,
+                                message.getAllVersions().count
+                            )
+                        )
                             .font(.caption2)
                     }
                 }
@@ -179,7 +186,7 @@ struct MessageActionsView: View {
             Button("取消", role: .cancel) { }
         } message: {
             if let index = messageIndex {
-                Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
+                Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
             }
         }
     }

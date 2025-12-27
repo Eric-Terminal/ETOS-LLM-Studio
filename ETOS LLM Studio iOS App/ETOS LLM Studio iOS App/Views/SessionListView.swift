@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct SessionListView: View {
@@ -272,7 +273,7 @@ private struct SessionInfoSheet: View {
                             .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
                     }
                     LabeledContent("消息数量") {
-                        Text("\(payload.messageCount) 条")
+                        Text(String(format: NSLocalizedString("%d 条", comment: ""), payload.messageCount))
                     }
                 }
                 

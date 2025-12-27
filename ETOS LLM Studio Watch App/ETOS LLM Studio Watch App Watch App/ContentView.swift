@@ -10,6 +10,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import MarkdownUI
 import Shared
 
@@ -109,7 +110,10 @@ struct ContentView: View {
                         viewModel.loadMoreHistoryChunk()
                     }
                 }) {
-                    Label("向上加载 \(chunk) 条记录", systemImage: "arrow.up.circle")
+                    Label(
+                        String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk),
+                        systemImage: "arrow.up.circle"
+                    )
                 }
                 .buttonStyle(.bordered)
                 .listRowBackground(Color.clear)

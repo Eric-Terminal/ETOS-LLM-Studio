@@ -164,7 +164,7 @@ struct ChatView: View {
                 }
             } message: {
                 if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
-                    Text("将从第 \(index + 1) 条消息处创建新的分支会话。")
+                    Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
                 }
             }
         }
@@ -317,7 +317,10 @@ struct ChatView: View {
                     viewModel.loadMoreHistoryChunk()
                 }
             } label: {
-                Label("向上加载 \(chunk) 条记录", systemImage: "arrow.uturn.left.circle")
+                Label(
+                    String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk),
+                    systemImage: "arrow.uturn.left.circle"
+                )
             }
             .font(.footnote)
             .padding(.vertical, 8)
@@ -423,7 +426,14 @@ struct ChatView: View {
                     }
                 }
             } label: {
-                Label("切换版本 (\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count))", systemImage: "clock.arrow.circlepath")
+                Label(
+                    String(
+                        format: NSLocalizedString("切换版本 (%d/%d)", comment: ""),
+                        message.getCurrentVersionIndex() + 1,
+                        message.getAllVersions().count
+                    ),
+                    systemImage: "clock.arrow.circlepath"
+                )
             }
             
             if message.getAllVersions().count > 1 {
