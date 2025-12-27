@@ -393,12 +393,30 @@ public struct MemoryItem: Codable, Identifiable, Hashable {
     public var content: String
     public var embedding: [Float]
     public var createdAt: Date
+    public var isArchived: Bool  // 是否被归档（被遗忘），归档后不参与检索
 
-    public init(id: UUID = UUID(), content: String, embedding: [Float], createdAt: Date = Date()) {
+    public init(id: UUID = UUID(), content: String, embedding: [Float], createdAt: Date = Date(), isArchived: Bool = false) {
         self.id = id
         self.content = content
         self.embedding = embedding
         self.createdAt = createdAt
+        self.isArchived = isArchived
+    }
+    
+    // MARK: - 向后兼容的 Codable 实现
+    
+    enum CodingKeys: String, CodingKey {
+        case id, content, embedding, createdAt, isArchived
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        content = try container.decode(String.self, forKey: .content)
+        embedding = try container.decode([Float].self, forKey: .embedding)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        // 向后兼容：如果旧数据没有 isArchived 字段，默认为 false
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
     }
 }
 

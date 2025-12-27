@@ -537,3 +537,17 @@
 "项目链接" = "Project link";
 "麦克风权限被拒绝，请到设置中开启。" = "Microphone permission denied. Enable it in Settings.";
 "debug_error_response_example" = "{\n  \"success\": false,\n  \"error\": \"Error message\"\n}";
+
+// Memory archiving feature
+"激活的记忆" = "Active Memories";
+"归档的记忆" = "Archived Memories";
+"暂无激活的记忆" = "No Active Memories";
+"没有被归档的记忆。" = "No archived memories.";
+"这些记忆会参与检索并发送给模型。" = "These memories will be used in search and sent to the model.";
+"这些记忆已被归档，不会参与检索。可以随时恢复。" = "These memories are archived and won't be used in search. You can restore them anytime.";
+"归档" = "Archive";
+"恢复" = "Restore";
+"已归档" = "Archived";
+"激活中" = "Active";
+"不参与检索" = "Not searchable";
+"参与检索" = "Searchable";

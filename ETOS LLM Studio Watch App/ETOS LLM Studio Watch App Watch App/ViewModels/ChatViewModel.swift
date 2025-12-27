@@ -53,6 +53,8 @@ class ChatViewModel: ObservableObject {
     @Published var speechTranscriptionInProgress: Bool = false
     @Published var speechErrorMessage: String?
     @Published var showSpeechErrorAlert: Bool = false
+    @Published var showDimensionMismatchAlert: Bool = false
+    @Published var dimensionMismatchMessage: String = ""
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
@@ -214,6 +216,14 @@ class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
             .store(in: &cancellables)
+        
+        MemoryManager.shared.dimensionMismatchPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] (queryDim, indexDim) in
+                self?.dimensionMismatchMessage = "嵌入维度不匹配！\n查询维度: \(queryDim)\n索引维度: \(indexDim)\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。"
+                self?.showDimensionMismatchAlert = true
+            }
+            .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
             .receive(on: DispatchQueue.main)
@@ -231,12 +241,7 @@ class ChatViewModel: ObservableObject {
         guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
         let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""
-        logger.info(
-            String(
-                format: NSLocalizedString("  - 自动轮换背景。新背景: %@", comment: ""),
-                self.currentBackgroundImage
-            )
-        )
+        logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage, privacy: .public)")
     }
     
     // MARK: - 公开方法 (视图操作)
@@ -662,6 +667,14 @@ class ChatViewModel: ObservableObject {
 
     func updateMemory(item: MemoryItem) async {
         await MemoryManager.shared.updateMemory(item: item)
+    }
+    
+    func archiveMemory(_ item: MemoryItem) async {
+        await MemoryManager.shared.archiveMemory(item)
+    }
+    
+    func unarchiveMemory(_ item: MemoryItem) async {
+        await MemoryManager.shared.unarchiveMemory(item)
     }
 
     func deleteMemories(at offsets: IndexSet) async {

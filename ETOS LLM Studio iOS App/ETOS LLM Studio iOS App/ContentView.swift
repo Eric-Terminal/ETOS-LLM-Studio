@@ -44,6 +44,11 @@ struct ContentView: View {
             }
             .tag(Tab.settings)
         }
+        .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(viewModel.dimensionMismatchMessage)
+        }
     }
 }
 

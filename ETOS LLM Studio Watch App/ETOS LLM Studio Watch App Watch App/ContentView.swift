@@ -359,5 +359,10 @@ struct ContentView: View {
             } message: {
                 Text(viewModel.speechErrorMessage ?? "发生未知错误，请稍后重试。")
             }
+            .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
+                Button("好的", role: .cancel) { }
+            } message: {
+                Text(viewModel.dimensionMismatchMessage)
+            }
     }
 }

@@ -50,6 +50,8 @@ final class ChatViewModel: ObservableObject {
     @Published var showAttachmentPicker: Bool = false
     @Published var showImagePicker: Bool = false
     @Published var showAudioRecorder: Bool = false
+    @Published var showDimensionMismatchAlert: Bool = false
+    @Published var dimensionMismatchMessage: String = ""
     
     // MARK: - User Preferences (AppStorage)
     
@@ -193,6 +195,14 @@ final class ChatViewModel: ObservableObject {
         MemoryManager.shared.memoriesPublisher
             .receive(on: DispatchQueue.main)
             .assign(to: \.memories, on: self)
+            .store(in: &cancellables)
+        
+        MemoryManager.shared.dimensionMismatchPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] (queryDim, indexDim) in
+                self?.dimensionMismatchMessage = "嵌入维度不匹配！\n查询维度: \(queryDim)\n索引维度: \(indexDim)\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。"
+                self?.showDimensionMismatchAlert = true
+            }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
@@ -598,6 +608,14 @@ final class ChatViewModel: ObservableObject {
         await MemoryManager.shared.updateMemory(item: item)
     }
     
+    func archiveMemory(_ item: MemoryItem) async {
+        await MemoryManager.shared.archiveMemory(item)
+    }
+    
+    func unarchiveMemory(_ item: MemoryItem) async {
+        await MemoryManager.shared.unarchiveMemory(item)
+    }
+
     func deleteMemories(at offsets: IndexSet) async {
         let items = offsets.map { memories[$0] }
         await MemoryManager.shared.deleteMemories(items)

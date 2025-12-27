@@ -5,6 +5,7 @@ struct MemoryEditView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var memory: MemoryItem
+    @State private var hasChanges = false
     
     init(memory: MemoryItem) {
         _memory = State(initialValue: memory)
@@ -15,6 +16,32 @@ struct MemoryEditView: View {
             Section("记忆内容") {
                 TextEditor(text: $memory.content)
                     .frame(minHeight: 180)
+                    .onChange(of: memory.content) { _, _ in
+                        hasChanges = true
+                    }
+            }
+            
+            Section {
+                Toggle(isOn: $memory.isArchived) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(memory.isArchived ? NSLocalizedString("已归档", comment: "") : NSLocalizedString("激活中", comment: ""))
+                        Text(memory.isArchived ? NSLocalizedString("不参与检索", comment: "") : NSLocalizedString("参与检索", comment: ""))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: memory.isArchived) { _, _ in
+                    hasChanges = true
+                }
+            } header: {
+                Text("状态")
+            }
+            
+            Section {
+                LabeledContent("创建时间") {
+                    Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle("编辑记忆")
@@ -30,7 +57,7 @@ struct MemoryEditView: View {
                         dismiss()
                     }
                 }
-                .disabled(memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!hasChanges || memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
