@@ -40,6 +40,9 @@ Carthage/
 *.dSYM.zip
 *.dSYM
 
+# Submission guide (private)
+APP_STORE_SUBMISSION_GUIDE.md
+
 # Swift
 *.swiftdoc
 *.swiftmodule

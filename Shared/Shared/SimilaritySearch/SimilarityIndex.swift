@@ -9,6 +9,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 // MARK: - 类型别名
 
@@ -18,6 +19,8 @@ public typealias EmbeddingModelType = SimilarityIndex.EmbeddingModelType
 public typealias SimilarityMetricType = SimilarityIndex.SimilarityMetricType
 public typealias TextSplitterType = SimilarityIndex.TextSplitterType
 public typealias VectorStoreType = SimilarityIndex.VectorStoreType
+
+private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "SimilarityIndex")
 
 public class SimilarityIndex: Identifiable, Hashable {
     // MARK: - 属性
@@ -174,7 +177,7 @@ public class SimilarityIndex: Identifiable, Hashable {
         if dimension == 0 {
             dimension = queryEmbedding.count
         } else if dimension != queryEmbedding.count {
-            logger.warning("查询嵌入维度 (\(queryEmbedding.count)) 与索引维度 (\(dimension)) 不匹配。")
+            logger.warning("查询嵌入维度 (\(queryEmbedding.count)) 与索引维度 (\(self.dimension)) 不匹配。")
             return []
         }
 
@@ -185,11 +188,11 @@ public class SimilarityIndex: Identifiable, Hashable {
         let searchResults = indexMetric.findNearest(for: queryEmbedding, in: indexEmbeddings, resultsCount: resultCount)
 
         // 将结果映射到索引ID
-        return searchResults.compactMap {
+        return searchResults.compactMap { [self] in
             let (score, index) = $0
             let id = indexIds[index]
 
-            if let item = getItem(id: id) {
+            if let item = self.getItem(id: id) {
                 return SearchResult(id: item.id, score: score, text: item.text, metadata: item.metadata)
             } else {
                 logger.error("在 indexItems 中未找到ID为 '\(id)' 的项。" )
@@ -203,7 +206,7 @@ public class SimilarityIndex: Identifiable, Hashable {
         if dimension == 0 {
             dimension = newValue
         } else if dimension != newValue {
-            logger.info("检测到嵌入维度变化: \(dimension) -> \(newValue)，将使用最新维度。")
+            logger.info("检测到嵌入维度变化: \(self.dimension) -> \(newValue)，将使用最新维度。")
             dimension = newValue
         }
     }
@@ -270,7 +273,7 @@ public extension SimilarityIndex {
     func updateItem(id: String, text: String? = nil, embedding: [Float]? = nil, metadata: [String: String]? = nil) {
         // 检查提供的嵌入是否具有正确的维度
         if let embedding = embedding, embedding.count != dimension {
-            logger.warning("维度不匹配，期望 \(dimension)，实际为 \(embedding.count)")
+            logger.warning("维度不匹配，期望 \(self.dimension)，实际为 \(embedding.count)")
         }
 
         // 查找具有指定ID的项
@@ -319,7 +322,7 @@ public extension SimilarityIndex {
 
         let savedVectorStore = try vectorStore.saveIndex(items: indexItems, to: basePath, as: indexName)
 
-        logger.info("已将 \(indexItems.count) 个索引项保存到 \(savedVectorStore.absoluteString)")
+        logger.info("已将 \(self.indexItems.count) 个索引项保存到 \(savedVectorStore.absoluteString)")
 
         return savedVectorStore
     }
