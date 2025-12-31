@@ -519,7 +519,7 @@
 				CODE_SIGN_ENTITLEMENTS = "ETOS LLM Studio Watch App Watch App/ETOS LLM Studio Watch App Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -560,7 +560,7 @@
 				CODE_SIGN_ENTITLEMENTS = "ETOS LLM Studio Watch App Watch App/ETOS LLM Studio Watch App Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -598,11 +598,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ericterminal.els.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ericterminal.els;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -615,7 +615,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = K9LDK6LF4H;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				MARKETING_VERSION = 1.0;
