@@ -21,7 +21,10 @@ public class NativeTokenizer: TokenizerProtocol {
             // 这个正则表达式会匹配一串连续的单词字符(\w+)或一串连续的非单词、非空白字符([^\s\w]+)
             let regex = try NSRegularExpression(pattern: "\\w+|[^\\s\\w]+")
             let results = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
-            return results.map { String(text[Range($0.range, in: text)!]) }
+            return results.compactMap { match in
+                guard let range = Range(match.range, in: text) else { return nil }
+                return String(text[range])
+            }
         } catch {
             print("无效的正则表达式: \(error.localizedDescription)")
             return []

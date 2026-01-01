@@ -656,7 +656,13 @@ class ChatViewModel: ObservableObject {
     @discardableResult
     func branchSessionFromMessage(upToMessage: ChatMessage, copyPrompts: Bool) -> ChatSession {
         guard let session = currentSession else {
-            fatalError("No current session to branch from")
+            logger.error("无法创建分支会话：当前会话为空，将创建新会话作为回退。")
+            chatService.createNewSession()
+            if let fallbackSession = chatService.currentSessionSubject.value {
+                return fallbackSession
+            }
+            logger.error("创建新会话失败，返回临时会话实例作为回退。")
+            return ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
         }
         return chatService.branchSessionFromMessage(from: session, upToMessage: upToMessage, copyPrompts: copyPrompts)
     }

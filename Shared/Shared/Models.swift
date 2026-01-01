@@ -179,7 +179,7 @@ public extension Model {
 // MARK: - 核心消息与会话模型 (已重构)
 
 /// 聊天消息的角色，使用枚举确保类型安全
-public enum MessageRole: String, Codable {
+public enum MessageRole: String, Codable, Sendable {
     case system
     case user
     case assistant
@@ -190,7 +190,7 @@ public enum MessageRole: String, Codable {
 /// 聊天消息数据结构 (App的"官方语言")
 /// 这是一个纯粹的数据模型，不包含任何UI状态
 /// 支持多版本历史记录功能 - 重试时保留旧版本，用户可在版本间切换
-public struct ChatMessage: Identifiable, Codable, Hashable {
+public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var role: MessageRole
     
@@ -348,7 +348,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable {
 }
 
 /// 消息所关联的一次 API 调用的 Token 统计
-public struct MessageTokenUsage: Codable, Hashable {
+public struct MessageTokenUsage: Codable, Hashable, Sendable {
     public var promptTokens: Int?
     public var completionTokens: Int?
     public var totalTokens: Int?
@@ -436,7 +436,7 @@ public struct InternalToolDefinition: Codable, Hashable {
 }
 
 /// 内部工具调用，与服务商无关。
-public struct InternalToolCall: Codable, Hashable {
+public struct InternalToolCall: Codable, Hashable, Sendable {
     public let id: String
     public let toolName: String
     public let arguments: String // 参数通常是JSON字符串

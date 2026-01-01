@@ -228,18 +228,27 @@ public extension SimilarityIndex {
     func addItems(ids: [String], texts: [String], metadata: [[String: String]], embeddings: [[Float]?]? = nil, onProgress: ((String) -> Void)? = nil) async {
         // 检查所有输入数组是否具有相同的长度
         guard ids.count == texts.count, texts.count == metadata.count else {
-            fatalError("输入数组必须具有相同的长度。" )
+            logger.error("输入数组长度不一致: ids=\(ids.count), texts=\(texts.count), metadata=\(metadata.count)")
+            return
         }
 
-        if let embeddings = embeddings, embeddings.count != ids.count {
-            logger.warning("嵌入数组的长度必须与ID数组的长度相同。 \(embeddings.count) vs \(ids.count)")
+        let useEmbeddings: [[Float]?]?
+        if let embeddings = embeddings {
+            if embeddings.count == ids.count {
+                useEmbeddings = embeddings
+            } else {
+                logger.warning("嵌入数组的长度必须与ID数组的长度相同，将忽略嵌入。 \(embeddings.count) vs \(ids.count)")
+                useEmbeddings = nil
+            }
+        } else {
+            useEmbeddings = nil
         }
 
         await withTaskGroup(of: Void.self) { taskGroup in
             for i in 0..<ids.count {
                 let id = ids[i]
                 let text = texts[i]
-                let embedding = embeddings?[i]
+                let embedding = useEmbeddings?[i]
                 let meta = metadata[i]
 
                 taskGroup.addTask(priority: .userInitiated) {

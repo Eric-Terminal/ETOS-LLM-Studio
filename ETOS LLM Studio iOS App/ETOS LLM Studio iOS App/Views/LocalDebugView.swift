@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio iOS App
 //
-// 局域网调试界面 - 显示IP地址和PIN码,控制HTTP调试服务器。
+// 反向探针调试界面 - 主动连接电脑端服务器
 // ============================================================================
 
 import SwiftUI
@@ -14,27 +14,18 @@ struct LocalDebugView: View {
     @StateObject private var server = LocalDebugServer()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showAPIDoc = false
+    @State private var serverURL: String = ""
     
     var body: some View {
         Form {
-            // 服务器状态
+            // 连接状态
             Section {
                 HStack {
                     Image(systemName: server.isRunning ? "circle.fill" : "circle")
                         .foregroundStyle(server.isRunning ? .green : .secondary)
                         .imageScale(.small)
-                    Text(server.isRunning ? "运行中" : "已停止")
+                    Text(server.connectionStatus)
                         .foregroundStyle(server.isRunning ? .green : .secondary)
-                    Spacer()
-                    Button(server.isRunning ? "停止" : "启动") {
-                        if server.isRunning {
-                            stopServer()
-                        } else {
-                            startServer()
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .tint(server.isRunning ? .red : .blue)
                 }
                 
                 if let error = server.errorMessage {
@@ -44,67 +35,96 @@ struct LocalDebugView: View {
                 }
             } header: {
                 Text("状态")
-            } footer: {
-                Text(server.isRunning ? "服务器运行时屏幕将保持常亮" : "启动后可通过局域网访问 Documents 目录")
             }
             
-            // 连接信息
-            if server.isRunning {
+            // 连接配置
+            if !server.isRunning {
+                Section(header: Text("服务器地址")) {
+                    TextField("输入地址", text: $serverURL, prompt: Text("192.168.1.100:8765"))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.body.monospaced())
+                    
+                    Button("连接") {
+                        connectToServer()
+                    }
+                    .disabled(serverURL.isEmpty)
+                } footer: {
+                    Text("在电脑上运行 debug_server.py 后输入显示的地址")
+                }
+            } else {
                 Section("连接信息") {
-                    LabeledContent("IP 地址") {
-                        Text(server.localIP)
+                    LabeledContent("服务器") {
+                        Text(server.serverURL)
                             .font(.body.monospaced())
                             .textSelection(.enabled)
                     }
                     
-                    LabeledContent("端口") {
-                        Text("8080")
-                            .font(.body.monospaced())
-                            .textSelection(.enabled)
+                    Button("断开") {
+                        disconnectServer()
                     }
-                    
-                    LabeledContent("PIN 码") {
-                        Text(server.pin)
-                            .font(.title3.monospaced().weight(.semibold))
-                            .foregroundStyle(.blue)
-                            .textSelection(.enabled)
+                    .tint(.red)
+                }
+            }
+
+            if server.isRunning, server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0 {
+                Section("OpenAI 捕获") {
+                    if let pending = server.pendingOpenAIRequest {
+                        let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(format: NSLocalizedString("收到请求：模型 %@ · 消息数 %d", comment: ""), modelName, pending.messageCount))
+                                .font(.subheadline)
+                            Text(formatPendingTime(pending.receivedAt))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Button("保存到本地") {
+                                server.resolvePendingOpenAIRequest(save: true)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            
+                            Button("忽略") {
+                                server.resolvePendingOpenAIRequest(save: false)
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
-                    
-                    LabeledContent("URL") {
-                        Text("http://\(server.localIP):8080")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                } footer: {
+                    if server.pendingOpenAIQueueCount > 1 {
+                        Text(String(format: NSLocalizedString("队列中还有 %d 条未处理请求", comment: ""), server.pendingOpenAIQueueCount - 1))
                     }
                 }
             }
             
-            // API 文档
+            // 使用说明
             Section {
                 Button {
                     showAPIDoc = true
                 } label: {
-                    Label("API 文档", systemImage: "book")
+                    Label("使用说明", systemImage: "book")
                 }
             } header: {
                 Text("文档")
             } footer: {
-                Text("查看所有 API 端点和使用示例")
+                Text("反向探针模式 · 主动连接电脑")
             }
             
             // 安全提示
             Section {
                 Label("仅在可信网络中使用", systemImage: "wifi")
-                Label("PIN 码随机生成,请勿泄露", systemImage: "key")
-                Label("用完后请及时停止服务", systemImage: "hand.raised")
+                Label("用完后请及时断开连接", systemImage: "hand.raised")
             } header: {
-                Text("安全提示")
+                Text("提示")
             }
             .foregroundStyle(.secondary)
             .font(.footnote)
         }
         .navigationTitle("局域网调试")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(server.isRunning)
+        .interactiveDismissDisabled(server.isRunning)
         .sheet(isPresented: $showAPIDoc) {
             NavigationStack {
                 DocumentationView()
@@ -112,19 +132,26 @@ struct LocalDebugView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active && server.isRunning {
-                stopServer()
+                disconnectServer()
             }
         }
     }
     
-    private func startServer() {
-        server.start(port: 8080)
+    private func connectToServer() {
+        server.connect(to: serverURL)
         UIApplication.shared.isIdleTimerDisabled = true
     }
     
-    private func stopServer() {
-        server.stop()
+    private func disconnectServer() {
+        server.disconnect()
         UIApplication.shared.isIdleTimerDisabled = false
+    }
+
+    private func formatPendingTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年MM月dd日 HH:mm:ss"
+        return formatter.string(from: date)
     }
 }
 
@@ -135,111 +162,68 @@ private struct DocumentationView: View {
     
     var body: some View {
         List {
-            Section {
-                InfoRow(label: "端口", value: "8080")
-                InfoRow(label: "内容类型", value: "application/json")
-                InfoRow(label: "认证 Header", value: "X-Debug-PIN")
-            } header: {
-                Text("基础信息")
-            }
-            
-            Section("API 端点") {
-                APIEndpointRow(
-                    method: "GET",
-                    path: "/api/list",
-                    description: "列出目录内容",
-                    example: """
-                    curl -X GET http://IP:8080/api/list \\
-                      -H "X-Debug-PIN: 123456" \\
-                      -H "Content-Type: application/json" \\
-                      -d '{"path": "Providers"}'
-                    """
-                )
-                
-                APIEndpointRow(
-                    method: "GET",
-                    path: "/api/download",
-                    description: "下载文件 (Base64)",
-                    example: """
-                    curl -X GET http://IP:8080/api/download \\
-                      -H "X-Debug-PIN: 123456" \\
-                      -H "Content-Type: application/json" \\
-                      -d '{"path": "file.txt"}' \\
-                      | jq -r '.data' | base64 -d > file.txt
-                    """
-                )
-                
-                APIEndpointRow(
-                    method: "POST",
-                    path: "/api/upload",
-                    description: "上传文件 (Base64)",
-                    example: """
-                    curl -X POST http://IP:8080/api/upload \\
-                      -H "X-Debug-PIN: 123456" \\
-                      -H "Content-Type: application/json" \\
-                      -d "{\\"path\\": \\"file.txt\\", \\"data\\": \\"$(base64 < file.txt)\\"}"
-                    """
-                )
-                
-                APIEndpointRow(
-                    method: "POST",
-                    path: "/api/delete",
-                    description: "删除文件或目录",
-                    example: """
-                    curl -X POST http://IP:8080/api/delete \\
-                      -H "X-Debug-PIN: 123456" \\
-                      -H "Content-Type: application/json" \\
-                      -d '{"path": "file.txt"}'
-                    """
-                )
-                
-                APIEndpointRow(
-                    method: "POST",
-                    path: "/api/mkdir",
-                    description: "创建目录 (递归)",
-                    example: """
-                    curl -X POST http://IP:8080/api/mkdir \\
-                      -H "X-Debug-PIN: 123456" \\
-                      -H "Content-Type: application/json" \\
-                      -d '{"path": "NewFolder/Sub"}'
-                    """
-                )
-            }
-            
-            Section {
+            Section("工作原理") {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("成功响应")
-                        .font(.subheadline.weight(.medium))
-                    Text("""
-                    {
-                      "success": true,
-                      "path": "...",
-                      ...
+                    HStack(spacing: 12) {
+                        Image(systemName: "iphone")
+                            .font(.title2)
+                        Image(systemName: "arrow.right")
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "desktopcomputer")
+                            .font(.title2)
                     }
-                    """)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
                     
-                    Text("错误响应")
-                        .font(.subheadline.weight(.medium))
-                        .padding(.top, 4)
-                    Text(NSLocalizedString("debug_error_response_example", comment: ""))
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    Text("设备主动连接电脑端 WebSocket 服务器，接收命令并执行文件操作。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-            } header: {
-                Text("响应格式")
+            }
+            
+            Section("启动步骤") {
+                StepRow(number: 1, title: "电脑端运行", detail: "在 docs/debug-tools/ 目录下运行 start_debug_server.sh")
+                StepRow(number: 2, title: "记录 IP", detail: "脚本会显示电脑的局域网 IP 地址")
+                StepRow(number: 3, title: "输入并连接", detail: "在本界面输入 IP 地址和端口（默认 8765）")
+                StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")
+            }
+            
+            Section("功能") {
+                FeatureRow(icon: "📂", title: "文件管理", description: "列出、下载、上传、删除文件和目录")
+                FeatureRow(icon: "📥", title: "OpenAI 捕获", description: "转发 API 请求到设备，在设备上确认是否保存")
+                FeatureRow(icon: "🎯", title: "菜单操作", description: "电脑端提供图形化菜单，无需手动输入命令")
+            }
+            
+            Section("OpenAI 代理设置") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("将 OpenAI API Base URL 设置为：")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    Text("http://电脑IP:8080")
+                        .font(.body.monospaced())
+                        .foregroundStyle(.blue)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    
+                    Text("发送的请求会转发到设备，设备会弹出确认对话框。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            
+            Section("优势") {
+                Label("绕过 watchOS 服务器限制", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Label("无需 PIN 码验证", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Label("菜单式操作更友好", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
             }
         }
-        .navigationTitle("API 文档")
+        .navigationTitle("使用说明")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -251,85 +235,50 @@ private struct DocumentationView: View {
     }
 }
 
-private struct InfoRow: View {
-    let label: String
-    let value: String
+private struct StepRow: View {
+    let number: Int
+    let title: String
+    let detail: String
     
     var body: some View {
-        LabeledContent(label) {
-            Text(value)
-                .font(.body.monospaced())
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct APIEndpointRow: View {
-    let method: String
-    let path: String
-    let description: String
-    let example: String
-    @State private var showExample = false
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(method)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(methodColor, in: Capsule())
-                
-                Text(path)
-                    .font(.body.monospaced())
-                
-                Spacer()
-                
-                Button {
-                    withAnimation {
-                        showExample.toggle()
-                    }
-                } label: {
-                    Image(systemName: showExample ? "chevron.up" : "chevron.down")
-                        .imageScale(.small)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
-            }
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(.blue))
             
-            Text(description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            
-            if showExample {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("示例")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        Text(example)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .padding(8)
-                            .background(Color.secondary.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                }
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)
     }
+}
+
+private struct FeatureRow: View {
+    let icon: String
+    let title: String
+    let description: String
     
-    private var methodColor: Color {
-        switch method {
-        case "GET": .blue
-        case "POST": .green
-        case "DELETE": .red
-        default: .gray
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(icon)
+                .font(.largeTitle)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(.vertical, 4)
     }
 }
 

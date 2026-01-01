@@ -1,242 +1,230 @@
 // ============================================================================
-// LocalDebugServer.swift
+// LocalDebugServer.swift (WebSocket Client Version)
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件提供局域网HTTP调试服务器,允许通过命令行工具远程操作沙盒Documents目录。
-// 功能包括:文件浏览、下载、上传,并通过6位PIN码进行身份验证。
+// 反向探针调试客户端,通过WebSocket主动连接到电脑端服务器。
+// 功能包括:文件浏览、下载、上传、OpenAI请求捕获转发。
 // ============================================================================
 
 import Foundation
 import Combine
 import Network
+import os.log
 #if os(iOS)
 import UIKit
 #elseif os(watchOS)
 import WatchKit
 #endif
 
-/// 局域网调试服务器
+/// 反向探针调试客户端
 public class LocalDebugServer: ObservableObject {
+    public struct OpenAIRequestSummary: Identifiable, Hashable {
+        public let id: UUID
+        public let model: String?
+        public let messageCount: Int
+        public let receivedAt: Date
+    }
+
     @Published public var isRunning = false
-    @Published public var localIP: String = "未知"
-    @Published public var pin: String = ""
+    @Published public var serverURL: String = ""
+    @Published public var connectionStatus: String = "未连接"
     @Published public var errorMessage: String?
+    @Published public var pendingOpenAIRequest: OpenAIRequestSummary?
+    @Published public var pendingOpenAIQueueCount: Int = 0
     
-    private var listener: NWListener?
-    private var connections: [NWConnection] = []
+    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "LocalDebugServer")
+    private var wsConnection: NWConnection?
     private let queue = DispatchQueue(label: "com.etos.localdebug", qos: .userInitiated)
+    private var pendingOpenAIRequests: [PendingOpenAIRequest] = []
     
     public init() {}
     
-    /// 启动服务器
+    // MARK: - 连接管理
+    
+    /// 连接到电脑端服务器
+    /// - Parameter url: 服务器地址，格式: "192.168.1.100:8765" 或 "192.168.1.100" (默认端口8765)
     @MainActor
-    public func start(port: UInt16 = 8080) {
+    public func connect(to url: String) {
         guard !isRunning else { return }
         
-        do {
-            // 生成随机6位PIN
-            pin = String(format: "%06d", Int.random(in: 0...999999))
-            
-            // 创建监听器
-            let parameters = NWParameters.tcp
-            parameters.allowLocalEndpointReuse = true
-            
-            listener = try NWListener(using: parameters, on: NWEndpoint.Port(integerLiteral: port))
-            
-            listener?.stateUpdateHandler = { [weak self] state in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    switch state {
-                    case .ready:
-                        self.isRunning = true
-                        Task.detached {
-                            let ipAddress = await self.getLocalIPAddress()
-                            await MainActor.run {
-                                self.localIP = ipAddress
-                            }
-                        }
-                        self.errorMessage = nil
-                    case .failed(let error):
-                        self.isRunning = false
-                        self.errorMessage = "服务器失败: \(error.localizedDescription)"
-                    case .cancelled:
-                        self.isRunning = false
-                    default:
-                        break
+        // 解析URL
+        let components = url.split(separator: ":").map(String.init)
+        let host = components.first ?? url
+        let port = components.count > 1 ? components[1] : "8765"
+        
+        serverURL = "\(host):\(port)"
+        
+        // 创建 WebSocket URL
+        let urlString = "ws://\(host):\(port)/"
+        guard let wsURL = URL(string: urlString) else {
+            Task { @MainActor in
+                self.errorMessage = "无效的服务器地址"
+            }
+            return
+        }
+        
+        let endpoint = NWEndpoint.url(wsURL)
+        let parameters = NWParameters.tcp
+        let wsOptions = NWProtocolWebSocket.Options()
+        wsOptions.autoReplyPing = true
+        
+        parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
+        
+        wsConnection = NWConnection(to: endpoint, using: parameters)
+        
+        wsConnection?.stateUpdateHandler = { [weak self] state in
+            guard let self = self else { return }
+            Task { @MainActor in
+                switch state {
+                case .ready:
+                    self.isRunning = true
+                    self.connectionStatus = "已连接"
+                    self.errorMessage = nil
+                    self.logger.info("✅ 已连接到 \(host):\(port)")
+                case .failed(let error):
+                    self.isRunning = false
+                    self.connectionStatus = "连接失败"
+                    // 提供更友好的错误信息
+                    let errorDescription = error.localizedDescription.lowercased()
+                    if errorDescription.contains("connection refused") || errorDescription.contains("拒绝") {
+                        self.errorMessage = "连接被拒绝，请检查服务器是否已启动"
+                    } else if errorDescription.contains("timed out") || errorDescription.contains("超时") {
+                        self.errorMessage = "连接超时，请检查 IP 地址和网络"
+                    } else if errorDescription.contains("unreachable") || errorDescription.contains("不可达") {
+                        self.errorMessage = "网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络"
+                    } else {
+                        self.errorMessage = "连接失败: \(error.localizedDescription)"
                     }
+                    self.logger.error("❌ 连接失败: \(error.localizedDescription)")
+                case .cancelled:
+                    self.isRunning = false
+                    self.connectionStatus = "未连接"
+                    self.errorMessage = nil
+                case .waiting(let error):
+                    self.connectionStatus = "等待连接..."
+                    self.logger.info("⏳ 等待连接: \(error.localizedDescription)")
+                case .preparing:
+                    self.connectionStatus = "准备中..."
+                case .setup:
+                    self.connectionStatus = "设置中..."
+                @unknown default:
+                    self.logger.warning("⚠️ 未知连接状态")
                 }
             }
-            
-            listener?.newConnectionHandler = { [weak self] connection in
-                self?.handleConnection(connection)
-            }
-            
-            listener?.start(queue: queue)
-            
-        } catch {
-            errorMessage = "启动失败: \(error.localizedDescription)"
         }
+        
+        wsConnection?.start(queue: queue)
+        startReceiving()
     }
     
-    /// 停止服务器
+    /// 断开连接
     @MainActor
-    public func stop() {
-        listener?.cancel()
-        connections.forEach { $0.cancel() }
-        connections.removeAll()
+    public func disconnect() {
+        wsConnection?.cancel()
+        wsConnection = nil
         isRunning = false
-        pin = ""
+        connectionStatus = "未连接"
+        pendingOpenAIRequests.removeAll()
+        updatePendingOpenAIState()
     }
     
-    // MARK: - 连接处理
+    // MARK: - 消息收发
     
-    private func handleConnection(_ connection: NWConnection) {
-        queue.async { [weak self] in
+    private func startReceiving() {
+        guard let connection = wsConnection else { return }
+        
+        connection.receiveMessage { [weak self] data, context, isComplete, error in
             guard let self = self else { return }
             
-            connection.stateUpdateHandler = { state in
-                if case .cancelled = state {
-                    // 使用同步方式更新连接列表
-                    self.queue.async {
-                        self.connections.removeAll { $0 === connection }
-                    }
-                }
-            }
-            
-            connection.start(queue: self.queue)
-            self.receiveRequest(on: connection)
-        }
-    }
-    
-    private func receiveRequest(on connection: NWConnection) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 52428800) { [weak self] data, _, isComplete, error in
-            guard let self = self, let data = data, !data.isEmpty else {
-                if isComplete {
-                    connection.cancel()
+            if let error = error {
+                self.logger.error("❌ 接收错误: \(error.localizedDescription)")
+                Task { @MainActor in
+                    self.disconnect()
                 }
                 return
             }
             
-            if let request = String(data: data, encoding: .utf8) {
-                self.processHTTPRequest(request, on: connection)
+            if let data = data {
+                self.handleReceivedMessage(data)
             }
             
-            if !isComplete {
-                self.receiveRequest(on: connection)
+            if isComplete {
+                self.startReceiving()
             }
         }
     }
     
-    // MARK: - HTTP 请求处理
-    
-    private func processHTTPRequest(_ request: String, on connection: NWConnection) {
-        let lines = request.components(separatedBy: "\r\n")
-        guard let requestLine = lines.first else {
-            sendResponse(statusCode: 400, body: "Bad Request", on: connection)
+    private func handleReceivedMessage(_ data: Data) {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let command = json["command"] as? String else {
             return
         }
         
-        let components = requestLine.components(separatedBy: " ")
-        guard components.count >= 2 else {
-            sendResponse(statusCode: 400, body: "Bad Request", on: connection)
-            return
-        }
+        logger.info("📨 收到命令: \(command)")
         
-        let method = components[0]
-        let path = components[1]
-        
-        // 提取PIN码
-        var receivedPIN: String?
-        var bodyData: Data?
-        
-        // 解析Headers和Body
-        if let bodyStart = request.range(of: "\r\n\r\n") {
-            let headersString = String(request[..<bodyStart.lowerBound])
-            let bodyString = String(request[bodyStart.upperBound...])
-            bodyData = bodyString.data(using: .utf8)
+        Task {
+            let response: [String: Any]
             
-            // 从headers中查找PIN
-            for line in headersString.components(separatedBy: "\r\n") {
-                if line.lowercased().hasPrefix("x-debug-pin:") {
-                    receivedPIN = line.components(separatedBy: ":")[1].trimmingCharacters(in: .whitespaces)
-                    break
-                }
+            switch command {
+            case "list":
+                response = await handleList(json)
+            case "download":
+                response = await handleDownload(json)
+            case "download_all":
+                response = await handleDownloadAll()
+            case "upload":
+                response = await handleUpload(json)
+            case "upload_all":
+                response = await handleUploadAll(json)
+            case "delete":
+                response = await handleDelete(json)
+            case "mkdir":
+                response = await handleMkdir(json)
+            case "openai_capture":
+                response = await handleOpenAICapture(json)
+            case "ping":
+                response = ["status": "ok", "message": "pong"]
+            default:
+                response = ["status": "error", "message": "未知命令"]
             }
-        }
-        
-        // 验证PIN (除了根路径的GET请求)
-        if !(method == "GET" && path == "/") {
-            guard receivedPIN == pin else {
-                sendResponse(statusCode: 401, body: "Unauthorized: Invalid PIN", on: connection)
-                return
-            }
-        }
-        
-        // 路由处理
-        handleRoute(method: method, path: path, body: bodyData, on: connection)
-    }
-    
-    private func handleRoute(method: String, path: String, body: Data?, on connection: NWConnection) {
-        switch (method, path) {
-        case ("GET", "/"):
-            handleRoot(on: connection)
-        case ("GET", "/api/list"):
-            handleList(body: body, on: connection)
-        case ("GET", "/api/download"):
-            handleDownload(body: body, on: connection)
-        case ("POST", "/api/upload"):
-            handleUpload(body: body, on: connection)
-        case ("POST", "/api/delete"):
-            handleDelete(body: body, on: connection)
-        case ("POST", "/api/mkdir"):
-            handleMkdir(body: body, on: connection)
-        default:
-            sendResponse(statusCode: 404, body: "Not Found", on: connection)
+            
+            sendResponse(response)
         }
     }
     
-    // MARK: - API 端点实现
-    
-    private func handleRoot(on connection: NWConnection) {
-        let html = """
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"><title>ETOS LLM Studio 调试服务器</title></head>
-        <body>
-        <h1>ETOS LLM Studio 局域网调试</h1>
-        <p>服务器运行中</p>
-        <p>PIN: \(pin)</p>
-        <h2>API 端点:</h2>
-        <ul>
-        <li>GET /api/list - 列出目录内容</li>
-        <li>GET /api/download - 下载文件</li>
-        <li>POST /api/upload - 上传文件</li>
-        <li>POST /api/delete - 删除文件/目录</li>
-        <li>POST /api/mkdir - 创建目录</li>
-        </ul>
-        <p>所有请求需要在Header中包含: <code>X-Debug-PIN: \(pin)</code></p>
-        </body>
-        </html>
-        """
-        sendResponse(statusCode: 200, body: html, contentType: "text/html; charset=utf-8", on: connection)
-    }
-    
-    private func handleList(body: Data?, on connection: NWConnection) {
-        guard let body = body,
-              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let relativePath = json["path"] as? String else {
-            sendJSONError("Missing or invalid 'path' parameter", on: connection)
+    private func sendResponse(_ response: [String: Any]) {
+        guard let connection = wsConnection,
+              let data = try? JSONSerialization.data(withJSONObject: response) else {
             return
+        }
+        
+        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
+        let context = NWConnection.ContentContext(identifier: "response", metadata: [metadata])
+        
+        connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
+    }
+    
+    // MARK: - 命令处理
+    
+    private func handleList(_ json: [String: Any]) async -> [String: Any] {
+        guard let path = json["path"] as? String else {
+            return ["status": "error", "message": "缺少 path 参数"]
         }
         
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let targetURL = documentsURL.appendingPathComponent(relativePath)
         
-        // 安全检查:确保路径在Documents目录内
+        // 处理特殊路径
+        let normalizedPath = path.trimmingCharacters(in: .whitespaces)
+        let targetURL: URL
+        if normalizedPath.isEmpty || normalizedPath == "." {
+            targetURL = documentsURL
+        } else {
+            targetURL = documentsURL.appendingPathComponent(normalizedPath)
+        }
+        
         guard targetURL.path.hasPrefix(documentsURL.path) else {
-            sendJSONError("Invalid path: outside Documents directory", statusCode: 403, on: connection)
-            return
+            return ["status": "error", "message": "路径越界"]
         }
         
         do {
@@ -248,8 +236,7 @@ public class LocalDebugServer: ObservableObject {
                 var isDirectory: ObjCBool = false
                 FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDirectory)
                 
-                var attributes: [FileAttributeKey: Any] = [:]
-                attributes = try FileManager.default.attributesOfItem(atPath: itemURL.path)
+                let attributes = try FileManager.default.attributesOfItem(atPath: itemURL.path)
                 
                 items.append([
                     "name": item,
@@ -259,250 +246,361 @@ public class LocalDebugServer: ObservableObject {
                 ])
             }
             
-            let response: [String: Any] = [
-                "success": true,
-                "path": relativePath,
+            return [
+                "status": "ok",
+                "path": path,
                 "items": items
             ]
-            
-            sendJSONResponse(response, on: connection)
-            
         } catch {
-            sendJSONError("Failed to list directory: \(error.localizedDescription)", on: connection)
+            return ["status": "error", "message": error.localizedDescription]
         }
     }
     
-    private func handleDownload(body: Data?, on connection: NWConnection) {
-        guard let body = body,
-              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let relativePath = json["path"] as? String else {
-            sendJSONError("Missing or invalid 'path' parameter", on: connection)
-            return
+    private func handleDownload(_ json: [String: Any]) async -> [String: Any] {
+        guard let path = json["path"] as? String else {
+            return ["status": "error", "message": "缺少 path 参数"]
         }
         
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let targetURL = documentsURL.appendingPathComponent(relativePath)
+        let targetURL = documentsURL.appendingPathComponent(path)
         
-        guard targetURL.path.hasPrefix(documentsURL.path) else {
-            sendJSONError("Invalid path: outside Documents directory", statusCode: 403, on: connection)
-            return
-        }
-        
-        guard FileManager.default.fileExists(atPath: targetURL.path) else {
-            sendJSONError("File not found", statusCode: 404, on: connection)
-            return
+        guard targetURL.path.hasPrefix(documentsURL.path),
+              FileManager.default.fileExists(atPath: targetURL.path) else {
+            return ["status": "error", "message": "文件不存在"]
         }
         
         do {
-            let fileData = try Data(contentsOf: targetURL)
-            let base64 = fileData.base64EncodedString()
-            
-            let response: [String: Any] = [
-                "success": true,
-                "path": relativePath,
-                "data": base64,
-                "size": fileData.count
+            let data = try Data(contentsOf: targetURL)
+            return [
+                "status": "ok",
+                "path": path,
+                "data": data.base64EncodedString(),
+                "size": data.count
             ]
-            
-            sendJSONResponse(response, on: connection)
-            
         } catch {
-            sendJSONError("Failed to read file: \(error.localizedDescription)", on: connection)
+            return ["status": "error", "message": error.localizedDescription]
         }
     }
     
-    private func handleUpload(body: Data?, on connection: NWConnection) {
-        guard let body = body,
-              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let relativePath = json["path"] as? String,
-              let base64Data = json["data"] as? String,
-              let fileData = Data(base64Encoded: base64Data) else {
-            sendJSONError("Missing or invalid parameters (path, data)", on: connection)
-            return
+    private func handleUpload(_ json: [String: Any]) async -> [String: Any] {
+        guard let path = json["path"] as? String,
+              let base64 = json["data"] as? String,
+              let data = Data(base64Encoded: base64) else {
+            return ["status": "error", "message": "参数错误"]
         }
         
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let targetURL = documentsURL.appendingPathComponent(relativePath)
+        let targetURL = documentsURL.appendingPathComponent(path)
         
         guard targetURL.path.hasPrefix(documentsURL.path) else {
-            sendJSONError("Invalid path: outside Documents directory", statusCode: 403, on: connection)
-            return
+            return ["status": "error", "message": "路径越界"]
         }
         
         do {
-            // 创建父目录
-            try FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(),
-                                                   withIntermediateDirectories: true)
-            try fileData.write(to: targetURL)
-            
-            let response: [String: Any] = [
-                "success": true,
-                "path": relativePath,
-                "size": fileData.count
+            try FileManager.default.createDirectory(
+                at: targetURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: targetURL)
+            return [
+                "status": "ok",
+                "path": path,
+                "size": data.count
             ]
-            
-            sendJSONResponse(response, on: connection)
-            
         } catch {
-            sendJSONError("Failed to write file: \(error.localizedDescription)", on: connection)
+            return ["status": "error", "message": error.localizedDescription]
         }
     }
     
-    private func handleDelete(body: Data?, on connection: NWConnection) {
-        guard let body = body,
-              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let relativePath = json["path"] as? String else {
-            sendJSONError("Missing or invalid 'path' parameter", on: connection)
-            return
+    private func handleDelete(_ json: [String: Any]) async -> [String: Any] {
+        guard let path = json["path"] as? String else {
+            return ["status": "error", "message": "缺少 path 参数"]
         }
         
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let targetURL = documentsURL.appendingPathComponent(relativePath)
+        let targetURL = documentsURL.appendingPathComponent(path)
         
-        guard targetURL.path.hasPrefix(documentsURL.path) else {
-            sendJSONError("Invalid path: outside Documents directory", statusCode: 403, on: connection)
-            return
-        }
-        
-        guard FileManager.default.fileExists(atPath: targetURL.path) else {
-            sendJSONError("File not found", statusCode: 404, on: connection)
-            return
+        guard targetURL.path.hasPrefix(documentsURL.path),
+              FileManager.default.fileExists(atPath: targetURL.path) else {
+            return ["status": "error", "message": "文件不存在"]
         }
         
         do {
             try FileManager.default.removeItem(at: targetURL)
-            
-            let response: [String: Any] = [
-                "success": true,
-                "path": relativePath
-            ]
-            
-            sendJSONResponse(response, on: connection)
-            
+            return ["status": "ok", "path": path]
         } catch {
-            sendJSONError("Failed to delete: \(error.localizedDescription)", on: connection)
+            return ["status": "error", "message": error.localizedDescription]
         }
     }
     
-    private func handleMkdir(body: Data?, on connection: NWConnection) {
-        guard let body = body,
-              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let relativePath = json["path"] as? String else {
-            sendJSONError("Missing or invalid 'path' parameter", on: connection)
-            return
+    private func handleDownloadAll() async -> [String: Any] {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        
+        do {
+            logger.info("📦 开始扫描 Documents 目录...")
+            var fileList: [[String: Any]] = []
+            
+            // 递归扫描所有文件
+            try scanDirectory(documentsURL, baseURL: documentsURL, fileList: &fileList)
+            
+            logger.info("✅ 扫描完成: \(fileList.count) 个文件")
+            
+            return [
+                "status": "ok",
+                "files": fileList,
+                "message": "已扫描完成"
+            ]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
+        }
+    }
+    
+    private func scanDirectory(_ dirURL: URL, baseURL: URL, fileList: inout [[String: Any]]) throws {
+        let fileManager = FileManager.default
+        let contents = try fileManager.contentsOfDirectory(at: dirURL, includingPropertiesForKeys: [.isDirectoryKey])
+        
+        for item in contents {
+            let resourceValues = try item.resourceValues(forKeys: [.isDirectoryKey])
+            
+            if resourceValues.isDirectory == true {
+                // 递归扫描子目录
+                try scanDirectory(item, baseURL: baseURL, fileList: &fileList)
+            } else {
+                // 读取文件内容
+                let data = try Data(contentsOf: item)
+                let relativePath = item.path.replacingOccurrences(of: baseURL.path + "/", with: "")
+                
+                fileList.append([
+                    "path": relativePath,
+                    "data": data.base64EncodedString(),
+                    "size": data.count
+                ])
+            }
+        }
+    }
+    
+    private func handleUploadAll(_ json: [String: Any]) async -> [String: Any] {
+        guard let files = json["files"] as? [[String: Any]] else {
+            return ["status": "error", "message": "缺少文件列表"]
         }
         
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let targetURL = documentsURL.appendingPathComponent(relativePath)
+        let fileManager = FileManager.default
+        
+        do {
+            // 清空 Documents 目录
+            logger.info("🗑️ 清空 Documents 目录...")
+            let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
+            for item in contents {
+                try fileManager.removeItem(at: item)
+            }
+            
+            // 递归创建文件
+            logger.info("📤 开始上传 \(files.count) 个文件...")
+            for fileInfo in files {
+                guard let relativePath = fileInfo["path"] as? String,
+                      let base64Data = fileInfo["data"] as? String,
+                      let data = Data(base64Encoded: base64Data) else {
+                    continue
+                }
+                
+                let targetURL = documentsURL.appendingPathComponent(relativePath)
+                
+                // 创建父目录
+                let parentURL = targetURL.deletingLastPathComponent()
+                if !fileManager.fileExists(atPath: parentURL.path) {
+                    try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
+                }
+                
+                // 写入文件
+                try data.write(to: targetURL)
+            }
+            
+            logger.info("✅ 上传完成")
+            return [
+                "status": "ok",
+                "message": "已覆盖 Documents 目录，共 \(files.count) 个文件"
+            ]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
+        }
+    }
+    
+    private func handleMkdir(_ json: [String: Any]) async -> [String: Any] {
+        guard let path = json["path"] as? String else {
+            return ["status": "error", "message": "缺少 path 参数"]
+        }
+        
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        
+        // 处理特殊路径
+        let normalizedPath = path.trimmingCharacters(in: .whitespaces)
+        let targetURL: URL
+        if normalizedPath.isEmpty || normalizedPath == "." {
+            targetURL = documentsURL
+        } else {
+            targetURL = documentsURL.appendingPathComponent(normalizedPath)
+        }
         
         guard targetURL.path.hasPrefix(documentsURL.path) else {
-            sendJSONError("Invalid path: outside Documents directory", statusCode: 403, on: connection)
-            return
+            return ["status": "error", "message": "路径越界"]
         }
         
         do {
             try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
-            
-            let response: [String: Any] = [
-                "success": true,
-                "path": relativePath
-            ]
-            
-            sendJSONResponse(response, on: connection)
-            
+            return ["status": "ok", "path": path]
         } catch {
-            sendJSONError("Failed to create directory: \(error.localizedDescription)", on: connection)
+            return ["status": "error", "message": error.localizedDescription]
         }
     }
     
-    // MARK: - 响应助手
-    
-    private func sendJSONResponse(_ object: [String: Any], on connection: NWConnection) {
-        guard let data = try? JSONSerialization.data(withJSONObject: object, options: .prettyPrinted),
-              let jsonString = String(data: data, encoding: .utf8) else {
-            sendJSONError("Failed to serialize response", on: connection)
-            return
+    private func handleOpenAICapture(_ json: [String: Any]) async -> [String: Any] {
+        guard let requestData = json["request"] as? [String: Any],
+              let pending = parseOpenAIChatCompletions(requestData) else {
+            return ["status": "error", "message": "无效的 OpenAI 请求"]
         }
-        sendResponse(statusCode: 200, body: jsonString, contentType: "application/json", on: connection)
-    }
-    
-    private func sendJSONError(_ message: String, statusCode: Int = 400, on connection: NWConnection) {
-        let error: [String: Any] = [
-            "success": false,
-            "error": message
+        
+        let model = pending.model
+        
+        await MainActor.run {
+            self.pendingOpenAIRequests.append(pending)
+            self.updatePendingOpenAIState()
+        }
+        
+        logger.info("📥 捕获 OpenAI 请求: \(model ?? "unknown")")
+        
+        return [
+            "status": "ok",
+            "message": "已捕获请求，等待用户确认"
         ]
-        guard let data = try? JSONSerialization.data(withJSONObject: error),
-              let jsonString = String(data: data, encoding: .utf8) else {
-            sendResponse(statusCode: statusCode, body: message, on: connection)
-            return
-        }
-        sendResponse(statusCode: statusCode, body: jsonString, contentType: "application/json", on: connection)
     }
     
-    private func sendResponse(statusCode: Int, body: String, contentType: String = "text/plain", on connection: NWConnection) {
-        let statusText: String = {
-            switch statusCode {
-            case 200: return "OK"
-            case 400: return "Bad Request"
-            case 401: return "Unauthorized"
-            case 403: return "Forbidden"
-            case 404: return "Not Found"
-            case 500: return "Internal Server Error"
-            default: return "Unknown"
+    public func resolvePendingOpenAIRequest(save: Bool) {
+        queue.async { [weak self] in
+            guard let self = self, !self.pendingOpenAIRequests.isEmpty else { return }
+            let pending = self.pendingOpenAIRequests.removeFirst()
+            if save {
+                self.saveCapturedOpenAIRequest(pending)
             }
-        }()
-        
-        let bodyData = body.data(using: .utf8) ?? Data()
-        let response = """
-        HTTP/1.1 \(statusCode) \(statusText)\r
-        Content-Type: \(contentType)\r
-        Content-Length: \(bodyData.count)\r
-        Connection: close\r
-        \r
-        \(body)
-        """
-        
-        guard let responseData = response.data(using: .utf8) else { return }
-        
-        connection.send(content: responseData, completion: .contentProcessed { _ in
-            connection.cancel()
-        })
+            self.updatePendingOpenAIState()
+        }
+    }
+}
+
+// MARK: - OpenAI 捕获解析
+
+private extension LocalDebugServer {
+    struct PendingOpenAIRequest: Sendable {
+        let id: UUID
+        let receivedAt: Date
+        let model: String?
+        let systemPrompt: String?
+        let messages: [ChatMessage]
+        let originalMessageCount: Int
     }
     
-    // MARK: - 网络助手
-    
-    private func getLocalIPAddress() async -> String {
-        var address: String = "未知"
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        
-        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else {
-            return address
+    func parseOpenAIChatCompletions(_ json: [String: Any]) -> PendingOpenAIRequest? {
+        guard let rawMessages = json["messages"] as? [[String: Any]] else {
+            return nil
         }
         
-        for ifptr in sequence(first: firstAddr, next: { $0.pointee.ifa_next }) {
-            let interface = ifptr.pointee
-            let addrFamily = interface.ifa_addr.pointee.sa_family
+        let model = json["model"] as? String
+        var systemParts: [String] = []
+        var messages: [ChatMessage] = []
+        
+        for rawMessage in rawMessages {
+            let roleString = (rawMessage["role"] as? String) ?? "user"
+            let content = normalizeOpenAIContent(rawMessage["content"])
             
-            if addrFamily == UInt8(AF_INET) || addrFamily == UInt8(AF_INET6) {
-                let name = String(cString: interface.ifa_name)
-                if name == "en0" || name == "en1" || name.hasPrefix("wlan") {
-                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    getnameinfo(interface.ifa_addr,
-                              socklen_t(interface.ifa_addr.pointee.sa_len),
-                              &hostname,
-                              socklen_t(hostname.count),
-                              nil,
-                              socklen_t(0),
-                              NI_NUMERICHOST)
-                    address = String(cString: hostname)
-                    if addrFamily == UInt8(AF_INET) {
-                        break
-                    }
+            if roleString == "system" {
+                if !content.isEmpty {
+                    systemParts.append(content)
+                }
+                continue
+            }
+            
+            let mappedRole: MessageRole
+            switch roleString {
+            case "assistant": mappedRole = .assistant
+            case "tool", "function": mappedRole = .tool
+            default: mappedRole = .user
+            }
+            
+            messages.append(ChatMessage(role: mappedRole, content: content))
+        }
+        
+        return PendingOpenAIRequest(
+            id: UUID(),
+            receivedAt: Date(),
+            model: model,
+            systemPrompt: systemParts.isEmpty ? nil : systemParts.joined(separator: "\n\n"),
+            messages: messages,
+            originalMessageCount: rawMessages.count
+        )
+    }
+    
+    func normalizeOpenAIContent(_ content: Any?) -> String {
+        if let text = content as? String {
+            return text
+        }
+        if let parts = content as? [[String: Any]] {
+            var pieces: [String] = []
+            for part in parts {
+                if let text = part["text"] as? String {
+                    pieces.append(text)
                 }
             }
+            return pieces.joined(separator: "\n")
         }
+        return ""
+    }
+    
+    func saveCapturedOpenAIRequest(_ pending: PendingOpenAIRequest) {
+        let session = ChatSession(
+            id: UUID(),
+            name: formatSessionTitle(for: pending.receivedAt),
+            topicPrompt: pending.systemPrompt,
+            enhancedPrompt: nil,
+            isTemporary: false
+        )
         
-        freeifaddrs(ifaddr)
-        return address
+        Persistence.saveMessages(pending.messages, for: session.id)
+        var sessions = Persistence.loadChatSessions()
+        sessions.insert(session, at: 0)
+        Persistence.saveChatSessions(sessions)
+        
+        Task { @MainActor in
+            let chatService = ChatService.shared
+            var liveSessions = chatService.chatSessionsSubject.value
+            liveSessions.insert(session, at: 0)
+            chatService.chatSessionsSubject.send(liveSessions)
+        }
+    }
+    
+    func formatSessionTitle(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年MM月dd日 HH点mm分ss秒"
+        return formatter.string(from: date)
+    }
+    
+    func updatePendingOpenAIState() {
+        let summary: OpenAIRequestSummary?
+        if let pending = pendingOpenAIRequests.first {
+            summary = OpenAIRequestSummary(
+                id: pending.id,
+                model: pending.model,
+                messageCount: pending.originalMessageCount,
+                receivedAt: pending.receivedAt
+            )
+        } else {
+            summary = nil
+        }
+        let count = pendingOpenAIRequests.count
+        
+        Task { @MainActor in
+            self.pendingOpenAIRequest = summary
+            self.pendingOpenAIQueueCount = count
+        }
     }
 }
