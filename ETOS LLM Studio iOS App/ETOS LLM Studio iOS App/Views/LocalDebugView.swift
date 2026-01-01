@@ -182,7 +182,7 @@ private struct DocumentationView: View {
             }
             
             Section("启动步骤") {
-                StepRow(number: 1, title: "电脑端运行", detail: "在 docs/debug-tools/ 目录下运行 start_debug_server.sh")
+                StepRow(number: 1, title: "电脑端下载并运行", detail: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/docs/debug-tools/debug_server.py")
                 StepRow(number: 2, title: "记录 IP", detail: "脚本会显示电脑的局域网 IP 地址")
                 StepRow(number: 3, title: "输入并连接", detail: "在本界面输入 IP 地址和端口（默认 8765）")
                 StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")

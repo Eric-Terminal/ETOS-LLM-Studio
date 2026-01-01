@@ -9,11 +9,24 @@ import asyncio
 import json
 import base64
 import os
+import socket
 from datetime import datetime
 from pathlib import Path
 import websockets
 from websockets.server import serve
 from aiohttp import web
+
+def get_local_ip():
+    """获取本机局域网IP地址"""
+    try:
+        # 创建一个UDP socket，不需要真正发送数据
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "无法获取IP"
 
 class DebugServer:
     def __init__(self, host='0.0.0.0', ws_port=8765, http_port=8080):
@@ -317,19 +330,22 @@ class DebugServer:
         
     async def run(self):
         """启动服务器"""
+        local_ip = get_local_ip()
+        
         print(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║  ETOS LLM Studio - 反向探针调试服务器                       ║
 ╚══════════════════════════════════════════════════════════════╝
 
-📡 WebSocket 服务器: ws://{self.host}:{self.ws_port}
-🌐 HTTP 代理服务器: http://{self.host}:{self.http_port}
+🖥️  本机局域网IP: {local_ip}
+📡 WebSocket 服务器: ws://{local_ip}:{self.ws_port}
+🌐 HTTP 代理服务器: http://{local_ip}:{self.http_port}
 
 💡 使用说明:
-  1. 在设备上输入此电脑的 IP 地址
+  1. 在设备上输入: {local_ip}
   2. 默认 WebSocket 端口: {self.ws_port}
   3. 设备连接后会自动进入操作菜单
-  4. OpenAI API 设置为: http://此电脑IP:{self.http_port}
+  4. OpenAI API 设置为: http://{local_ip}:{self.http_port}
 
 ⏳ 等待设备连接...
         """)

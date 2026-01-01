@@ -41,7 +41,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("在手表上查看 MCP Server 状态，长按条目可通过 iPhone 端进行完整管理。")
+                Text("让 AI 能够调用 MCP 提供的各种工具和服务。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }            

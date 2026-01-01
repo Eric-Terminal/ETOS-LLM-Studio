@@ -37,10 +37,70 @@ public class LocalDebugServer: ObservableObject {
     private var wsConnection: NWConnection?
     private let queue = DispatchQueue(label: "com.etos.localdebug", qos: .userInitiated)
     private var pendingOpenAIRequests: [PendingOpenAIRequest] = []
+    private var permissionProbeConnection: NWConnection?
     
     public init() {}
     
     // MARK: - 连接管理
+    
+    /// 触发本地网络权限请求
+    /// 只在真机上执行，模拟器会直接跳过（避免"Network is down"错误）
+    private func triggerLocalNetworkPermission(host: String, completion: @escaping () -> Void) {
+        // 检测是否是模拟器
+        #if targetEnvironment(simulator)
+        logger.info("📱 检测到模拟器环境，跳过权限检查")
+        completion()
+        return
+        #else
+        logger.info("🔐 真机环境：触发本地网络权限请求...")
+        
+        // 创建一个临时的TCP连接来触发权限弹窗
+        // 即使连接失败，也能让系统弹出权限请求
+        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: 1)
+        let params = NWParameters.tcp
+        params.requiredLocalEndpoint = nil
+        params.prohibitedInterfaceTypes = [.cellular, .loopback]
+        
+        let probeConnection = NWConnection(to: endpoint, using: params)
+        self.permissionProbeConnection = probeConnection
+        
+        var hasCompleted = false
+        
+        probeConnection.stateUpdateHandler = { [weak self] state in
+            guard let self = self, !hasCompleted else { return }
+            
+            switch state {
+            case .ready, .failed:
+                // 无论成功还是失败，都说明权限检查已完成
+                hasCompleted = true
+                self.logger.info("✅ 本地网络权限检查完成")
+                probeConnection.cancel()
+                self.permissionProbeConnection = nil
+                // 给系统一点时间处理权限状态
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    completion()
+                }
+            case .waiting:
+                // 等待中，可能是权限弹窗正在显示
+                self.logger.info("⏳ 等待权限授予...")
+            default:
+                break
+            }
+        }
+        
+        probeConnection.start(queue: queue)
+        
+        // 设置超时：如果5秒内没有响应，继续执行
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            guard let self = self, !hasCompleted else { return }
+            hasCompleted = true
+            self.logger.warning("⚠️ 权限检查超时，继续尝试连接")
+            probeConnection.cancel()
+            self.permissionProbeConnection = nil
+            completion()
+        }
+        #endif
+    }
     
     /// 连接到电脑端服务器
     /// - Parameter url: 服务器地址，格式: "192.168.1.100:8765" 或 "192.168.1.100" (默认端口8765)
@@ -54,18 +114,41 @@ public class LocalDebugServer: ObservableObject {
         let port = components.count > 1 ? components[1] : "8765"
         
         serverURL = "\(host):\(port)"
+        connectionStatus = "正在请求权限..."
+        
+        // 先触发权限请求（仅watchOS）
+        triggerLocalNetworkPermission(host: host) { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in
+                self.performConnection(host: host, port: port)
+            }
+        }
+    }
+    
+    /// 执行实际的WebSocket连接
+    @MainActor
+    private func performConnection(host: String, port: String) {
+        logger.info("🔌 开始建立WebSocket连接到 \(host):\(port)")
         
         // 创建 WebSocket URL
         let urlString = "ws://\(host):\(port)/"
         guard let wsURL = URL(string: urlString) else {
-            Task { @MainActor in
-                self.errorMessage = "无效的服务器地址"
-            }
+            self.errorMessage = "无效的服务器地址"
+            self.connectionStatus = "连接失败"
             return
         }
         
         let endpoint = NWEndpoint.url(wsURL)
         let parameters = NWParameters.tcp
+        
+        // 真机环境：禁用蜂窝网络，优先使用WiFi
+        #if !targetEnvironment(simulator)
+        parameters.prohibitedInterfaceTypes = [.cellular]
+        #if os(watchOS)
+        parameters.requiredInterfaceType = .wifi
+        #endif
+        #endif
+        
         let wsOptions = NWProtocolWebSocket.Options()
         wsOptions.autoReplyPing = true
         
@@ -121,6 +204,8 @@ public class LocalDebugServer: ObservableObject {
     /// 断开连接
     @MainActor
     public func disconnect() {
+        permissionProbeConnection?.cancel()
+        permissionProbeConnection = nil
         wsConnection?.cancel()
         wsConnection = nil
         isRunning = false

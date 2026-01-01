@@ -158,8 +158,8 @@ private struct WatchDocumentationView: View {
             
             Section("启动步骤") {
                 VStack(alignment: .leading, spacing: 8) {
-                    StepItem(num: 1, text: "电脑端运行:")
-                    Text("cd docs/debug-tools\n./start_debug_server.sh")
+                    StepItem(num: 1, text: "电脑端下载并运行:")
+                    Text("https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/docs/debug-tools/debug_server.py")
                         .font(.system(size: 9).monospaced())
                         .foregroundStyle(.secondary)
                         .padding(.leading)
