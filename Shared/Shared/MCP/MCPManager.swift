@@ -106,7 +106,6 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var lastOperationOutput: String?
     @Published public private(set) var lastOperationError: String?
     @Published public private(set) var isBusy: Bool = false
-    @Published public private(set) var proxySettings: MCPProxySettings
 
     public weak var samplingHandler: MCPSamplingHandler?
 
@@ -115,14 +114,8 @@ public final class MCPManager: ObservableObject {
     private var routedTools: [String: RoutedTool] = [:]
     private var routedPrompts: [String: RoutedPrompt] = [:]
     private var debugBusyCount = 0
-    private let proxyEnabledKey = "mcpProxyEnabled"
-    private let proxyBaseURLKey = "mcpProxyBaseURL"
 
     private init() {
-        let defaults = UserDefaults.standard
-        let storedEnabled = defaults.object(forKey: proxyEnabledKey) as? Bool ?? false
-        let storedBaseURL = defaults.string(forKey: proxyBaseURLKey) ?? MCPProxySettings.defaultBaseURLString
-        self.proxySettings = MCPProxySettings(isEnabled: storedEnabled, baseURLString: storedBaseURL)
         reloadServers()
     }
 
@@ -166,8 +159,7 @@ public final class MCPManager: ObservableObject {
             $0.roots = []
         }
 
-        let proxyConfig = proxySettings.isValid ? proxySettings : nil
-        let transport = server.makeTransport(proxy: proxyConfig)
+        let transport = server.makeTransport()
         let client = MCPClient(transport: transport)
         clients[server.id] = client
 
@@ -223,20 +215,6 @@ public final class MCPManager: ObservableObject {
             $0.isBusy = false
             $0.isSelectedForChat = false
         }
-    }
-
-    public func setProxyEnabled(_ enabled: Bool) {
-        guard proxySettings.isEnabled != enabled else { return }
-        proxySettings.isEnabled = enabled
-        persistProxySettings()
-        rebuildTransportsForProxyChange()
-    }
-
-    public func updateProxyBaseURL(_ baseURL: String) {
-        guard proxySettings.baseURLString != baseURL else { return }
-        proxySettings.baseURLString = baseURL
-        persistProxySettings()
-        rebuildTransportsForProxyChange()
     }
 
     public func toggleSelection(for server: MCPServerConfiguration) {
@@ -559,24 +537,6 @@ public final class MCPManager: ObservableObject {
     private func updateBusyFlag() {
         let serverBusy = serverStatuses.values.contains(where: { $0.isBusy })
         isBusy = serverBusy || debugBusyCount > 0
-    }
-
-    private func persistProxySettings() {
-        UserDefaults.standard.set(proxySettings.isEnabled, forKey: proxyEnabledKey)
-        UserDefaults.standard.set(proxySettings.baseURLString, forKey: proxyBaseURLKey)
-    }
-
-    private func rebuildTransportsForProxyChange() {
-        let readyServers = servers.filter {
-            if case .ready = status(for: $0).connectionState {
-                return true
-            }
-            return false
-        }
-        for server in readyServers {
-            clients[server.id] = nil
-            connect(to: server, preserveSelection: true)
-        }
     }
 
     private func internalToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {

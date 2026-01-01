@@ -9,7 +9,6 @@ import Shared
 
 struct MCPIntegrationView: View {
     @StateObject private var manager = MCPManager.shared
-    @State private var proxyURLInput: String = MCPManager.shared.proxySettings.baseURLString
     
     var body: some View {
         List {
@@ -81,21 +80,6 @@ struct MCPIntegrationView: View {
                     ProgressView("同步中…")
                 }
             }
-
-            Section("代理") {
-                Toggle("启用代理", isOn: Binding(
-                    get: { manager.proxySettings.isEnabled },
-                    set: { manager.setProxyEnabled($0) }
-                ))
-                if manager.proxySettings.isEnabled {
-                    TextField("代理地址", text: $proxyURLInput)
-                    Button("保存") {
-                        manager.updateProxyBaseURL(proxyURLInput.trimmingCharacters(in: .whitespacesAndNewlines))
-                    }
-                    .disabled(proxyURLInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                Text("通过代理可绕过 ATS 限制。").font(.caption2)
-            }
             
             Section("能力概览") {
                 HStack {
@@ -147,9 +131,6 @@ struct MCPIntegrationView: View {
             }
         }
         .navigationTitle("MCP")
-        .onChange(of: manager.proxySettings.baseURLString) { _, newValue in
-            proxyURLInput = newValue
-        }
     }
     
     private func statusDescription(for server: MCPServerConfiguration) -> String {

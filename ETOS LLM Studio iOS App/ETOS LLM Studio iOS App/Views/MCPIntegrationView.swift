@@ -20,7 +20,6 @@ struct MCPIntegrationView: View {
     @State private var localError: String?
     @State private var selectedToolServerID: UUID?
     @State private var selectedResourceServerID: UUID?
-    @State private var proxyURLInput: String = MCPManager.shared.proxySettings.baseURLString
     
     var body: some View {
         List {
@@ -96,28 +95,6 @@ struct MCPIntegrationView: View {
                 if manager.isBusy {
                     ProgressView("正在同步 MCP 状态…")
                 }
-            }
-
-            Section {
-                Toggle("启用 MCP 代理", isOn: Binding(
-                    get: { manager.proxySettings.isEnabled },
-                    set: { manager.setProxyEnabled($0) }
-                ))
-                if manager.proxySettings.isEnabled {
-                    TextField("代理地址", text: $proxyURLInput)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    Button("保存代理地址") {
-                        manager.updateProxyBaseURL(proxyURLInput.trimmingCharacters(in: .whitespacesAndNewlines))
-                    }
-                    .disabled(proxyURLInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            } header: {
-                Text("代理设置")
-            } footer: {
-                Text("通过代理将请求转发到目标 MCP Server，以绕过 ATS 对证书/域名的限制。默认使用 mcp.ericterminal.com。")
-                    .font(.footnote)
             }
             
             if !manager.tools.isEmpty {
@@ -327,9 +304,6 @@ struct MCPIntegrationView: View {
             } label: {
                 Image(systemName: "plus")
             }
-        }
-        .onChange(of: manager.proxySettings.baseURLString) { _, newValue in
-            proxyURLInput = newValue
         }
         .sheet(isPresented: $isPresentingEditor, onDismiss: { serverToEdit = nil }) {
             NavigationStack {
