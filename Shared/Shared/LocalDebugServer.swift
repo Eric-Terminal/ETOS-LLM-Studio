@@ -100,9 +100,37 @@ public class LocalDebugServer: ObservableObject {
     
     // MARK: - 连接管理
     
+    /// 用于线程安全的权限探测状态管理
+    private final class PermissionProbeState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _hasCompleted = false
+        private var _permissionGranted = false
+        
+        var hasCompleted: Bool {
+            get { lock.withLock { _hasCompleted } }
+            set { lock.withLock { _hasCompleted = newValue } }
+        }
+        
+        var permissionGranted: Bool {
+            get { lock.withLock { _permissionGranted } }
+            set { lock.withLock { _permissionGranted = newValue } }
+        }
+        
+        /// 原子性地检查并设置完成状态，返回是否是第一次完成
+        func tryComplete() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if _hasCompleted {
+                return false
+            }
+            _hasCompleted = true
+            return true
+        }
+    }
+    
     /// 触发本地网络权限请求
     /// 只在真机上执行，模拟器会直接跳过（避免"Network is down"错误）
-    private func triggerLocalNetworkPermission(host: String, completion: @escaping () -> Void) {
+    private func triggerLocalNetworkPermission(host: String, completion: @escaping @Sendable () -> Void) {
         // 检测是否是模拟器
         #if targetEnvironment(simulator)
         logger.info("📱 检测到模拟器环境，跳过权限检查")
@@ -143,24 +171,36 @@ public class LocalDebugServer: ObservableObject {
         #endif
         
         let probeConnection = NWConnection(to: endpoint, using: params)
-        self.permissionProbeConnection = probeConnection
         
-        var hasCompleted = false
-        var permissionGranted = false
+        // 在主线程上设置 permissionProbeConnection
+        Task { @MainActor [weak self] in
+            self?.permissionProbeConnection = probeConnection
+        }
+        
+        // 使用线程安全的状态对象
+        let probeState = PermissionProbeState()
         
         probeConnection.stateUpdateHandler = { [weak self] state in
-            guard let self = self, !hasCompleted else { return }
+            guard let self = self else { return }
             
-            self.logger.info("🔍 权限探测状态: \(String(describing: state))")
+            // 使用 nonisolated 方式记录日志
+            let logMessage = "🔍 权限探测状态: \(String(describing: state))"
+            Task { @MainActor in
+                self.logger.info("\(logMessage)")
+            }
             
             switch state {
             case .ready:
                 // 连接成功！这意味着权限已授予
-                hasCompleted = true
-                permissionGranted = true
-                self.logger.info("✅ 权限探测成功，连接已建立")
+                guard probeState.tryComplete() else { return }
+                probeState.permissionGranted = true
+                Task { @MainActor in
+                    self.logger.info("✅ 权限探测成功，连接已建立")
+                }
                 probeConnection.cancel()
-                self.permissionProbeConnection = nil
+                Task { @MainActor [weak self] in
+                    self?.permissionProbeConnection = nil
+                }
                 // 等待一下让权限状态完全生效
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     completion()
@@ -169,47 +209,63 @@ public class LocalDebugServer: ObservableObject {
             case .failed(let error):
                 // 连接失败但不代表权限失败
                 // 如果是"connection refused"，说明至少网络栈尝试连接了（权限OK）
-                hasCompleted = true
+                guard probeState.tryComplete() else { return }
                 let errorDesc = error.localizedDescription.lowercased()
                 
                 if errorDesc.contains("connection refused") || errorDesc.contains("拒绝") {
                     // 连接被拒绝 = 权限OK，但服务器未启动
-                    permissionGranted = true
-                    self.logger.info("✅ 权限已授予（连接被拒绝是正常的）")
+                    probeState.permissionGranted = true
+                    Task { @MainActor in
+                        self.logger.info("✅ 权限已授予（连接被拒绝是正常的）")
+                    }
                 } else if errorDesc.contains("timed out") || errorDesc.contains("超时") {
                     // 超时也可能是权限OK的
-                    permissionGranted = true
-                    self.logger.info("⚠️ 探测超时，假设权限已授予")
+                    probeState.permissionGranted = true
+                    Task { @MainActor in
+                        self.logger.info("⚠️ 探测超时，假设权限已授予")
+                    }
                 } else {
                     // 其他错误，可能是权限问题
-                    self.logger.warning("⚠️ 探测失败: \(error.localizedDescription)")
+                    Task { @MainActor in
+                        self.logger.warning("⚠️ 探测失败: \(error.localizedDescription)")
+                    }
                 }
                 
                 probeConnection.cancel()
-                self.permissionProbeConnection = nil
+                Task { @MainActor [weak self] in
+                    self?.permissionProbeConnection = nil
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     completion()
                 }
                 
             case .waiting(let error):
                 // 等待中 - 可能是权限弹窗正在显示！
-                self.logger.info("⏳ 等待网络（可能是权限弹窗）: \(error.localizedDescription)")
-                
-            case .preparing:
-                self.logger.info("🔧 准备连接...")
-                
-            case .setup:
-                self.logger.info("⚙️ 设置连接...")
-                
-            case .cancelled:
-                if !hasCompleted {
-                    hasCompleted = true
-                    self.logger.info("🚫 探测被取消")
-                    completion()
+                Task { @MainActor in
+                    self.logger.info("⏳ 等待网络（可能是权限弹窗）: \(error.localizedDescription)")
                 }
                 
+            case .preparing:
+                Task { @MainActor in
+                    self.logger.info("🔧 准备连接...")
+                }
+                
+            case .setup:
+                Task { @MainActor in
+                    self.logger.info("⚙️ 设置连接...")
+                }
+                
+            case .cancelled:
+                guard probeState.tryComplete() else { return }
+                Task { @MainActor in
+                    self.logger.info("🚫 探测被取消")
+                }
+                completion()
+                
             @unknown default:
-                self.logger.warning("⚠️ 未知状态: \(String(describing: state))")
+                Task { @MainActor in
+                    self.logger.warning("⚠️ 未知状态: \(String(describing: state))")
+                }
             }
         }
         
@@ -217,17 +273,22 @@ public class LocalDebugServer: ObservableObject {
         
         // 🔥 增加超时到10秒，给用户足够时间点击权限弹窗
         DispatchQueue.global().asyncAfter(deadline: .now() + 10.0) { [weak self] in
-            guard let self = self, !hasCompleted else { return }
-            hasCompleted = true
+            guard probeState.tryComplete() else { return }
             
-            if permissionGranted {
-                self.logger.info("✅ 权限检查完成（已授予）")
+            if probeState.permissionGranted {
+                Task { @MainActor in
+                    self?.logger.info("✅ 权限检查完成（已授予）")
+                }
             } else {
-                self.logger.warning("⚠️ 权限检查超时，强制继续")
+                Task { @MainActor in
+                    self?.logger.warning("⚠️ 权限检查超时，强制继续")
+                }
             }
             
             probeConnection.cancel()
-            self.permissionProbeConnection = nil
+            Task { @MainActor [weak self] in
+                self?.permissionProbeConnection = nil
+            }
             completion()
         }
         #endif
