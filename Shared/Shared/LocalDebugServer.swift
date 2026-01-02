@@ -18,6 +18,7 @@ import WatchKit
 #endif
 
 /// 反向探针调试客户端
+@MainActor
 public class LocalDebugServer: ObservableObject {
     public struct OpenAIRequestSummary: Identifiable, Hashable {
         public let id: UUID
@@ -32,6 +33,30 @@ public class LocalDebugServer: ObservableObject {
     @Published public var errorMessage: String?
     @Published public var pendingOpenAIRequest: OpenAIRequestSummary?
     @Published public var pendingOpenAIQueueCount: Int = 0
+    @Published public var useHTTP: Bool = false // HTTP 轮询模式开关
+    @Published public var debugLogs: [DebugLogEntry] = [] // 调试日志
+    
+    /// 调试日志条目
+    public struct DebugLogEntry: Identifiable {
+        public let id = UUID()
+        public let timestamp: Date
+        public let message: String
+        public let type: LogType
+        
+        public enum LogType: CustomStringConvertible {
+            case info, send, receive, error, heartbeat
+            
+            public var description: String {
+                switch self {
+                case .info: return "INFO"
+                case .send: return "SEND"
+                case .receive: return "RECV"
+                case .error: return "ERROR"
+                case .heartbeat: return "BEAT"
+                }
+            }
+        }
+    }
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "LocalDebugServer")
     private var wsConnection: NWConnection?
@@ -39,7 +64,39 @@ public class LocalDebugServer: ObservableObject {
     private var pendingOpenAIRequests: [PendingOpenAIRequest] = []
     private var permissionProbeConnection: NWConnection?
     
+    // HTTP 轮询相关
+    private var httpPollingTimer: Timer?
+    private var httpSession: URLSession?
+    private let httpPollingInterval: TimeInterval = 1.0 // 1秒轮询一次
+    private var httpFailureCount: Int = 0 // HTTP 失败计数
+    private let maxHTTPFailures: Int = 5 // 最大失败次数
+    
+    private let maxLogEntries = 100 // 最大日志条数
+    
     public init() {}
+    
+    // MARK: - 调试日志
+    
+    /// 添加调试日志
+    public func addLog(_ message: String, type: DebugLogEntry.LogType = .info) {
+        // 心跳日志只记录到系统日志，不显示在UI中（避免占用空间）
+        if type == .heartbeat {
+            logger.debug("[\(type)] \(message)")
+            return
+        }
+        
+        let entry = DebugLogEntry(timestamp: Date(), message: message, type: type)
+        debugLogs.insert(entry, at: 0)
+        if debugLogs.count > maxLogEntries {
+            debugLogs.removeLast()
+        }
+        logger.info("[\(type)] \(message)")
+    }
+    
+    /// 清空日志
+    public func clearLogs() {
+        debugLogs.removeAll()
+    }
     
     // MARK: - 连接管理
     
@@ -54,47 +111,121 @@ public class LocalDebugServer: ObservableObject {
         #else
         logger.info("🔐 真机环境：触发本地网络权限请求...")
         
-        // 创建一个临时的TCP连接来触发权限弹窗
-        // 即使连接失败，也能让系统弹出权限请求
-        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: 1)
+        // 🔥 关键修复：使用目标端口而不是端口1！
+        // watchOS需要实际尝试连接到真实的服务端口才会触发权限
+        // 使用解析后的实际端口号
+        let targetPort: UInt16
+        if let portNum = UInt16(host.components(separatedBy: ":").last ?? "8765") {
+            targetPort = portNum
+        } else {
+            targetPort = 8765
+        }
+        
+        // 使用实际的host（不带端口）
+        let actualHost = host.components(separatedBy: ":").first ?? host
+        
+        logger.info("🎯 尝试连接到 \(actualHost):\(targetPort) 以触发权限")
+        
+        // 创建临时的TCP连接
+        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(actualHost), port: NWEndpoint.Port(rawValue: targetPort)!)
         let params = NWParameters.tcp
-        params.requiredLocalEndpoint = nil
-        params.prohibitedInterfaceTypes = [.cellular, .loopback]
+        
+        // 🔥 关键：不要禁用任何接口，让系统自己选择
+        // 禁用蜂窝是对的，但不要禁用loopback（如果服务器在本机）
+        params.prohibitedInterfaceTypes = [.cellular]
+        
+        // 🔥 设置超时时间
+        params.serviceClass = .responsiveData
+        
+        #if os(watchOS)
+        // watchOS必须指定使用WiFi
+        params.requiredInterfaceType = .wifi
+        #endif
         
         let probeConnection = NWConnection(to: endpoint, using: params)
         self.permissionProbeConnection = probeConnection
         
         var hasCompleted = false
+        var permissionGranted = false
         
         probeConnection.stateUpdateHandler = { [weak self] state in
             guard let self = self, !hasCompleted else { return }
             
+            self.logger.info("🔍 权限探测状态: \(String(describing: state))")
+            
             switch state {
-            case .ready, .failed:
-                // 无论成功还是失败，都说明权限检查已完成
+            case .ready:
+                // 连接成功！这意味着权限已授予
                 hasCompleted = true
-                self.logger.info("✅ 本地网络权限检查完成")
+                permissionGranted = true
+                self.logger.info("✅ 权限探测成功，连接已建立")
                 probeConnection.cancel()
                 self.permissionProbeConnection = nil
-                // 给系统一点时间处理权限状态
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                // 等待一下让权限状态完全生效
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     completion()
                 }
-            case .waiting:
-                // 等待中，可能是权限弹窗正在显示
-                self.logger.info("⏳ 等待权限授予...")
-            default:
-                break
+                
+            case .failed(let error):
+                // 连接失败但不代表权限失败
+                // 如果是"connection refused"，说明至少网络栈尝试连接了（权限OK）
+                hasCompleted = true
+                let errorDesc = error.localizedDescription.lowercased()
+                
+                if errorDesc.contains("connection refused") || errorDesc.contains("拒绝") {
+                    // 连接被拒绝 = 权限OK，但服务器未启动
+                    permissionGranted = true
+                    self.logger.info("✅ 权限已授予（连接被拒绝是正常的）")
+                } else if errorDesc.contains("timed out") || errorDesc.contains("超时") {
+                    // 超时也可能是权限OK的
+                    permissionGranted = true
+                    self.logger.info("⚠️ 探测超时，假设权限已授予")
+                } else {
+                    // 其他错误，可能是权限问题
+                    self.logger.warning("⚠️ 探测失败: \(error.localizedDescription)")
+                }
+                
+                probeConnection.cancel()
+                self.permissionProbeConnection = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    completion()
+                }
+                
+            case .waiting(let error):
+                // 等待中 - 可能是权限弹窗正在显示！
+                self.logger.info("⏳ 等待网络（可能是权限弹窗）: \(error.localizedDescription)")
+                
+            case .preparing:
+                self.logger.info("🔧 准备连接...")
+                
+            case .setup:
+                self.logger.info("⚙️ 设置连接...")
+                
+            case .cancelled:
+                if !hasCompleted {
+                    hasCompleted = true
+                    self.logger.info("🚫 探测被取消")
+                    completion()
+                }
+                
+            @unknown default:
+                self.logger.warning("⚠️ 未知状态: \(String(describing: state))")
             }
         }
         
         probeConnection.start(queue: queue)
         
-        // 设置超时：如果5秒内没有响应，继续执行
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        // 🔥 增加超时到10秒，给用户足够时间点击权限弹窗
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10.0) { [weak self] in
             guard let self = self, !hasCompleted else { return }
             hasCompleted = true
-            self.logger.warning("⚠️ 权限检查超时，继续尝试连接")
+            
+            if permissionGranted {
+                self.logger.info("✅ 权限检查完成（已授予）")
+            } else {
+                self.logger.warning("⚠️ 权限检查超时，强制继续")
+            }
+            
             probeConnection.cancel()
             self.permissionProbeConnection = nil
             completion()
@@ -111,16 +242,23 @@ public class LocalDebugServer: ObservableObject {
         // 解析URL
         let components = url.split(separator: ":").map(String.init)
         let host = components.first ?? url
-        let port = components.count > 1 ? components[1] : "8765"
+        let port = components.count > 1 ? components[1] : (useHTTP ? "7654" : "8765")
         
         serverURL = "\(host):\(port)"
-        connectionStatus = "正在请求权限..."
         
-        // 先触发权限请求（仅watchOS）
-        triggerLocalNetworkPermission(host: host) { [weak self] in
-            guard let self = self else { return }
-            Task { @MainActor in
-                self.performConnection(host: host, port: port)
+        if useHTTP {
+            // HTTP 轮询模式，直接启动
+            logger.info("🌐 使用 HTTP 轮询模式")
+            connectionStatus = "正在连接..."
+            performHTTPConnection(host: host, port: port)
+        } else {
+            // WebSocket 模式，需要权限检查
+            connectionStatus = "正在请求权限..."
+            triggerLocalNetworkPermission(host: "\(host):\(port)") { [weak self] in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    self.performConnection(host: host, port: port)
+                }
             }
         }
     }
@@ -204,14 +342,238 @@ public class LocalDebugServer: ObservableObject {
     /// 断开连接
     @MainActor
     public func disconnect() {
+        // 停止权限探测
         permissionProbeConnection?.cancel()
         permissionProbeConnection = nil
+        
+        // 停止 HTTP 轮询
+        httpPollingTimer?.invalidate()
+        httpPollingTimer = nil
+        httpFailureCount = 0
+        
+        // 停止 WebSocket
         wsConnection?.cancel()
         wsConnection = nil
+        
+        // 停止 HTTP 轮询
+        httpPollingTimer?.invalidate()
+        httpPollingTimer = nil
+        httpSession?.invalidateAndCancel()
+        httpSession = nil
+        
         isRunning = false
         connectionStatus = "未连接"
         pendingOpenAIRequests.removeAll()
         updatePendingOpenAIState()
+    }
+    
+    // MARK: - HTTP 轮询模式
+    
+    /// 执行 HTTP 连接和轮询
+    @MainActor
+    private func performHTTPConnection(host: String, port: String) {
+        logger.info("🌐 开始 HTTP 轮询模式，目标: \(host):\(port)")
+        
+        // 创建 URLSession，支持大文件传输
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10.0
+        config.timeoutIntervalForResource = 300.0  // 5分钟，支持大文件
+        config.httpMaximumConnectionsPerHost = 4  // 增加并发连接数
+        httpSession = URLSession(configuration: config)
+        
+        // 先测试连接
+        testHTTPConnection(host: host, port: port) { [weak self] success in
+            guard let self = self else { return }
+            Task { @MainActor in
+                if success {
+                    self.isRunning = true
+                    self.connectionStatus = "已连接 (HTTP)"
+                    self.errorMessage = nil
+                    self.logger.info("✅ HTTP 连接测试成功")
+                    // 启动轮询定时器
+                    self.startHTTPPolling(host: host, port: port)
+                } else {
+                    self.isRunning = false
+                    self.connectionStatus = "连接失败"
+                    self.errorMessage = "无法连接到服务器，请检查地址和端口"
+                    self.logger.error("❌ HTTP 连接测试失败")
+                }
+            }
+        }
+    }
+    
+    /// 测试 HTTP 连接
+    private func testHTTPConnection(host: String, port: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "http://\(host):\(port)/ping") else {
+            completion(false)
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5.0
+        
+        httpSession?.dataTask(with: request) { data, response, error in
+            if let error = error {
+                self.logger.error("❌ HTTP 测试失败: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200 {
+                completion(true)
+            } else {
+                completion(false)
+            }
+        }.resume()
+    }
+    
+    /// 启动 HTTP 轮询
+    @MainActor
+    private func startHTTPPolling(host: String, port: String) {
+        logger.info("🔄 启动 HTTP 轮询，间隔: \(self.httpPollingInterval)秒")
+        
+        // 使用主线程的 Timer
+        httpPollingTimer = Timer.scheduledTimer(withTimeInterval: self.httpPollingInterval, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            // 在主线程上执行轮询
+            Task { @MainActor in
+                self.performHTTPPoll(host: host, port: port)
+            }
+        }
+        
+        // 立即执行第一次轮询
+        performHTTPPoll(host: host, port: port)
+    }
+    
+    /// 执行一次 HTTP 轮询
+    private func performHTTPPoll(host: String, port: String) {
+        guard let url = URL(string: "http://\(host):\(port)/poll") else {
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 3.0
+        
+        // 发送设备信息
+        let deviceInfo: [String: Any] = [
+            "device_id": getDeviceIdentifier(),
+            "platform": "watchOS",
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let jsonData = try? JSONSerialization.data(withJSONObject: deviceInfo) {
+            request.httpBody = jsonData
+        }
+        
+        httpSession?.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                // 轮询失败计数
+                Task { @MainActor in
+                    self.httpFailureCount += 1
+                    self.addLog("轮询失败: \(error.localizedDescription)", type: .error)
+                    if self.httpFailureCount >= self.maxHTTPFailures {
+                        self.addLog("连续失败 \(self.httpFailureCount) 次，断开连接", type: .error)
+                        self.disconnect()
+                    }
+                }
+                return
+            }
+            
+            guard let data = data,
+                  let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                Task { @MainActor in
+                    self.httpFailureCount += 1
+                    if self.httpFailureCount >= self.maxHTTPFailures {
+                        self.addLog("响应异常，断开连接", type: .error)
+                        self.disconnect()
+                    }
+                }
+                return
+            }
+            
+            // 重置失败计数
+            Task { @MainActor in
+                self.httpFailureCount = 0
+            }
+            
+            // 解析命令
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let command = json["command"] as? String {
+                Task { @MainActor in
+                    if command == "none" {
+                        // 心跳包，无命令
+                        self.addLog("💓 心跳", type: .heartbeat)
+                    } else {
+                        self.addLog("📥 收到命令: \(command)", type: .receive)
+                        self.handleReceivedMessage(data)
+                    }
+                }
+            }
+        }.resume()
+    }
+    
+    /// 通过 HTTP 发送响应
+    private func sendHTTPResponse(_ response: [String: Any], host: String, port: String) {
+        guard let url = URL(string: "http://\(host):\(port)/response") else {
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30.0  // 增加到30秒，支持大文件
+        
+        if let jsonData = try? JSONSerialization.data(withJSONObject: response) {
+            request.httpBody = jsonData
+            
+            let dataSize = jsonData.count
+            let path = response["path"] as? String ?? ""
+            let status = response["status"] as? String ?? ""
+            
+            Task { @MainActor in
+                if dataSize > 1_000_000 {
+                    self.addLog("📤 发送大响应: \(String(format: "%.2f", Double(dataSize) / 1_000_000)) MB", type: .send)
+                } else if !path.isEmpty {
+                    self.addLog("📤 发送: \(path) (\(self.formatSize(dataSize)))", type: .send)
+                } else {
+                    self.addLog("📤 响应: \(status)", type: .send)
+                }
+            }
+            
+            httpSession?.dataTask(with: request) { [weak self] _, _, error in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    if let error = error {
+                        self.addLog("❌ 发送失败: \(error.localizedDescription)", type: .error)
+                    }
+                }
+            }.resume()
+        }
+    }
+    
+    /// 格式化文件大小
+    private func formatSize(_ bytes: Int) -> String {
+        if bytes < 1024 { return "\(bytes) B" }
+        let kb = Double(bytes) / 1024
+        if kb < 1024 { return String(format: "%.1f KB", kb) }
+        let mb = kb / 1024
+        return String(format: "%.2f MB", mb)
+    }
+    
+    /// 获取设备标识符
+    private func getDeviceIdentifier() -> String {
+        #if os(watchOS)
+        return WKInterfaceDevice.current().name
+        #else
+        return UIDevice.current.name
+        #endif
     }
     
     // MARK: - 消息收发
@@ -230,12 +592,14 @@ public class LocalDebugServer: ObservableObject {
                 return
             }
             
-            if let data = data {
-                self.handleReceivedMessage(data)
-            }
-            
-            if isComplete {
-                self.startReceiving()
+            Task { @MainActor in
+                if let data = data {
+                    self.handleReceivedMessage(data)
+                }
+                
+                if isComplete {
+                    self.startReceiving()
+                }
             }
         }
     }
@@ -246,48 +610,87 @@ public class LocalDebugServer: ObservableObject {
             return
         }
         
+        // 忽略空命令
+        if command == "none" {
+            return
+        }
+        
         logger.info("📨 收到命令: \(command)")
         
         Task {
-            let response: [String: Any]
-            
             switch command {
             case "list":
-                response = await handleList(json)
+                let response = await handleList(json)
+                sendResponse(response)
             case "download":
-                response = await handleDownload(json)
+                let response = await handleDownload(json)
+                sendResponse(response)
             case "download_all":
-                response = await handleDownloadAll()
+                // HTTP 模式下使用流式下载
+                if useHTTP {
+                    await handleDownloadAllStream()
+                } else {
+                    let response = await handleDownloadAll()
+                    sendResponse(response)
+                }
             case "upload":
-                response = await handleUpload(json)
+                let response = await handleUpload(json)
+                sendResponse(response)
             case "upload_all":
-                response = await handleUploadAll(json)
+                // WebSocket 批量上传
+                let response = await handleUploadAll(json)
+                sendResponse(response)
+            case "clear_documents":
+                // HTTP 流式上传：第一步清空目录
+                let response = await handleClearDocuments()
+                sendResponse(response)
+            case "upload_list":
+                // HTTP 流式上传：接收文件列表，逐个请求文件
+                await handleUploadList(json)
+            case "upload_file":
+                // HTTP 流式上传：接收单个文件
+                let response = await handleUploadFile(json)
+                sendResponse(response)
+            case "upload_complete":
+                // HTTP 流式上传完成
+                logger.info("✅ 流式上传完成")
+                sendResponse(["status": "ok", "message": "上传完成"])
             case "delete":
-                response = await handleDelete(json)
+                let response = await handleDelete(json)
+                sendResponse(response)
             case "mkdir":
-                response = await handleMkdir(json)
+                let response = await handleMkdir(json)
+                sendResponse(response)
             case "openai_capture":
-                response = await handleOpenAICapture(json)
+                let response = await handleOpenAICapture(json)
+                sendResponse(response)
             case "ping":
-                response = ["status": "ok", "message": "pong"]
+                sendResponse(["status": "ok", "message": "pong"])
             default:
-                response = ["status": "error", "message": "未知命令"]
+                sendResponse(["status": "error", "message": "未知命令"])
             }
-            
-            sendResponse(response)
         }
     }
     
     private func sendResponse(_ response: [String: Any]) {
-        guard let connection = wsConnection,
-              let data = try? JSONSerialization.data(withJSONObject: response) else {
-            return
+        if useHTTP {
+            // HTTP 模式：发送响应到服务器
+            let components = serverURL.split(separator: ":").map(String.init)
+            let host = components.first ?? ""
+            let port = components.count > 1 ? components[1] : "7654"
+            sendHTTPResponse(response, host: host, port: port)
+        } else {
+            // WebSocket 模式：直接发送
+            guard let connection = wsConnection,
+                  let data = try? JSONSerialization.data(withJSONObject: response) else {
+                return
+            }
+            
+            let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
+            let context = NWConnection.ContentContext(identifier: "response", metadata: [metadata])
+            
+            connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
         }
-        
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-        let context = NWConnection.ContentContext(identifier: "response", metadata: [metadata])
-        
-        connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
     }
     
     // MARK: - 命令处理
@@ -440,6 +843,104 @@ public class LocalDebugServer: ObservableObject {
         }
     }
     
+    /// HTTP 流式下载：连续发送所有文件到电脑（不等待响应）
+    private func handleDownloadAllStream() async {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        
+        do {
+            logger.info("📦 开始流式下载 Documents 目录...")
+            
+            // 收集所有文件路径
+            var filePaths: [String] = []
+            try collectFilePaths(documentsURL, baseURL: documentsURL, filePaths: &filePaths)
+            
+            logger.info("📂 发现 \(filePaths.count) 个文件，开始连续传输")
+            
+            // 连续发送所有文件（不等待响应）
+            for (index, relativePath) in filePaths.enumerated() {
+                let fileURL = documentsURL.appendingPathComponent(relativePath)
+                
+                do {
+                    let data = try Data(contentsOf: fileURL)
+                    let response: [String: Any] = [
+                        "status": "ok",
+                        "path": relativePath,
+                        "data": data.base64EncodedString(),
+                        "size": data.count,
+                        "index": index + 1,
+                        "total": filePaths.count
+                    ]
+                    
+                    // 立即发送，不等待响应
+                    Task {
+                        await sendHTTPResponseAsync(response)
+                    }
+                    logger.info("📤 [\(index + 1)/\(filePaths.count)] 发送: \(relativePath)")
+                    
+                } catch {
+                    logger.error("❌ 读取文件失败: \(relativePath) - \(error.localizedDescription)")
+                }
+            }
+            
+            // 发送完成消息
+            let completeResponse: [String: Any] = [
+                "status": "ok",
+                "message": "流式下载完成",
+                "total": filePaths.count,
+                "stream_complete": true
+            ]
+            await sendHTTPResponseAsync(completeResponse)
+            logger.info("✅ 流式下载完成，共 \(filePaths.count) 个文件")
+            
+        } catch {
+            let errorResponse: [String: Any] = [
+                "status": "error",
+                "message": error.localizedDescription
+            ]
+            await sendHTTPResponseAsync(errorResponse)
+        }
+    }
+    
+    /// 收集目录下所有文件的相对路径
+    private func collectFilePaths(_ dirURL: URL, baseURL: URL, filePaths: inout [String]) throws {
+        let fileManager = FileManager.default
+        let contents = try fileManager.contentsOfDirectory(at: dirURL, includingPropertiesForKeys: [.isDirectoryKey])
+        
+        for item in contents {
+            let resourceValues = try item.resourceValues(forKeys: [.isDirectoryKey])
+            
+            if resourceValues.isDirectory == true {
+                try collectFilePaths(item, baseURL: baseURL, filePaths: &filePaths)
+            } else {
+                let relativePath = item.path.replacingOccurrences(of: baseURL.path + "/", with: "")
+                filePaths.append(relativePath)
+            }
+        }
+    }
+    
+    /// 异步发送 HTTP 响应（等待完成）
+    private func sendHTTPResponseAsync(_ response: [String: Any]) async {
+        let components = serverURL.split(separator: ":").map(String.init)
+        let host = components.first ?? ""
+        let port = components.count > 1 ? components[1] : "7654"
+        
+        guard let url = URL(string: "http://\(host):\(port)/response") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 60.0
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: response) else { return }
+        request.httpBody = jsonData
+        
+        do {
+            let (_, _) = try await httpSession!.data(for: request)
+        } catch {
+            logger.error("❌ 发送响应失败: \(error.localizedDescription)")
+        }
+    }
+    
     private func scanDirectory(_ dirURL: URL, baseURL: URL, fileList: inout [[String: Any]]) throws {
         let fileManager = FileManager.default
         let contents = try fileManager.contentsOfDirectory(at: dirURL, includingPropertiesForKeys: [.isDirectoryKey])
@@ -465,15 +966,159 @@ public class LocalDebugServer: ObservableObject {
     }
     
     private func handleUploadAll(_ json: [String: Any]) async -> [String: Any] {
-        guard let files = json["files"] as? [[String: Any]] else {
-            return ["status": "error", "message": "缺少文件列表"]
+        // WebSocket模式：files数组，一次性上传所有
+        if let files = json["files"] as? [[String: Any]] {
+            return await handleBatchUpload(files: files)
+        } else {
+            return ["status": "error", "message": "无效的上传参数"]
         }
+    }
+    
+    /// HTTP 流式上传：接收文件列表，连续请求所有文件
+    private func handleUploadList(_ json: [String: Any]) async {
+        guard let paths = json["paths"] as? [String],
+              let total = json["total"] as? Int else {
+            logger.error("❌ 无效的文件列表")
+            return
+        }
+        
+        logger.info("📋 收到文件列表: \(total) 个文件")
+        
+        // 先清空Documents目录
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fileManager = FileManager.default
+        
+        do {
+            logger.info("🗑️ 清空 Documents 目录...")
+            let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
+            for item in contents {
+                try fileManager.removeItem(at: item)
+            }
+            logger.info("✅ Documents 目录已清空")
+        } catch {
+            logger.error("❌ 清空目录失败: \(error.localizedDescription)")
+            return
+        }
+        
+        // 连续请求所有文件
+        for (index, path) in paths.enumerated() {
+            await fetchAndWriteFile(path: path, index: index + 1, total: total)
+        }
+        
+        logger.info("✅ 所有文件上传完成！")
+    }
+    
+    /// 请求并写入单个文件
+    private func fetchAndWriteFile(path: String, index: Int, total: Int) async {
+        let components = serverURL.split(separator: ":").map(String.init)
+        let host = components.first ?? ""
+        let port = components.count > 1 ? components[1] : "7654"
+        
+        guard let url = URL(string: "http://\(host):\(port)/fetch_file") else {
+            logger.error("❌ 无效的URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30.0
+        
+        let requestBody: [String: Any] = ["path": path]
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            logger.error("❌ 无法序列化请求")
+            return
+        }
+        request.httpBody = jsonData
+        
+        do {
+            let (data, _) = try await httpSession!.data(for: request)
+            
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let status = json["status"] as? String,
+                  status == "ok",
+                  let fileData = json["data"] as? String,
+                  let decodedData = Data(base64Encoded: fileData) else {
+                logger.error("❌ 无效的响应: \(path)")
+                return
+            }
+            
+            // 写入文件
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let fileURL = documentsURL.appendingPathComponent(path)
+            let dirURL = fileURL.deletingLastPathComponent()
+            
+            try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+            try decodedData.write(to: fileURL)
+            
+            let remaining = json["remaining"] as? Int ?? 0
+            logger.info("📥 [\(index)/\(total)] 写入: \(path) (\(decodedData.count) bytes) [剩余 \(remaining)]")
+            
+        } catch {
+            logger.error("❌ 请求文件失败 \(path): \(error.localizedDescription)")
+        }
+    }
+    
+    /// HTTP 流式上传：接收单个文件（旧方法，保留兼容）
+    private func handleUploadFile(_ json: [String: Any]) async -> [String: Any] {
+        guard let path = json["path"] as? String,
+              let b64Data = json["data"] as? String else {
+            return ["status": "error", "message": "文件数据缺失"]
+        }
+        
+        let remaining = json["remaining"] as? Int ?? 0
         
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fileManager = FileManager.default
         
         do {
-            // 清空 Documents 目录
+            guard let data = Data(base64Encoded: b64Data) else {
+                return ["status": "error", "message": "Base64解码失败"]
+            }
+            
+            let fileURL = documentsURL.appendingPathComponent(path)
+            let dirURL = fileURL.deletingLastPathComponent()
+            
+            try fileManager.createDirectory(at: dirURL, withIntermediateDirectories: true)
+            try data.write(to: fileURL)
+            
+            logger.info("📥 写入: \(path) (\(data.count) bytes) [剩余 \(remaining)]")
+            
+            return [
+                "status": "ok",
+                "message": "文件已写入",
+                "path": path
+            ]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
+        }
+    }
+    
+    /// 清空Documents目录
+    private func handleClearDocuments() async -> [String: Any] {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fileManager = FileManager.default
+        
+        do {
+            logger.info("🗑️ 清空 Documents 目录...")
+            let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
+            for item in contents {
+                try fileManager.removeItem(at: item)
+            }
+            logger.info("✅ Documents 目录已清空")
+            return ["status": "ok", "message": "目录已清空"]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
+        }
+    }
+    
+    /// 批量上传（WebSocket模式）
+    private func handleBatchUpload(files: [[String: Any]]) async -> [String: Any] {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fileManager = FileManager.default
+        
+        do {
+            // 清空目录
             logger.info("🗑️ 清空 Documents 目录...")
             let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
             for item in contents {
@@ -561,8 +1206,8 @@ public class LocalDebugServer: ObservableObject {
     }
     
     public func resolvePendingOpenAIRequest(save: Bool) {
-        queue.async { [weak self] in
-            guard let self = self, !self.pendingOpenAIRequests.isEmpty else { return }
+        Task { @MainActor in
+            guard !self.pendingOpenAIRequests.isEmpty else { return }
             let pending = self.pendingOpenAIRequests.removeFirst()
             if save {
                 self.saveCapturedOpenAIRequest(pending)

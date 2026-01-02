@@ -14,6 +14,7 @@ public struct LocalDebugView: View {
     @StateObject private var server = LocalDebugServer()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingDocs = false
+    @State private var showingLogs = false
     @State private var serverURL: String = ""
     
     public init() {}
@@ -40,11 +41,23 @@ public struct LocalDebugView: View {
             
             // 连接配置
             if !server.isRunning {
+                Section(header: Text("连接模式")) {
+                    Toggle(isOn: $server.useHTTP) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
+                                .font(.caption)
+                            Text(server.useHTTP ? "稳定但较慢" : "快速但不稳定")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                
                 Section(header: Text("服务器地址")) {
-                    TextField("192.168.1.100:8765", text: $serverURL)
+                    TextField(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765", text: $serverURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    
+
                     Button("连接") {
                         connectToServer()
                     }
@@ -65,6 +78,22 @@ public struct LocalDebugView: View {
                         disconnectServer()
                     }
                     .foregroundStyle(.red)
+                }
+                
+                // 调试日志
+                Section {
+                    Button {
+                        showingLogs = true
+                    } label: {
+                        HStack {
+                            Text("调试日志")
+                                .font(.caption)
+                            Spacer()
+                            Text("\(server.debugLogs.count)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
 
@@ -118,6 +147,11 @@ public struct LocalDebugView: View {
                 WatchDocumentationView()
             }
         }
+        .sheet(isPresented: $showingLogs) {
+            NavigationStack {
+                WatchDebugLogsView(server: server)
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active && server.isRunning {
                 disconnectServer()
@@ -151,15 +185,28 @@ private struct WatchDocumentationView: View {
     var body: some View {
         List {
             Section("工作原理") {
-                Text("设备主动连接电脑端 WebSocket 服务器，接收命令并执行")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("WebSocket 模式")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                    Text("设备主动连接电脑端服务器（端口 8765），实时接收命令")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    
+                    Text("HTTP 轮询模式")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.top, 4)
+                    Text("设备每秒向服务器（端口 7654）请求一次，获取待执行命令")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             
             Section("启动步骤") {
                 VStack(alignment: .leading, spacing: 8) {
                     StepItem(num: 1, text: "电脑端下载并运行:")
-                    Text("https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/docs/debug-tools/debug_server.py")
+                    Text("debug_server.py")
                         .font(.system(size: 9).monospaced())
                         .foregroundStyle(.secondary)
                         .padding(.leading)
@@ -226,6 +273,76 @@ private struct FeatureItem: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - 调试日志视图 (watchOS)
+
+private struct WatchDebugLogsView: View {
+    @ObservedObject var server: LocalDebugServer
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        List {
+            if server.debugLogs.isEmpty {
+                Text("暂无日志")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(server.debugLogs) { log in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Image(systemName: iconForType(log.type))
+                                .foregroundStyle(colorForType(log.type))
+                                .font(.caption2)
+                            Text(log.message)
+                                .font(.system(size: 10, design: .monospaced))
+                                .lineLimit(2)
+                        }
+                        Text(formatTime(log.timestamp))
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("日志")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("清空") {
+                    server.clearLogs()
+                }
+                .font(.caption2)
+            }
+        }
+    }
+    
+    private func iconForType(_ type: LocalDebugServer.DebugLogEntry.LogType) -> String {
+        switch type {
+        case .info: return "info.circle"
+        case .send: return "arrow.up"
+        case .receive: return "arrow.down"
+        case .error: return "xmark.circle"
+        case .heartbeat: return "heart.fill"
+        @unknown default: return "questionmark.circle"
+        }
+    }
+    
+    private func colorForType(_ type: LocalDebugServer.DebugLogEntry.LogType) -> Color {
+        switch type {
+        case .info: return .blue
+        case .send: return .green
+        case .receive: return .orange
+        case .error: return .red
+        case .heartbeat: return .pink
+        @unknown default: return .gray
+        }
+    }
+    
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: date)
     }
 }
 
