@@ -33,7 +33,7 @@ public class LocalDebugServer: ObservableObject {
     @Published public var errorMessage: String?
     @Published public var pendingOpenAIRequest: OpenAIRequestSummary?
     @Published public var pendingOpenAIQueueCount: Int = 0
-    @Published public var useHTTP: Bool = false // HTTP 轮询模式开关
+    @Published public var useHTTP: Bool = true // HTTP 轮询模式开关（默认启用）
     @Published public var debugLogs: [DebugLogEntry] = [] // 调试日志
     
     /// 调试日志条目
@@ -271,7 +271,6 @@ public class LocalDebugServer: ObservableObject {
         
         probeConnection.start(queue: queue)
         
-        // 🔥 增加超时到10秒，给用户足够时间点击权限弹窗
         DispatchQueue.global().asyncAfter(deadline: .now() + 10.0) { [weak self] in
             guard probeState.tryComplete() else { return }
             
