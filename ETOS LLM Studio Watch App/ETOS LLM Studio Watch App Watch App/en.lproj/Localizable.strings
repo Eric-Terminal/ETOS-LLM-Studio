@@ -315,7 +315,7 @@
 "尚未添加任何 MCP Server。点击右上角的“＋”来新建。" = "No MCP servers yet. Tap “+” to add one.";
 "尚未添加服务器，点击下方入口新建。" = "No servers yet. Tap below to add one.";
 "尚未选择语音转文字模型。" = "No speech-to-text model selected.";
-"局域网调试" = "LAN debug";
+"局域网调试" = "LAN Debug";
 "嵌入模型" = "Embedding model";
 "嵌套用 { }，例如 chat_template_kwargs = {thinking = false}" = "Use { } for nesting, e.g., chat_template_kwargs = {thinking = false}";
 "嵌套结构使用 {}，例如: chat_template_kwargs = {thinking = false}" = "Nested structure uses {}, e.g., chat_template_kwargs = {thinking = false}";
@@ -342,7 +342,7 @@
 "录音启动失败。" = "Failed to start recording.";
 "录音将直接附带音频给当前模型。下方语音模型为可选项，用于后台转写文字显示。" = "Recordings are sent as audio to the current model. The speech model below is optional for background transcription.";
 "录音文件未找到，无法处理。" = "Recording file not found.";
-"快速调试" = "Quick debug";
+"快速调试" = "Quick Debug";
 "思考过程" = "Reasoning";
 "思考过程 (可选)" = "Reasoning (optional)";
 "性能设置" = "Performance settings";
@@ -506,7 +506,7 @@
 "读取资源" = "Read resource";
 "调用工具" = "Call tool";
 "调试" = "Debug";
-"调试面板" = "Debug panel";
+"调试面板" = "Debug Panel";
 "资源 ID" = "Resource ID";
 "资源列表" = "Resource list";
 "资源标识" = "Resource identifier";
