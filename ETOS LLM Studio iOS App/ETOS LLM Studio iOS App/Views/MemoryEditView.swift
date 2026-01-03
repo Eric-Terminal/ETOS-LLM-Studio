@@ -47,9 +47,6 @@ struct MemoryEditView: View {
         .navigationTitle("编辑记忆")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("取消") { dismiss() }
-            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("保存") {
                     Task {

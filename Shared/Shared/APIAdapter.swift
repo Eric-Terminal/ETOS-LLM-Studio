@@ -156,7 +156,7 @@ public class OpenAIAdapter: APIAdapter {
         let chatURL = baseURL.appendingPathComponent("chat/completions")
         
         var request = URLRequest(url: chatURL)
-        request.timeoutInterval = 300
+        request.timeoutInterval = 600  // 10分钟，支持大模型长时间推理和流式响应
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -424,7 +424,7 @@ public class OpenAIAdapter: APIAdapter {
         
         var request = URLRequest(url: transcriptionURL)
         request.httpMethod = "POST"
-        request.timeoutInterval = 180
+        request.timeoutInterval = 300  // 5分钟，支持长音频文件转写
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
         let boundary = "Boundary-\(UUID().uuidString)"
@@ -468,7 +468,7 @@ public class OpenAIAdapter: APIAdapter {
         
         var request = URLRequest(url: embeddingsURL)
         request.httpMethod = "POST"
-        request.timeoutInterval = 180
+        request.timeoutInterval = 300  // 5分钟，支持大批量文本嵌入
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         

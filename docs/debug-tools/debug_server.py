@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ETOS LLM Studio - 电脑端调试服务器
-通过 WebSocket 接收来自 watchOS/iOS 设备的反向连接
+通过 WebSocket 或 HTTP 轮询接收来自 watchOS/iOS 设备的连接
 提供交互式菜单操作文件系统和捕获 OpenAI 请求
 """
 
@@ -9,38 +9,79 @@ import asyncio
 import json
 import base64
 import os
+import socket
 from datetime import datetime
 from pathlib import Path
 import websockets
 from websockets.server import serve
 from aiohttp import web
 
+# ============================================================================
+# 调试配置 - 用户可修改
+# ============================================================================
+DEBUG_MODE = False  # 设置为 True 查看详细请求体，False 只显示摘要
+# ============================================================================
+
+def get_local_ip():
+    """获取本机局域网IP地址"""
+    try:
+        # 创建一个UDP socket，不需要真正发送数据
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "无法获取IP"
+
 class DebugServer:
-    def __init__(self, host='0.0.0.0', ws_port=8765, http_port=8080):
+    def __init__(self, host='0.0.0.0', ws_port=8765, http_port=7654, proxy_port=8080):
         self.host = host
         self.ws_port = ws_port
         self.http_port = http_port
+        self.proxy_port = proxy_port
         self.device_connection = None
         self.device_name = "未知设备"
+        self.last_poll_time = None  # 最后轮询时间（HTTP模式）
+        
+        # HTTP 轮询相关
+        self.command_queue = []  # 待发送的命令队列
+        self.response_queue = []  # 收到的响应队列
+        self.http_app = None
+        
+        # 流式传输相关
+        self.stream_backup_dir = None  # 流式接收的保存目录
+        self.upload_file_queue = []  # 流式上传的文件队列（电脑→设备）
+        self.upload_in_progress = False  # 是否正在进行流式上传
+        self.download_in_progress = False  # 是否正在进行流式下载
+        self.download_file_count = 0  # 下载文件计数
+        self.download_expected_total = 0  # 期望下载总数
         
     async def handle_websocket(self, websocket):
         """处理来自设备的 WebSocket 连接"""
         self.device_connection = websocket
         client_ip = websocket.remote_address[0]
-        print(f"\n✅ 设备已连接: {client_ip}")
+        print(f"\n✅ 设备已连接 (WebSocket): {client_ip}")
         self.device_name = f"设备 {client_ip}"
         
         try:
             # 发送 ping 测试连接
-            print("[DEBUG] 发送 ping 测试...")
+            if DEBUG_MODE:
+                print("[DEBUG] 发送 ping 测试...")
             await self.send_command({"command": "ping"})
             
             # 保持连接，接收响应
             async for message in websocket:
-                print(f"[DEBUG] 收到原始消息: {message[:200]}...") if len(message) > 200 else print(f"[DEBUG] 收到消息: {message}")
+                if DEBUG_MODE:
+                    if len(message) > 200:
+                        print(f"[DEBUG] 收到原始消息: {message[:200]}...")
+                    else:
+                        print(f"[DEBUG] 收到消息: {message}")
+                
                 try:
                     data = json.loads(message)
-                    print(f"[DEBUG] 解析JSON: {data.keys()}")
+                    if DEBUG_MODE:
+                        print(f"[DEBUG] 解析JSON: {data.keys()}")
                     self.handle_response(data)
                 except json.JSONDecodeError as e:
                     print(f"[ERROR] JSON解析失败: {e}")
@@ -51,27 +92,47 @@ class DebugServer:
             print(f"[ERROR] WebSocket错误: {e}")
         finally:
             self.device_connection = None
-            print("[DEBUG] 连接已清理")
+            if DEBUG_MODE:
+                print("[DEBUG] 连接已清理")
             
     def handle_response(self, data):
-        """处理设备返回的响应"""
+        """处理设备返回的响应（WebSocket 和 HTTP 共用）"""
         status = data.get('status')
-        print(f"[DEBUG] 响应状态: {status}")
+        
+        if DEBUG_MODE:
+            print(f"[DEBUG] 响应状态: {status}")
         
         if status == 'ok':
             message = data.get('message', '')
-            if message:
-                print(f"\n✅ 成功: {message}")
-            if 'items' in data:
-                print(f"[DEBUG] 找到 {len(data['items'])} 个项目")
+            
+            # 流式下载完成标志
+            if data.get('stream_complete'):
+                total = data.get('total', 0)
+                self.download_in_progress = False  # 下载完成
+                print(f"\n\n✅ 流式下载完成！共 {total} 个文件")
+                print(f"💾 保存目录: {self.stream_backup_dir}")
+                self.stream_backup_dir = None  # 重置
+                return
+            
+            # 流式下载：单个文件
+            if 'path' in data and 'data' in data and 'index' in data:
+                self.download_file_count = data.get('index', 0)
+                self.download_expected_total = data.get('total', 0)
+                self.save_stream_file(data)
+            # 批量下载：所有文件（WebSocket模式）
+            elif 'items' in data:
+                if DEBUG_MODE:
+                    print(f"[DEBUG] 找到 {len(data['items'])} 个项目")
                 self.print_directory_list(data['items'])
             elif 'files' in data:
-                # 批量下载
                 self.save_all_files(data['files'])
-            elif 'data' in data:
-                # 单文件下载
+            # 单文件下载
+            elif 'data' in data and 'path' in data:
                 self.save_downloaded_file(data)
+            elif message:
+                print(f"\n✅ 成功: {message}")
         else:
+            print(f"\n❌ 错误: {data.get('message', '未知错误')}")
             print(f"\n❌ 错误: {data.get('message', '未知错误')}")
             
     def print_directory_list(self, items):
@@ -136,34 +197,103 @@ class DebugServer:
                 print(f"  ❌ {path}: {e}")
         
         print(f"\n💾 全部保存完成: {backup_dir}")
+    
+    def save_stream_file(self, data):
+        """保存流式传输的单个文件"""
+        path = data.get('path', '')
+        b64_data = data.get('data', '')
+        index = data.get('index', 0)
+        total = data.get('total', 0)
+        size = data.get('size', 0)
+        
+        try:
+            file_data = base64.b64decode(b64_data)
+            
+            # 创建时间戳目录（首次）
+            if not self.stream_backup_dir:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                self.stream_backup_dir = Path('downloads') / f'Documents_stream_{timestamp}'
+                self.stream_backup_dir.mkdir(parents=True, exist_ok=True)
+                print(f"\n📦 开始流式接收文件到: {self.stream_backup_dir}")
+            
+            local_path = self.stream_backup_dir / path
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(local_path, 'wb') as f:
+                f.write(file_data)
+            
+            progress = f"[{index}/{total}]" if total > 0 else f"[{index}]"
+            print(f"  {progress} ✅ {path} ({self.format_size(size)})")
+        except Exception as e:
+            print(f"  [{index}] ❌ {path}: {e}")
             
     async def send_command(self, command):
-        """发送命令到设备"""
-        if not self.device_connection:
-            print("[ERROR] 设备未连接")
-            return False
-            
-        try:
-            cmd_str = json.dumps(command)
-            print(f"[DEBUG] 发送命令: {cmd_str}")
-            await self.device_connection.send(cmd_str)
+        """发送命令到设备（支持 WebSocket 和 HTTP 模式）"""
+        if self.device_connection:
+            # WebSocket 模式：直接发送
+            try:
+                cmd_str = json.dumps(command)
+                if DEBUG_MODE:
+                    print(f"[DEBUG] WS发送命令: {cmd_str}")
+                else:
+                    print(f"[WS] 📤 发送命令: {command.get('command')}")
+                await self.device_connection.send(cmd_str)
+                return True
+            except Exception as e:
+                print(f"[ERROR] 发送命令失败: {e}")
+                return False
+        else:
+            # HTTP 模式：放入队列
+            if DEBUG_MODE:
+                print(f"[DEBUG] HTTP队列命令: {command.get('command')}")
+            else:
+                print(f"[HTTP] 📦 队列命令: {command.get('command')}")
+            self.command_queue.append(command)
             return True
-        except Exception as e:
-            print(f"[ERROR] 发送命令失败: {e}")
-            return False
             
     async def interactive_menu(self):
         """交互式菜单"""
         while True:
-            await asyncio.sleep(0.1)  # 给 WebSocket 处理留空间
+            await asyncio.sleep(0.1)  # 给 WebSocket/HTTP 处理留空间
             
-            if not self.device_connection:
-                print("\n⏳ 等待设备连接...")
+            # 检测连接状态
+            is_connected = False
+            if self.device_connection:
+                connection_type = "WebSocket"
+                is_connected = True
+            elif self.last_poll_time:
+                # HTTP模式：检查最后轮询时间（10秒内算连接）
+                time_diff = (datetime.now() - self.last_poll_time).total_seconds()
+                if time_diff < 10:
+                    connection_type = "HTTP 轮询"
+                    is_connected = True
+                else:
+                    connection_type = "HTTP 轮询（已断开）"
+            else:
+                connection_type = "等待连接"
+            
+            if not is_connected:
+                print(f"\n⏳ 等待设备连接... (模式: {connection_type})")
                 await asyncio.sleep(5)
+                continue
+            
+            # 如果正在进行传输，等待完成
+            if self.download_in_progress:
+                print(f"\r⏳ 下载中... 已接收 {self.download_file_count} 个文件", end="", flush=True)
+                await asyncio.sleep(0.5)
+                continue
+            
+            if self.upload_in_progress:
+                remaining = len(self.upload_file_queue)
+                print(f"\r⏳ 上传中... 剩余 {remaining} 个文件", end="", flush=True)
+                await asyncio.sleep(0.5)
                 continue
                 
             print(f"\n{'='*60}")
             print(f"📱 {self.device_name} - ETOS LLM Studio 调试控制台")
+            print(f"🔗 连接模式: {connection_type}")
+            if not self.device_connection:
+                print(f"📦 待发送命令: {len(self.command_queue)} 个")
             print(f"{'='*60}")
             print("1. 📂 列出设备目录")
             print("2. 📥 下载文件（设备→电脑）")
@@ -173,7 +303,7 @@ class DebugServer:
             print("6. 📦 一键下载 Documents 目录")
             print("7. 🚀 一键上传覆盖 Documents")
             print("8. 🔄 刷新连接")
-            print("0. 🚺 退出")
+            print("0. 🚪 退出")
             print(f"{'='*60}")
             
             try:
@@ -191,7 +321,10 @@ class DebugServer:
                 path = await asyncio.to_thread(input, "设备文件路径: ")
                 if path:
                     await self.send_command({"command": "download", "path": path})
-                    await asyncio.sleep(1)  # 等待下载完成
+                    if self.device_connection:
+                        await asyncio.sleep(1)
+                    else:
+                        print("⏳ 命令已入队，等待设备轮询...")
                     
             elif choice == '3':
                 local_file = await asyncio.to_thread(input, "本地文件路径: ")
@@ -224,9 +357,19 @@ class DebugServer:
             
             elif choice == '6':
                 print("📦 准备下载整个 Documents 目录...")
-                await self.send_command({"command": "download_all"})
-                print("⏳ 等待设备打包和传输...")
-                await asyncio.sleep(5)  # 等待打包和下载
+                
+                if self.device_connection:
+                    # WebSocket模式：批量下载
+                    await self.send_command({"command": "download_all"})
+                    print("⏳ 等待设备打包和传输（WebSocket模式）...")
+                    await asyncio.sleep(5)
+                else:
+                    # HTTP模式：流式下载
+                    self.stream_backup_dir = None  # 重置流式目录
+                    self.download_in_progress = True  # 开始下载
+                    self.download_file_count = 0
+                    await self.send_command({"command": "download_all"})
+                    print("⏳ 命令已队列，等待设备传输文件...")
             
             elif choice == '7':
                 local_dir = await asyncio.to_thread(input, "本地目录路径 (将覆盖设备 Documents): ")
@@ -250,14 +393,32 @@ class DebugServer:
                                 })
                                 print(f"  ➤ {rel_path}")
                         
-                        print(f"\n📤 上传 {len(files)} 个文件到设备...")
-                        print("⏳ 设备将清空 Documents 并写入文件...")
-                        
-                        await self.send_command({
-                            "command": "upload_all",
-                            "files": files
-                        })
-                        await asyncio.sleep(5)
+                        if self.device_connection:
+                            # WebSocket模式：批量上传
+                            print(f"\n📤 上传 {len(files)} 个文件到设备（批量模式）...")
+                            await self.send_command({
+                                "command": "upload_all",
+                                "files": files
+                            })
+                            print("⏳ WebSocket模式：设备正在清空 Documents 并写入文件...")
+                            await asyncio.sleep(5)
+                        else:
+                            # HTTP模式：先发送文件列表，设备主动请求文件
+                            print(f"\n📤 上传 {len(files)} 个文件到设备（流式模式）...")
+                            
+                            # 准备文件数据字典（路径->数据）
+                            self.upload_file_queue = {f["path"]: f["data"] for f in files}
+                            self.upload_in_progress = True
+                            
+                            # 发送文件列表命令（只包含路径）
+                            await self.send_command({
+                                "command": "upload_list",
+                                "paths": [f["path"] for f in files],
+                                "total": len(files)
+                            })
+                            
+                            print(f"✅ 已发送文件列表 ({len(files)} 个)")
+                            print(f"   设备将主动请求每个文件数据")
                 else:
                     print("❌ 目录不存在")
                     
@@ -266,24 +427,136 @@ class DebugServer:
                     await self.send_command({"command": "ping"})
                     await asyncio.sleep(0.5)
                     print("✅ 已发送 ping")
+                else:
+                    print("💡 HTTP模式下无需手动刷新")
                     
             elif choice == '0':
                 print("👋 再见!")
                 break
+    
+    # ========================================================================
+    # HTTP 轮询端点
+    # ========================================================================
+    
+    async def handle_http_ping(self, request):
+        """HTTP Ping 测试端点"""
+        return web.json_response({"status": "ok", "message": "pong", "server": "ETOS Debug Server"})
+    
+    async def handle_http_poll(self, request):
+        """HTTP 轮询端点 - 设备获取命令（仅用于控制命令）"""
+        # 更新轮询时间和设备信息
+        self.last_poll_time = datetime.now()
+        if self.device_name == "未知设备":
+            client_ip = request.remote
+            self.device_name = f"设备 {client_ip}"
+            print(f"\n✅ 设备已连接 (HTTP 轮询): {client_ip}")
+        
+        # 检查流式上传是否完成
+        if self.upload_in_progress and isinstance(self.upload_file_queue, dict) and not self.upload_file_queue:
+            self.upload_in_progress = False
+            print(f"[HTTP] ✅ 流式上传完成")
+            return web.json_response({"command": "upload_complete"})
+        
+        # 处理普通命令队列
+        if self.command_queue:
+            command = self.command_queue.pop(0)
+            if DEBUG_MODE:
+                print(f"[DEBUG] HTTP轮询：返回命令 {command.get('command')}")
+            else:
+                print(f"[HTTP] 📤 发送命令: {command.get('command')}")
+            return web.json_response(command)
+        else:
+            # 无命令，返回空
+            return web.json_response({"command": "none"})
+    
+    async def handle_http_response(self, request):
+        """HTTP 响应端点 - 设备提交响应"""
+        try:
+            data = await request.json()
+            if DEBUG_MODE:
+                print(f"[DEBUG] HTTP响应：{data.keys()}")
+            self.handle_response(data)
+            return web.json_response({"status": "ok"})
+        except Exception as e:
+            print(f"[ERROR] 处理HTTP响应失败: {e}")
+            return web.json_response({"status": "error", "message": str(e)}, status=500)
+    
+    async def handle_http_fetch_file(self, request):
+        """HTTP 文件请求端点 - 设备请求单个文件数据"""
+        try:
+            data = await request.json()
+            path = data.get("path")
+            
+            if not path or not isinstance(self.upload_file_queue, dict):
+                return web.json_response({"status": "error", "message": "无效请求"}, status=400)
+            
+            if path in self.upload_file_queue:
+                file_data = self.upload_file_queue.pop(path)
+                remaining = len(self.upload_file_queue)
                 
-    async def handle_http_request(self, request):
+                if DEBUG_MODE:
+                    print(f"[DEBUG] 响应文件请求: {path} (剩余 {remaining})")
+                else:
+                    print(f"[HTTP] 📤 发送文件: {path} (剩余 {remaining})")
+                
+                return web.json_response({
+                    "status": "ok",
+                    "path": path,
+                    "data": file_data,
+                    "remaining": remaining
+                })
+            else:
+                return web.json_response({"status": "error", "message": "文件不存在"}, status=404)
+        except Exception as e:
+            print(f"[ERROR] 处理文件请求失败: {e}")
+            return web.json_response({"status": "error", "message": str(e)}, status=500)
+    
+    async def handle_http_fetch_file(self, request):
+        """HTTP 文件请求端点 - 设备请求单个文件数据"""
+        try:
+            data = await request.json()
+            path = data.get("path")
+            
+            if not path or not isinstance(self.upload_file_queue, dict):
+                return web.json_response({"status": "error", "message": "无效请求"}, status=400)
+            
+            if path in self.upload_file_queue:
+                file_data = self.upload_file_queue.pop(path)
+                remaining = len(self.upload_file_queue)
+                
+                if DEBUG_MODE:
+                    print(f"[DEBUG] 响应文件请求: {path} (剩余 {remaining})")
+                else:
+                    print(f"[HTTP] 📤 发送文件: {path} (剩余 {remaining})")
+                
+                return web.json_response({
+                    "status": "ok",
+                    "path": path,
+                    "data": file_data,
+                    "remaining": remaining
+                })
+            else:
+                return web.json_response({"status": "error", "message": "文件不存在"}, status=404)
+        except Exception as e:
+            print(f"[ERROR] 处理文件请求失败: {e}")
+            return web.json_response({"status": "error", "message": str(e)}, status=500)
+    
+    async def handle_openai_proxy(self, request):
         """处理 HTTP OpenAI 代理请求"""
         if request.path == '/v1/chat/completions' and request.method == 'POST':
             try:
                 openai_data = await request.json()
                 
                 # 转发到设备
-                if self.device_connection:
-                    await self.send_command({
-                        "command": "openai_capture",
-                        "request": openai_data
-                    })
-                    print(f"\n📨 OpenAI 请求已转发到设备")
+                await self.send_command({
+                    "command": "openai_capture",
+                    "request": openai_data
+                })
+                
+                if DEBUG_MODE:
+                    print(f"[DEBUG] OpenAI 请求已转发到设备")
+                else:
+                    print(f"📨 OpenAI 请求已转发到设备")
                     
                 # 返回空响应（让实际 API 处理）
                 return web.json_response({
@@ -303,42 +576,77 @@ class DebugServer:
         
         return web.Response(text="ETOS LLM Studio Proxy", status=200)
         
-    async def start_http_proxy(self):
-        """启动 HTTP 代理服务器（用于捕获 OpenAI 请求）"""
-        app = web.Application()
-        app.router.add_post('/v1/chat/completions', self.handle_http_request)
-        app.router.add_get('/', self.handle_http_request)
+    async def start_http_server(self):
+        """启动 HTTP 服务器（轮询服务器 + OpenAI代理服务器）"""
+        local_ip = get_local_ip()
         
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, self.host, self.http_port)
-        await site.start()
-        print(f"🌐 HTTP 代理服务器已启动: http://{self.host}:{self.http_port}")
+        # ============================================================
+        # HTTP 轮询服务器 (端口 7654) - 用于设备调试
+        # ============================================================
+        poll_app = web.Application(client_max_size=100*1024*1024)  # 100MB 限制
+        poll_app.router.add_get('/ping', self.handle_http_ping)
+        poll_app.router.add_post('/poll', self.handle_http_poll)
+        poll_app.router.add_post('/response', self.handle_http_response)
+        poll_app.router.add_post('/fetch_file', self.handle_http_fetch_file)  # 新增：文件请求端点
+        poll_app.router.add_get('/', self.handle_http_ping)
+        
+        poll_runner = web.AppRunner(poll_app)
+        await poll_runner.setup()
+        poll_site = web.TCPSite(poll_runner, self.host, self.http_port)
+        await poll_site.start()
+
+        
+        # ============================================================
+        # OpenAI 代理服务器 (端口 8080) - 仅用于捕获 OpenAI 请求
+        # ============================================================
+        proxy_app = web.Application(client_max_size=10*1024*1024)  # 10MB 限制
+        proxy_app.router.add_post('/v1/chat/completions', self.handle_openai_proxy)
+        proxy_app.router.add_get('/', self.handle_openai_ping)
+        
+        proxy_runner = web.AppRunner(proxy_app)
+        await proxy_runner.setup()
+        proxy_site = web.TCPSite(proxy_runner, self.host, self.proxy_port)
+        await proxy_site.start()
+    
+    async def handle_openai_ping(self, request):
+        """OpenAI 代理服务器的 Ping 端点"""
+        return web.json_response({
+            "status": "ok", 
+            "message": "ETOS OpenAI Proxy Server",
+            "endpoint": "/v1/chat/completions"
+        })
         
     async def run(self):
         """启动服务器"""
+        local_ip = get_local_ip()
+        
         print(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║  ETOS LLM Studio - 反向探针调试服务器                       ║
 ╚══════════════════════════════════════════════════════════════╝
 
-📡 WebSocket 服务器: ws://{self.host}:{self.ws_port}
-🌐 HTTP 代理服务器: http://{self.host}:{self.http_port}
+🖥️  本机局域网IP: {local_ip}
+📡 WebSocket 服务器: ws://{local_ip}:{self.ws_port} (推荐)
+🌐 HTTP 轮询服务器: http://{local_ip}:{self.http_port} (备用)
+🌐 HTTP 代理服务器: http://{local_ip}:{self.proxy_port}
 
 💡 使用说明:
-  1. 在设备上输入此电脑的 IP 地址
-  2. 默认 WebSocket 端口: {self.ws_port}
-  3. 设备连接后会自动进入操作菜单
-  4. OpenAI API 设置为: http://此电脑IP:{self.http_port}
+  1. 在设备上输入主机: {local_ip}
+  2. WebSocket 端口: {self.ws_port} (模拟器首选)
+  3. HTTP 轮询端口: {self.http_port} (真机备用)
+  4. 设备连接后会自动进入操作菜单
+  5. OpenAI API 设置为: http://{local_ip}:{self.proxy_port}
+
+⚙️  调试模式: {"开启" if DEBUG_MODE else "关闭"} (修改文件顶部 DEBUG_MODE)
 
 ⏳ 等待设备连接...
         """)
         
+        # 启动 HTTP 服务器
+        await self.start_http_server()
+        
         # 启动 WebSocket 服务器
         async with serve(self.handle_websocket, self.host, self.ws_port):
-            # 启动 HTTP 代理
-            await self.start_http_proxy()
-            
             # 启动交互菜单
             await self.interactive_menu()
 
@@ -347,14 +655,17 @@ def main():
     
     host = '0.0.0.0'
     ws_port = 8765
-    http_port = 8080
+    http_port = 7654
+    proxy_port = 8080
     
     if len(sys.argv) > 1:
         ws_port = int(sys.argv[1])
     if len(sys.argv) > 2:
         http_port = int(sys.argv[2])
+    if len(sys.argv) > 3:
+        proxy_port = int(sys.argv[3])
         
-    server = DebugServer(host, ws_port, http_port)
+    server = DebugServer(host, ws_port, http_port, proxy_port)
     
     try:
         asyncio.run(server.run())

@@ -52,9 +52,6 @@ final class ChatViewModel: ObservableObject {
     @Published var showAudioRecorder: Bool = false
     @Published var showDimensionMismatchAlert: Bool = false
     @Published var dimensionMismatchMessage: String = ""
-    @Published var showRetryErrorAlert: Bool = false
-    @Published var retryErrorTitle: String = ""
-    @Published var retryErrorMessage: String = ""
     
     // MARK: - User Preferences (AppStorage)
     
@@ -207,14 +204,6 @@ final class ChatViewModel: ObservableObject {
                 self?.showDimensionMismatchAlert = true
             }
             .store(in: &cancellables)        
-        chatService.errorNotificationSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] notification in
-                self?.retryErrorTitle = notification.title
-                self?.retryErrorMessage = notification.message
-                self?.showRetryErrorAlert = true
-            }
-            .store(in: &cancellables)
         NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in

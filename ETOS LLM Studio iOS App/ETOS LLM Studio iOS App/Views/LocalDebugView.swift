@@ -15,6 +15,7 @@ struct LocalDebugView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showAPIDoc = false
     @State private var serverURL: String = ""
+    @State private var showLogs = false
     
     var body: some View {
         Form {
@@ -39,8 +40,20 @@ struct LocalDebugView: View {
             
             // 连接配置
             if !server.isRunning {
+                Section(header: Text("连接模式")) {
+                    Toggle(isOn: $server.useHTTP) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
+                                .font(.body)
+                            Text(server.useHTTP ? "稳定但较慢，适合真机" : "快速但不稳定")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                
                 Section(header: Text("服务器地址")) {
-                    TextField("输入地址", text: $serverURL, prompt: Text("192.168.1.100:8765"))
+                    TextField("输入地址", text: $serverURL, prompt: Text(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
@@ -51,7 +64,7 @@ struct LocalDebugView: View {
                     }
                     .disabled(serverURL.isEmpty)
                 } footer: {
-                    Text("在电脑上运行 debug_server.py 后输入显示的地址")
+                    Text(server.useHTTP ? "HTTP 默认端口: 7654" : "WebSocket 默认端口: 8765")
                 }
             } else {
                 Section("连接信息") {
@@ -61,10 +74,30 @@ struct LocalDebugView: View {
                             .textSelection(.enabled)
                     }
                     
+                    LabeledContent("模式") {
+                        Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
+                    }
+                    
                     Button("断开") {
                         disconnectServer()
                     }
                     .tint(.red)
+                }
+                
+                // 调试日志
+                Section {
+                    Button {
+                        showLogs = true
+                    } label: {
+                        HStack {
+                            Label("调试日志", systemImage: "doc.text")
+                            Spacer()
+                            Text("\(server.debugLogs.count)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("调试")
                 }
             }
 
@@ -130,6 +163,11 @@ struct LocalDebugView: View {
                 DocumentationView()
             }
         }
+        .sheet(isPresented: $showLogs) {
+            NavigationStack {
+                DebugLogsView(server: server)
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active && server.isRunning {
                 disconnectServer()
@@ -151,6 +189,78 @@ struct LocalDebugView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "yyyy年MM月dd日 HH:mm:ss"
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - 调试日志视图
+
+private struct DebugLogsView: View {
+    @ObservedObject var server: LocalDebugServer
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        List {
+            if server.debugLogs.isEmpty {
+                ContentUnavailableView("暂无日志", systemImage: "doc.text", description: Text("连接后会显示调试信息"))
+            } else {
+                ForEach(server.debugLogs) { log in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: iconForType(log.type))
+                            .foregroundStyle(colorForType(log.type))
+                            .frame(width: 20)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(log.message)
+                                .font(.system(.caption, design: .monospaced))
+                            Text(formatTime(log.timestamp))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("调试日志")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("清空") {
+                    server.clearLogs()
+                }
+                .disabled(server.debugLogs.isEmpty)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("完成") {
+                    dismiss()
+                }
+            }
+        }
+    }
+    
+    private func iconForType(_ type: LocalDebugServer.DebugLogEntry.LogType) -> String {
+        switch type {
+        case .info: return "info.circle"
+        case .send: return "arrow.up.circle"
+        case .receive: return "arrow.down.circle"
+        case .error: return "exclamationmark.circle"
+        case .heartbeat: return "heart.fill"
+        }
+    }
+    
+    private func colorForType(_ type: LocalDebugServer.DebugLogEntry.LogType) -> Color {
+        switch type {
+        case .info: return .blue
+        case .send: return .green
+        case .receive: return .orange
+        case .error: return .red
+        case .heartbeat: return .pink
+        }
+    }
+    
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
         return formatter.string(from: date)
     }
 }
@@ -182,7 +292,7 @@ private struct DocumentationView: View {
             }
             
             Section("启动步骤") {
-                StepRow(number: 1, title: "电脑端运行", detail: "在 docs/debug-tools/ 目录下运行 start_debug_server.sh")
+                StepRow(number: 1, title: "电脑端下载并运行", detail: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/docs/debug-tools/debug_server.py")
                 StepRow(number: 2, title: "记录 IP", detail: "脚本会显示电脑的局域网 IP 地址")
                 StepRow(number: 3, title: "输入并连接", detail: "在本界面输入 IP 地址和端口（默认 8765）")
                 StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")

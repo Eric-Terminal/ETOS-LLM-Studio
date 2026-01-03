@@ -43,28 +43,24 @@ public extension MCPServerConfiguration {
         }
     }
 
-    func makeTransport(urlSession: URLSession = .shared, proxy: MCPProxySettings?) -> MCPTransport {
+    func makeTransport(urlSession: URLSession = .shared) -> MCPTransport {
         switch transport {
         case .http(let endpoint, let apiKey, let additionalHeaders):
-            let resolvedEndpoint = proxy?.proxiedURL(for: endpoint) ?? endpoint
             var headers = additionalHeaders
             if let apiKey, !apiKey.isEmpty {
                 headers["Authorization"] = "Bearer \(apiKey)"
             }
-            return MCPHTTPTransport(endpoint: resolvedEndpoint, session: urlSession, headers: headers)
+            return MCPHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
         case .httpSSE(let endpoint, let apiKey, let additionalHeaders):
-            let resolvedEndpoint = proxy?.proxiedURL(for: endpoint) ?? endpoint
             var headers = additionalHeaders
             if let apiKey, !apiKey.isEmpty {
                 headers["Authorization"] = "Bearer \(apiKey)"
             }
-            return MCPSSETransport(endpoint: resolvedEndpoint, session: urlSession, headers: headers)
+            return MCPSSETransport(endpoint: endpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
-            let resolvedEndpoint = proxy?.proxiedURL(for: endpoint) ?? endpoint
-            let resolvedTokenEndpoint = proxy?.proxiedURL(for: tokenEndpoint) ?? tokenEndpoint
             return MCPOAuthHTTPTransport(
-                endpoint: resolvedEndpoint,
-                tokenEndpoint: resolvedTokenEndpoint,
+                endpoint: endpoint,
+                tokenEndpoint: tokenEndpoint,
                 clientID: clientID,
                 clientSecret: clientSecret,
                 scope: scope,

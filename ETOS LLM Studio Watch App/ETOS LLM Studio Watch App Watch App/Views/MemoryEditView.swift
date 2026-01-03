@@ -22,55 +22,48 @@ public struct MemoryEditView: View {
     }
     
     public var body: some View {
-        NavigationStack {
-            Form {
-                Section(header: Text("记忆内容")) {
-                    TextField("在此输入多行记忆内容...", text: $memory.content, axis: .vertical)
-                        .lineLimit(5...20)
-                        .onChange(of: memory.content) { _, _ in
-                            hasChanges = true
-                        }
-                }
-                
-                Section(header: Text("状态")) {
-                    Toggle(isOn: $memory.isArchived) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(memory.isArchived ? NSLocalizedString("已归档", comment: "") : NSLocalizedString("激活中", comment: ""))
-                                .font(.footnote)
-                            Text(memory.isArchived ? NSLocalizedString("不参与检索", comment: "") : NSLocalizedString("参与检索", comment: ""))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .onChange(of: memory.isArchived) { _, _ in
+        Form {
+            Section(header: Text("记忆内容")) {
+                TextField("在此输入多行记忆内容...", text: $memory.content, axis: .vertical)
+                    .lineLimit(5...20)
+                    .onChange(of: memory.content) { _, _ in
                         hasChanges = true
                     }
-                }
-                
-                Section {
-                    HStack {
-                        Text("创建时间")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text(memory.createdAt.formatted(.dateTime))
-                            .font(.caption)
+            }
+            
+            Section(header: Text("状态")) {
+                Toggle(isOn: $memory.isArchived) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(memory.isArchived ? NSLocalizedString("已归档", comment: "") : NSLocalizedString("激活中", comment: ""))
+                            .font(.footnote)
+                        Text(memory.isArchived ? NSLocalizedString("不参与检索", comment: "") : NSLocalizedString("参与检索", comment: ""))
+                            .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
-                
-                Section {
-                    Button("保存更改", action: saveMemory)
-                        .disabled(!hasChanges || memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .onChange(of: memory.isArchived) { _, _ in
+                    hasChanges = true
                 }
             }
-            .navigationTitle("编辑记忆")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+            
+            Section {
+                HStack {
+                    Text("创建时间")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(memory.createdAt.formatted(.dateTime))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+            }
+            
+            Section {
+                Button("保存更改", action: saveMemory)
+                    .disabled(!hasChanges || memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .navigationTitle("编辑记忆")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     private func saveMemory() {

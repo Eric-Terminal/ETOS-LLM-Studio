@@ -56,15 +56,6 @@ public class ChatService {
         case error
         case cancelled
     }
-    
-    /// 错误通知，用于弹窗提示（主要用于重试失败场景）
-    public struct ErrorNotification {
-        public let title: String
-        public let message: String
-        public let statusCode: Int?
-    }
-    
-    public let errorNotificationSubject = PassthroughSubject<ErrorNotification, Never>()
 
     // MARK: - 私有状态
     
@@ -258,7 +249,12 @@ public class ChatService {
         } catch is CancellationError {
             logger.info("🛑 用户已手动取消当前请求。")
         } catch {
-            logger.error("⚠️ 取消请求时出现意外错误: \(error.localizedDescription)")
+            // URLError.cancelled 不会匹配 CancellationError，需要单独检测
+            if isCancellationError(error) {
+                logger.info("🛑 用户已手动取消当前请求 (URLError)。")
+            } else {
+                logger.error("⚠️ 取消请求时出现意外错误: \(error.localizedDescription)")
+            }
         }
         
         if currentRequestToken == token {
@@ -538,27 +534,31 @@ public class ChatService {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
         
+        // 格式化错误内容，使其更简洁易读
+        let formattedContent = formatErrorContent(content)
+        
         // 找到正在加载中的消息
         if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
-            if retryTargetMessageID != nil {
-                // 重试 assistant 时出错：移除 loading message，保留原 assistant，发送弹窗通知
-                messages.remove(at: loadingIndex)
+            if let targetID = retryTargetMessageID,
+               let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
+                // 重试 assistant 时出错：将错误作为新版本添加到原 assistant 消息
+                messages.remove(at: loadingIndex) // 移除 loading message
+                
+                var targetMessage = messages[targetIndex]
+                targetMessage.addVersion("❌ 重试失败\n\n\(formattedContent)")
+                messages[targetIndex] = targetMessage
+                
                 retryTargetMessageID = nil
-                
-                // 解析错误内容，提取状态码和简化消息
-                let (title, message, statusCode) = parseErrorContent(content)
-                errorNotificationSubject.send(ErrorNotification(title: title, message: message, statusCode: statusCode))
-                
-                logger.error("❌ 重试失败: \(content)")
+                logger.error("❌ 重试失败，已作为新版本添加: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
-                messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: content)
+                messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: formattedContent)
                 logger.error("❌ 错误消息已添加: \(content)")
             }
         } else {
             // 没有 loading message，直接添加错误
-            messages.append(ChatMessage(id: UUID(), role: .error, content: content))
+            messages.append(ChatMessage(id: UUID(), role: .error, content: formattedContent))
             logger.error("❌ 错误消息已添加: \(content)")
         }
         
@@ -566,20 +566,9 @@ public class ChatService {
         Persistence.saveMessages(messages, for: currentSession.id)
     }
     
-    /// 解析错误内容，提取标题、消息和状态码，并检测 HTML 响应
-    private func parseErrorContent(_ content: String) -> (title: String, message: String, statusCode: Int?) {
-        var statusCode: Int? = nil
-        var title = "重试失败"
+    /// 格式化错误内容，使其更简洁易读
+    private func formatErrorContent(_ content: String) -> String {
         var message = content
-        
-        // 提取状态码
-        if let match = content.range(of: #"状态码\s+(\d+)"#, options: .regularExpression) {
-            let codeString = content[match].replacingOccurrences(of: #"状态码\s+"#, with: "", options: .regularExpression)
-            statusCode = Int(codeString)
-            if let code = statusCode {
-                title = "请求失败 (\(code))"
-            }
-        }
         
         // 检测并简化 HTML 响应（如 Cloudflare 错误页面）
         if content.contains("<html") || content.contains("<!DOCTYPE") {
@@ -590,22 +579,22 @@ public class ChatService {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !titleText.isEmpty {
                     // 限制 title 长度
-                    let truncatedTitle = titleText.count > 100 ? String(titleText.prefix(100)) + "..." : titleText
-                    message = "服务器返回了网页响应\n\n页面标题: \(truncatedTitle)\n\n这通常表示遇到了 CDN 或防火墙拦截。"
+                    let truncatedTitle = titleText.count > 80 ? String(titleText.prefix(80)) + "..." : titleText
+                    message = "🌐 服务器返回了网页响应\n\n📄 页面标题: \(truncatedTitle)\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
                 } else {
-                    message = "服务器返回了 HTML 网页响应，这通常表示遇到了 CDN 或防火墙拦截。\n\n建议检查网络连接或 API 地址配置。"
+                    message = "🌐 服务器返回了 HTML 网页响应\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
                 }
             } else {
-                message = "服务器返回了 HTML 网页响应，这通常表示遇到了 CDN 或防火墙拦截。\n\n建议检查网络连接或 API 地址配置。"
+                message = "🌐 服务器返回了 HTML 网页响应\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
+            }
+        } else {
+            // 限制普通错误消息长度，避免过长
+            if message.count > 500 {
+                message = String(message.prefix(500)) + "...\n\n（消息已截断）"
             }
         }
         
-        // 限制消息长度，避免过长（对所有类型的错误都应用）
-        if message.count > 500 {
-            message = String(message.prefix(500)) + "...\n\n（消息已截断）"
-        }
-        
-        return (title, message, statusCode)
+        return message
     }
         
     public func sendAndProcessMessage(
@@ -785,7 +774,12 @@ public class ChatService {
         } catch is CancellationError {
             logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
         } catch {
-            logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            // URLError.cancelled 不会匹配 CancellationError，需要单独检测
+            if isCancellationError(error) {
+                logger.info("⚠️ 请求已被用户取消 (URLError)，将等待后续动作。")
+            } else {
+                logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -1134,14 +1128,29 @@ public class ChatService {
         var persistedMessages = leadingMessages
         persistedMessages.append(messageToSend)
         persistedMessages.append(contentsOf: middleMessages)
+        
+        // 如果有需要更新的 assistant 消息，将其转换为 loading 状态
+        // 这样用户看到的是原消息位置上的 loading，而不是两个气泡
         if let existingAssistant = assistantToUpdate {
-            persistedMessages.append(existingAssistant)
+            // 创建一个 loading 状态的消息，保留原消息的所有属性和版本历史
+            var loadingAssistant = existingAssistant
+            // 将当前内容设为空（表示 loading 状态）
+            loadingAssistant.content = ""
+            // 清除推理内容、工具调用和 token 统计（这些是上次请求的）
+            loadingAssistant.reasoningContent = nil
+            loadingAssistant.toolCalls = nil
+            loadingAssistant.tokenUsage = nil
+            
+            persistedMessages.append(loadingAssistant)
             // 记录要添加版本的消息ID
             retryTargetMessageID = existingAssistant.id
+            // loadingMessageID 使用原消息的 ID
+            currentLoadingMessageID = existingAssistant.id
         } else {
             retryTargetMessageID = nil
+            persistedMessages.append(loadingMessage)
+            currentLoadingMessageID = loadingMessage.id
         }
-        persistedMessages.append(loadingMessage)
         persistedMessages.append(contentsOf: trailingMessages)
         
         // 先更新 UI 显示新的 loading message，避免闪烁
@@ -1178,7 +1187,7 @@ public class ChatService {
         // 使用原消息内容和附件，调用主要的发送函数（不移除保留尾部）
         await startRequestWithPresetMessages(
             messages: requestMessages,
-            loadingMessageID: loadingMessage.id,
+            loadingMessageID: currentLoadingMessageID!,  // 使用实际的 loading message ID
             currentSession: currentSession,
             userMessage: messageToSend,
             aiTemperature: aiTemperature,
@@ -1264,7 +1273,12 @@ public class ChatService {
         } catch is CancellationError {
             logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
         } catch {
-            logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            // URLError.cancelled 不会匹配 CancellationError，需要单独检测
+            if isCancellationError(error) {
+                logger.info("⚠️ 请求已被用户取消 (URLError)，将等待后续动作。")
+            } else {
+                logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -1351,6 +1365,18 @@ public class ChatService {
             case .featureUnavailable(let provider): return "当前提供商 \(provider) 暂未实现语音转文字能力。"
             }
         }
+    }
+    
+    /// 检测是否为取消错误（包括 CancellationError 和 URLError.cancelled）
+    /// URLError(.cancelled) 不会被 Swift 的 `is CancellationError` 匹配，需要单独处理
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        return false
     }
 
     private func fetchData(for request: URLRequest) async throws -> Data {
@@ -1494,8 +1520,13 @@ public class ChatService {
             addErrorMessage("服务器响应错误 (状态码 \(code)):\n\(bodyString)")
             requestStatusSubject.send(.error)
         } catch {
-            addErrorMessage("网络错误: \(error.localizedDescription)")
-            requestStatusSubject.send(.error)
+            // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
+            if isCancellationError(error) {
+                logger.info("⚠️ 请求在拉取数据时被取消 (URLError)。")
+            } else {
+                addErrorMessage("网络错误: \(error.localizedDescription)")
+                requestStatusSubject.send(.error)
+            }
         }
     }
     
@@ -1745,8 +1776,13 @@ public class ChatService {
             addErrorMessage("流式请求失败 (状态码 \(code)):\n\(bodySnippet)")
             requestStatusSubject.send(.error)
         } catch {
-            addErrorMessage("流式传输错误: \(error.localizedDescription)")
-            requestStatusSubject.send(.error)
+            // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
+            if isCancellationError(error) {
+                logger.info("⚠️ 流式请求在处理中被取消 (URLError)。")
+            } else {
+                addErrorMessage("流式传输错误: \(error.localizedDescription)")
+                requestStatusSubject.send(.error)
+            }
         }
     }
     
@@ -1768,8 +1804,10 @@ public class ChatService {
         // 检查是否是重试场景，需要添加新版本
         if let targetID = retryTargetMessageID,
            let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
-            // 找到目标assistant消息，添加新版本
+            // 找到目标assistant消息（此时它应该处于 loading 状态）
             var targetMessage = messages[targetIndex]
+            
+            // 添加新版本到历史
             targetMessage.addVersion(newMessage.content)
             
             // 如果有推理内容，也添加到新版本
@@ -1782,12 +1820,15 @@ public class ChatService {
                 targetMessage.tokenUsage = newUsage
             }
             
+            // 如果新消息有工具调用，也要更新
+            if let newToolCalls = newMessage.toolCalls {
+                targetMessage.toolCalls = newToolCalls
+            }
+            
             messages[targetIndex] = targetMessage
             
-            // 移除 loading message
-            if let loadingIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-                messages.remove(at: loadingIndex)
-            }
+            // 注意：这里不需要移除 loading message，因为 targetID 就是 loadingMessageID
+            // 我们已经在原位置更新了消息
             
             // 清除重试标记
             retryTargetMessageID = nil
