@@ -258,7 +258,12 @@ public class ChatService {
         } catch is CancellationError {
             logger.info("🛑 用户已手动取消当前请求。")
         } catch {
-            logger.error("⚠️ 取消请求时出现意外错误: \(error.localizedDescription)")
+            // URLError.cancelled 不会匹配 CancellationError，需要单独检测
+            if isCancellationError(error) {
+                logger.info("🛑 用户已手动取消当前请求 (URLError)。")
+            } else {
+                logger.error("⚠️ 取消请求时出现意外错误: \(error.localizedDescription)")
+            }
         }
         
         if currentRequestToken == token {
@@ -785,7 +790,12 @@ public class ChatService {
         } catch is CancellationError {
             logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
         } catch {
-            logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            // URLError.cancelled 不会匹配 CancellationError，需要单独检测
+            if isCancellationError(error) {
+                logger.info("⚠️ 请求已被用户取消 (URLError)，将等待后续动作。")
+            } else {
+                logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -1264,7 +1274,12 @@ public class ChatService {
         } catch is CancellationError {
             logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
         } catch {
-            logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            // URLError.cancelled 不会匹配 CancellationError，需要单独检测
+            if isCancellationError(error) {
+                logger.info("⚠️ 请求已被用户取消 (URLError)，将等待后续动作。")
+            } else {
+                logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -1351,6 +1366,18 @@ public class ChatService {
             case .featureUnavailable(let provider): return "当前提供商 \(provider) 暂未实现语音转文字能力。"
             }
         }
+    }
+    
+    /// 检测是否为取消错误（包括 CancellationError 和 URLError.cancelled）
+    /// URLError(.cancelled) 不会被 Swift 的 `is CancellationError` 匹配，需要单独处理
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        return false
     }
 
     private func fetchData(for request: URLRequest) async throws -> Data {
@@ -1494,8 +1521,13 @@ public class ChatService {
             addErrorMessage("服务器响应错误 (状态码 \(code)):\n\(bodyString)")
             requestStatusSubject.send(.error)
         } catch {
-            addErrorMessage("网络错误: \(error.localizedDescription)")
-            requestStatusSubject.send(.error)
+            // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
+            if isCancellationError(error) {
+                logger.info("⚠️ 请求在拉取数据时被取消 (URLError)。")
+            } else {
+                addErrorMessage("网络错误: \(error.localizedDescription)")
+                requestStatusSubject.send(.error)
+            }
         }
     }
     
@@ -1745,8 +1777,13 @@ public class ChatService {
             addErrorMessage("流式请求失败 (状态码 \(code)):\n\(bodySnippet)")
             requestStatusSubject.send(.error)
         } catch {
-            addErrorMessage("流式传输错误: \(error.localizedDescription)")
-            requestStatusSubject.send(.error)
+            // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
+            if isCancellationError(error) {
+                logger.info("⚠️ 流式请求在处理中被取消 (URLError)。")
+            } else {
+                addErrorMessage("流式传输错误: \(error.localizedDescription)")
+                requestStatusSubject.send(.error)
+            }
         }
     }
     
