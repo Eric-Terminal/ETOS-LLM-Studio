@@ -111,6 +111,7 @@ struct ChatBubble: View {
             
             let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
             let hasToolCalls = message.toolCalls != nil && !message.toolCalls!.isEmpty
+            let isErrorVersion = message.content.hasPrefix("❌ 重试失败")
             
             // 思考过程区域
             if let reasoning = message.reasoningContent, !reasoning.isEmpty {
@@ -134,6 +135,7 @@ struct ChatBubble: View {
             // 消息内容区域
             if !message.content.isEmpty {
                 renderContent(message.content)
+                    .foregroundColor(isErrorVersion ? .white : nil)
             }
             
             // 加载指示器
@@ -152,11 +154,12 @@ struct ChatBubble: View {
             if enableLiquidGlass {
                 if #available(watchOS 26.0, *) {
                     content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                        .background(message.content.hasPrefix("❌ 重试失败") ? Color.red.opacity(0.5) : nil)
                 } else {
-                    assistantBubbleFallback(content)
+                    assistantBubbleFallback(content, isError: message.content.hasPrefix("❌ 重试失败"))
                 }
             } else {
-                assistantBubbleFallback(content)
+                assistantBubbleFallback(content, isError: message.content.hasPrefix("❌ 重试失败"))
             }
         }
         .contentShape(Rectangle())
@@ -308,9 +311,9 @@ struct ChatBubble: View {
     }
     
     @ViewBuilder
-    private func assistantBubbleFallback<Content: View>(_ content: Content) -> some View {
+    private func assistantBubbleFallback<Content: View>(_ content: Content, isError: Bool = false) -> some View {
         content
-            .background(enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3))
+            .background(isError ? Color.red.opacity(0.7) : (enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)))
             .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

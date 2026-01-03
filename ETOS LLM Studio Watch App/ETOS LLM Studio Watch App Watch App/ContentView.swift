@@ -364,10 +364,5 @@ struct ContentView: View {
             } message: {
                 Text(viewModel.dimensionMismatchMessage)
             }
-            .alert(viewModel.retryErrorTitle, isPresented: $viewModel.showRetryErrorAlert) {
-                Button("确定", role: .cancel) { }
-            } message: {
-                Text(viewModel.retryErrorMessage)
-            }
     }
 }
