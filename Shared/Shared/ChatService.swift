@@ -1125,9 +1125,16 @@ public class ChatService {
             }
         }
         
+        // 【重要】必须先取消旧请求，再设置新状态变量
+        // 否则 cancelOngoingRequest 会清理掉我们刚设置的 currentLoadingMessageID 等变量
+        await cancelOngoingRequest()
+        
         var persistedMessages = leadingMessages
         persistedMessages.append(messageToSend)
         persistedMessages.append(contentsOf: middleMessages)
+        
+        // 计算实际使用的 loadingMessageID（在取消旧请求后、设置新请求状态前确定）
+        let actualLoadingMessageID: UUID
         
         // 如果有需要更新的 assistant 消息，将其转换为 loading 状态
         // 这样用户看到的是原消息位置上的 loading，而不是两个气泡
@@ -1145,20 +1152,19 @@ public class ChatService {
             // 记录要添加版本的消息ID
             retryTargetMessageID = existingAssistant.id
             // loadingMessageID 使用原消息的 ID
-            currentLoadingMessageID = existingAssistant.id
+            actualLoadingMessageID = existingAssistant.id
+            currentLoadingMessageID = actualLoadingMessageID
         } else {
             retryTargetMessageID = nil
             persistedMessages.append(loadingMessage)
-            currentLoadingMessageID = loadingMessage.id
+            actualLoadingMessageID = loadingMessage.id
+            currentLoadingMessageID = actualLoadingMessageID
         }
         persistedMessages.append(contentsOf: trailingMessages)
         
-        // 先更新 UI 显示新的 loading message，避免闪烁
+        // 更新 UI 显示新的 loading message
         messagesForSessionSubject.send(persistedMessages)
         Persistence.saveMessages(persistedMessages, for: currentSession.id)
-        
-        // 再取消旧的请求（如果有）
-        await cancelOngoingRequest()
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -1187,7 +1193,7 @@ public class ChatService {
         // 使用原消息内容和附件，调用主要的发送函数（不移除保留尾部）
         await startRequestWithPresetMessages(
             messages: requestMessages,
-            loadingMessageID: currentLoadingMessageID!,  // 使用实际的 loading message ID
+            loadingMessageID: actualLoadingMessageID,  // 使用局部变量，避免强制解包可能导致的崩溃
             currentSession: currentSession,
             userMessage: messageToSend,
             aiTemperature: aiTemperature,
