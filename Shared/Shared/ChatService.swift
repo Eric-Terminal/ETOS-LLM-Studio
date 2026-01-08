@@ -541,16 +541,16 @@ public class ChatService {
         if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
             if let targetID = retryTargetMessageID,
-               let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
-                // 重试 assistant 时出错：将错误作为新版本添加到原 assistant 消息
-                messages.remove(at: loadingIndex) // 移除 loading message
-                
-                var targetMessage = messages[targetIndex]
-                targetMessage.addVersion("❌ 重试失败\n\n\(formattedContent)")
-                messages[targetIndex] = targetMessage
+               messages[loadingIndex].id == targetID {
+                // 重试 assistant 时出错：当前版本（loading状态的空版本）更新为错误消息
+                // 注意：loadingIndex 和 targetID 指向同一个消息
+                var targetMessage = messages[loadingIndex]
+                // 直接更新当前版本（空的 loading 版本）为错误消息
+                targetMessage.content = "❌ 重试失败\n\n\(formattedContent)"
+                messages[loadingIndex] = targetMessage
                 
                 retryTargetMessageID = nil
-                logger.error("❌ 重试失败，已作为新版本添加: \(content)")
+                logger.error("❌ 重试失败，已更新当前版本: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: formattedContent)
@@ -1141,8 +1141,9 @@ public class ChatService {
         if let existingAssistant = assistantToUpdate {
             // 创建一个 loading 状态的消息，保留原消息的所有属性和版本历史
             var loadingAssistant = existingAssistant
-            // 将当前内容设为空（表示 loading 状态）
-            loadingAssistant.content = ""
+            // 【重要】添加一个空版本作为 loading 状态，而不是直接设置 content = ""
+            // 直接设置 content 会覆盖当前版本的内容，导致切换回旧版本时看不到内容
+            loadingAssistant.addVersion("")
             // 清除推理内容、工具调用和 token 统计（这些是上次请求的）
             loadingAssistant.reasoningContent = nil
             loadingAssistant.toolCalls = nil
@@ -1810,15 +1811,16 @@ public class ChatService {
         // 检查是否是重试场景，需要添加新版本
         if let targetID = retryTargetMessageID,
            let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
-            // 找到目标assistant消息（此时它应该处于 loading 状态）
+            // 找到目标assistant消息（此时它应该处于 loading 状态，已经有一个空版本）
             var targetMessage = messages[targetIndex]
             
-            // 添加新版本到历史
-            targetMessage.addVersion(newMessage.content)
+            // 【重要】直接更新当前版本（即 loading 时添加的空版本），而不是再添加新版本
+            // 因为在 retryGenerating 中已经调用了 addVersion("") 创建了新版本
+            targetMessage.content = newMessage.content
             
             // 如果有推理内容，也添加到新版本
             if let newReasoning = newMessage.reasoningContent, !newReasoning.isEmpty {
-                targetMessage.reasoningContent = (targetMessage.reasoningContent ?? "") + "\n\n[新版本推理]\n" + newReasoning
+                targetMessage.reasoningContent = newReasoning
             }
             
             // 更新 token 使用情况
