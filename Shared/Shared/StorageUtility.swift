@@ -382,6 +382,77 @@ public enum StorageUtility {
         return allImageFiles.filter { !referencedFiles.contains($0.name) }
     }
     
+    // MARK: - 幽灵会话检测（彩蛋功能）
+    
+    /// 幽灵会话 - sessions.json 中有记录但对应的消息文件不存在
+    public struct GhostSession: Identifiable {
+        public let id: UUID
+        public let name: String
+        
+        public init(id: UUID, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+    
+    /// 查找幽灵会话（会话记录存在但消息文件丢失）
+    /// 这是一个"彩蛋"功能 - 检测数据不一致的情况
+    public static func findGhostSessions() -> [GhostSession] {
+        let sessions = Persistence.loadChatSessions()
+        let chatsDirectory = Persistence.getChatsDirectory()
+        let fileManager = FileManager.default
+        var ghosts: [GhostSession] = []
+        
+        for session in sessions {
+            let messageFile = chatsDirectory.appendingPathComponent("\(session.id.uuidString).json")
+            
+            // 如果 sessions.json 中有记录，但对应的消息文件不存在
+            if !fileManager.fileExists(atPath: messageFile.path) {
+                ghosts.append(GhostSession(
+                    id: session.id,
+                    name: session.name
+                ))
+            }
+        }
+        
+        return ghosts
+    }
+    
+    /// 清理幽灵会话（从 sessions.json 中移除但消息文件不存在的会话）
+    /// 返回被清理的会话数量
+    public static func cleanupGhostSessions() -> Int {
+        let ghostSessions = findGhostSessions()
+        guard !ghostSessions.isEmpty else { return 0 }
+        
+        var allSessions = Persistence.loadChatSessions()
+        let ghostIDs = Set(ghostSessions.map { $0.id })
+        
+        // 移除幽灵会话
+        allSessions.removeAll { ghostIDs.contains($0.id) }
+        
+        // 保存更新后的会话列表
+        Persistence.saveChatSessions(allSessions)
+        
+        logger.info("Cleaned up \(ghostSessions.count) ghost sessions")
+        return ghostSessions.count
+    }
+    
+    /// 获取关于幽灵会话的趣味消息（彩蛋文本）
+    public static func getGhostSessionEasterEggMessage(count: Int) -> String {
+        switch count {
+        case 0:
+            return NSLocalizedString("👻 一切正常！没有发现幽灵会话。", comment: "")
+        case 1:
+            return NSLocalizedString("👻 发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了...", comment: "")
+        case 2...5:
+            return NSLocalizedString("👻 发现 \(count) 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。", comment: "")
+        case 6...10:
+            return NSLocalizedString("👻 哇！\(count) 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？", comment: "")
+        default:
+            return NSLocalizedString("👻👻👻 天呐！发现了 \(count) 个幽灵会话！这里已经闹鬼了！建议立即清理。", comment: "")
+        }
+    }
+    
     /// 清理所有孤立文件
     public static func cleanupOrphanedFiles() -> (audioDeleted: Int, imageDeleted: Int) {
         let orphanedAudio = findOrphanedAudioFiles()

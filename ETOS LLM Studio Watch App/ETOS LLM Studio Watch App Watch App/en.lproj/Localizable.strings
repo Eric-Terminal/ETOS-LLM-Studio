@@ -574,6 +574,10 @@
 "清理工具" = "Cleanup";
 "清理孤立文件" = "Clean Orphans";
 "清理所有缓存" = "Clear Cache";
+"检测幽灵会话" = "Detect Ghosts";
+"幽灵会话" = "Ghost Sessions";
+"清理幽灵会话" = "Clean Ghosts";
+"👻 驱鬼成功" = "👻 Exorcism Done";
 "清理缓存" = "Clear Cache";
 "清理" = "Clear";
 "无孤立文件" = "No Orphans";

@@ -19,6 +19,9 @@ public struct StorageManagementView: View {
     @State private var showCleanOrphansConfirmation = false
     @State private var orphanedAudioCount = 0
     @State private var orphanedImageCount = 0
+    @State private var ghostSessionCount = 0
+    @State private var showGhostSessionAlert = false
+    @State private var ghostSessionMessage = ""
     @State private var cleanupAlert: CleanupAlert?
     
     struct CleanupAlert: Identifiable {
@@ -67,6 +70,20 @@ public struct StorageManagementView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("将删除 \(orphanedAudioCount + orphanedImageCount) 个孤立文件。")
+        }
+        .confirmationDialog(
+            "幽灵会话",
+            isPresented: $showGhostSessionAlert,
+            titleVisibility: .visible
+        ) {
+            if ghostSessionCount > 0 {
+                Button("清理", role: .destructive) {
+                    cleanupGhostSessions()
+                }
+            }
+            Button(ghostSessionCount > 0 ? "取消" : "好的", role: .cancel) {}
+        } message: {
+            Text(ghostSessionMessage)
         }
         .alert(item: $cleanupAlert) { alert in
             Alert(
@@ -154,6 +171,26 @@ public struct StorageManagementView: View {
                 }
             }
             
+            // 👻 幽灵会话检测
+            Button {
+                checkGhostSessions()
+            } label: {
+                HStack {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(.purple)
+                    Text("检测幽灵会话")
+                        .font(.footnote)
+                    Spacer()
+                    if ghostSessionCount > 0 {
+                        HStack(spacing: 2) {
+                            Text("👻")
+                            Text("\(ghostSessionCount)")
+                        }
+                        .font(.caption2)
+                    }
+                }
+            }
+            
             Button(role: .destructive) {
                 showClearCacheConfirmation = true
             } label: {
@@ -183,10 +220,15 @@ public struct StorageManagementView: View {
             StorageUtility.findOrphanedImageFiles().count
         }.value
         
+        let ghostCount = await Task.detached(priority: .userInitiated) {
+            StorageUtility.findGhostSessions().count
+        }.value
+        
         await MainActor.run {
             storageBreakdown = breakdown
             orphanedAudioCount = orphanedAudio
             orphanedImageCount = orphanedImages
+            ghostSessionCount = ghostCount
             isLoading = false
         }
     }
@@ -199,6 +241,28 @@ public struct StorageManagementView: View {
                 title: "无孤立文件",
                 message: "没有需要清理的孤立文件。"
             )
+        }
+    }
+    
+    private func checkGhostSessions() {
+        ghostSessionMessage = StorageUtility.getGhostSessionEasterEggMessage(count: ghostSessionCount)
+        showGhostSessionAlert = true
+    }
+    
+    private func cleanupGhostSessions() {
+        Task {
+            let count = await Task.detached(priority: .userInitiated) {
+                StorageUtility.cleanupGhostSessions()
+            }.value
+            
+            await MainActor.run {
+                cleanupAlert = CleanupAlert(
+                    title: "👻 驱鬼成功",
+                    message: "已清理 \(count) 个幽灵会话。"
+                )
+            }
+            
+            await refreshData()
         }
     }
     
@@ -331,8 +395,9 @@ public struct WatchFileListView: View {
     private func loadFiles() async {
         isLoading = true
         
+        let categoryToLoad = category  // 捕获值以避免 Swift 6 并发错误
         let loadedFiles = await Task.detached(priority: .userInitiated) {
-            StorageUtility.listFiles(for: category)
+            StorageUtility.listFiles(for: categoryToLoad)
         }.value
         
         await MainActor.run {

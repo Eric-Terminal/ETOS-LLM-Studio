@@ -102,18 +102,18 @@ struct LocalDebugView: View {
             }
 
             if server.isRunning, server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0 {
-                Section("OpenAI 捕获") {
+                Section("API 流量分析") {
                     if let pending = server.pendingOpenAIRequest {
                         let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(String(format: NSLocalizedString("收到请求：模型 %@ · 消息数 %d", comment: ""), modelName, pending.messageCount))
+                            Text(String(format: NSLocalizedString("请求详情：模型 %@ · 消息数 %d", comment: ""), modelName, pending.messageCount))
                                 .font(.subheadline)
                             Text(formatPendingTime(pending.receivedAt))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         HStack {
-                            Button("保存到本地") {
+                            Button("保存日志") {
                                 server.resolvePendingOpenAIRequest(save: true)
                             }
                             .buttonStyle(.borderedProminent)
@@ -126,7 +126,7 @@ struct LocalDebugView: View {
                     }
                 } footer: {
                     if server.pendingOpenAIQueueCount > 1 {
-                        Text(String(format: NSLocalizedString("队列中还有 %d 条未处理请求", comment: ""), server.pendingOpenAIQueueCount - 1))
+                        Text(String(format: NSLocalizedString("队列中还有 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
                     }
                 }
             }
@@ -141,7 +141,7 @@ struct LocalDebugView: View {
             } header: {
                 Text("文档")
             } footer: {
-                Text("反向探针模式 · 主动连接电脑")
+                Text("远程诊断模式 · 主动连接调试端")
             }
             
             // 安全提示
@@ -154,7 +154,7 @@ struct LocalDebugView: View {
             .foregroundStyle(.secondary)
             .font(.footnote)
         }
-        .navigationTitle("局域网调试")
+        .navigationTitle("高级诊断")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(server.isRunning)
         .interactiveDismissDisabled(server.isRunning)
@@ -299,14 +299,14 @@ private struct DocumentationView: View {
             }
             
             Section("功能") {
-                FeatureRow(icon: "folder", title: "文件管理", description: "列出、下载、上传、删除文件和目录")
-                FeatureRow(icon: "tray.and.arrow.down", title: "OpenAI 捕获", description: "转发 API 请求到设备，在设备上确认是否保存")
-                FeatureRow(icon: "menucard", title: "菜单操作", description: "电脑端提供图形化菜单，无需手动输入命令")
+                FeatureRow(icon: "folder", title: "文件管理", description: "管理应用沙盒内的文件和目录")
+                FeatureRow(icon: "tray.and.arrow.down", title: "API 分析", description: "查看并分析 API 请求日志")
+                FeatureRow(icon: "menucard", title: "远程控制", description: "通过电脑端菜单进行辅助操作")
             }
             
-            Section("OpenAI 代理设置") {
+            Section("API 代理设置") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("将 OpenAI API Base URL 设置为：")
+                    Text("将 API Base URL 设置为：")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     
@@ -318,18 +318,18 @@ private struct DocumentationView: View {
                         .background(Color.blue.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     
-                    Text("发送的请求会转发到设备，设备会弹出确认对话框。")
+                    Text("请求将被重定向到调试端进行记录和分析。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             
-            Section("优势") {
-                Label("绕过 watchOS 服务器限制", systemImage: "checkmark.circle.fill")
+            Section("特性") {
+                Label("局域网直连，无中间服务器", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Label("无需 PIN 码验证", systemImage: "checkmark.circle.fill")
+                Label("实时日志流", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Label("菜单式操作更友好", systemImage: "checkmark.circle.fill")
+                Label("可视化菜单操作", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             }
         }

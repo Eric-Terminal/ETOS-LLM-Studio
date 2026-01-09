@@ -101,12 +101,12 @@ public struct LocalDebugView: View {
                 Section {
                     if let pending = server.pendingOpenAIRequest {
                         let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
-                        Text(String(format: NSLocalizedString("模型 %@ · 消息 %d", comment: ""), modelName, pending.messageCount))
+                        Text(String(format: NSLocalizedString("请求详情：模型 %@ · 消息 %d", comment: ""), modelName, pending.messageCount))
                             .font(.caption2)
                         Text(formatPendingTime(pending.receivedAt))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Button("保存到本地") {
+                        Button("保存日志") {
                             server.resolvePendingOpenAIRequest(save: true)
                         }
                         .font(.caption)
@@ -116,10 +116,10 @@ public struct LocalDebugView: View {
                         .font(.caption)
                     }
                 } header: {
-                    Text("OpenAI 捕获")
+                    Text("API 流量分析")
                 } footer: {
                     if server.pendingOpenAIQueueCount > 1 {
-                        Text(String(format: NSLocalizedString("剩余 %d 条", comment: ""), server.pendingOpenAIQueueCount - 1))
+                        Text(String(format: NSLocalizedString("剩余 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -135,12 +135,12 @@ public struct LocalDebugView: View {
                         .font(.caption)
                 }
             } footer: {
-                Text("反向探针模式 · 主动连接电脑")
+                Text("远程诊断模式 · 主动连接调试端")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("调试")
+        .navigationTitle("诊断")
         .navigationBarBackButtonHidden(server.isRunning)
         .sheet(isPresented: $showingDocs) {
             NavigationStack {
@@ -220,17 +220,20 @@ private struct WatchDocumentationView: View {
             }
             
             Section("功能") {
-                FeatureItem(icon: "folder", name: "文件管理", desc: "列出、下载、上传、删除")
-                FeatureItem(icon: "tray.and.arrow.down", name: "OpenAI 捕获", desc: "转发请求到设备确认")
-                FeatureItem(icon: "menucard", name: "菜单操作", desc: "无需输入命令")
+                FeatureItem(icon: "folder", name: "文件管理", desc: "管理应用内数据")
+                FeatureItem(icon: "tray.and.arrow.down", name: "流量分析", desc: "API 请求日志记录")
+                FeatureItem(icon: "menucard", name: "远程控制", desc: "通过调试端辅助操作")
             }
             
-            Section("OpenAI 代理") {
+            Section("API 代理") {
                 Text("设置 API Base URL 为:")
                     .font(.caption2)
                 Text("http://电脑IP:8080")
                     .font(.system(size: 10).monospaced())
                     .foregroundStyle(.blue)
+                Text("请求将重定向至调试端进行记录。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("使用说明")
