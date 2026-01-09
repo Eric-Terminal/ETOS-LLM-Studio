@@ -206,7 +206,7 @@ private struct WatchDocumentationView: View {
             Section("启动步骤") {
                 VStack(alignment: .leading, spacing: 8) {
                     StepItem(num: 1, text: "电脑端下载并运行:")
-                    Text("debug_server.py")
+                    Text("https://raw.githubusercontent.com/Eric-Terminal/ETOS-LLM-Studio/main/docs/debug-tools/debug_server.py")
                         .font(.system(size: 9).monospaced())
                         .foregroundStyle(.secondary)
                         .padding(.leading)
@@ -220,9 +220,9 @@ private struct WatchDocumentationView: View {
             }
             
             Section("功能") {
-                FeatureItem(icon: "📂", name: "文件管理", desc: "列出、下载、上传、删除")
-                FeatureItem(icon: "📥", name: "OpenAI 捕获", desc: "转发请求到设备确认")
-                FeatureItem(icon: "🎯", name: "菜单操作", desc: "无需输入命令")
+                FeatureItem(icon: "folder", name: "文件管理", desc: "列出、下载、上传、删除")
+                FeatureItem(icon: "tray.and.arrow.down", name: "OpenAI 捕获", desc: "转发请求到设备确认")
+                FeatureItem(icon: "menucard", name: "菜单操作", desc: "无需输入命令")
             }
             
             Section("OpenAI 代理") {
@@ -262,8 +262,10 @@ private struct FeatureItem: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            Text(icon)
+            Image(systemName: icon)
                 .font(.title3)
+                .foregroundStyle(.blue)
+                .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(.caption.weight(.medium))

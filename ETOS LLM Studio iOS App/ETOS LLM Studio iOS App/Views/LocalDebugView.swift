@@ -292,16 +292,16 @@ private struct DocumentationView: View {
             }
             
             Section("启动步骤") {
-                StepRow(number: 1, title: "电脑端下载并运行", detail: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/docs/debug-tools/debug_server.py")
+                StepRow(number: 1, title: "电脑端下载并运行", detail: "https://raw.githubusercontent.com/Eric-Terminal/ETOS-LLM-Studio/main/docs/debug-tools/debug_server.py")
                 StepRow(number: 2, title: "记录 IP", detail: "脚本会显示电脑的局域网 IP 地址")
                 StepRow(number: 3, title: "输入并连接", detail: "在本界面输入 IP 地址和端口（默认 8765）")
                 StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")
             }
             
             Section("功能") {
-                FeatureRow(icon: "📂", title: "文件管理", description: "列出、下载、上传、删除文件和目录")
-                FeatureRow(icon: "📥", title: "OpenAI 捕获", description: "转发 API 请求到设备，在设备上确认是否保存")
-                FeatureRow(icon: "🎯", title: "菜单操作", description: "电脑端提供图形化菜单，无需手动输入命令")
+                FeatureRow(icon: "folder", title: "文件管理", description: "列出、下载、上传、删除文件和目录")
+                FeatureRow(icon: "tray.and.arrow.down", title: "OpenAI 捕获", description: "转发 API 请求到设备，在设备上确认是否保存")
+                FeatureRow(icon: "menucard", title: "菜单操作", description: "电脑端提供图形化菜单，无需手动输入命令")
             }
             
             Section("OpenAI 代理设置") {
@@ -377,8 +377,10 @@ private struct FeatureRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Text(icon)
-                .font(.largeTitle)
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 32)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
