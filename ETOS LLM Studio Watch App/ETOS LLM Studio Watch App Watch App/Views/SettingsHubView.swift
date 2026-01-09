@@ -25,6 +25,10 @@ struct SettingsHubView: View {
                 Label("模型行为配置", systemImage: "slider.horizontal.3")
             }
             
+            NavigationLink(destination: StorageManagementView()) {
+                Label("存储管理", systemImage: "internaldrive")
+            }
+            
             //if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
             //    NavigationLink(destination: MemorySettingsView().environmentObject(viewModel)) {
             //        Label("记忆库管理", systemImage: "brain.head.profile")

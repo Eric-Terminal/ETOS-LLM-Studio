@@ -559,3 +559,27 @@
 "激活中" = "Active";
 "不参与检索" = "Not searchable";
 "参与检索" = "Searchable";
+
+// MARK: - Storage Management
+"存储管理" = "Storage";
+"总使用空间" = "Total Used";
+"存储分类" = "Categories";
+"聊天会话" = "Chat Sessions";
+"语音文件" = "Audio Files";
+"图片文件" = "Image Files";
+"记忆数据" = "Memory Data";
+"背景图片" = "Backgrounds";
+"提供商配置" = "Providers";
+"MCP 服务器" = "MCP Servers";
+"清理工具" = "Cleanup";
+"清理孤立文件" = "Clean Orphans";
+"清理所有缓存" = "Clear Cache";
+"清理缓存" = "Clear Cache";
+"清理" = "Clear";
+"无孤立文件" = "No Orphans";
+"清理完成" = "Cleanup Done";
+"暂无文件" = "No Files";
+"文件数量" = "Files";
+"总大小" = "Size";
+"文件" = "Files";
+"删除文件" = "Delete File";
