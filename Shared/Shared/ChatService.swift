@@ -911,7 +911,8 @@ public class ChatService {
         if enableMemory {
             let topK = resolvedMemoryTopK()
             if topK == 0 {
-                memories = await self.memoryManager.getAllMemories()
+                // topK == 0 表示不进行向量检索，直接获取所有激活的记忆
+                memories = await self.memoryManager.getActiveMemories()
             } else {
                 let queryText = buildMemoryQueryContext(from: messages, fallbackUserMessage: userMessage)
                 if let queryText {

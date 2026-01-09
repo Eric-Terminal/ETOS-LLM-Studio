@@ -291,10 +291,16 @@ public class MemoryManager {
         logger.info("🔓 记忆已恢复：\(item.id.uuidString)")
     }
     
-    /// 获取所有记忆。
+    /// 获取所有记忆（包括归档的），用于 UI 显示。
     public func getAllMemories() async -> [MemoryItem] {
         await initializationTask.value
         return cachedMemories
+    }
+    
+    /// 获取激活的记忆（不包括归档的），用于发送给模型。
+    public func getActiveMemories() async -> [MemoryItem] {
+        await initializationTask.value
+        return cachedMemories.filter { !$0.isArchived }
     }
 
     /// 重新构建所有记忆的嵌入，并清空旧的向量存储。
