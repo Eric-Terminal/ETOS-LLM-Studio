@@ -541,16 +541,16 @@ public class ChatService {
         if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
             if let targetID = retryTargetMessageID,
-               let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
-                // 重试 assistant 时出错：将错误作为新版本添加到原 assistant 消息
-                messages.remove(at: loadingIndex) // 移除 loading message
-                
-                var targetMessage = messages[targetIndex]
-                targetMessage.addVersion("❌ 重试失败\n\n\(formattedContent)")
-                messages[targetIndex] = targetMessage
+               messages[loadingIndex].id == targetID {
+                // 重试 assistant 时出错：当前版本（loading状态的空版本）更新为错误消息
+                // 注意：loadingIndex 和 targetID 指向同一个消息
+                var targetMessage = messages[loadingIndex]
+                // 直接更新当前版本（空的 loading 版本）为错误消息
+                targetMessage.content = "❌ 重试失败\n\n\(formattedContent)"
+                messages[loadingIndex] = targetMessage
                 
                 retryTargetMessageID = nil
-                logger.error("❌ 重试失败，已作为新版本添加: \(content)")
+                logger.error("❌ 重试失败，已更新当前版本: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: formattedContent)
@@ -911,7 +911,8 @@ public class ChatService {
         if enableMemory {
             let topK = resolvedMemoryTopK()
             if topK == 0 {
-                memories = await self.memoryManager.getAllMemories()
+                // topK == 0 表示不进行向量检索，直接获取所有激活的记忆
+                memories = await self.memoryManager.getActiveMemories()
             } else {
                 let queryText = buildMemoryQueryContext(from: messages, fallbackUserMessage: userMessage)
                 if let queryText {
@@ -1125,17 +1126,25 @@ public class ChatService {
             }
         }
         
+        // 【重要】必须先取消旧请求，再设置新状态变量
+        // 否则 cancelOngoingRequest 会清理掉我们刚设置的 currentLoadingMessageID 等变量
+        await cancelOngoingRequest()
+        
         var persistedMessages = leadingMessages
         persistedMessages.append(messageToSend)
         persistedMessages.append(contentsOf: middleMessages)
+        
+        // 计算实际使用的 loadingMessageID（在取消旧请求后、设置新请求状态前确定）
+        let actualLoadingMessageID: UUID
         
         // 如果有需要更新的 assistant 消息，将其转换为 loading 状态
         // 这样用户看到的是原消息位置上的 loading，而不是两个气泡
         if let existingAssistant = assistantToUpdate {
             // 创建一个 loading 状态的消息，保留原消息的所有属性和版本历史
             var loadingAssistant = existingAssistant
-            // 将当前内容设为空（表示 loading 状态）
-            loadingAssistant.content = ""
+            // 【重要】添加一个空版本作为 loading 状态，而不是直接设置 content = ""
+            // 直接设置 content 会覆盖当前版本的内容，导致切换回旧版本时看不到内容
+            loadingAssistant.addVersion("")
             // 清除推理内容、工具调用和 token 统计（这些是上次请求的）
             loadingAssistant.reasoningContent = nil
             loadingAssistant.toolCalls = nil
@@ -1145,20 +1154,19 @@ public class ChatService {
             // 记录要添加版本的消息ID
             retryTargetMessageID = existingAssistant.id
             // loadingMessageID 使用原消息的 ID
-            currentLoadingMessageID = existingAssistant.id
+            actualLoadingMessageID = existingAssistant.id
+            currentLoadingMessageID = actualLoadingMessageID
         } else {
             retryTargetMessageID = nil
             persistedMessages.append(loadingMessage)
-            currentLoadingMessageID = loadingMessage.id
+            actualLoadingMessageID = loadingMessage.id
+            currentLoadingMessageID = actualLoadingMessageID
         }
         persistedMessages.append(contentsOf: trailingMessages)
         
-        // 先更新 UI 显示新的 loading message，避免闪烁
+        // 更新 UI 显示新的 loading message
         messagesForSessionSubject.send(persistedMessages)
         Persistence.saveMessages(persistedMessages, for: currentSession.id)
-        
-        // 再取消旧的请求（如果有）
-        await cancelOngoingRequest()
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -1187,7 +1195,7 @@ public class ChatService {
         // 使用原消息内容和附件，调用主要的发送函数（不移除保留尾部）
         await startRequestWithPresetMessages(
             messages: requestMessages,
-            loadingMessageID: currentLoadingMessageID!,  // 使用实际的 loading message ID
+            loadingMessageID: actualLoadingMessageID,  // 使用局部变量，避免强制解包可能导致的崩溃
             currentSession: currentSession,
             userMessage: messageToSend,
             aiTemperature: aiTemperature,
@@ -1804,15 +1812,16 @@ public class ChatService {
         // 检查是否是重试场景，需要添加新版本
         if let targetID = retryTargetMessageID,
            let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
-            // 找到目标assistant消息（此时它应该处于 loading 状态）
+            // 找到目标assistant消息（此时它应该处于 loading 状态，已经有一个空版本）
             var targetMessage = messages[targetIndex]
             
-            // 添加新版本到历史
-            targetMessage.addVersion(newMessage.content)
+            // 【重要】直接更新当前版本（即 loading 时添加的空版本），而不是再添加新版本
+            // 因为在 retryGenerating 中已经调用了 addVersion("") 创建了新版本
+            targetMessage.content = newMessage.content
             
             // 如果有推理内容，也添加到新版本
             if let newReasoning = newMessage.reasoningContent, !newReasoning.isEmpty {
-                targetMessage.reasoningContent = (targetMessage.reasoningContent ?? "") + "\n\n[新版本推理]\n" + newReasoning
+                targetMessage.reasoningContent = newReasoning
             }
             
             // 更新 token 使用情况

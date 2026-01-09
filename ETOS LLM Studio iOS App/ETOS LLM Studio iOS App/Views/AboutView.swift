@@ -147,7 +147,7 @@ private struct PrivacyPolicyView: View {
                     Text("隐私政策")
                         .font(.title.weight(.bold))
                     
-                    Text("最后更新：2025年12月")
+                    Text("最后更新：2026年1月")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -157,16 +157,16 @@ private struct PrivacyPolicyView: View {
                     Text("ETOS LLM Studio 不会收集、存储或传输任何个人数据到我们的服务器。所有数据均存储在您的设备本地。")
                     
                     SectionHeader("本地数据存储")
-                    Text(.init(NSLocalizedString("privacy_storage_details_markdown", comment: "")))
+                    Text("您的聊天记录、会话配置和模型参数都安全地存储在设备本地沙盒中。")
                     
                     SectionHeader("第三方服务")
-                    Text("当您使用 AI 聊天功能时，您的消息将发送到您配置的 API 提供商（如 OpenAI、Anthropic 等）。请参阅相应服务商的隐私政策了解他们如何处理您的数据。")
+                    Text("当您使用 AI 聊天功能时，您的消息将直接发送到您自行配置的 API 提供商（如 OpenAI、Anthropic 等）。我们不会拦截这些数据，请参阅相应服务商的隐私政策。")
                     
-                    SectionHeader("iCloud 同步")
-                    Text("如果您启用了设备同步功能，部分数据可能通过 iCloud 在您的设备之间同步。Apple 的 iCloud 隐私政策适用于此类数据传输。")
+                    SectionHeader("设备间同步")
+                    Text("iPhone 与 Apple Watch 之间的数据同步通过 WatchConnectivity 框架完成。这是一种加密的点对点直接传输，数据不会离开您的个人设备生态系统。")
                     
                     SectionHeader("联系我们")
-                    Text("如有隐私相关问题，请通过 GitHub Issues 联系我们。")
+                    Text("如有隐私相关问题，请通过 GitHub Issues 或 contact@ericterminal.com 联系我们。")
                 }
             }
             .padding()

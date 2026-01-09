@@ -24,6 +24,12 @@ struct SettingsHubView: View {
                 } label: {
                     Label("记忆库管理", systemImage: "brain.head.profile")
                 }
+                
+                NavigationLink {
+                    StorageManagementView()
+                } label: {
+                    Label("存储管理", systemImage: "internaldrive")
+                }
             }
         }
         .navigationTitle("数据与模型设置")
