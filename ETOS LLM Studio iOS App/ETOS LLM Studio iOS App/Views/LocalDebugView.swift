@@ -18,7 +18,7 @@ struct LocalDebugView: View {
     @State private var showLogs = false
     
     var body: some View {
-        Form {
+        List {
             // 连接状态
             Section {
                 HStack {
@@ -52,7 +52,7 @@ struct LocalDebugView: View {
                     }
                 }
                 
-                Section(header: Text("服务器地址")) {
+                Section {
                     TextField("输入地址", text: $serverURL, prompt: Text(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -63,6 +63,8 @@ struct LocalDebugView: View {
                         connectToServer()
                     }
                     .disabled(serverURL.isEmpty)
+                } header: {
+                    Text("服务器地址")
                 } footer: {
                     Text(server.useHTTP ? "HTTP 默认端口: 7654" : "WebSocket 默认端口: 8765")
                 }
@@ -102,7 +104,7 @@ struct LocalDebugView: View {
             }
 
             if server.isRunning, server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0 {
-                Section("API 流量分析") {
+                Section {
                     if let pending = server.pendingOpenAIRequest {
                         let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
                         VStack(alignment: .leading, spacing: 8) {
@@ -124,6 +126,8 @@ struct LocalDebugView: View {
                             .buttonStyle(.bordered)
                         }
                     }
+                } header: {
+                    Text("API 流量分析")
                 } footer: {
                     if server.pendingOpenAIQueueCount > 1 {
                         Text(String(format: NSLocalizedString("队列中还有 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
@@ -132,24 +136,18 @@ struct LocalDebugView: View {
             }
             
             // 使用说明
-            Section {
+            Section(header: Text("文档"), footer: Text("远程诊断模式 · 主动连接调试端")) {
                 Button {
                     showAPIDoc = true
                 } label: {
                     Label("使用说明", systemImage: "book")
                 }
-            } header: {
-                Text("文档")
-            } footer: {
-                Text("远程诊断模式 · 主动连接调试端")
             }
             
             // 安全提示
-            Section {
+            Section(header: Text("提示")) {
                 Label("仅在可信网络中使用", systemImage: "wifi")
                 Label("用完后请及时断开连接", systemImage: "hand.raised")
-            } header: {
-                Text("提示")
             }
             .foregroundStyle(.secondary)
             .font(.footnote)
@@ -245,6 +243,7 @@ private struct DebugLogsView: View {
         case .receive: return "arrow.down.circle"
         case .error: return "exclamationmark.circle"
         case .heartbeat: return "heart.fill"
+        @unknown default: return "questionmark.circle"
         }
     }
     
@@ -255,6 +254,7 @@ private struct DebugLogsView: View {
         case .receive: return .orange
         case .error: return .red
         case .heartbeat: return .pink
+        @unknown default: return .gray
         }
     }
     

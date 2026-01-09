@@ -13,9 +13,12 @@ import Combine
 import Foundation
 import SwiftUI
 import Shared
+import os.log
 #if canImport(UIKit)
 import UIKit
 #endif
+
+private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
 @MainActor
 final class ChatViewModel: ObservableObject {
