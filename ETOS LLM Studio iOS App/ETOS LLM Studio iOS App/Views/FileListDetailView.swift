@@ -171,9 +171,10 @@ struct FileListDetailView: View {
     
     private func loadFiles() async {
         isLoading = true
+        let categoryToLoad = category
         
         let loadedFiles = await Task.detached(priority: .userInitiated) {
-            StorageUtility.listFiles(for: category)
+            StorageUtility.listFiles(for: categoryToLoad)
         }.value
         
         await MainActor.run {
