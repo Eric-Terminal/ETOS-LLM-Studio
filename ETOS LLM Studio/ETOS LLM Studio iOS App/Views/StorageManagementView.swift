@@ -62,7 +62,7 @@ struct StorageManagementView: View {
                 performOrphanCleanup()
             }
         } message: {
-            Text("将删除 \(orphanedAudioCount) 个孤立语音文件和 \(orphanedImageCount) 个孤立图片文件。这些文件不再被任何会话引用。")
+            Text(String(format: NSLocalizedString("将删除 %d 个孤立语音文件和 %d 个孤立图片文件。这些文件不再被任何会话引用。", comment: ""), orphanedAudioCount, orphanedImageCount))
         }
         .alert(item: $cleanupResult) { result in
             Alert(
@@ -168,7 +168,7 @@ struct StorageManagementView: View {
                     Label("清理孤立文件", systemImage: "trash.slash")
                     Spacer()
                     if orphanedAudioCount + orphanedImageCount > 0 {
-                        Text("\(orphanedAudioCount + orphanedImageCount) 个")
+                        Text(String(format: NSLocalizedString("%d 个", comment: ""), orphanedAudioCount + orphanedImageCount))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -277,7 +277,7 @@ struct StorageManagementView: View {
             await MainActor.run {
                 cleanupResult = CleanupResult(
                     title: "👻 驱鬼成功",
-                    message: "已清理 \(count) 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。"
+                    message: String(format: NSLocalizedString("已清理 %d 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。", comment: ""), count)
                 )
             }
             
@@ -294,7 +294,7 @@ struct StorageManagementView: View {
             await MainActor.run {
                 cleanupResult = CleanupResult(
                     title: "清理完成",
-                    message: "已删除 \(result.audioDeleted) 个语音文件和 \(result.imageDeleted) 个图片文件。"
+                    message: String(format: NSLocalizedString("已删除 %d 个语音文件和 %d 个图片文件。", comment: ""), result.audioDeleted, result.imageDeleted)
                 )
             }
             
@@ -311,7 +311,7 @@ struct StorageManagementView: View {
             await MainActor.run {
                 cleanupResult = CleanupResult(
                     title: "清理完成",
-                    message: "已删除 \(result.audioDeleted) 个孤立语音文件和 \(result.imageDeleted) 个孤立图片文件。"
+                    message: String(format: NSLocalizedString("已删除 %d 个孤立语音文件和 %d 个孤立图片文件。", comment: ""), result.audioDeleted, result.imageDeleted)
                 )
             }
             

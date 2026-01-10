@@ -19,6 +19,7 @@ struct ContentView: View {
     // MARK: - 状态对象
     
     @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var announcementManager = AnnouncementManager.shared
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     
@@ -363,6 +364,23 @@ struct ContentView: View {
                 Button("好的", role: .cancel) { }
             } message: {
                 Text(viewModel.dimensionMismatchMessage)
+            }
+            // MARK: - 公告弹窗
+            .sheet(isPresented: $announcementManager.shouldShowAlert) {
+                if let announcement = announcementManager.currentAnnouncement {
+                    NavigationStack {
+                        AnnouncementAlertView(
+                            announcement: announcement,
+                            onDismiss: {
+                                announcementManager.dismissAlert()
+                            }
+                        )
+                    }
+                }
+            }
+            // 启动时检查公告
+            .task {
+                await announcementManager.checkAnnouncement()
             }
     }
 }
