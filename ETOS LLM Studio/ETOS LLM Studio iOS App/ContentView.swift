@@ -7,9 +7,11 @@
 // ============================================================================
 
 import SwiftUI
+import Shared
 
 struct ContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @StateObject private var announcementManager = AnnouncementManager.shared
     @State private var selection: Tab = .chat
     
     enum Tab: Hashable {
@@ -48,6 +50,21 @@ struct ContentView: View {
             Button("确定", role: .cancel) {}
         } message: {
             Text(viewModel.dimensionMismatchMessage)
+        }
+        // MARK: - 公告弹窗
+        .sheet(isPresented: $announcementManager.shouldShowAlert) {
+            if let announcement = announcementManager.currentAnnouncement {
+                AnnouncementAlertView(
+                    announcement: announcement,
+                    onDismiss: {
+                        announcementManager.dismissAlert()
+                    }
+                )
+            }
+        }
+        // 启动时检查公告
+        .task {
+            await announcementManager.checkAnnouncement()
         }
     }
 }

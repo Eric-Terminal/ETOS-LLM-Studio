@@ -3,6 +3,7 @@ import Shared
 
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var announcementManager = AnnouncementManager.shared
     
     var body: some View {
         List {
@@ -102,7 +103,47 @@ struct SettingsView: View {
                     Label("关于 ETOS LLM Studio", systemImage: "info.circle")
                 }
             }
+            
+            // MARK: - 公告通知 Section
+            if let announcement = announcementManager.currentAnnouncement,
+               announcementManager.shouldShowInSettings {
+                Section("系统公告") {
+                    NavigationLink {
+                        AnnouncementDetailView(
+                            announcement: announcement,
+                            announcementManager: announcementManager
+                        )
+                    } label: {
+                        HStack {
+                            announcementIcon(for: announcement.type)
+                            Text(announcement.title)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
         }
         .navigationTitle("设置")
+    }
+    
+    // MARK: - 辅助方法
+    
+    /// 根据公告类型返回对应图标
+    @ViewBuilder
+    private func announcementIcon(for type: AnnouncementType) -> some View {
+        switch type {
+        case .info:
+            Image(systemName: "info.circle.fill")
+                .foregroundColor(.blue)
+        case .warning:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+        case .blocking:
+            Image(systemName: "exclamationmark.octagon.fill")
+                .foregroundColor(.red)
+        @unknown default:
+            Image(systemName: "bell.fill")
+                .foregroundColor(.gray)
+        }
     }
 }
