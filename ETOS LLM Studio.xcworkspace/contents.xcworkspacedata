@@ -2,10 +2,7 @@
 <Workspace
    version = "1.0">
    <FileRef
-      location = "group:ETOS LLM Studio iOS App/ETOS LLM Studio iOS App.xcodeproj">
-   </FileRef>
-   <FileRef
-      location = "group:ETOS LLM Studio Watch App/ETOS LLM Studio Watch App.xcodeproj">
+      location = "group:ETOS LLM Studio/ETOS LLM Studio.xcodeproj">
    </FileRef>
    <FileRef
       location = "group:Shared/Shared.xcodeproj">

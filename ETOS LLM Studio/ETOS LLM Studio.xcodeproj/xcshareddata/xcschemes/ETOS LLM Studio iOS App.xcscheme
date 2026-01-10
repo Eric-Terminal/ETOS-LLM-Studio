@@ -15,9 +15,23 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "073CA6BD2E8CFD3D004516A0"
+               BuildableName = "ETOS LLM Studio Watch App Watch App.app"
+               BlueprintName = "ETOS LLM Studio Watch App Watch App"
+               ReferencedContainer = "container:../ETOS LLM Studio Watch App/ETOS LLM Studio Watch App.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "073CA6DA2E8CFD65004516A0"
-               BuildableName = "ETOS LLM Studio iOS App.app"
-               BlueprintName = "ETOS LLM Studio iOS App"
+               BuildableName = "ETOS LLM Studio iOS App App.app"
+               BlueprintName = "ETOS LLM Studio iOS App App"
                ReferencedContainer = "container:ETOS LLM Studio iOS App.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -45,8 +59,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "073CA6DA2E8CFD65004516A0"
-            BuildableName = "ETOS LLM Studio iOS App.app"
-            BlueprintName = "ETOS LLM Studio iOS App"
+            BuildableName = "ETOS LLM Studio iOS App App.app"
+            BlueprintName = "ETOS LLM Studio iOS App App"
             ReferencedContainer = "container:ETOS LLM Studio iOS App.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,8 +76,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "073CA6DA2E8CFD65004516A0"
-            BuildableName = "ETOS LLM Studio iOS App.app"
-            BlueprintName = "ETOS LLM Studio iOS App"
+            BuildableName = "ETOS LLM Studio iOS App App.app"
+            BlueprintName = "ETOS LLM Studio iOS App App"
             ReferencedContainer = "container:ETOS LLM Studio iOS App.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
