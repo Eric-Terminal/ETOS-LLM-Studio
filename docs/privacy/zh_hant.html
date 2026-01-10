@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>隱私政策 - ETOS LLM Studio</title>
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --text-color: #1d1d1f;
+            --bg-color: #ffffff;
+            --secondary-text: #86868b;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #000000;
+                --text-color: #f5f5f7;
+                --secondary-text: #a1a1a6;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+        h2 { font-size: 1.4rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        .last-updated { color: var(--secondary-text); margin-bottom: 2rem; font-size: 0.9rem; }
+        section { margin-bottom: 2rem; }
+        ul { padding-left: 1.2rem; }
+        li { margin-bottom: 0.6rem; }
+        strong { color: var(--primary-color); }
+        .contact-info { background: #f5f5f710; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        @media (prefers-color-scheme: light) {
+            .contact-info { background: #f5f5f7; border: none; }
+        }
+        footer { margin-top: 4rem; font-size: 0.8rem; color: var(--secondary-text); text-align: center; }
+        a { color: var(--primary-color); text-decoration: none; }
+        .lang-switch { text-align: right; margin-bottom: 20px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="lang-switch">
+        <a href="zh_hans.html">简体中文</a> | 
+        <a href="en.html">English</a> | 
+        <a href="ja.html">日本語</a>
+    </div>
+
+    <h1>隱私政策</h1>
+    <p class="last-updated">生效日期：2026年1月9日</p>
+
+    <section>
+        <h2>1. 前言</h2>
+        <p>ETOS LLM Studio 非常重視您的隱私。本應用採用 <strong>「本地優先 (Local-first)」</strong> 的設計理念。我們不運營任何中央伺服器，也不會存儲您的聊天記錄、語音錄音或任何個人信息。</p>
+        <p><strong>核心原則：您的數據完全由您掌控。</strong></p>
+    </section>
+
+    <section>
+        <h2>2. 數據處理說明</h2>
+        <ul>
+            <li><strong>本地存儲：</strong> 所有的聊天會話、配置參數和記憶碎片都安全地存儲在您設備的 App 沙盒中。</li>
+            <li><strong>AI 處理：</strong> 您發送的數據（文本、音頻、圖片）將<strong>直接</strong>發送給您自行配置的 <strong>第三方 AI 服務提供商</strong>（如 OpenAI, Anthropic, Cloudflare 或自建模型）。我們不會攔截、處理或存儲這些流量。</li>
+            <li><strong>語音與音頻：</strong> 麥克風權限僅在您主動觸發錄音時啟用。錄音文件僅用於發送至您配置的 API 進行轉寫或分析。</li>
+            <li><strong>多端同步：</strong> iPhone 與 Apple Watch 之間的數據同步通過 <strong>WatchConnectivity</strong> 框架完成。這是一種點對點的直接加密傳輸，確保同步過程中數據不會離開您的個人設備生態系統。</li>
+            <li><strong>本地網絡：</strong> 僅用於可選的「本地調試」功能，以便您通過局域網內的瀏覽器管理 App。</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>3. 透明度承諾</h2>
+        <p>ETOS LLM Studio <strong>不包含</strong> 任何行為追蹤代碼，也不會收集任何分析數據。作為一款極客工具，我們追求的是完全的透明度和用戶對大模型工作流的絕對所有權。</p>
+    </section>
+
+    <section>
+        <div class="contact-info">
+            <h2>4. 聯繫我們</h2>
+            <p>如果您對本隱私政策有任何疑問，請聯繫：</p>
+            <p><strong>Eric Terminal</strong><br>
+            電子郵件：<a href="mailto:ericterminal@gmail.com">ericterminal@gmail.com</a><br>
+            GitHub：<a href="https://github.com/Eric-Terminal">Eric-Terminal</a></p>
+        </div>
+    </section>
+
+    <footer>
+        &copy; 2026 Eric Terminal. 保留所有權利。
+    </footer>
+</body>
+</html>

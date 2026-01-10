@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - ETOS LLM Studio</title>
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --text-color: #1d1d1f;
+            --bg-color: #ffffff;
+            --secondary-text: #86868b;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #000000;
+                --text-color: #f5f5f7;
+                --secondary-text: #a1a1a6;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+        h2 { font-size: 1.4rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        .last-updated { color: var(--secondary-text); margin-bottom: 2rem; font-size: 0.9rem; }
+        section { margin-bottom: 2rem; }
+        ul { padding-left: 1.2rem; }
+        li { margin-bottom: 0.6rem; }
+        strong { color: var(--primary-color); }
+        .contact-info { background: #f5f5f710; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        @media (prefers-color-scheme: light) {
+            .contact-info { background: #f5f5f7; border: none; }
+        }
+        footer { margin-top: 4rem; font-size: 0.8rem; color: var(--secondary-text); text-align: center; }
+        a { color: var(--primary-color); text-decoration: none; }
+        .lang-switch { text-align: right; margin-bottom: 20px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="lang-switch">
+        <a href="zh_hans.html">简体中文</a> | 
+        <a href="zh_hant.html">繁體中文</a> | 
+        <a href="ja.html">日本語</a>
+    </div>
+
+    <h1>Privacy Policy</h1>
+    <p class="last-updated">Effective Date: January 9, 2026</p>
+
+    <section>
+        <h2>1. Introduction</h2>
+        <p>ETOS LLM Studio takes your privacy very seriously. This application adopts a <strong>"Local-first"</strong> design philosophy. We do not operate any central servers, nor do we store your chat logs, voice recordings, or any personal information.</p>
+        <p><strong>Core Principle: Your data is completely under your control.</strong></p>
+    </section>
+
+    <section>
+        <h2>2. Data Processing</h2>
+        <ul>
+            <li><strong>Local Storage:</strong> All chat sessions, configuration parameters, and memory fragments are securely stored within the App Sandbox on your device.</li>
+            <li><strong>AI Processing:</strong> The data you send (text, audio, images) is sent <strong>directly</strong> to the <strong>third-party AI service providers</strong> you configure yourself (e.g., OpenAI, Anthropic, Cloudflare, or self-hosted models). We do not intercept, process, or store this traffic.</li>
+            <li><strong>Voice & Audio:</strong> Microphone permission is only enabled when you actively trigger recording. Audio files are only used to be sent to your configured API for transcription or analysis.</li>
+            <li><strong>Multi-device Sync:</strong> Data synchronization between iPhone and Apple Watch is done via the <strong>WatchConnectivity</strong> framework. This is a direct, encrypted peer-to-peer transmission, ensuring that data never leaves your personal device ecosystem during sync.</li>
+            <li><strong>Local Network:</strong> Used only for the optional "Local Debugging" feature, allowing you to manage files within the App via a browser on your local network.</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>3. Transparency Commitment</h2>
+        <p>ETOS LLM Studio <strong>does not contain</strong> any tracking code and does not collect any analytics data. As a tool for geeks, we strive for complete transparency and absolute user ownership of the LLM workflow.</p>
+    </section>
+
+    <section>
+        <div class="contact-info">
+            <h2>4. Contact Us</h2>
+            <p>If you have any questions about this Privacy Policy, please contact:</p>
+            <p><strong>Eric Terminal</strong><br>
+            Email: <a href="mailto:ericterminal@gmail.com">ericterminal@gmail.com</a><br>
+            GitHub: <a href="https://github.com/Eric-Terminal">Eric-Terminal</a></p>
+        </div>
+    </section>
+
+    <footer>
+        &copy; 2026 Eric Terminal. All rights reserved.
+    </footer>
+</body>
+</html>

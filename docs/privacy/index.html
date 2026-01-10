@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Redirecting...</title>
+    <script>
+        (function() {
+            var lang = navigator.language || navigator.userLanguage; 
+            lang = lang.toLowerCase();
+            
+            if (lang.startsWith('zh-tw') || lang.startsWith('zh-hk')) {
+                window.location.href = 'zh_hant.html';
+            } else if (lang.startsWith('zh')) {
+                window.location.href = 'zh_hans.html';
+            } else if (lang.startsWith('ja')) {
+                window.location.href = 'ja.html';
+            } else {
+                window.location.href = 'en.html';
+            }
+        })();
+    </script>
+</head>
+<body>
+    <p>Redirecting to <a href="en.html">Privacy Policy</a>...</p>
+</body>
+</html>
