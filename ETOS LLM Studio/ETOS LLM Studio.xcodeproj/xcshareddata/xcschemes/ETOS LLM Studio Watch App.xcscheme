@@ -15,10 +15,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "073CA6BD2E8CFD3D004516A0"
-               BuildableName = "ETOS LLM Studio Watch App Watch App.app"
-               BlueprintName = "ETOS LLM Studio Watch App Watch App"
-               ReferencedContainer = "container:ETOS LLM Studio Watch App.xcodeproj">
+               BlueprintIdentifier = "0796794E2F1278F2006562BC"
+               BuildableName = "ETOS LLM Studio Watch App.app"
+               BlueprintName = "ETOS LLM Studio Watch App"
+               ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -29,10 +29,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "073CA6B72E8CFD3D004516A0"
-               BuildableName = "ETOS LLM Studio Watch App.app"
-               BlueprintName = "ETOS LLM Studio Watch App"
-               ReferencedContainer = "container:ETOS LLM Studio Watch App.xcodeproj">
+               BlueprintIdentifier = "073CA6DA2E8CFD65004516A0"
+               BuildableName = "ETOS LLM Studio App.app"
+               BlueprintName = "ETOS LLM Studio App"
+               ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -43,6 +43,30 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0796795A2F1278F5006562BC"
+               BuildableName = "ETOS LLM Studio Watch AppTests.xctest"
+               BlueprintName = "ETOS LLM Studio Watch AppTests"
+               ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "079679642F1278F5006562BC"
+               BuildableName = "ETOS LLM Studio Watch AppUITests.xctest"
+               BlueprintName = "ETOS LLM Studio Watch AppUITests"
+               ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -58,10 +82,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "073CA6BD2E8CFD3D004516A0"
-            BuildableName = "ETOS LLM Studio Watch App Watch App.app"
-            BlueprintName = "ETOS LLM Studio Watch App Watch App"
-            ReferencedContainer = "container:ETOS LLM Studio Watch App.xcodeproj">
+            BlueprintIdentifier = "0796794E2F1278F2006562BC"
+            BuildableName = "ETOS LLM Studio Watch App.app"
+            BlueprintName = "ETOS LLM Studio Watch App"
+            ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -75,10 +99,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "073CA6BD2E8CFD3D004516A0"
-            BuildableName = "ETOS LLM Studio Watch App Watch App.app"
-            BlueprintName = "ETOS LLM Studio Watch App Watch App"
-            ReferencedContainer = "container:ETOS LLM Studio Watch App.xcodeproj">
+            BlueprintIdentifier = "0796794E2F1278F2006562BC"
+            BuildableName = "ETOS LLM Studio Watch App.app"
+            BlueprintName = "ETOS LLM Studio Watch App"
+            ReferencedContainer = "container:ETOS LLM Studio.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

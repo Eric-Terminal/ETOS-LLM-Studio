@@ -1,13 +1,13 @@
 //
-//  UITest.swift
-//  UITest
+//  ETOS_LLM_Studio_Watch_AppUITests.swift
+//  ETOS LLM Studio Watch AppUITests
 //
-//  Created by Eric on 2025/10/6.
+//  Created by Eric on 2026/1/10.
 //
 
 import XCTest
 
-final class UITest: XCTestCase {
+final class ETOS_LLM_Studio_Watch_AppUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

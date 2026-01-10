@@ -1,13 +1,13 @@
 //
-//  UITestLaunchTests.swift
-//  UITest
+//  ETOS_LLM_Studio_Watch_AppUITestsLaunchTests.swift
+//  ETOS LLM Studio Watch AppUITests
 //
-//  Created by Eric on 2025/10/6.
+//  Created by Eric on 2026/1/10.
 //
 
 import XCTest
 
-final class UITestLaunchTests: XCTestCase {
+final class ETOS_LLM_Studio_Watch_AppUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
