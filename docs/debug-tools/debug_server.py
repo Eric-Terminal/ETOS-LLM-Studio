@@ -100,7 +100,7 @@ class DebugServer:
         status = data.get('status')
         
         if DEBUG_MODE:
-            print(f"[DEBUG] 响应状态: {status}")
+            print(f"[DEBUG] 响应状态: {status}, 键: {list(data.keys())}")
         
         if status == 'ok':
             message = data.get('message', '')
@@ -109,9 +109,20 @@ class DebugServer:
             if data.get('stream_complete'):
                 total = data.get('total', 0)
                 self.download_in_progress = False  # 下载完成
+                
+                # 保存目录路径（在重置前）
+                saved_dir = self.stream_backup_dir
+                
                 print(f"\n\n✅ 流式下载完成！共 {total} 个文件")
-                print(f"💾 保存目录: {self.stream_backup_dir}")
+                if saved_dir:
+                    print(f"💾 保存目录: {saved_dir}")
+                elif total > 0:
+                    print(f"⚠️  警告: 收到完成信号但未创建保存目录（可能未收到文件数据）")
+                else:
+                    print(f"💾 保存目录: 无文件需要保存")
+                
                 self.stream_backup_dir = None  # 重置
+                self.download_file_count = 0  # 重置计数
                 return
             
             # 流式下载：单个文件
@@ -132,8 +143,10 @@ class DebugServer:
             elif message:
                 print(f"\n✅ 成功: {message}")
         else:
-            print(f"\n❌ 错误: {data.get('message', '未知错误')}")
-            print(f"\n❌ 错误: {data.get('message', '未知错误')}")
+            error_msg = data.get('message', '未知错误')
+            print(f"\n❌ 错误: {error_msg}")
+            if DEBUG_MODE:
+                print(f"[DEBUG] 完整错误数据: {data}")
             
     def print_directory_list(self, items):
         """打印目录列表"""
@@ -206,6 +219,10 @@ class DebugServer:
         total = data.get('total', 0)
         size = data.get('size', 0)
         
+        if not path or not b64_data:
+            print(f"  [{index}] ⚠️  跳过空文件数据: path={path}, data_len={len(b64_data)}")
+            return
+        
         try:
             file_data = base64.b64decode(b64_data)
             
@@ -222,10 +239,20 @@ class DebugServer:
             with open(local_path, 'wb') as f:
                 f.write(file_data)
             
+            # 更新接收计数
+            self.download_file_count = index
+            
             progress = f"[{index}/{total}]" if total > 0 else f"[{index}]"
             print(f"  {progress} ✅ {path} ({self.format_size(size)})")
+            
+            if DEBUG_MODE:
+                print(f"[DEBUG] 已保存: {local_path}")
+                
         except Exception as e:
             print(f"  [{index}] ❌ {path}: {e}")
+            if DEBUG_MODE:
+                import traceback
+                print(f"[DEBUG] 错误堆栈: {traceback.format_exc()}")
             
     async def send_command(self, command):
         """发送命令到设备（支持 WebSocket 和 HTTP 模式）"""
@@ -279,7 +306,10 @@ class DebugServer:
             
             # 如果正在进行传输，等待完成
             if self.download_in_progress:
-                print(f"\r⏳ 下载中... 已接收 {self.download_file_count} 个文件", end="", flush=True)
+                if self.download_expected_total > 0:
+                    print(f"\r⏳ 下载中... 已接收 {self.download_file_count}/{self.download_expected_total} 个文件", end="", flush=True)
+                else:
+                    print(f"\r⏳ 下载中... 已接收 {self.download_file_count} 个文件", end="", flush=True)
                 await asyncio.sleep(0.5)
                 continue
             
@@ -367,9 +397,11 @@ class DebugServer:
                     # HTTP模式：流式下载
                     self.stream_backup_dir = None  # 重置流式目录
                     self.download_in_progress = True  # 开始下载
-                    self.download_file_count = 0
+                    self.download_file_count = 0  # 重置计数
+                    self.download_expected_total = 0  # 重置期望总数
                     await self.send_command({"command": "download_all"})
                     print("⏳ 命令已队列，等待设备传输文件...")
+                    print("💡 提示：如果长时间没有进度，可能是设备端发送格式有问题")
             
             elif choice == '7':
                 local_dir = await asyncio.to_thread(input, "本地目录路径 (将覆盖设备 Documents): ")
@@ -475,6 +507,10 @@ class DebugServer:
             data = await request.json()
             if DEBUG_MODE:
                 print(f"[DEBUG] HTTP响应：{data.keys()}")
+            else:
+                # 非调试模式下，也显示关键信息
+                if 'path' in data and 'index' in data:
+                    print(f"[HTTP] 📥 接收文件 {data.get('index', 0)}: {data.get('path', 'unknown')}")
             self.handle_response(data)
             return web.json_response({"status": "ok"})
         except Exception as e:

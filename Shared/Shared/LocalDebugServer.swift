@@ -916,7 +916,7 @@ public class LocalDebugServer: ObservableObject {
             
             logger.info("📂 发现 \(filePaths.count) 个文件，开始连续传输")
             
-            // 连续发送所有文件（不等待响应）
+            // 连续发送所有文件（等待每个发送完成）
             for (index, relativePath) in filePaths.enumerated() {
                 let fileURL = documentsURL.appendingPathComponent(relativePath)
                 
@@ -931,11 +931,9 @@ public class LocalDebugServer: ObservableObject {
                         "total": filePaths.count
                     ]
                     
-                    // 立即发送，不等待响应
-                    Task {
-                        await sendHTTPResponseAsync(response)
-                    }
-                    logger.info("📤 [\(index + 1)/\(filePaths.count)] 发送: \(relativePath)")
+                    // 等待发送完成再发下一个
+                    await sendHTTPResponseAsync(response)
+                    logger.info("📤 [\(index + 1)/\(filePaths.count)] 已发送: \(relativePath)")
                     
                 } catch {
                     logger.error("❌ 读取文件失败: \(relativePath) - \(error.localizedDescription)")
