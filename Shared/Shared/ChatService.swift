@@ -113,6 +113,8 @@ public class ChatService {
         self.providers = ConfigLoader.loadProviders()
         self.adapters = adapters ?? [
             "openai-compatible": OpenAIAdapter(),
+            "gemini": GeminiAdapter(),
+            "anthropic": AnthropicAdapter(),
         ]
         
         var loadedSessions = Persistence.loadChatSessions()
@@ -180,7 +182,8 @@ public class ChatService {
         }
         
         guard let request = adapter.buildModelListRequest(for: provider) else {
-            throw NetworkError.requestBuildFailed(provider: provider.name)
+            logger.warning("  - ⚠️ 提供商 '\(provider.name)' (\(provider.apiFormat)) 不支持在线获取模型列表。")
+            throw NetworkError.modelListUnavailable(provider: provider.name, apiFormat: provider.apiFormat)
         }
         
         do {
@@ -1364,6 +1367,7 @@ public class ChatService {
         case adapterNotFound(format: String)
         case requestBuildFailed(provider: String)
         case featureUnavailable(provider: String)
+        case modelListUnavailable(provider: String, apiFormat: String)
 
         var errorDescription: String? {
             switch self {
@@ -1371,6 +1375,7 @@ public class ChatService {
             case .adapterNotFound(let format): return "找不到适用于 '\(format)' 格式的 API 适配器。"
             case .requestBuildFailed(let provider): return "无法为 '\(provider)' 构建请求。"
             case .featureUnavailable(let provider): return "当前提供商 \(provider) 暂未实现语音转文字能力。"
+            case .modelListUnavailable(let provider, let apiFormat): return "\(provider) (\(apiFormat)) 不支持在线获取模型列表，请手动配置模型。"
             }
         }
     }

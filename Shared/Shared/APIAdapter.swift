@@ -534,3 +534,986 @@ private extension Data {
         appendString("\r\n")
     }
 }
+
+
+// MARK: - Gemini 适配器实现
+
+/// `GeminiAdapter` 是 `APIAdapter` 协议的具体实现，专门用于处理 Google Gemini API。
+/// Gemini API 使用 `contents`/`parts` 结构，系统提示使用独立的 `system_instruction` 字段。
+public class GeminiAdapter: APIAdapter {
+    
+    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "GeminiAdapter")
+    
+    // MARK: - 内部解码模型
+    
+    private struct GeminiResponse: Decodable {
+        struct Candidate: Decodable {
+            struct Content: Decodable {
+                let role: String?
+                let parts: [Part]?
+            }
+            struct Part: Decodable {
+                let text: String?
+                let thought: Bool?
+                let functionCall: FunctionCall?
+            }
+            struct FunctionCall: Decodable {
+                let name: String
+                let args: [String: AnyCodable]?
+            }
+            let content: Content?
+            let finishReason: String?
+        }
+        let candidates: [Candidate]?
+        struct UsageMetadata: Decodable {
+            let promptTokenCount: Int?
+            let candidatesTokenCount: Int?
+            let totalTokenCount: Int?
+            let thoughtsTokenCount: Int?
+        }
+        let usageMetadata: UsageMetadata?
+        struct Error: Decodable {
+            let message: String?
+            let code: Int?
+        }
+        let error: Error?
+    }
+    
+    /// 用于解码任意 JSON 值的辅助类型
+    private struct AnyCodable: Decodable {
+        let value: Any
+        
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let intValue = try? container.decode(Int.self) {
+                value = intValue
+            } else if let doubleValue = try? container.decode(Double.self) {
+                value = doubleValue
+            } else if let boolValue = try? container.decode(Bool.self) {
+                value = boolValue
+            } else if let stringValue = try? container.decode(String.self) {
+                value = stringValue
+            } else if let arrayValue = try? container.decode([AnyCodable].self) {
+                value = arrayValue.map { $0.value }
+            } else if let dictValue = try? container.decode([String: AnyCodable].self) {
+                value = dictValue.mapValues { $0.value }
+            } else {
+                value = NSNull()
+            }
+        }
+    }
+    
+    private struct GeminiEmbeddingResponse: Decodable {
+        struct Embedding: Decodable {
+            let values: [Double]
+        }
+        let embedding: Embedding?
+        let embeddings: [Embedding]?
+    }
+    
+    public init() {}
+    
+    // MARK: - 协议方法实现
+    
+    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        
+        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
+            return nil
+        }
+        
+        // Gemini 端点格式: /models/{model}:generateContent 或 :streamGenerateContent
+        let isStreaming = commonPayload["stream"] as? Bool ?? false
+        let action = isStreaming ? "streamGenerateContent" : "generateContent"
+        var chatURL = baseURL.appendingPathComponent("models/\(model.model.modelName):\(action)")
+        
+        // Gemini 使用 URL 参数传递 API Key
+        var urlComponents = URLComponents(url: chatURL, resolvingAgainstBaseURL: false)!
+        var queryItems = urlComponents.queryItems ?? []
+        queryItems.append(URLQueryItem(name: "key", value: apiKey))
+        if isStreaming {
+            queryItems.append(URLQueryItem(name: "alt", value: "sse"))
+        }
+        urlComponents.queryItems = queryItems
+        chatURL = urlComponents.url!
+        
+        var request = URLRequest(url: chatURL)
+        request.timeoutInterval = 600
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 分离系统消息和普通消息
+        var systemInstruction: [String: Any]? = nil
+        var geminiContents: [[String: Any]] = []
+        
+        for msg in messages {
+            if msg.role == .system {
+                // Gemini 的 system_instruction 格式
+                systemInstruction = [
+                    "parts": [["text": msg.content]]
+                ]
+                continue
+            }
+            
+            // 映射角色: assistant -> model, user -> user, tool -> function
+            let geminiRole: String
+            switch msg.role {
+            case .user:
+                geminiRole = "user"
+            case .assistant:
+                geminiRole = "model"
+            case .tool:
+                // 工具结果需要特殊处理
+                if let toolCall = msg.toolCalls?.first {
+                    let functionResponse: [String: Any] = [
+                        "name": toolCall.toolName,
+                        "response": ["result": msg.content]
+                    ]
+                    geminiContents.append([
+                        "role": "function",
+                        "parts": [["functionResponse": functionResponse]]
+                    ])
+                }
+                continue
+            default:
+                continue
+            }
+            
+            var parts: [[String: Any]] = []
+            
+            // 检查是否有附件
+            let msgImageAttachments = imageAttachments[msg.id] ?? []
+            let audioAttachment = audioAttachments[msg.id]
+            
+            // 添加文本内容
+            let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty && trimmed != "[语音消息]" && trimmed != "[图片]" {
+                parts.append(["text": trimmed])
+            }
+            
+            // 添加图片 (Gemini 格式: inline_data)
+            for imageAttachment in msgImageAttachments {
+                // 从 dataURL 中提取 base64 和 mimeType
+                if let (mimeType, base64Data) = parseDataURL(imageAttachment.dataURL) {
+                    parts.append([
+                        "inline_data": [
+                            "mime_type": mimeType,
+                            "data": base64Data
+                        ]
+                    ])
+                }
+            }
+            
+            // 添加音频 (Gemini 格式)
+            if let audioAttachment = audioAttachment {
+                let base64Audio = audioAttachment.data.base64EncodedString()
+                let mimeType = audioAttachment.format == "wav" ? "audio/wav" : "audio/\(audioAttachment.format)"
+                parts.append([
+                    "inline_data": [
+                        "mime_type": mimeType,
+                        "data": base64Audio
+                    ]
+                ])
+            }
+            
+            // 处理 assistant 消息中的工具调用
+            if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
+                for toolCall in toolCalls {
+                    var argsDict: [String: Any] = [:]
+                    if let argsData = toolCall.arguments.data(using: .utf8),
+                       let parsed = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] {
+                        argsDict = parsed
+                    }
+                    parts.append([
+                        "functionCall": [
+                            "name": toolCall.toolName,
+                            "args": argsDict
+                        ]
+                    ])
+                }
+            }
+            
+            if !parts.isEmpty {
+                geminiContents.append([
+                    "role": geminiRole,
+                    "parts": parts
+                ])
+            }
+        }
+        
+        // 构建请求体
+        var payload: [String: Any] = [:]
+        
+        // 应用模型覆盖参数
+        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        
+        // 设置 contents
+        payload["contents"] = geminiContents
+        
+        // 设置 system_instruction
+        if let systemInstruction = systemInstruction {
+            payload["system_instruction"] = systemInstruction
+        }
+        
+        // 构建 generationConfig
+        var generationConfig: [String: Any] = [:]
+        if let temperature = commonPayload["temperature"] ?? overrides["temperature"] {
+            generationConfig["temperature"] = temperature
+        }
+        if let topP = commonPayload["top_p"] ?? overrides["top_p"] {
+            generationConfig["topP"] = topP
+        }
+        if let topK = commonPayload["top_k"] ?? overrides["top_k"] {
+            generationConfig["topK"] = topK
+        }
+        if let maxTokens = commonPayload["max_tokens"] ?? overrides["max_tokens"] {
+            generationConfig["maxOutputTokens"] = maxTokens
+        }
+        // 支持 thinking 模式
+        if let thinkingBudget = overrides["thinking_budget"] {
+            generationConfig["thinkingConfig"] = ["thinkingBudget": thinkingBudget]
+        }
+        if !generationConfig.isEmpty {
+            payload["generationConfig"] = generationConfig
+        }
+        
+        // 工具定义
+        if let tools = tools, !tools.isEmpty {
+            let functionDeclarations = tools.map { tool -> [String: Any] in
+                var funcDef: [String: Any] = [
+                    "name": tool.name,
+                    "description": tool.description
+                ]
+                if let params = tool.parameters.toAny() as? [String: Any] {
+                    funcDef["parameters"] = params
+                }
+                return funcDef
+            }
+            payload["tools"] = [["function_declarations": functionDeclarations]]
+        }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
+                logger.debug("构建的 Gemini 聊天请求体:\n---\n\(jsonString)\n---")
+            }
+        } catch {
+            logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
+            return nil
+        }
+        
+        return request
+    }
+    
+    public func buildModelListRequest(for provider: Provider) -> URLRequest? {
+        guard let baseURL = URL(string: provider.baseURL) else {
+            logger.error("构建模型列表请求失败: 无效的 API 基础 URL - \(provider.baseURL)")
+            return nil
+        }
+        
+        guard let apiKey = provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建模型列表请求失败: 提供商 '\(provider.name)' 未配置有效的 API Key。")
+            return nil
+        }
+        
+        var modelsURL = baseURL.appendingPathComponent("models")
+        var urlComponents = URLComponents(url: modelsURL, resolvingAgainstBaseURL: false)!
+        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        modelsURL = urlComponents.url!
+        
+        var request = URLRequest(url: modelsURL)
+        request.httpMethod = "GET"
+        return request
+    }
+    
+    public func parseResponse(data: Data) throws -> ChatMessage {
+        let apiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
+        
+        // 检查错误
+        if let error = apiResponse.error {
+            throw NSError(domain: "GeminiAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+        }
+        
+        guard let candidate = apiResponse.candidates?.first,
+              let content = candidate.content,
+              let parts = content.parts else {
+            throw NSError(domain: "GeminiAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: "响应中缺少有效的 content 对象"])
+        }
+        
+        var textContent = ""
+        var reasoningContent: String? = nil
+        var internalToolCalls: [InternalToolCall] = []
+        
+        for part in parts {
+            if let text = part.text {
+                if part.thought == true {
+                    // 这是思考内容
+                    if reasoningContent == nil {
+                        reasoningContent = text
+                    } else {
+                        reasoningContent! += text
+                    }
+                } else {
+                    textContent += text
+                }
+            }
+            if let functionCall = part.functionCall {
+                // Gemini 没有内置的 tool_call_id，我们生成一个
+                let callId = "gemini_call_\(UUID().uuidString.prefix(8))"
+                var argsString = "{}"
+                if let args = functionCall.args {
+                    let argsDict = args.mapValues { $0.value }
+                    if let argsData = try? JSONSerialization.data(withJSONObject: argsDict),
+                       let str = String(data: argsData, encoding: .utf8) {
+                        argsString = str
+                    }
+                }
+                internalToolCalls.append(InternalToolCall(id: callId, toolName: functionCall.name, arguments: argsString))
+            }
+        }
+        
+        return ChatMessage(
+            id: UUID(),
+            role: .assistant,
+            content: textContent,
+            reasoningContent: reasoningContent,
+            toolCalls: internalToolCalls.isEmpty ? nil : internalToolCalls,
+            tokenUsage: makeTokenUsage(from: apiResponse.usageMetadata)
+        )
+    }
+    
+    public func parseStreamingResponse(line: String) -> ChatMessagePart? {
+        guard line.hasPrefix("data:") else { return nil }
+        
+        let dataString = String(line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines))
+        
+        guard !dataString.isEmpty, let data = dataString.data(using: .utf8) else {
+            return nil
+        }
+        
+        do {
+            let chunk = try JSONDecoder().decode(GeminiResponse.self, from: data)
+            
+            guard let candidate = chunk.candidates?.first,
+                  let content = candidate.content,
+                  let parts = content.parts else {
+                // 可能只有 usageMetadata
+                if let usage = chunk.usageMetadata {
+                    return ChatMessagePart(tokenUsage: makeTokenUsage(from: usage))
+                }
+                return nil
+            }
+            
+            var textContent: String? = nil
+            var reasoningContent: String? = nil
+            var toolCallDeltas: [ChatMessagePart.ToolCallDelta]? = nil
+            
+            for (index, part) in parts.enumerated() {
+                if let text = part.text {
+                    if part.thought == true {
+                        reasoningContent = (reasoningContent ?? "") + text
+                    } else {
+                        textContent = (textContent ?? "") + text
+                    }
+                }
+                if let functionCall = part.functionCall {
+                    let callId = "gemini_call_\(UUID().uuidString.prefix(8))"
+                    var argsString: String? = nil
+                    if let args = functionCall.args {
+                        let argsDict = args.mapValues { $0.value }
+                        if let argsData = try? JSONSerialization.data(withJSONObject: argsDict),
+                           let str = String(data: argsData, encoding: .utf8) {
+                            argsString = str
+                        }
+                    }
+                    if toolCallDeltas == nil { toolCallDeltas = [] }
+                    toolCallDeltas?.append(ChatMessagePart.ToolCallDelta(
+                        id: callId,
+                        index: index,
+                        nameFragment: functionCall.name,
+                        argumentsFragment: argsString
+                    ))
+                }
+            }
+            
+            return ChatMessagePart(
+                content: textContent,
+                reasoningContent: reasoningContent,
+                toolCallDeltas: toolCallDeltas,
+                tokenUsage: makeTokenUsage(from: chunk.usageMetadata)
+            )
+        } catch {
+            logger.warning("Gemini 流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")
+            return nil
+        }
+    }
+    
+    public func buildEmbeddingRequest(for model: RunnableModel, texts: [String]) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建嵌入请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        
+        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建嵌入请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
+            return nil
+        }
+        
+        // Gemini 嵌入端点
+        let action = texts.count == 1 ? "embedContent" : "batchEmbedContents"
+        var embeddingsURL = baseURL.appendingPathComponent("models/\(model.model.modelName):\(action)")
+        var urlComponents = URLComponents(url: embeddingsURL, resolvingAgainstBaseURL: false)!
+        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        embeddingsURL = urlComponents.url!
+        
+        var request = URLRequest(url: embeddingsURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var payload: [String: Any]
+        if texts.count == 1 {
+            payload = [
+                "model": "models/\(model.model.modelName)",
+                "content": ["parts": [["text": texts[0]]]]
+            ]
+        } else {
+            let requests = texts.map { text in
+                [
+                    "model": "models/\(model.model.modelName)",
+                    "content": ["parts": [["text": text]]]
+                ]
+            }
+            payload = ["requests": requests]
+        }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            return request
+        } catch {
+            logger.error("构建嵌入请求失败: 无法编码 JSON - \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    public func parseEmbeddingResponse(data: Data) throws -> [[Float]] {
+        do {
+            let response = try JSONDecoder().decode(GeminiEmbeddingResponse.self, from: data)
+            if let embedding = response.embedding {
+                return [embedding.values.map { Float($0) }]
+            }
+            if let embeddings = response.embeddings {
+                return embeddings.map { $0.values.map { Float($0) } }
+            }
+            throw NSError(domain: "GeminiAdapterError", code: 2, userInfo: [NSLocalizedDescriptionKey: "嵌入响应中缺少 embedding 数据"])
+        } catch {
+            if let raw = String(data: data, encoding: .utf8) {
+                logger.error("Gemini 嵌入响应解析失败，原始数据: \(raw)")
+            }
+            throw error
+        }
+    }
+    
+    // MARK: - 辅助方法
+    
+    private func makeTokenUsage(from usage: GeminiResponse.UsageMetadata?) -> MessageTokenUsage? {
+        guard let usage = usage else { return nil }
+        if usage.promptTokenCount == nil && usage.candidatesTokenCount == nil && usage.totalTokenCount == nil {
+            return nil
+        }
+        return MessageTokenUsage(
+            promptTokens: usage.promptTokenCount,
+            completionTokens: usage.candidatesTokenCount,
+            totalTokens: usage.totalTokenCount
+        )
+    }
+    
+    /// 从 data URL 中提取 MIME 类型和 base64 数据
+    private func parseDataURL(_ dataURL: String) -> (mimeType: String, base64Data: String)? {
+        // 格式: data:image/png;base64,xxxxx
+        guard dataURL.hasPrefix("data:") else { return nil }
+        let withoutPrefix = String(dataURL.dropFirst(5))
+        guard let semicolonIndex = withoutPrefix.firstIndex(of: ";"),
+              let commaIndex = withoutPrefix.firstIndex(of: ",") else { return nil }
+        let mimeType = String(withoutPrefix[..<semicolonIndex])
+        let base64Data = String(withoutPrefix[withoutPrefix.index(after: commaIndex)...])
+        return (mimeType, base64Data)
+    }
+}
+
+
+// MARK: - Anthropic 适配器实现
+
+/// `AnthropicAdapter` 是 `APIAdapter` 协议的具体实现，专门用于处理 Anthropic Claude API。
+/// Anthropic API 使用顶层 `system` 字段，消息中使用 content blocks 格式，工具调用使用 `tool_use`/`tool_result`。
+public class AnthropicAdapter: APIAdapter {
+    
+    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AnthropicAdapter")
+    
+    // MARK: - 内部解码模型
+    
+    private struct AnthropicResponse: Decodable {
+        let id: String?
+        let type: String?
+        let role: String?
+        let content: [ContentBlock]?
+        let stop_reason: String?
+        let usage: Usage?
+        
+        struct ContentBlock: Decodable {
+            let type: String
+            let text: String?
+            let id: String?
+            let name: String?
+            let input: [String: AnyCodable]?
+            // 用于流式响应的 thinking block
+            let thinking: String?
+        }
+        
+        struct Usage: Decodable {
+            let input_tokens: Int?
+            let output_tokens: Int?
+            let cache_creation_input_tokens: Int?
+            let cache_read_input_tokens: Int?
+        }
+        
+        struct Error: Decodable {
+            let type: String?
+            let message: String?
+        }
+        let error: Error?
+    }
+    
+    /// 流式事件结构
+    private struct AnthropicStreamEvent: Decodable {
+        let type: String
+        let index: Int?
+        let content_block: AnthropicResponse.ContentBlock?
+        let delta: Delta?
+        let usage: AnthropicResponse.Usage?
+        let message: AnthropicResponse?
+        
+        struct Delta: Decodable {
+            let type: String?
+            let text: String?
+            let partial_json: String?
+            let thinking: String?
+            let stop_reason: String?
+            let usage: AnthropicResponse.Usage?
+        }
+    }
+    
+    /// 用于解码任意 JSON 值的辅助类型
+    private struct AnyCodable: Decodable {
+        let value: Any
+        
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let intValue = try? container.decode(Int.self) {
+                value = intValue
+            } else if let doubleValue = try? container.decode(Double.self) {
+                value = doubleValue
+            } else if let boolValue = try? container.decode(Bool.self) {
+                value = boolValue
+            } else if let stringValue = try? container.decode(String.self) {
+                value = stringValue
+            } else if let arrayValue = try? container.decode([AnyCodable].self) {
+                value = arrayValue.map { $0.value }
+            } else if let dictValue = try? container.decode([String: AnyCodable].self) {
+                value = dictValue.mapValues { $0.value }
+            } else {
+                value = NSNull()
+            }
+        }
+    }
+    
+    public init() {}
+    
+    // MARK: - 协议方法实现
+    
+    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        
+        let chatURL = baseURL.appendingPathComponent("messages")
+        
+        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
+            return nil
+        }
+        
+        var request = URLRequest(url: chatURL)
+        request.timeoutInterval = 600
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Anthropic 使用 x-api-key header
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        
+        // 分离系统消息和普通消息
+        var systemPrompt: String? = nil
+        var anthropicMessages: [[String: Any]] = []
+        
+        for msg in messages {
+            if msg.role == .system {
+                systemPrompt = msg.content
+                continue
+            }
+            
+            // Anthropic 只支持 user 和 assistant 角色
+            let anthropicRole: String
+            switch msg.role {
+            case .user:
+                anthropicRole = "user"
+            case .assistant:
+                anthropicRole = "assistant"
+            case .tool:
+                // 工具结果在 Anthropic 中作为 user 消息的 tool_result content block
+                if let toolCall = msg.toolCalls?.first {
+                    let toolResultBlock: [String: Any] = [
+                        "type": "tool_result",
+                        "tool_use_id": toolCall.id,
+                        "content": msg.content
+                    ]
+                    anthropicMessages.append([
+                        "role": "user",
+                        "content": [toolResultBlock]
+                    ])
+                }
+                continue
+            default:
+                continue
+            }
+            
+            // 检查是否有附件
+            let msgImageAttachments = imageAttachments[msg.id] ?? []
+            let hasMedia = !msgImageAttachments.isEmpty
+            
+            if hasMedia && msg.role == .user {
+                // 使用 content blocks 格式
+                var contentBlocks: [[String: Any]] = []
+                
+                // 添加图片 (Anthropic 格式)
+                for imageAttachment in msgImageAttachments {
+                    if let (mediaType, base64Data) = parseDataURL(imageAttachment.dataURL) {
+                        contentBlocks.append([
+                            "type": "image",
+                            "source": [
+                                "type": "base64",
+                                "media_type": mediaType,
+                                "data": base64Data
+                            ]
+                        ])
+                    }
+                }
+                
+                // 添加文本
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty && trimmed != "[图片]" {
+                    contentBlocks.append([
+                        "type": "text",
+                        "text": trimmed
+                    ])
+                }
+                
+                if !contentBlocks.isEmpty {
+                    anthropicMessages.append([
+                        "role": anthropicRole,
+                        "content": contentBlocks
+                    ])
+                }
+            } else if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
+                // assistant 消息中包含工具调用
+                var contentBlocks: [[String: Any]] = []
+                
+                // 如果有文本内容，先添加
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    contentBlocks.append([
+                        "type": "text",
+                        "text": trimmed
+                    ])
+                }
+                
+                // 添加 tool_use blocks
+                for toolCall in toolCalls {
+                    var inputDict: [String: Any] = [:]
+                    if let argsData = toolCall.arguments.data(using: .utf8),
+                       let parsed = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] {
+                        inputDict = parsed
+                    }
+                    contentBlocks.append([
+                        "type": "tool_use",
+                        "id": toolCall.id,
+                        "name": toolCall.toolName,
+                        "input": inputDict
+                    ])
+                }
+                
+                anthropicMessages.append([
+                    "role": anthropicRole,
+                    "content": contentBlocks
+                ])
+            } else {
+                // 普通文本消息
+                anthropicMessages.append([
+                    "role": anthropicRole,
+                    "content": msg.content
+                ])
+            }
+        }
+        
+        // 构建请求体
+        var payload: [String: Any] = [:]
+        
+        // 应用模型覆盖参数
+        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        
+        payload["model"] = model.model.modelName
+        payload["messages"] = anthropicMessages
+        
+        // 设置 system
+        if let systemPrompt = systemPrompt {
+            payload["system"] = systemPrompt
+        }
+        
+        // 设置生成参数
+        if let maxTokens = commonPayload["max_tokens"] ?? overrides["max_tokens"] {
+            payload["max_tokens"] = maxTokens
+        } else {
+            // Anthropic 要求必须指定 max_tokens
+            payload["max_tokens"] = 8192
+        }
+        
+        if let temperature = commonPayload["temperature"] ?? overrides["temperature"] {
+            payload["temperature"] = temperature
+        }
+        if let topP = commonPayload["top_p"] ?? overrides["top_p"] {
+            payload["top_p"] = topP
+        }
+        if let topK = commonPayload["top_k"] ?? overrides["top_k"] {
+            payload["top_k"] = topK
+        }
+        
+        // 流式设置
+        if let stream = commonPayload["stream"] as? Bool {
+            payload["stream"] = stream
+        }
+        
+        // 支持 extended thinking
+        if let thinkingBudget = overrides["thinking_budget"] {
+            payload["thinking"] = [
+                "type": "enabled",
+                "budget_tokens": thinkingBudget
+            ]
+        }
+        
+        // 工具定义
+        if let tools = tools, !tools.isEmpty {
+            let anthropicTools = tools.map { tool -> [String: Any] in
+                var toolDef: [String: Any] = [
+                    "name": tool.name,
+                    "description": tool.description
+                ]
+                if let params = tool.parameters.toAny() as? [String: Any] {
+                    toolDef["input_schema"] = params
+                }
+                return toolDef
+            }
+            payload["tools"] = anthropicTools
+        }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
+                logger.debug("构建的 Anthropic 聊天请求体:\n---\n\(jsonString)\n---")
+            }
+        } catch {
+            logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
+            return nil
+        }
+        
+        return request
+    }
+    
+    public func buildModelListRequest(for provider: Provider) -> URLRequest? {
+        // Anthropic 没有公开的模型列表 API
+        logger.warning("Anthropic 不提供模型列表 API，请手动配置模型。")
+        return nil
+    }
+    
+    public func parseResponse(data: Data) throws -> ChatMessage {
+        let apiResponse = try JSONDecoder().decode(AnthropicResponse.self, from: data)
+        
+        // 检查错误
+        if let error = apiResponse.error {
+            throw NSError(domain: "AnthropicAPIError", code: -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+        }
+        
+        guard let contentBlocks = apiResponse.content else {
+            throw NSError(domain: "AnthropicAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: "响应中缺少有效的 content 数组"])
+        }
+        
+        var textContent = ""
+        var reasoningContent: String? = nil
+        var internalToolCalls: [InternalToolCall] = []
+        
+        for block in contentBlocks {
+            switch block.type {
+            case "text":
+                if let text = block.text {
+                    textContent += text
+                }
+            case "thinking":
+                if let thinking = block.thinking ?? block.text {
+                    if reasoningContent == nil {
+                        reasoningContent = thinking
+                    } else {
+                        reasoningContent! += thinking
+                    }
+                }
+            case "tool_use":
+                if let id = block.id, let name = block.name {
+                    var argsString = "{}"
+                    if let input = block.input {
+                        let inputDict = input.mapValues { $0.value }
+                        if let argsData = try? JSONSerialization.data(withJSONObject: inputDict),
+                           let str = String(data: argsData, encoding: .utf8) {
+                            argsString = str
+                        }
+                    }
+                    internalToolCalls.append(InternalToolCall(id: id, toolName: name, arguments: argsString))
+                }
+            default:
+                break
+            }
+        }
+        
+        return ChatMessage(
+            id: UUID(),
+            role: .assistant,
+            content: textContent,
+            reasoningContent: reasoningContent,
+            toolCalls: internalToolCalls.isEmpty ? nil : internalToolCalls,
+            tokenUsage: makeTokenUsage(from: apiResponse.usage)
+        )
+    }
+    
+    public func parseStreamingResponse(line: String) -> ChatMessagePart? {
+        // Anthropic 使用 SSE 格式: event: xxx\ndata: {...}
+        // 这里我们处理 data: 行
+        guard line.hasPrefix("data:") else { return nil }
+        
+        let dataString = String(line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines))
+        
+        guard !dataString.isEmpty, let data = dataString.data(using: .utf8) else {
+            return nil
+        }
+        
+        do {
+            let event = try JSONDecoder().decode(AnthropicStreamEvent.self, from: data)
+            
+            switch event.type {
+            case "message_start":
+                // 消息开始，可能包含初始 usage
+                if let usage = event.message?.usage {
+                    return ChatMessagePart(tokenUsage: makeTokenUsage(from: usage))
+                }
+                return nil
+                
+            case "content_block_start":
+                // 内容块开始
+                if let block = event.content_block {
+                    if block.type == "tool_use", let id = block.id, let name = block.name {
+                        return ChatMessagePart(
+                            toolCallDeltas: [ChatMessagePart.ToolCallDelta(
+                                id: id,
+                                index: event.index ?? 0,
+                                nameFragment: name,
+                                argumentsFragment: nil
+                            )]
+                        )
+                    }
+                }
+                return nil
+                
+            case "content_block_delta":
+                // 内容块增量
+                guard let delta = event.delta else { return nil }
+                
+                if delta.type == "text_delta", let text = delta.text {
+                    return ChatMessagePart(content: text)
+                }
+                if delta.type == "thinking_delta", let thinking = delta.thinking {
+                    return ChatMessagePart(reasoningContent: thinking)
+                }
+                if delta.type == "input_json_delta", let partialJson = delta.partial_json {
+                    return ChatMessagePart(
+                        toolCallDeltas: [ChatMessagePart.ToolCallDelta(
+                            id: nil,
+                            index: event.index ?? 0,
+                            nameFragment: nil,
+                            argumentsFragment: partialJson
+                        )]
+                    )
+                }
+                return nil
+                
+            case "message_delta":
+                // 消息结束，包含最终 usage
+                if let usage = event.usage ?? event.delta?.usage {
+                    return ChatMessagePart(tokenUsage: makeTokenUsage(from: usage))
+                }
+                return nil
+                
+            case "message_stop":
+                // 流结束
+                logger.info("Anthropic 流式传输结束。")
+                return nil
+                
+            case "error":
+                logger.error("Anthropic 流式错误: \(dataString)")
+                return nil
+                
+            default:
+                return nil
+            }
+        } catch {
+            logger.warning("Anthropic 流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")
+            return nil
+        }
+    }
+    
+    // MARK: - 辅助方法
+    
+    private func makeTokenUsage(from usage: AnthropicResponse.Usage?) -> MessageTokenUsage? {
+        guard let usage = usage else { return nil }
+        if usage.input_tokens == nil && usage.output_tokens == nil {
+            return nil
+        }
+        let inputTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+        let outputTokens = usage.output_tokens ?? 0
+        return MessageTokenUsage(
+            promptTokens: inputTokens,
+            completionTokens: outputTokens,
+            totalTokens: inputTokens + outputTokens
+        )
+    }
+    
+    /// 从 data URL 中提取 MIME 类型和 base64 数据
+    private func parseDataURL(_ dataURL: String) -> (mediaType: String, base64Data: String)? {
+        guard dataURL.hasPrefix("data:") else { return nil }
+        let withoutPrefix = String(dataURL.dropFirst(5))
+        guard let semicolonIndex = withoutPrefix.firstIndex(of: ";"),
+              let commaIndex = withoutPrefix.firstIndex(of: ",") else { return nil }
+        let mediaType = String(withoutPrefix[..<semicolonIndex])
+        let base64Data = String(withoutPrefix[withoutPrefix.index(after: commaIndex)...])
+        return (mediaType, base64Data)
+    }
+}

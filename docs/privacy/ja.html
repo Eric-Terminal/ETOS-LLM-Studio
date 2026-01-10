@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>プライバシーポリシー - ETOS LLM Studio</title>
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --text-color: #1d1d1f;
+            --bg-color: #ffffff;
+            --secondary-text: #86868b;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #000000;
+                --text-color: #f5f5f7;
+                --secondary-text: #a1a1a6;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+        h2 { font-size: 1.4rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        .last-updated { color: var(--secondary-text); margin-bottom: 2rem; font-size: 0.9rem; }
+        section { margin-bottom: 2rem; }
+        ul { padding-left: 1.2rem; }
+        li { margin-bottom: 0.6rem; }
+        strong { color: var(--primary-color); }
+        .contact-info { background: #f5f5f710; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        @media (prefers-color-scheme: light) {
+            .contact-info { background: #f5f5f7; border: none; }
+        }
+        footer { margin-top: 4rem; font-size: 0.8rem; color: var(--secondary-text); text-align: center; }
+        a { color: var(--primary-color); text-decoration: none; }
+        .lang-switch { text-align: right; margin-bottom: 20px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="lang-switch">
+        <a href="zh_hans.html">简体中文</a> | 
+        <a href="zh_hant.html">繁體中文</a> | 
+        <a href="en.html">English</a>
+    </div>
+
+    <h1>プライバシーポリシー</h1>
+    <p class="last-updated">発効日：2026年1月9日</p>
+
+    <section>
+        <h2>1. はじめに</h2>
+        <p>ETOS LLM Studio は、お客様のプライバシーを非常に重視しています。本アプリは<strong>「ローカルファースト (Local-first)」</strong>の設計理念を採用しています。中央サーバーは運用しておらず、チャットログ、音声録音、個人情報を保存することはありません。</p>
+        <p><strong>基本原則：データは完全にあなたのコントロール下にあります。</strong></p>
+    </section>
+
+    <section>
+        <h2>2. データ処理について</h2>
+        <ul>
+            <li><strong>ローカルストレージ：</strong> すべてのチャットセッション、設定パラメータ、記憶の断片は、デバイス内の App Sandbox に安全に保存されます。</li>
+            <li><strong>AI 処理：</strong> 送信したデータ（テキスト、音声、画像）は、お客様自身が設定した<strong>サードパーティ AI サービスプロバイダー</strong>（例：OpenAI, Anthropic, Cloudflare または自作モデル）へ<strong>直接</strong>送信されます。私たちはこれらのトラフィックを傍受、処理、保存することはありません。</li>
+            <li><strong>音声とオーディオ：</strong> マイクへのアクセス権限は、お客様が能動的に録音を開始したときのみ有効になります。録音ファイルは、書き起こしや分析のために設定された API へ送信する目的でのみ使用されます。</li>
+            <li><strong>マルチデバイス同期：</strong> iPhone と Apple Watch 間のデータ同期は、<strong>WatchConnectivity</strong> フレームワークを通じて行われます。これは直接的な暗号化されたピアツーピア通信であり、同期プロセス中にデータが個人のデバイスエコシステムの外に出ることはありません。</li>
+            <li><strong>ローカルネットワーク：</strong> 任意の「ローカルデバッグ」機能でのみ使用され、ローカルネットワーク内のブラウザ経由でアプリ内のファイルを管理するために使用されます。</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>3. 透明性へのコミットメント</h2>
+        <p>ETOS LLM Studio には行動追跡コードは<strong>含まれておらず</strong>、分析データも収集しません。ギーク向けのツールとして、私たちは完全な透明性と、LLM ワークフローに対するユーザーの絶対的な所有権を追求しています。</p>
+    </section>
+
+    <section>
+        <div class="contact-info">
+            <h2>4. お問い合わせ</h2>
+            <p>本プライバシーポリシーに関するご質問は、以下までご連絡ください：</p>
+            <p><strong>Eric Terminal</strong><br>
+            Email: <a href="mailto:ericterminal@gmail.com">ericterminal@gmail.com</a><br>
+            GitHub: <a href="https://github.com/Eric-Terminal">Eric-Terminal</a></p>
+        </div>
+    </section>
+
+    <footer>
+        &copy; 2026 Eric Terminal. All rights reserved.
+    </footer>
+</body>
+</html>
