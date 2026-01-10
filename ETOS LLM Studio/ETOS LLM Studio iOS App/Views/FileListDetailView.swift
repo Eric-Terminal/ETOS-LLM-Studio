@@ -70,16 +70,16 @@ struct FileListDetailView: View {
             }
         } message: {
             if let file = fileToDelete {
-                Text("确定要删除 \"\(file.name)\" 吗？此操作不可撤销。")
+                Text(String(format: NSLocalizedString("确定要删除 \"%@\" 吗？此操作不可撤销。", comment: ""), file.name))
             }
         }
         .alert("批量删除", isPresented: $showBatchDeleteAlert) {
             Button("取消", role: .cancel) {}
-            Button("删除 \(selectedFiles.count) 个文件", role: .destructive) {
+            Button(String(format: NSLocalizedString("删除 %d 个文件", comment: ""), selectedFiles.count), role: .destructive) {
                 deleteSelectedFiles()
             }
         } message: {
-            Text("确定要删除选中的 \(selectedFiles.count) 个文件吗？此操作不可撤销。")
+            Text(String(format: NSLocalizedString("确定要删除选中的 %d 个文件吗？此操作不可撤销。", comment: ""), selectedFiles.count))
         }
         .sheet(item: $previewingFile) { file in
             FilePreviewSheet(file: file)
@@ -154,7 +154,7 @@ struct FileListDetailView: View {
         } label: {
             HStack {
                 Image(systemName: "trash")
-                Text("删除 \(selectedFiles.count) 个文件")
+                Text(String(format: NSLocalizedString("删除 %d 个文件", comment: ""), selectedFiles.count))
             }
             .font(.headline)
             .frame(maxWidth: .infinity)
@@ -397,7 +397,7 @@ struct OtherFilesView: View {
             }
         } message: {
             if let file = fileToDelete {
-                Text("确定要删除 \"\(file.name)\" 吗？此操作不可撤销。")
+                Text(String(format: NSLocalizedString("确定要删除 \"%@\" 吗？此操作不可撤销。", comment: ""), file.name))
             }
         }
     }

@@ -69,7 +69,7 @@ public struct StorageManagementView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将删除 \(orphanedAudioCount + orphanedImageCount) 个孤立文件。")
+            Text(String(format: NSLocalizedString("将删除 %d 个孤立文件。", comment: ""), orphanedAudioCount + orphanedImageCount))
         }
         .confirmationDialog(
             "幽灵会话",
@@ -258,7 +258,7 @@ public struct StorageManagementView: View {
             await MainActor.run {
                 cleanupAlert = CleanupAlert(
                     title: "👻 驱鬼成功",
-                    message: "已清理 \(count) 个幽灵会话。"
+                    message: String(format: NSLocalizedString("已清理 %d 个幽灵会话。", comment: ""), count)
                 )
             }
             
@@ -275,7 +275,7 @@ public struct StorageManagementView: View {
             await MainActor.run {
                 cleanupAlert = CleanupAlert(
                     title: "清理完成",
-                    message: "已删除 \(result.audioDeleted + result.imageDeleted) 个文件。"
+                    message: String(format: NSLocalizedString("已删除 %d 个文件。", comment: ""), result.audioDeleted + result.imageDeleted)
                 )
             }
             
@@ -292,7 +292,7 @@ public struct StorageManagementView: View {
             await MainActor.run {
                 cleanupAlert = CleanupAlert(
                     title: "清理完成",
-                    message: "已删除 \(result.audioDeleted + result.imageDeleted) 个孤立文件。"
+                    message: String(format: NSLocalizedString("已删除 %d 个孤立文件。", comment: ""), result.audioDeleted + result.imageDeleted)
                 )
             }
             
@@ -349,7 +349,7 @@ public struct WatchFileListView: View {
             Button("取消", role: .cancel) {}
         } message: {
             if let file = fileToDelete {
-                Text("删除 \"\(file.name)\"？")
+                Text(String(format: NSLocalizedString("删除 \"%@\"？", comment: ""), file.name))
             }
         }
     }
