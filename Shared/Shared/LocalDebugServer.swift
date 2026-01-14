@@ -35,6 +35,7 @@ public class LocalDebugServer: ObservableObject {
     @Published public var pendingOpenAIQueueCount: Int = 0
     @Published public var useHTTP: Bool = true // HTTP 轮询模式开关（默认启用）
     @Published public var debugLogs: [DebugLogEntry] = [] // 调试日志
+    @Published public var isTransferring: Bool = false // 是否正在进行批量传输（暂停轮询）
     
     /// 调试日志条目
     public struct DebugLogEntry: Identifiable {
@@ -509,6 +510,11 @@ public class LocalDebugServer: ObservableObject {
     
     /// 执行一次 HTTP 轮询
     private func performHTTPPoll(host: String, port: String) {
+        // 如果正在批量传输，跳过此次轮询
+        if isTransferring {
+            return
+        }
+        
         guard let url = URL(string: "http://\(host):\(port)/poll") else {
             return
         }
@@ -907,6 +913,24 @@ public class LocalDebugServer: ObservableObject {
     private func handleDownloadAllStream() async {
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         
+        // 先检查 httpSession 是否可用
+        guard httpSession != nil else {
+            logger.error("❌ httpSession 为 nil，无法执行流式下载")
+            return
+        }
+        
+        // 标记开始批量传输，暂停轮询
+        isTransferring = true
+        addLog("📦 开始流式下载（暂停轮询）", type: .info)
+        
+        defer {
+            // 传输完成后恢复轮询
+            Task { @MainActor in
+                self.isTransferring = false
+                self.addLog("📦 流式下载结束（恢复轮询）", type: .info)
+            }
+        }
+        
         do {
             logger.info("📦 开始流式下载 Documents 目录...")
             
@@ -915,6 +939,9 @@ public class LocalDebugServer: ObservableObject {
             try collectFilePaths(documentsURL, baseURL: documentsURL, filePaths: &filePaths)
             
             logger.info("📂 发现 \(filePaths.count) 个文件，开始连续传输")
+            
+            var successCount = 0
+            var failCount = 0
             
             // 连续发送所有文件（等待每个发送完成）
             for (index, relativePath) in filePaths.enumerated() {
@@ -933,12 +960,20 @@ public class LocalDebugServer: ObservableObject {
                     
                     // 等待发送完成再发下一个
                     await sendHTTPResponseAsync(response)
-                    logger.info("📤 [\(index + 1)/\(filePaths.count)] 已发送: \(relativePath)")
+                    successCount += 1
+                    
+                    // 每10个文件打印一次进度
+                    if (index + 1) % 10 == 0 || index + 1 == filePaths.count {
+                        logger.info("📤 进度: \(index + 1)/\(filePaths.count) (成功: \(successCount), 失败: \(failCount))")
+                    }
                     
                 } catch {
+                    failCount += 1
                     logger.error("❌ 读取文件失败: \(relativePath) - \(error.localizedDescription)")
                 }
             }
+            
+            logger.info("📊 传输统计: 成功 \(successCount), 失败 \(failCount), 总计 \(filePaths.count)")
             
             // 发送完成消息
             let completeResponse: [String: Any] = [
@@ -951,6 +986,7 @@ public class LocalDebugServer: ObservableObject {
             logger.info("✅ 流式下载完成，共 \(filePaths.count) 个文件")
             
         } catch {
+            logger.error("❌ 流式下载出错: \(error.localizedDescription)")
             let errorResponse: [String: Any] = [
                 "status": "error",
                 "message": error.localizedDescription
@@ -982,18 +1018,37 @@ public class LocalDebugServer: ObservableObject {
         let host = components.first ?? ""
         let port = components.count > 1 ? components[1] : "7654"
         
-        guard let url = URL(string: "http://\(host):\(port)/response") else { return }
+        guard let url = URL(string: "http://\(host):\(port)/response") else {
+            logger.error("❌ 无效的 URL: http://\(host):\(port)/response")
+            return
+        }
+        
+        // 安全获取 httpSession
+        guard let session = httpSession else {
+            logger.error("❌ httpSession 为 nil，无法发送响应")
+            return
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 60.0
         
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: response) else { return }
+        // JSON 序列化并记录错误
+        let jsonData: Data
+        do {
+            jsonData = try JSONSerialization.data(withJSONObject: response)
+        } catch {
+            logger.error("❌ JSON 序列化失败: \(error.localizedDescription), 响应键: \(response.keys.joined(separator: ", "))")
+            return
+        }
         request.httpBody = jsonData
         
         do {
-            let (_, _) = try await httpSession!.data(for: request)
+            let (_, httpResponse) = try await session.data(for: request)
+            if let httpRes = httpResponse as? HTTPURLResponse, httpRes.statusCode != 200 {
+                logger.error("❌ 服务器返回错误状态码: \(httpRes.statusCode)")
+            }
         } catch {
             logger.error("❌ 发送响应失败: \(error.localizedDescription)")
         }
@@ -1040,6 +1095,18 @@ public class LocalDebugServer: ObservableObject {
             return
         }
         
+        // 标记开始批量传输，暂停轮询
+        isTransferring = true
+        addLog("📦 开始流式上传（暂停轮询）", type: .info)
+        
+        defer {
+            // 传输完成后恢复轮询
+            Task { @MainActor in
+                self.isTransferring = false
+                self.addLog("📦 流式上传结束（恢复轮询）", type: .info)
+            }
+        }
+        
         logger.info("📋 收到文件列表: \(total) 个文件")
         
         // 先清空Documents目录
@@ -1077,6 +1144,12 @@ public class LocalDebugServer: ObservableObject {
             return
         }
         
+        // 安全获取 httpSession
+        guard let session = httpSession else {
+            logger.error("❌ httpSession 为 nil，无法请求文件")
+            return
+        }
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1090,7 +1163,7 @@ public class LocalDebugServer: ObservableObject {
         request.httpBody = jsonData
         
         do {
-            let (data, _) = try await httpSession!.data(for: request)
+            let (data, _) = try await session.data(for: request)
             
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let status = json["status"] as? String,
