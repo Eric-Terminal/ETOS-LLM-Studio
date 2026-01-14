@@ -719,6 +719,13 @@ public class ChatService {
             chatSessionsSubject.send(updatedSessions)
             Persistence.saveChatSessions(updatedSessions)
             logger.info("✨ 临时会话已转为永久会话: \(currentSession.name)")
+            
+            // 用户发送第一条消息时，立即异步生成标题（无需等待AI响应）
+            let sessionIDForTitle = currentSession.id
+            let userMessageForTitle = sessionTitleSource
+            Task {
+                await self.generateAndApplySessionTitle(for: sessionIDForTitle, firstUserMessage: userMessageForTitle)
+            }
         } else {
             // 老会话重新收到消息时，将其排到列表顶部
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
@@ -1559,8 +1566,7 @@ public class ChatService {
             // --- 无工具调用，标准流程 ---
             updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
             requestStatusSubject.send(.finished)
-            
-            if wasTemporarySession, let userMsg = userMessage { await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage) }
+            // 标题已在用户发送消息时异步生成，无需等待AI响应
             return
         }
 
@@ -1574,9 +1580,7 @@ public class ChatService {
         if toolDefs.isEmpty {
             logger.info("🔇 当前未提供任何工具定义，忽略 AI 返回的 \(toolCalls.count) 个工具调用。")
             requestStatusSubject.send(.finished)
-            if wasTemporarySession, let userMsg = userMessage {
-                await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage)
-            }
+            // 标题已在用户发送消息时异步生成，无需等待AI响应
             return
         }
         let blockingCalls = toolCalls.filter { tc in
@@ -1653,9 +1657,7 @@ public class ChatService {
         } else {
             // 5. 如果只有非阻塞式工具并且 AI 已经给出正文，则在这里结束请求
             requestStatusSubject.send(.finished)
-            if wasTemporarySession, let userMsg = userMessage {
-                await generateAndApplySessionTitle(for: currentSessionID, firstUserMessage: userMsg, firstAssistantMessage: responseMessage)
-            }
+            // 标题已在用户发送消息时异步生成，无需等待AI响应
         }
     }
     
@@ -2029,21 +2031,15 @@ public class ChatService {
         return collected.reversed()
     }
     
-    private func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage, firstAssistantMessage: ChatMessage) async {
+    private func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage) async {
         // 1. 检查功能是否开启
         let isAutoNamingEnabled = UserDefaults.standard.object(forKey: "enableAutoSessionNaming") as? Bool ?? true
         guard isAutoNamingEnabled else {
             logger.info("自动标题功能已禁用，跳过生成。")
             return
         }
-
-        // 2. 检查AI回复是否为错误
-        guard firstAssistantMessage.role != .error else {
-            logger.warning("AI首次回复为错误，跳过标题生成。")
-            return
-        }
         
-        // 3. 获取当前模型和适配器
+        // 2. 获取当前模型和适配器
         guard let runnableModel = selectedModelSubject.value, let adapter = adapters[runnableModel.provider.apiFormat] else {
             logger.error("无法获取当前模型或适配器，无法生成标题。")
             return
@@ -2051,20 +2047,19 @@ public class ChatService {
         
         logger.info("🚀 开始为会话 \(sessionID.uuidString) 生成标题...")
 
-        // 4. 准备生成标题的提示
+        // 3. 准备生成标题的提示（只基于用户的第一条消息）
         let titlePromptTemplate = NSLocalizedString("""
-        请根据以下对话内容，为本次对话生成一个简短、精炼的标题。
+        请根据用户的问题，为本次对话生成一个简短、精炼的标题。
 
         要求：
-        - 长度在4到8个词之间。
-        - 能准确概括对话的核心主题。
+        - 长度在2到6个词之间。
+        - 能准确概括用户想要讨论的主题。
         - 直接返回标题内容，不要包含任何额外说明、引号或标点符号。
 
-        对话内容：
-        用户: %@
-        AI: %@
-        """, comment: "Prompt to generate a concise session title.")
-        let titlePrompt = String(format: titlePromptTemplate, firstUserMessage.content, firstAssistantMessage.content)
+        用户的问题：
+        %@
+        """, comment: "Prompt to generate a concise session title from user message.")
+        let titlePrompt = String(format: titlePromptTemplate, firstUserMessage.content)
         
         let titleRequestMessages = [ChatMessage(role: .user, content: titlePrompt)]
         

@@ -96,6 +96,8 @@ struct ChatView: View {
                     .overlay(alignment: .bottomTrailing) {
                         if showScrollToBottom {
                             Button {
+                                // 点击回底按钮时，重置懒加载状态到初始数量
+                                viewModel.resetLazyLoadState()
                                 scrollToBottom(proxy: proxy)
                             } label: {
                                 Image(systemName: "arrow.down.circle.fill")

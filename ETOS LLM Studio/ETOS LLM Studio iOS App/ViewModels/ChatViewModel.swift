@@ -612,6 +612,12 @@ final class ChatViewModel: ObservableObject {
         updateDisplayedMessages()
     }
     
+    /// 重置懒加载状态，恢复到初始加载数量
+    func resetLazyLoadState() {
+        additionalHistoryLoaded = 0
+        updateDisplayedMessages()
+    }
+    
     // MARK: - Memory Management
     
     func addMemory(content: String) async {
