@@ -79,6 +79,12 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
+    @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
+    
+    var audioRecordingFormat: AudioRecordingFormat {
+        get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
+        set { audioRecordingFormatRaw = newValue.rawValue }
+    }
     
     // MARK: - Public Properties
     

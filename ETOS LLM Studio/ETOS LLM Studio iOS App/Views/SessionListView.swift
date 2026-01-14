@@ -18,6 +18,8 @@ struct SessionListView: View {
     @State private var showDeleteConfirmation = false
     @State private var sessionsToDelete: [ChatSession] = []
     @State private var sessionInfo: SessionInfoPayload?
+    @State private var showGhostSessionAlert = false
+    @State private var ghostSession: ChatSession?
     
     var body: some View {
         List {
@@ -42,7 +44,7 @@ struct SessionListView: View {
                             editingSessionID = nil
                         },
                         onSelect: {
-                            viewModel.setCurrentSession(session)
+                            selectSession(session)
                         },
                         onRename: {
                             editingSessionID = session.id
@@ -99,6 +101,33 @@ struct SessionListView: View {
         }
         .sheet(item: $sessionInfo) { info in
             SessionInfoSheet(payload: info)
+        }
+        .alert("👻 发现幽灵会话", isPresented: $showGhostSessionAlert) {
+            Button("删除幽灵", role: .destructive) {
+                if let session = ghostSession {
+                    viewModel.deleteSessions([session])
+                }
+                ghostSession = nil
+            }
+            Button("稍后处理", role: .cancel) {
+                ghostSession = nil
+            }
+        } message: {
+            Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
+        }
+    }
+    
+    /// 选择会话时检测是否为 Ghost Session
+    private func selectSession(_ session: ChatSession) {
+        let messageFile = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
+        
+        // 检查消息文件是否存在
+        if !FileManager.default.fileExists(atPath: messageFile.path) {
+            // 发现幽灵会话！
+            ghostSession = session
+            showGhostSessionAlert = true
+        } else {
+            viewModel.setCurrentSession(session)
         }
     }
     

@@ -505,12 +505,13 @@ class DebugServer:
         """HTTP 响应端点 - 设备提交响应"""
         try:
             data = await request.json()
-            if DEBUG_MODE:
+            # 总是打印收到的响应类型，帮助调试
+            if 'stream_complete' in data:
+                print(f"[HTTP] 📥 收到完成信号: total={data.get('total', 0)}")
+            elif 'path' in data and 'index' in data:
+                print(f"[HTTP] 📥 接收文件 {data.get('index', 0)}/{data.get('total', '?')}: {data.get('path', 'unknown')}")
+            elif DEBUG_MODE:
                 print(f"[DEBUG] HTTP响应：{data.keys()}")
-            else:
-                # 非调试模式下，也显示关键信息
-                if 'path' in data and 'index' in data:
-                    print(f"[HTTP] 📥 接收文件 {data.get('index', 0)}: {data.get('path', 'unknown')}")
             self.handle_response(data)
             return web.json_response({"status": "ok"})
         except Exception as e:

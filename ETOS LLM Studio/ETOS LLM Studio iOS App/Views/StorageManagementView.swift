@@ -16,12 +16,8 @@ struct StorageManagementView: View {
     @State private var storageBreakdown = StorageBreakdown()
     @State private var isLoading = true
     @State private var showClearCacheAlert = false
-    @State private var showCleanOrphansAlert = false
-    @State private var orphanedAudioCount = 0
-    @State private var orphanedImageCount = 0
-    @State private var ghostSessionCount = 0
-    @State private var showGhostSessionAlert = false
-    @State private var ghostSessionMessage = ""
+    @State private var showCleanAllOrphansAlert = false
+    @State private var orphanedDataCount = StorageUtility.OrphanedDataCount(ghostSessions: 0, orphanedAudioFiles: 0, orphanedImageFiles: 0, orphanedAudioReferences: 0)
     @State private var cleanupResult: CleanupResult?
     
     struct CleanupResult: Identifiable {
@@ -55,14 +51,6 @@ struct StorageManagementView: View {
             }
         } message: {
             Text("将删除所有语音和图片缓存文件。此操作不可撤销。")
-        }
-        .alert("清理孤立文件", isPresented: $showCleanOrphansAlert) {
-            Button("取消", role: .cancel) {}
-            Button("清理", role: .destructive) {
-                performOrphanCleanup()
-            }
-        } message: {
-            Text(String(format: NSLocalizedString("将删除 %d 个孤立语音文件和 %d 个孤立图片文件。这些文件不再被任何会话引用。", comment: ""), orphanedAudioCount, orphanedImageCount))
         }
         .alert(item: $cleanupResult) { result in
             Alert(
@@ -160,36 +148,17 @@ struct StorageManagementView: View {
     
     private var cleanupToolsSection: some View {
         Section {
-            // 清理孤立文件
+            // 统一清理孤立数据
             Button {
-                checkOrphanedFiles()
+                checkAllOrphanedData()
             } label: {
                 HStack {
-                    Label("清理孤立文件", systemImage: "trash.slash")
+                    Label("清理孤立数据", systemImage: "trash.slash")
                     Spacer()
-                    if orphanedAudioCount + orphanedImageCount > 0 {
-                        Text(String(format: NSLocalizedString("%d 个", comment: ""), orphanedAudioCount + orphanedImageCount))
+                    if orphanedDataCount.total > 0 {
+                        Text(String(format: NSLocalizedString("%d 项", comment: ""), orphanedDataCount.total))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            
-            // 👻 幽灵会话检测（彩蛋）
-            Button {
-                checkGhostSessions()
-            } label: {
-                HStack {
-                    Label("检测幽灵会话", systemImage: "sparkles")
-                        .foregroundStyle(.purple)
-                    Spacer()
-                    if ghostSessionCount > 0 {
-                        HStack(spacing: 4) {
-                            Text("👻")
-                            Text("\(ghostSessionCount)")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -203,21 +172,21 @@ struct StorageManagementView: View {
         } header: {
             Text("清理工具")
         } footer: {
-            Text("孤立文件是指不再被任何会话引用的语音和图片文件。幽灵会话是指会话记录存在但消息文件已丢失的异常情况。")
+            Text("孤立数据包括：幽灵会话（消息文件丢失）、孤立音频/图片文件（无会话引用）、无效音频引用（文件已删除）。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .alert("幽灵会话", isPresented: $showGhostSessionAlert) {
-            if ghostSessionCount > 0 {
-                Button("取消", role: .cancel) {}
-                Button("清理幽灵会话", role: .destructive) {
-                    cleanupGhostSessions()
-                }
-            } else {
-                Button("好的", role: .cancel) {}
+        .confirmationDialog(
+            "确认清理孤立数据",
+            isPresented: $showCleanAllOrphansAlert,
+            titleVisibility: .visible
+        ) {
+            Button("清理", role: .destructive) {
+                performAllOrphanCleanup()
             }
+            Button("取消", role: .cancel) {}
         } message: {
-            Text(ghostSessionMessage)
+            Text("将清理：\(orphanedDataCount.description)。\n\n此操作不可撤销。")
         }
     }
     
@@ -231,53 +200,38 @@ struct StorageManagementView: View {
             StorageUtility.getStorageBreakdown()
         }.value
         
-        let orphanedAudio = await Task.detached(priority: .userInitiated) {
-            StorageUtility.findOrphanedAudioFiles().count
-        }.value
-        
-        let orphanedImages = await Task.detached(priority: .userInitiated) {
-            StorageUtility.findOrphanedImageFiles().count
-        }.value
-        
-        let ghostCount = await Task.detached(priority: .userInitiated) {
-            StorageUtility.findGhostSessions().count
+        let orphanedCount = await Task.detached(priority: .userInitiated) {
+            StorageUtility.countAllOrphanedData()
         }.value
         
         await MainActor.run {
             storageBreakdown = breakdown
-            orphanedAudioCount = orphanedAudio
-            orphanedImageCount = orphanedImages
-            ghostSessionCount = ghostCount
+            orphanedDataCount = orphanedCount
             isLoading = false
         }
     }
     
-    private func checkOrphanedFiles() {
-        if orphanedAudioCount + orphanedImageCount > 0 {
-            showCleanOrphansAlert = true
+    private func checkAllOrphanedData() {
+        if orphanedDataCount.total > 0 {
+            showCleanAllOrphansAlert = true
         } else {
             cleanupResult = CleanupResult(
-                title: "无孤立文件",
-                message: "当前没有需要清理的孤立文件。"
+                title: "无孤立数据",
+                message: "当前没有需要清理的孤立数据。"
             )
         }
     }
     
-    private func checkGhostSessions() {
-        ghostSessionMessage = StorageUtility.getGhostSessionEasterEggMessage(count: ghostSessionCount)
-        showGhostSessionAlert = true
-    }
-    
-    private func cleanupGhostSessions() {
+    private func performAllOrphanCleanup() {
         Task {
-            let count = await Task.detached(priority: .userInitiated) {
-                StorageUtility.cleanupGhostSessions()
+            let summary = await Task.detached(priority: .userInitiated) {
+                StorageUtility.cleanupAllOrphans()
             }.value
             
             await MainActor.run {
                 cleanupResult = CleanupResult(
-                    title: "👻 驱鬼成功",
-                    message: String(format: NSLocalizedString("已清理 %d 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。", comment: ""), count)
+                    title: "清理完成",
+                    message: "已清理：\(summary.description)"
                 )
             }
             
@@ -295,23 +249,6 @@ struct StorageManagementView: View {
                 cleanupResult = CleanupResult(
                     title: "清理完成",
                     message: String(format: NSLocalizedString("已删除 %d 个语音文件和 %d 个图片文件。", comment: ""), result.audioDeleted, result.imageDeleted)
-                )
-            }
-            
-            await refreshData()
-        }
-    }
-    
-    private func performOrphanCleanup() {
-        Task {
-            let result = await Task.detached(priority: .userInitiated) {
-                StorageUtility.cleanupOrphanedFiles()
-            }.value
-            
-            await MainActor.run {
-                cleanupResult = CleanupResult(
-                    title: "清理完成",
-                    message: String(format: NSLocalizedString("已删除 %d 个孤立语音文件和 %d 个孤立图片文件。", comment: ""), result.audioDeleted, result.imageDeleted)
                 )
             }
             

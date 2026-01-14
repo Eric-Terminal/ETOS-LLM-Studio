@@ -626,7 +626,7 @@ private struct MessageComposerView: View {
             }
         }
         .sheet(isPresented: $showAudioRecorder) {
-            AudioRecorderSheet { attachment in
+            AudioRecorderSheet(format: viewModel.audioRecordingFormat) { attachment in
                 viewModel.setAudioAttachment(attachment)
             }
         }
@@ -693,6 +693,7 @@ private struct MessageComposerView: View {
 // MARK: - Audio Recorder Sheet
 
 private struct AudioRecorderSheet: View {
+    let format: AudioRecordingFormat
     let onComplete: (AudioAttachment) -> Void
     @Environment(\.dismiss) private var dismiss
     
@@ -772,13 +773,35 @@ private struct AudioRecorderSheet: View {
             try session.setCategory(.playAndRecord, mode: .default)
             try session.setActive(true)
             
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
-            let settings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                AVSampleRateKey: 44100.0,
-                AVNumberOfChannelsKey: 1,
-                AVEncoderBitRateKey: 64000
-            ]
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(format.fileExtension)")
+            
+            let settings: [String: Any]
+            switch format {
+            case .aac:
+                settings = [
+                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                    AVSampleRateKey: 44100.0,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderBitRateKey: 64000
+                ]
+            case .wav:
+                settings = [
+                    AVFormatIDKey: Int(kAudioFormatLinearPCM),
+                    AVSampleRateKey: 44100.0,
+                    AVNumberOfChannelsKey: 1,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false
+                ]
+            @unknown default:
+                // 默认使用 AAC 格式
+                settings = [
+                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                    AVSampleRateKey: 44100.0,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderBitRateKey: 64000
+                ]
+            }
             
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
             audioRecorder?.prepareToRecord()
@@ -821,8 +844,8 @@ private struct AudioRecorderSheet: View {
         
         let attachment = AudioAttachment(
             data: data,
-            mimeType: "audio/m4a",
-            format: "m4a",
+            mimeType: format.mimeType,
+            format: format.fileExtension,
             fileName: url.lastPathComponent
         )
         
