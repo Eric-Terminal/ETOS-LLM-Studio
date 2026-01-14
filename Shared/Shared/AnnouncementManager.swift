@@ -26,12 +26,71 @@ public enum AnnouncementType: String, Codable {
     case blocking = "blocking"   // 每次启动都显式通知
 }
 
+/// 支持的语言选项
+/// 用于 GitOps 远程配置的 language 字段
+public enum AnnouncementLanguage: String, CaseIterable {
+    // 主要语言
+    case zh = "zh"           // 中文（匹配所有中文变体）
+    case zhHans = "zh-Hans"  // 简体中文
+    case zhHant = "zh-Hant"  // 繁体中文
+    case en = "en"           // 英语
+    case ja = "ja"           // 日语
+    case ko = "ko"           // 韩语
+    case fr = "fr"           // 法语
+    case de = "de"           // 德语
+    case es = "es"           // 西班牙语
+    case pt = "pt"           // 葡萄牙语
+    case it = "it"           // 意大利语
+    case ru = "ru"           // 俄语
+    case ar = "ar"           // 阿拉伯语
+    case th = "th"           // 泰语
+    case vi = "vi"           // 越南语
+    case id = "id"           // 印尼语
+    case ms = "ms"           // 马来语
+    case tr = "tr"           // 土耳其语
+    case pl = "pl"           // 波兰语
+    case nl = "nl"           // 荷兰语
+    case uk = "uk"           // 乌克兰语
+    case he = "he"           // 希伯来语
+    case hi = "hi"           // 印地语
+    
+    public var displayName: String {
+        switch self {
+        case .zh: return "中文 (Chinese)"
+        case .zhHans: return "简体中文 (Simplified Chinese)"
+        case .zhHant: return "繁體中文 (Traditional Chinese)"
+        case .en: return "English"
+        case .ja: return "日本語 (Japanese)"
+        case .ko: return "한국어 (Korean)"
+        case .fr: return "Français (French)"
+        case .de: return "Deutsch (German)"
+        case .es: return "Español (Spanish)"
+        case .pt: return "Português (Portuguese)"
+        case .it: return "Italiano (Italian)"
+        case .ru: return "Русский (Russian)"
+        case .ar: return "العربية (Arabic)"
+        case .th: return "ไทย (Thai)"
+        case .vi: return "Tiếng Việt (Vietnamese)"
+        case .id: return "Bahasa Indonesia"
+        case .ms: return "Bahasa Melayu (Malay)"
+        case .tr: return "Türkçe (Turkish)"
+        case .pl: return "Polski (Polish)"
+        case .nl: return "Nederlands (Dutch)"
+        case .uk: return "Українська (Ukrainian)"
+        case .he: return "עברית (Hebrew)"
+        case .hi: return "हिन्दी (Hindi)"
+        }
+    }
+}
+
 /// 公告数据模型
 public struct Announcement: Codable, Identifiable {
     public let id: Int                  // 唯一标识，用日期+序号
     public let type: AnnouncementType   // 通知类型
     public let minBuild: String?        // 最低版本要求
     public let maxBuild: String?        // 最高版本要求
+    public let language: String?        // 目标语言 (e.g., "zh-Hans", "en", nil = 所有)
+    public let platform: String?        // 目标平台 (e.g., "iOS", "watchOS", nil = 所有)
     public let title: String            // 标题
     public let body: String             // 正文内容
     
@@ -40,6 +99,8 @@ public struct Announcement: Codable, Identifiable {
         case type
         case minBuild = "min_build"
         case maxBuild = "max_build"
+        case language
+        case platform
         case title
         case body
     }
@@ -51,6 +112,8 @@ public struct Announcement: Codable, Identifiable {
         type = try container.decode(AnnouncementType.self, forKey: .type)
         minBuild = try container.decodeIfPresent(String.self, forKey: .minBuild)
         maxBuild = try container.decodeIfPresent(String.self, forKey: .maxBuild)
+        language = try container.decodeIfPresent(String.self, forKey: .language)
+        platform = try container.decodeIfPresent(String.self, forKey: .platform)
         title = try container.decode(String.self, forKey: .title)
         body = try container.decode(String.self, forKey: .body)
     }
@@ -115,8 +178,12 @@ public class AnnouncementManager: ObservableObject {
         }
         
         do {
-            let announcement = try await fetchAnnouncement()
-            await processAnnouncement(announcement)
+            if let announcement = try await fetchAnnouncement() {
+                await processAnnouncement(announcement)
+            } else {
+                logger.info("📢 没有适用于当前设备的公告")
+                currentAnnouncement = nil
+            }
         } catch {
             logger.error("📢 获取公告失败: \(error.localizedDescription)")
             // 网络失败时不修改已有的AppStorage设置
@@ -139,7 +206,8 @@ public class AnnouncementManager: ObservableObject {
     // MARK: - 私有方法
     
     /// 从服务器获取公告
-    private func fetchAnnouncement() async throws -> Announcement {
+    /// 支持多个相同 ID 的公告（不同语言版本），返回最佳匹配
+    private func fetchAnnouncement() async throws -> Announcement? {
         logger.info("📢 正在从服务器获取公告...")
         
         var request = URLRequest(url: announcementURL)
@@ -154,20 +222,95 @@ public class AnnouncementManager: ObservableObject {
         }
         
         let decoder = JSONDecoder()
-        let announcement = try decoder.decode(Announcement.self, from: data)
         
-        logger.info("📢 成功获取公告: ID=\(announcement.id), Type=\(announcement.type.rawValue)")
-        return announcement
+        // 尝试解析为数组（支持多个相同 ID 的不同语言版本）
+        if let announcements = try? decoder.decode([Announcement].self, from: data) {
+            logger.info("📢 获取到 \(announcements.count) 个公告条目")
+            return selectBestAnnouncement(from: announcements)
+        }
+        
+        // 后向兼容：尝试解析为单个对象
+        if let announcement = try? decoder.decode(Announcement.self, from: data) {
+            logger.info("📢 成功获取单个公告: ID=\(announcement.id), Type=\(announcement.type.rawValue)")
+            return announcement
+        }
+        
+        throw AnnouncementError.decodingFailed
+    }
+    
+    /// 从多个公告中选择最佳匹配
+    /// 优先级：精确语言匹配 > 语言前缀匹配 > 无语言限制 > 第一个
+    private func selectBestAnnouncement(from announcements: [Announcement]) -> Announcement? {
+        guard !announcements.isEmpty else { return nil }
+        
+        // 先过滤出版本和平台兼容的公告
+        let compatible = announcements.filter { isVersionCompatible($0) && isPlatformCompatible($0) }
+        guard !compatible.isEmpty else { return nil }
+        
+        let deviceLanguage = Locale.current.language.languageCode?.identifier ?? "en"
+        let deviceFullLanguage = Locale.current.identifier // e.g., "zh-Hans_CN"
+        
+        // 第一优先级：精确匹配语言代码 (e.g., "zh-Hans")
+        for announcement in compatible {
+            if let lang = announcement.language, !lang.isEmpty {
+                if deviceFullLanguage.hasPrefix(lang.replacingOccurrences(of: "-", with: "_")) ||
+                   deviceFullLanguage.hasPrefix(lang) {
+                    logger.info("📢 精确匹配语言: \(lang)")
+                    return announcement
+                }
+            }
+        }
+        
+        // 第二优先级：前缀匹配 (e.g., "zh" 匹配 "zh-Hans")
+        for announcement in compatible {
+            if let lang = announcement.language, !lang.isEmpty {
+                if deviceLanguage.hasPrefix(lang) || lang.hasPrefix(deviceLanguage) {
+                    logger.info("📢 前缀匹配语言: \(lang)")
+                    return announcement
+                }
+            }
+        }
+        
+        // 第三优先级：无语言限制的公告（适用于所有用户）
+        for announcement in compatible {
+            if announcement.language == nil || announcement.language?.isEmpty == true {
+                logger.info("📢 使用无语言限制的公告")
+                return announcement
+            }
+        }
+        
+        // 最后回退：返回英文版本或第一个
+        for announcement in compatible {
+            if announcement.language == "en" {
+                logger.info("📢 回退到英文版本")
+                return announcement
+            }
+        }
+        
+        logger.info("📢 使用第一个兼容的公告")
+        return compatible.first
+    }
+    
+    /// 检查平台兼容性（仅检查平台，不检查语言）
+    private func isPlatformCompatible(_ announcement: Announcement) -> Bool {
+        guard let targetPlatform = announcement.platform, !targetPlatform.isEmpty else {
+            return true // 无平台限制
+        }
+        
+        #if os(iOS)
+        let currentPlatform = "iOS"
+        #elseif os(watchOS)
+        let currentPlatform = "watchOS"
+        #else
+        let currentPlatform = "unknown"
+        #endif
+        
+        return targetPlatform.lowercased() == currentPlatform.lowercased()
     }
     
     /// 处理获取到的公告
     private func processAnnouncement(_ announcement: Announcement) async {
-        // 检查版本兼容性
-        guard isVersionCompatible(announcement) else {
-            logger.info("📢 公告版本不兼容，跳过显示")
-            currentAnnouncement = nil
-            return
-        }
+        // 版本和平台检查已在 selectBestAnnouncement 中完成
         
         let isNewAnnouncement = announcement.id != lastAnnouncementId
         

@@ -106,13 +106,13 @@ struct MemorySettingsView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(memory.content)
                                     .lineLimit(2)
-                                Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
                         .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 if let index = viewModel.memories.firstIndex(where: { $0.id == memory.id }) {
                                     Task {
@@ -122,7 +122,8 @@ struct MemorySettingsView: View {
                             } label: {
                                 Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
-                            
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button {
                                 Task {
                                     await viewModel.archiveMemory(memory)
@@ -137,7 +138,7 @@ struct MemorySettingsView: View {
             } header: {
                 Text(NSLocalizedString("激活的记忆", comment: ""))
             } footer: {
-                Text(NSLocalizedString("这些记忆会参与检索并发送给模型。", comment: ""))
+                Text(NSLocalizedString("这些记忆会参与检索并发送给模型。左滑删除，右滑归档。", comment: ""))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -157,13 +158,13 @@ struct MemorySettingsView: View {
                                 Text(memory.content)
                                     .lineLimit(2)
                                     .foregroundStyle(.secondary)
-                                Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
                             }
                         }
                         .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 if let index = viewModel.memories.firstIndex(where: { $0.id == memory.id }) {
                                     Task {
@@ -173,7 +174,8 @@ struct MemorySettingsView: View {
                             } label: {
                                 Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
-                            
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button {
                                 Task {
                                     await viewModel.unarchiveMemory(memory)
@@ -188,7 +190,7 @@ struct MemorySettingsView: View {
             } header: {
                 Text(NSLocalizedString("归档的记忆", comment: ""))
             } footer: {
-                Text(NSLocalizedString("这些记忆已被归档，不会参与检索。可以随时恢复。", comment: ""))
+                Text(NSLocalizedString("这些记忆已被归档，不会参与检索。左滑删除，右滑恢复。", comment: ""))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

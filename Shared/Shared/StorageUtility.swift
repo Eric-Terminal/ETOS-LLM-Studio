@@ -483,6 +483,181 @@ public enum StorageUtility {
         return (audioDeleted, imageDeleted)
     }
     
+    // MARK: - 无效音频引用检测
+    
+    /// 无效音频引用 - 消息中引用了不存在的音频文件
+    public struct OrphanedAudioReference: Identifiable {
+        public let id: UUID
+        public let sessionID: UUID
+        public let sessionName: String
+        public let messageID: UUID
+        public let missingFile: String
+        
+        public init(sessionID: UUID, sessionName: String, messageID: UUID, missingFile: String) {
+            self.id = UUID()
+            self.sessionID = sessionID
+            self.sessionName = sessionName
+            self.messageID = messageID
+            self.missingFile = missingFile
+        }
+    }
+    
+    /// 查找消息中引用但文件不存在的音频
+    public static func findOrphanedAudioReferences() -> [OrphanedAudioReference] {
+        let sessions = Persistence.loadChatSessions()
+        let audioDirectory = getDirectory(for: .audio)
+        let fileManager = FileManager.default
+        var orphanedRefs: [OrphanedAudioReference] = []
+        
+        for session in sessions {
+            let messages = Persistence.loadMessages(for: session.id)
+            for message in messages {
+                if let audioFileName = message.audioFileName {
+                    let audioFileURL = audioDirectory.appendingPathComponent(audioFileName)
+                    if !fileManager.fileExists(atPath: audioFileURL.path) {
+                        orphanedRefs.append(OrphanedAudioReference(
+                            sessionID: session.id,
+                            sessionName: session.name,
+                            messageID: message.id,
+                            missingFile: audioFileName
+                        ))
+                    }
+                }
+            }
+        }
+        
+        return orphanedRefs
+    }
+    
+    /// 清理消息中的无效音频引用
+    /// 返回清理的引用数量
+    public static func cleanupOrphanedAudioReferences() -> Int {
+        let orphanedRefs = findOrphanedAudioReferences()
+        guard !orphanedRefs.isEmpty else { return 0 }
+        
+        // 按会话分组
+        var refsBySession: [UUID: [UUID]] = [:]
+        for ref in orphanedRefs {
+            refsBySession[ref.sessionID, default: []].append(ref.messageID)
+        }
+        
+        var cleanedCount = 0
+        
+        // 逐个会话处理
+        for (sessionID, messageIDs) in refsBySession {
+            var messages = Persistence.loadMessages(for: sessionID)
+            let messageIDSet = Set(messageIDs)
+            
+            // 清除无效音频引用
+            for i in messages.indices {
+                if messageIDSet.contains(messages[i].id) {
+                    messages[i].audioFileName = nil
+                    cleanedCount += 1
+                }
+            }
+            
+            // 保存更新后的消息
+            Persistence.saveMessages(messages, for: sessionID)
+        }
+        
+        logger.info("Cleaned up \(cleanedCount) orphaned audio references")
+        return cleanedCount
+    }
+    
+    // MARK: - 统一清理
+    
+    /// 清理摘要
+    public struct CleanupSummary {
+        public let ghostSessionsCleaned: Int
+        public let orphanedAudioFilesCleaned: Int
+        public let orphanedImageFilesCleaned: Int
+        public let orphanedAudioReferencesCleaned: Int
+        
+        public var totalCleaned: Int {
+            ghostSessionsCleaned + orphanedAudioFilesCleaned + orphanedImageFilesCleaned + orphanedAudioReferencesCleaned
+        }
+        
+        public var description: String {
+            var parts: [String] = []
+            if ghostSessionsCleaned > 0 {
+                parts.append("\(ghostSessionsCleaned) 个幽灵会话")
+            }
+            if orphanedAudioFilesCleaned > 0 {
+                parts.append("\(orphanedAudioFilesCleaned) 个孤立音频")
+            }
+            if orphanedImageFilesCleaned > 0 {
+                parts.append("\(orphanedImageFilesCleaned) 个孤立图片")
+            }
+            if orphanedAudioReferencesCleaned > 0 {
+                parts.append("\(orphanedAudioReferencesCleaned) 个无效音频引用")
+            }
+            return parts.isEmpty ? "没有需要清理的内容" : parts.joined(separator: "、")
+        }
+    }
+    
+    /// 统一清理所有孤立数据
+    public static func cleanupAllOrphans() -> CleanupSummary {
+        let ghostSessions = cleanupGhostSessions()
+        let (audioFiles, imageFiles) = cleanupOrphanedFiles()
+        let audioRefs = cleanupOrphanedAudioReferences()
+        
+        let summary = CleanupSummary(
+            ghostSessionsCleaned: ghostSessions,
+            orphanedAudioFilesCleaned: audioFiles,
+            orphanedImageFilesCleaned: imageFiles,
+            orphanedAudioReferencesCleaned: audioRefs
+        )
+        
+        logger.info("统一清理完成: \(summary.description)")
+        return summary
+    }
+    
+    /// 检测所有孤立数据的数量
+    public struct OrphanedDataCount {
+        public let ghostSessions: Int
+        public let orphanedAudioFiles: Int
+        public let orphanedImageFiles: Int
+        public let orphanedAudioReferences: Int
+        
+        public init(ghostSessions: Int, orphanedAudioFiles: Int, orphanedImageFiles: Int, orphanedAudioReferences: Int) {
+            self.ghostSessions = ghostSessions
+            self.orphanedAudioFiles = orphanedAudioFiles
+            self.orphanedImageFiles = orphanedImageFiles
+            self.orphanedAudioReferences = orphanedAudioReferences
+        }
+        
+        public var total: Int {
+            ghostSessions + orphanedAudioFiles + orphanedImageFiles + orphanedAudioReferences
+        }
+        
+        public var description: String {
+            var parts: [String] = []
+            if ghostSessions > 0 {
+                parts.append("\(ghostSessions) 个幽灵会话")
+            }
+            if orphanedAudioFiles > 0 {
+                parts.append("\(orphanedAudioFiles) 个孤立音频")
+            }
+            if orphanedImageFiles > 0 {
+                parts.append("\(orphanedImageFiles) 个孤立图片")
+            }
+            if orphanedAudioReferences > 0 {
+                parts.append("\(orphanedAudioReferences) 个无效音频引用")
+            }
+            return parts.isEmpty ? "无孤立数据" : parts.joined(separator: "、")
+        }
+    }
+    
+    /// 统计所有孤立数据的数量（不执行清理）
+    public static func countAllOrphanedData() -> OrphanedDataCount {
+        return OrphanedDataCount(
+            ghostSessions: findGhostSessions().count,
+            orphanedAudioFiles: findOrphanedAudioFiles().count,
+            orphanedImageFiles: findOrphanedImageFiles().count,
+            orphanedAudioReferences: findOrphanedAudioReferences().count
+        )
+    }
+    
     // MARK: - JSON 文件预览
     
     /// 读取 JSON 文件内容（用于预览）

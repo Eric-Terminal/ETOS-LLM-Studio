@@ -50,6 +50,10 @@ struct SettingsView: View {
                         selectedSpeechModel: speechModelBinding,
                         sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+                        audioRecordingFormat: Binding(
+                            get: { viewModel.audioRecordingFormat },
+                            set: { viewModel.audioRecordingFormat = $0 }
+                        ),
                         speechModels: viewModel.speechModels
                     )
                 } label: {

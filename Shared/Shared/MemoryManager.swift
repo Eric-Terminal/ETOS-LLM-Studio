@@ -235,7 +235,8 @@ public class MemoryManager {
         let chunkTexts = chunker.chunk(text: trimmed)
         guard !chunkTexts.isEmpty else { return }
         
-        let updatedMemory = MemoryItem(id: item.id, content: trimmed, embedding: [], createdAt: item.createdAt)
+        // 更新时设置 updatedAt 为当前时间
+        let updatedMemory = MemoryItem(id: item.id, content: trimmed, embedding: [], createdAt: item.createdAt, updatedAt: Date(), isArchived: item.isArchived)
         cacheMemory(updatedMemory)
         
         // 如果没有配置嵌入模型，只更新原文，跳过嵌入生成
