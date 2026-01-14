@@ -732,6 +732,12 @@ class ChatViewModel: ObservableObject {
         additionalHistoryLoaded += increment
         updateDisplayedMessages()
     }
+    
+    /// 重置懒加载状态，恢复到初始加载数量
+    func resetLazyLoadState() {
+        additionalHistoryLoaded = 0
+        updateDisplayedMessages()
+    }
 
     func saveCurrentSessionDetails() {
         if let session = currentSession {

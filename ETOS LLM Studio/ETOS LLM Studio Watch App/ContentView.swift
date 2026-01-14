@@ -211,6 +211,8 @@ struct ContentView: View {
     
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         let scrollAction = {
+            // 点击回底按钮时，重置懒加载状态到初始数量
+            viewModel.resetLazyLoadState()
             withAnimation {
                 proxy.scrollTo("inputBubble", anchor: .bottom)
             }
