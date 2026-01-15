@@ -29,6 +29,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var selectedSpeechModel: RunnableModel?
     @Binding var sendSpeechAsAudio: Bool
     @Binding var includeSystemTimeInPrompt: Bool
+    @Binding var audioRecordingFormat: AudioRecordingFormat
     var speechModels: [RunnableModel]
     
     // MARK: - 私有属性
@@ -178,6 +179,19 @@ struct ModelAdvancedSettingsView: View {
                                     .foregroundColor(.secondary)
                             }
                         }
+                    }
+                }
+            }
+            
+            Section(
+                header: Text("音频发送格式"),
+                footer: Text(audioRecordingFormat.formatDescription)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            ) {
+                Picker("录制格式", selection: $audioRecordingFormat) {
+                    ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
+                        Text(format.displayName).tag(format)
                     }
                 }
             }

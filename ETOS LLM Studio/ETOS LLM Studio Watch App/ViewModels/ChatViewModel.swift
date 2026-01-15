@@ -83,6 +83,12 @@ class ChatViewModel: ObservableObject {
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
+    @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
+    
+    var audioRecordingFormat: AudioRecordingFormat {
+        get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
+        set { audioRecordingFormatRaw = newValue.rawValue }
+    }
     
     // MARK: - 公开属性
     
@@ -410,13 +416,34 @@ class ChatViewModel: ObservableObject {
             if let existingURL = speechRecordingURL {
                 try? FileManager.default.removeItem(at: existingURL)
             }
-            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).m4a")
-            let settings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                AVSampleRateKey: 44100,
-                AVNumberOfChannelsKey: 1,
-                AVEncoderBitRateKey: 64000
-            ]
+            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("speech-\(UUID().uuidString).\(audioRecordingFormat.fileExtension)")
+            
+            let settings: [String: Any]
+            switch audioRecordingFormat {
+            case .aac:
+                settings = [
+                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                    AVSampleRateKey: 44100,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderBitRateKey: 64000
+                ]
+            case .wav:
+                settings = [
+                    AVFormatIDKey: Int(kAudioFormatLinearPCM),
+                    AVSampleRateKey: 44100,
+                    AVNumberOfChannelsKey: 1,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false
+                ]
+            @unknown default:
+                settings = [
+                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                    AVSampleRateKey: 44100,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderBitRateKey: 64000
+                ]
+            }
             
             audioRecorder = try AVAudioRecorder(url: targetURL, settings: settings)
             audioRecorder?.isMeteringEnabled = true

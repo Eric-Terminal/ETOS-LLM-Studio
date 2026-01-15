@@ -91,6 +91,7 @@ struct SettingsView: View {
                         selectedSpeechModel: speechModelBinding,
                         sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+                        audioRecordingFormat: $viewModel.audioRecordingFormat,
                         speechModels: viewModel.speechModels
                     )) {
                         Label("模型高级设置", systemImage: "brain.head.profile")
@@ -127,17 +128,18 @@ struct SettingsView: View {
                 }
                 
                 // MARK: - 公告通知 Section
-                if let announcement = announcementManager.currentAnnouncement,
-                   announcementManager.shouldShowInSettings {
+                if announcementManager.shouldShowInSettings {
                     Section {
-                        NavigationLink(destination: AnnouncementDetailView(
-                            announcement: announcement,
-                            announcementManager: announcementManager
-                        )) {
-                            HStack {
-                                announcementIcon(for: announcement.type)
-                                Text(announcement.title)
-                                    .lineLimit(2)
+                        ForEach(announcementManager.currentAnnouncements) { announcement in
+                            NavigationLink(destination: AnnouncementDetailView(
+                                announcement: announcement,
+                                announcementManager: announcementManager
+                            )) {
+                                HStack {
+                                    announcementIcon(for: announcement.type)
+                                    Text(announcement.title)
+                                        .lineLimit(2)
+                                }
                             }
                         }
                     } header: {
