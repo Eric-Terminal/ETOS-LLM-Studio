@@ -619,7 +619,7 @@ public enum StorageUtility {
         public let orphanedImageFiles: Int
         public let orphanedAudioReferences: Int
         
-        public init(ghostSessions: Int, orphanedAudioFiles: Int, orphanedImageFiles: Int, orphanedAudioReferences: Int) {
+        public init(ghostSessions: Int = 0, orphanedAudioFiles: Int = 0, orphanedImageFiles: Int = 0, orphanedAudioReferences: Int = 0) {
             self.ghostSessions = ghostSessions
             self.orphanedAudioFiles = orphanedAudioFiles
             self.orphanedImageFiles = orphanedImageFiles

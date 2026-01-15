@@ -109,19 +109,20 @@ struct SettingsView: View {
             }
             
             // MARK: - 公告通知 Section
-            if let announcement = announcementManager.currentAnnouncement,
-               announcementManager.shouldShowInSettings {
+            if announcementManager.shouldShowInSettings {
                 Section("系统公告") {
-                    NavigationLink {
-                        AnnouncementDetailView(
-                            announcement: announcement,
-                            announcementManager: announcementManager
-                        )
-                    } label: {
-                        HStack {
-                            announcementIcon(for: announcement.type)
-                            Text(announcement.title)
-                                .lineLimit(2)
+                    ForEach(announcementManager.currentAnnouncements) { announcement in
+                        NavigationLink {
+                            AnnouncementDetailView(
+                                announcement: announcement,
+                                announcementManager: announcementManager
+                            )
+                        } label: {
+                            HStack {
+                                announcementIcon(for: announcement.type)
+                                Text(announcement.title)
+                                    .lineLimit(2)
+                            }
                         }
                     }
                 }

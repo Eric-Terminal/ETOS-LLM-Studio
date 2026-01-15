@@ -130,8 +130,8 @@ public class AnnouncementManager: ObservableObject {
     
     // MARK: - Published 属性
     
-    /// 当前公告（用于UI显示）
-    @Published public var currentAnnouncement: Announcement?
+    /// 当前公告列表（用于UI显示，可能有多个）
+    @Published public var currentAnnouncements: [Announcement] = []
     
     /// 是否应该显示弹窗通知
     @Published public var shouldShowAlert: Bool = false
@@ -156,7 +156,12 @@ public class AnnouncementManager: ObservableObject {
     
     /// 是否应该在设置中显示通知Section
     public var shouldShowInSettings: Bool {
-        return currentAnnouncement != nil && !hideAnnouncementSection
+        return !currentAnnouncements.isEmpty && !hideAnnouncementSection
+    }
+    
+    /// 便捷属性：获取第一个公告（向后兼容）
+    public var currentAnnouncement: Announcement? {
+        return currentAnnouncements.first
     }
     
     // MARK: - 初始化
@@ -178,17 +183,18 @@ public class AnnouncementManager: ObservableObject {
         }
         
         do {
-            if let announcement = try await fetchAnnouncement() {
-                await processAnnouncement(announcement)
+            let announcements = try await fetchAnnouncements()
+            if !announcements.isEmpty {
+                await processAnnouncements(announcements)
             } else {
                 logger.info("📢 没有适用于当前设备的公告")
-                currentAnnouncement = nil
+                currentAnnouncements = []
             }
         } catch {
             logger.error("📢 获取公告失败: \(error.localizedDescription)")
             // 网络失败时不修改已有的AppStorage设置
             // 也不显示任何通知
-            currentAnnouncement = nil
+            currentAnnouncements = []
         }
     }
     
@@ -206,8 +212,8 @@ public class AnnouncementManager: ObservableObject {
     // MARK: - 私有方法
     
     /// 从服务器获取公告
-    /// 支持多个相同 ID 的公告（不同语言版本），返回最佳匹配
-    private func fetchAnnouncement() async throws -> Announcement? {
+    /// 支持多个公告，返回筛选后的公告数组
+    private func fetchAnnouncements() async throws -> [Announcement] {
         logger.info("📢 正在从服务器获取公告...")
         
         var request = URLRequest(url: announcementURL)
@@ -223,35 +229,75 @@ public class AnnouncementManager: ObservableObject {
         
         let decoder = JSONDecoder()
         
-        // 尝试解析为数组（支持多个相同 ID 的不同语言版本）
+        // 尝试解析为数组
         if let announcements = try? decoder.decode([Announcement].self, from: data) {
             logger.info("📢 获取到 \(announcements.count) 个公告条目")
-            return selectBestAnnouncement(from: announcements)
+            return selectAnnouncements(from: announcements)
         }
         
         // 后向兼容：尝试解析为单个对象
         if let announcement = try? decoder.decode(Announcement.self, from: data) {
             logger.info("📢 成功获取单个公告: ID=\(announcement.id), Type=\(announcement.type.rawValue)")
-            return announcement
+            // 检查是否兼容
+            if isVersionCompatible(announcement) && isPlatformCompatible(announcement) {
+                return [announcement]
+            }
+            return []
         }
         
         throw AnnouncementError.decodingFailed
     }
     
-    /// 从多个公告中选择最佳匹配
-    /// 优先级：精确语言匹配 > 语言前缀匹配 > 无语言限制 > 第一个
-    private func selectBestAnnouncement(from announcements: [Announcement]) -> Announcement? {
-        guard !announcements.isEmpty else { return nil }
+    /// 从多个公告中选择要显示的公告
+    /// 逻辑：
+    /// 1. 按 ID 分组
+    /// 2. 对于每个 ID：如果所有条目都没有语言和平台限制，则全部返回；否则选择最佳匹配的一个
+    private func selectAnnouncements(from announcements: [Announcement]) -> [Announcement] {
+        guard !announcements.isEmpty else { return [] }
         
         // 先过滤出版本和平台兼容的公告
         let compatible = announcements.filter { isVersionCompatible($0) && isPlatformCompatible($0) }
-        guard !compatible.isEmpty else { return nil }
+        guard !compatible.isEmpty else { return [] }
+        
+        // 按 ID 分组
+        let grouped = Dictionary(grouping: compatible) { $0.id }
+        
+        var result: [Announcement] = []
+        
+        for (id, group) in grouped.sorted(by: { $0.key > $1.key }) { // ID 降序，新的在前
+            // 检查这组公告是否都没有语言和平台限制
+            let allUnrestricted = group.allSatisfy { announcement in
+                let noLanguage = announcement.language == nil || announcement.language?.isEmpty == true
+                let noPlatform = announcement.platform == nil || announcement.platform?.isEmpty == true
+                return noLanguage && noPlatform
+            }
+            
+            if allUnrestricted {
+                // 如果都没有限制，全部添加
+                logger.info("📢 ID \(id) 的 \(group.count) 个公告都无限制，全部显示")
+                result.append(contentsOf: group)
+            } else {
+                // 否则选择最佳匹配的一个
+                if let best = selectBestFromGroup(group) {
+                    logger.info("📢 ID \(id) 选择最佳匹配公告")
+                    result.append(best)
+                }
+            }
+        }
+        
+        return result
+    }
+    
+    /// 从一组同 ID 的公告中选择最佳匹配
+    /// 优先级：精确语言匹配 > 语言前缀匹配 > 无语言限制 > 英文 > 第一个
+    private func selectBestFromGroup(_ group: [Announcement]) -> Announcement? {
+        guard !group.isEmpty else { return nil }
         
         let deviceLanguage = Locale.current.language.languageCode?.identifier ?? "en"
         let deviceFullLanguage = Locale.current.identifier // e.g., "zh-Hans_CN"
         
         // 第一优先级：精确匹配语言代码 (e.g., "zh-Hans")
-        for announcement in compatible {
+        for announcement in group {
             if let lang = announcement.language, !lang.isEmpty {
                 if deviceFullLanguage.hasPrefix(lang.replacingOccurrences(of: "-", with: "_")) ||
                    deviceFullLanguage.hasPrefix(lang) {
@@ -262,7 +308,7 @@ public class AnnouncementManager: ObservableObject {
         }
         
         // 第二优先级：前缀匹配 (e.g., "zh" 匹配 "zh-Hans")
-        for announcement in compatible {
+        for announcement in group {
             if let lang = announcement.language, !lang.isEmpty {
                 if deviceLanguage.hasPrefix(lang) || lang.hasPrefix(deviceLanguage) {
                     logger.info("📢 前缀匹配语言: \(lang)")
@@ -271,24 +317,24 @@ public class AnnouncementManager: ObservableObject {
             }
         }
         
-        // 第三优先级：无语言限制的公告（适用于所有用户）
-        for announcement in compatible {
+        // 第三优先级：无语言限制的公告
+        for announcement in group {
             if announcement.language == nil || announcement.language?.isEmpty == true {
                 logger.info("📢 使用无语言限制的公告")
                 return announcement
             }
         }
         
-        // 最后回退：返回英文版本或第一个
-        for announcement in compatible {
+        // 第四优先级：英文版本
+        for announcement in group {
             if announcement.language == "en" {
                 logger.info("📢 回退到英文版本")
                 return announcement
             }
         }
         
-        logger.info("📢 使用第一个兼容的公告")
-        return compatible.first
+        logger.info("📢 使用第一个公告")
+        return group.first
     }
     
     /// 检查平台兼容性（仅检查平台，不检查语言）
@@ -308,45 +354,46 @@ public class AnnouncementManager: ObservableObject {
         return targetPlatform.lowercased() == currentPlatform.lowercased()
     }
     
-    /// 处理获取到的公告
-    private func processAnnouncement(_ announcement: Announcement) async {
-        // 版本和平台检查已在 selectBestAnnouncement 中完成
+    /// 处理获取到的公告数组
+    private func processAnnouncements(_ announcements: [Announcement]) async {
+        guard !announcements.isEmpty else { return }
         
-        let isNewAnnouncement = announcement.id != lastAnnouncementId
+        // 获取最高优先级的公告（用于判断是否新公告和弹窗类型）
+        // 按 ID 降序排列，取最大的
+        let maxId = announcements.map { $0.id }.max() ?? 0
+        let isNewAnnouncement = maxId != lastAnnouncementId
         
         // 如果是新公告，重置隐藏状态
         if isNewAnnouncement {
             hideAnnouncementSection = false
-            logger.info("📢 检测到新公告 (ID: \(announcement.id))，重置隐藏状态")
+            logger.info("📢 检测到新公告 (最高ID: \(maxId))，重置隐藏状态")
         }
         
-        // 设置当前公告（用于静默显示）
-        currentAnnouncement = announcement
+        // 设置当前公告列表（用于静默显示）
+        currentAnnouncements = announcements
+        logger.info("📢 设置 \(announcements.count) 个公告用于显示")
         
-        // 根据类型决定是否显示弹窗
-        switch announcement.type {
-        case .info:
-            // info 类型只在设置中静默显示，不弹窗
-            logger.info("📢 Info类型公告，静默显示")
-            
-        case .warning:
-            // warning 类型仅在新公告时弹窗
-            if isNewAnnouncement {
-                shouldShowAlert = true
-                logger.info("📢 Warning类型新公告，显示弹窗")
-            } else {
-                logger.info("📢 Warning类型旧公告，降级为静默显示")
-            }
-            
-        case .blocking:
+        // 根据公告中最高优先级的类型决定是否显示弹窗
+        // 优先级：blocking > warning > info
+        let hasBlocking = announcements.contains { $0.type == .blocking }
+        let hasWarning = announcements.contains { $0.type == .warning }
+        
+        if hasBlocking {
             // blocking 类型每次都弹窗
             shouldShowAlert = true
-            logger.info("📢 Blocking类型公告，强制显示弹窗")
+            logger.info("📢 包含 Blocking 类型公告，强制显示弹窗")
+        } else if hasWarning && isNewAnnouncement {
+            // warning 类型仅在新公告时弹窗
+            shouldShowAlert = true
+            logger.info("📢 包含 Warning 类型新公告，显示弹窗")
+        } else {
+            // info 类型只在设置中静默显示，不弹窗
+            logger.info("📢 公告静默显示")
         }
         
-        // 更新本地存储的ID（仅在成功获取公告后）
-        lastAnnouncementId = announcement.id
-        logger.info("📢 已更新本地公告ID为: \(announcement.id)")
+        // 更新本地存储的ID（使用最大ID）
+        lastAnnouncementId = maxId
+        logger.info("📢 已更新本地公告ID为: \(maxId)")
     }
     
     /// 检查版本兼容性

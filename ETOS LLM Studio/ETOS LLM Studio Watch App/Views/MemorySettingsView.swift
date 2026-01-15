@@ -144,7 +144,7 @@ public struct MemorySettingsView: View {
                                 Text(memory.content)
                                     .lineLimit(2)
                                     .font(.footnote)
-                                Text(memory.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
+                                Text(memory.displayDate.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
@@ -159,7 +159,8 @@ public struct MemorySettingsView: View {
                             } label: {
                                 Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
-                            
+                        }
+                        .swipeActions(edge: .leading) {
                             Button {
                                 Task {
                                     await viewModel.archiveMemory(memory)
@@ -186,7 +187,7 @@ public struct MemorySettingsView: View {
                                     .lineLimit(2)
                                     .font(.footnote)
                                     .foregroundColor(.secondary)
-                                Text(memory.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
+                                Text(memory.displayDate.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                             }
@@ -201,7 +202,8 @@ public struct MemorySettingsView: View {
                             } label: {
                                 Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
-                            
+                        }
+                        .swipeActions(edge: .leading) {
                             Button {
                                 Task {
                                     await viewModel.unarchiveMemory(memory)
