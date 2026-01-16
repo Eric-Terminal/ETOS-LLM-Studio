@@ -501,7 +501,12 @@ class ChatViewModel: ObservableObject {
                 let data = try Data(contentsOf: url)
                 if sendSpeechAsAudio {
                     // 不立即发送，而是暂存为待发送附件
-                    let attachment = AudioAttachment(data: data, mimeType: "audio/m4a", format: "m4a", fileName: url.lastPathComponent)
+                    let attachment = AudioAttachment(
+                        data: data,
+                        mimeType: audioRecordingFormat.mimeType,
+                        format: audioRecordingFormat.fileExtension,
+                        fileName: url.lastPathComponent
+                    )
                     await MainActor.run {
                         pendingAudioAttachment = attachment
                     }
@@ -513,7 +518,7 @@ class ChatViewModel: ObservableObject {
                         using: speechModel,
                         audioData: data,
                         fileName: url.lastPathComponent,
-                        mimeType: "audio/m4a"
+                        mimeType: audioRecordingFormat.mimeType
                     )
                     appendTranscribedText(transcript)
                 }

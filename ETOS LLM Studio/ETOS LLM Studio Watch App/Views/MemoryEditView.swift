@@ -48,11 +48,11 @@ public struct MemoryEditView: View {
             
             Section {
                 HStack {
-                    Text("创建时间")
-                        .foregroundColor(.secondary)
+                    Text("更新时间")
+                        .font(.footnote)
                     Spacer()
-                    Text(memory.createdAt.formatted(.dateTime))
-                        .font(.caption)
+                    Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                 }
             }
