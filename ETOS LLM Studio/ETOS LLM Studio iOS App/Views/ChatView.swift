@@ -407,6 +407,9 @@ struct ChatView: View {
                 viewModel.sendMessage()
                 draftText = ""
             },
+            stopAction: {
+                viewModel.cancelSending()
+            },
             focus: $composerFocused
         )
         .onAppear {
@@ -675,9 +678,11 @@ private struct TelegramPatternView: View {
 /// Telegram 风格的消息输入框
 private struct TelegramMessageComposer: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var text: String
     let isSending: Bool
     let sendAction: () -> Void
+    let stopAction: () -> Void
     let focus: FocusState<Bool>.Binding
     
     @State private var showAttachmentMenu = false
@@ -685,29 +690,29 @@ private struct TelegramMessageComposer: View {
     @State private var showAudioRecorder = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
+    private let controlSize: CGFloat = 40
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // 分隔线
-            Rectangle()
-                .fill(Color(uiColor: .separator))
-                .frame(height: 0.5)
-            
+        VStack(spacing: 8) {
             // 附件预览区域
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
                 telegramAttachmentPreview
+                    .padding(.horizontal, 16)
             }
             
             // 主输入栏
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .bottom, spacing: 12) {
                 // 附件按钮
                 Button {
                     showAttachmentMenu = true
                 } label: {
                     Image(systemName: "paperclip")
-                        .font(.system(size: 22, weight: .medium))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(TelegramColors.attachButtonColor)
-                        .frame(width: 36, height: 36)
+                        .frame(width: controlSize, height: controlSize)
+                        .background(glassCircleBackground)
                 }
+                .buttonStyle(.plain)
                 .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
                     Button("选择图片") {
                         showImagePicker = true
@@ -721,66 +726,40 @@ private struct TelegramMessageComposer: View {
                 // 输入框容器
                 HStack(alignment: .bottom, spacing: 8) {
                     // 文本输入框
-                    TextField("消息", text: $text, axis: .vertical)
+                    TextField("Message", text: $text, axis: .vertical)
                         .lineLimit(1...8)
                         .textFieldStyle(.plain)
                         .focused(focus)
                         .font(.system(size: 16))
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(TelegramColors.inputFieldBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(TelegramColors.inputBorder, lineWidth: 0.5)
-                )
+                .frame(minHeight: controlSize)
+                .background(glassCapsuleBackground)
                 
-                // 发送按钮或麦克风按钮
-                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && viewModel.pendingImageAttachments.isEmpty && viewModel.pendingAudioAttachment == nil {
-                    // 麦克风按钮（无内容时）
-                    Button {
-                        showAudioRecorder = true
-                    } label: {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(TelegramColors.attachButtonColor)
-                            .frame(width: 36, height: 36)
-                    }
-                } else {
-                    // 发送按钮
-                    Button {
+                // 麦克风 / 发送 / 停止按钮
+                Button {
+                    if isSending {
+                        stopAction()
+                    } else if hasContent {
                         sendAction()
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    viewModel.canSendMessage
-                                        ? TelegramColors.sendButtonColor
-                                        : Color.gray.opacity(0.3)
-                                )
-                                .frame(width: 36, height: 36)
-                            
-                            if isSending {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.8)
-                            } else {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                        }
+                    } else {
+                        showAudioRecorder = true
                     }
-                    .disabled(!viewModel.canSendMessage)
+                } label: {
+                    Image(systemName: actionIconName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(actionForegroundColor)
+                        .frame(width: controlSize, height: controlSize)
+                        .background(actionBackground)
                 }
+                .buttonStyle(.plain)
+                .disabled(!isSending && hasContent && !viewModel.canSendMessage)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(TelegramColors.inputBackground)
         }
+        .padding(.bottom, 6)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
@@ -869,7 +848,99 @@ private struct TelegramMessageComposer: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .background(TelegramColors.inputBackground)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(glassOverlayColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(glassStrokeColor, lineWidth: 0.5)
+                )
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        )
+    }
+
+    private var hasContent: Bool {
+        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty
+        return hasText || hasAttachments
+    }
+    
+    private var actionIconName: String {
+        if isSending {
+            return "stop.fill"
+        }
+        return hasContent ? "arrow.up" : "mic.fill"
+    }
+    
+    private var actionForegroundColor: Color {
+        if isSending || hasContent {
+            return .white
+        }
+        return TelegramColors.attachButtonColor
+    }
+    
+    @ViewBuilder
+    private var actionBackground: some View {
+        if isSending {
+            Circle()
+                .fill(Color.red.opacity(0.85))
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        } else if hasContent {
+            Circle()
+                .fill(
+                    viewModel.canSendMessage
+                        ? TelegramColors.sendButtonColor
+                        : Color.gray.opacity(0.3)
+                )
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        } else {
+            glassCircleBackground
+        }
+    }
+    
+    private var glassCircleBackground: some View {
+        Circle()
+            .fill(.ultraThinMaterial)
+            .overlay(
+                Circle()
+                    .fill(glassOverlayColor)
+            )
+            .overlay(
+                Circle()
+                    .stroke(glassStrokeColor, lineWidth: 0.5)
+            )
+            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+    }
+    
+    private var glassCapsuleBackground: some View {
+        Capsule()
+            .fill(.ultraThinMaterial)
+            .overlay(
+                Capsule()
+                    .fill(glassOverlayColor)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(glassStrokeColor, lineWidth: 0.5)
+            )
+            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+    }
+    
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.2)
+    }
+    
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+    
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
     }
 }
 

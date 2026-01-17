@@ -268,6 +268,12 @@ final class ChatViewModel: ObservableObject {
             )
         }
     }
+
+    func cancelSending() {
+        Task {
+            await chatService.cancelOngoingRequest()
+        }
+    }
     
     /// 是否可以发送消息（有文字或附件）
     var canSendMessage: Bool {
