@@ -49,6 +49,19 @@ struct ChatView: View {
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
+    private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
+    private let navBarSubtitleFont = UIFont.systemFont(ofSize: 12)
+    private let navBarPillVerticalPadding: CGFloat = 6
+    private let navBarPillSpacing: CGFloat = 1
+    private var navBarPillHeight: CGFloat {
+        navBarTitleFont.lineHeight
+            + navBarSubtitleFont.lineHeight
+            + navBarPillSpacing
+            + navBarPillVerticalPadding * 2
+    }
+    private var navBarIconSize: CGFloat {
+        navBarPillHeight
+    }
     
     var body: some View {
         NavigationStack {
@@ -253,97 +266,130 @@ struct ChatView: View {
     @ViewBuilder
     private var telegramNavBar: some View {
         HStack(spacing: 12) {
-            // 返回按钮区域 - 点击打开会话列表
-            VStack(alignment: .leading, spacing: 2) {
-                Button {
-                    navigationDestination = .sessions
-                } label: {
-                    Text(viewModel.currentSession?.name ?? "新的对话")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(TelegramColors.navBarText)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                
-                if viewModel.activatedModels.isEmpty {
-                    Text("选择模型以开始")
-                        .font(.system(size: 13))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                        .lineLimit(1)
-                } else {
-                    Menu {
-                        ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                            Button {
-                                viewModel.setSelectedModel(runnable)
-                            } label: {
-                                if runnable.id == viewModel.selectedModel?.id {
-                                    Label(
-                                        "\(runnable.model.displayName) · \(runnable.provider.name)",
-                                        systemImage: "checkmark"
-                                    )
-                                } else {
-                                    Text("\(runnable.model.displayName) · \(runnable.provider.name)")
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(viewModel.selectedModel?.model.displayName ?? "选择模型")
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .font(.system(size: 13))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                    }
-                    .buttonStyle(.plain)
-                }
+            navBarModelMenu
+
+            Spacer(minLength: 12)
+
+            Button {
+                navigationDestination = .sessions
+            } label: {
+                navBarCenterPill
             }
-            
-            Spacer()
-            
-            // 右侧操作按钮
-            HStack(spacing: 20) {
-                // 新建会话按钮
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 12)
+
+            Menu {
                 Button {
                     viewModel.createNewSession()
                 } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(TelegramColors.navBarText)
+                    Label("新建会话", systemImage: "square.and.pencil")
                 }
-                
-                // 更多菜单
-                Menu {
-                    Button {
-                        navigationDestination = .sessions
-                    } label: {
-                        Label("会话列表", systemImage: "list.bullet")
-                    }
-                    
-                    Button {
-                        navigationDestination = .settings
-                    } label: {
-                        Label("设置", systemImage: "gearshape")
-                    }
+
+                Button {
+                    navigationDestination = .sessions
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(TelegramColors.navBarText)
+                    Label("会话列表", systemImage: "list.bullet")
                 }
+
+                Button {
+                    navigationDestination = .settings
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+            } label: {
+                navBarIconLabel(systemName: "ellipsis", accessibilityLabel: "更多")
             }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .overlay(
-            Rectangle()
-                .fill(Color(uiColor: .separator))
-                .frame(height: 0.5),
-            alignment: .bottom
-        )
+        .padding(.vertical, 8)
     }
-    
+
+    private var navBarModelMenu: some View {
+        Menu {
+            if viewModel.activatedModels.isEmpty {
+                Button("暂无可用模型") {}
+                    .disabled(true)
+            } else {
+                ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                    Button {
+                        viewModel.setSelectedModel(runnable)
+                    } label: {
+                        if runnable.id == viewModel.selectedModel?.id {
+                            Label(
+                                "\(runnable.model.displayName) · \(runnable.provider.name)",
+                                systemImage: "checkmark"
+                            )
+                        } else {
+                            Text("\(runnable.model.displayName) · \(runnable.provider.name)")
+                        }
+                    }
+                }
+            }
+        } label: {
+            navBarIconLabel(systemName: "cpu", accessibilityLabel: "切换模型")
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(TelegramColors.navBarText)
+            .frame(width: navBarIconSize, height: navBarIconSize)
+            .background(
+                Circle()
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+            )
+            .contentShape(Circle())
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var navBarCenterPill: some View {
+        VStack(spacing: navBarPillSpacing) {
+            MarqueeText(
+                content: viewModel.currentSession?.name ?? "新的对话",
+                uiFont: navBarTitleFont
+            )
+            .foregroundColor(TelegramColors.navBarText)
+            .allowsHitTesting(false)
+
+            if viewModel.activatedModels.isEmpty {
+                MarqueeText(content: "选择模型以开始", uiFont: navBarSubtitleFont)
+                    .foregroundColor(TelegramColors.navBarSubtitle)
+                    .allowsHitTesting(false)
+            } else {
+                MarqueeText(content: modelSubtitle, uiFont: navBarSubtitleFont)
+                    .foregroundColor(TelegramColors.navBarSubtitle)
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, navBarPillVerticalPadding)
+        .frame(height: navBarPillHeight)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+    }
+
+    private var modelSubtitle: String {
+        if let selectedModel = viewModel.selectedModel {
+            return "\(selectedModel.model.displayName) · \(selectedModel.provider.name)"
+        }
+        return "选择模型"
+    }
+
     /// Telegram 风格输入栏
     @ViewBuilder
     private var telegramInputBar: some View {
