@@ -161,7 +161,7 @@ public class OpenAIAdapter: APIAdapter {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         guard let randomApiKey = model.provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
-            logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。" )
+            logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
         }
         request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")

@@ -12,11 +12,11 @@ import Shared
 
 struct SessionListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.dismiss) private var dismiss
     
     @State private var editingSessionID: UUID?
     @State private var draftName: String = ""
-    @State private var showDeleteConfirmation = false
-    @State private var sessionsToDelete: [ChatSession] = []
+    @State private var sessionToDelete: ChatSession?
     @State private var sessionInfo: SessionInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
@@ -59,8 +59,7 @@ struct SessionListView: View {
                             viewModel.deleteLastMessage(for: session)
                         },
                         onDelete: {
-                            sessionsToDelete = [session]
-                            showDeleteConfirmation = true
+                            sessionToDelete = session
                         },
                         onCancelRename: {
                             editingSessionID = nil
@@ -76,25 +75,29 @@ struct SessionListView: View {
                     )
                 }
                 .onDelete { indexSet in
-                    let toDelete = indexSet.map { viewModel.chatSessions[$0] }
-                    sessionsToDelete = toDelete
-                    showDeleteConfirmation = true
+                    if let index = indexSet.first {
+                        sessionToDelete = viewModel.chatSessions[index]
+                    }
                 }
             }
         }
         .navigationTitle("会话管理")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                EditButton()
+        .alert("确认删除会话", isPresented: Binding(
+            get: { sessionToDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    sessionToDelete = nil
+                }
             }
-        }
-        .alert("确认删除会话", isPresented: $showDeleteConfirmation) {
+        )) {
             Button("删除", role: .destructive) {
-                viewModel.deleteSessions(sessionsToDelete)
-                sessionsToDelete.removeAll()
+                if let session = sessionToDelete {
+                    viewModel.deleteSessions([session])
+                }
+                sessionToDelete = nil
             }
             Button("取消", role: .cancel) {
-                sessionsToDelete.removeAll()
+                sessionToDelete = nil
             }
         } message: {
             Text("删除后所有消息也将被移除，操作不可恢复。")
@@ -102,7 +105,7 @@ struct SessionListView: View {
         .sheet(item: $sessionInfo) { info in
             SessionInfoSheet(payload: info)
         }
-        .alert("👻 发现幽灵会话", isPresented: $showGhostSessionAlert) {
+        .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
             Button("删除幽灵", role: .destructive) {
                 if let session = ghostSession {
                     viewModel.deleteSessions([session])
@@ -128,6 +131,7 @@ struct SessionListView: View {
             showGhostSessionAlert = true
         } else {
             viewModel.setCurrentSession(session)
+            dismiss()
         }
     }
     
@@ -197,24 +201,10 @@ private struct SessionRow: View {
                     Spacer()
                     
                     if isCurrent {
-                        Capsule()
-                            .fill(Color.accentColor.opacity(0.2))
-                            .frame(width: 70, height: 26)
-                            .overlay(
-                                Label("当前", systemImage: "checkmark")
-                                    .font(.footnote.bold())
-                                    .foregroundColor(.accentColor)
-                            )
+                        Image(systemName: "checkmark")
+                            .font(.footnote.bold())
+                            .foregroundColor(.accentColor)
                     }
-                    
-                    Button {
-                        onInfo()
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 18, weight: .medium))
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("查看会话信息")
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {

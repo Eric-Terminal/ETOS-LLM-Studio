@@ -133,7 +133,7 @@ class ChatViewModel: ObservableObject {
 
     /// 用于测试和依赖注入的指定初始化方法
     internal init(chatService: ChatService) {
-        logger.info("🚀 [ViewModel] ChatViewModel initializing with specific service...")
+        logger.info("ChatViewModel initializing with specific service.")
         self.chatService = chatService
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
 
@@ -146,7 +146,7 @@ class ChatViewModel: ObservableObject {
         // 自动轮换背景逻辑
         rotateBackgroundImageIfNeeded()
         
-        logger.info("  - ViewModel initialized and subscribed to a ChatService instance.")
+        logger.info("ChatViewModel initialized and subscribed to ChatService.")
     }
     
     @objc private func handleDidBecomeActive() {
@@ -246,7 +246,7 @@ class ChatViewModel: ObservableObject {
         guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
         let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""
-        logger.info("  - 自动轮换背景。新背景: \(self.currentBackgroundImage, privacy: .public)")
+        logger.info("自动轮换背景，新背景: \(self.currentBackgroundImage, privacy: .public)")
     }
     
     // MARK: - 公开方法 (视图操作)
@@ -254,7 +254,7 @@ class ChatViewModel: ObservableObject {
     // MARK: 消息流
     
     func sendMessage() {
-        logger.info("✉️ [ViewModel] sendMessage called.")
+        logger.info("sendMessage called.")
         let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasText = !userMessageContent.isEmpty
         let hasAudio = pendingAudioAttachment != nil
@@ -501,7 +501,12 @@ class ChatViewModel: ObservableObject {
                 let data = try Data(contentsOf: url)
                 if sendSpeechAsAudio {
                     // 不立即发送，而是暂存为待发送附件
-                    let attachment = AudioAttachment(data: data, mimeType: "audio/m4a", format: "m4a", fileName: url.lastPathComponent)
+                    let attachment = AudioAttachment(
+                        data: data,
+                        mimeType: audioRecordingFormat.mimeType,
+                        format: audioRecordingFormat.fileExtension,
+                        fileName: url.lastPathComponent
+                    )
                     await MainActor.run {
                         pendingAudioAttachment = attachment
                     }
@@ -513,7 +518,7 @@ class ChatViewModel: ObservableObject {
                         using: speechModel,
                         audioData: data,
                         fileName: url.lastPathComponent,
-                        mimeType: "audio/m4a"
+                        mimeType: audioRecordingFormat.mimeType
                     )
                     appendTranscribedText(transcript)
                 }

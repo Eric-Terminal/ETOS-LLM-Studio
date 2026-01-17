@@ -37,14 +37,14 @@ public struct ConfigLoader {
             return
         }
         
-        logger.warning("⚠️ 用户提供商配置目录不存在。正在创建...")
+        logger.warning("用户提供商配置目录不存在。正在创建...")
         
         do {
             // 1. 创建 Providers 目录
             try fileManager.createDirectory(at: providersDirectory, withIntermediateDirectories: true, attributes: nil)
             logger.info("  - 成功创建目录: \(providersDirectory.path)")
         } catch {
-            logger.error("❌ 初始化提供商配置目录失败: \(error.localizedDescription)")
+            logger.error("初始化提供商配置目录失败: \(error.localizedDescription)")
         }
     }
 
@@ -53,7 +53,7 @@ public struct ConfigLoader {
     /// 从 `Providers` 目录加载所有提供商的配置。
     /// - Returns: 一个包含所有已加载 `Provider` 对象的数组。
     public static func loadProviders() -> [Provider] {
-        logger.info("🔄 正在从 \(providersDirectory.path) 加载所有提供商...")
+        logger.info("正在从 \(providersDirectory.path) 加载所有提供商...")
         let fileManager = FileManager.default
         var providers: [Provider] = []
 
@@ -64,13 +64,13 @@ public struct ConfigLoader {
                     let data = try Data(contentsOf: url)
                     let provider = try JSONDecoder().decode(Provider.self, from: data)
                     providers.append(provider)
-                    logger.info("  - ✅ 成功加载: \(url.lastPathComponent)")
+                    logger.info("  - 成功加载: \(url.lastPathComponent)")
                 } catch {
-                    logger.error("  - ❌ 解析文件失败 \(url.lastPathComponent): \(error.localizedDescription)")
+                    logger.error("  - 解析文件失败 \(url.lastPathComponent): \(error.localizedDescription)")
                 }
             }
         } catch {
-            logger.error("❌ 无法读取 Providers 目录: \(error.localizedDescription)")
+            logger.error("无法读取 Providers 目录: \(error.localizedDescription)")
         }
         
         logger.info("总共加载了 \(providers.count) 个提供商。")
@@ -82,7 +82,7 @@ public struct ConfigLoader {
     public static func saveProvider(_ provider: Provider) {
         // 使用 provider 的 ID 作为文件名以确保唯一性
         let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
-        logger.info("💾 正在保存提供商 \(provider.name) 到 \(fileURL.path)")
+        logger.info("正在保存提供商 \(provider.name) 到 \(fileURL.path)")
         
         do {
             // 使用“先删再写”模式，确保能覆盖文件
@@ -92,9 +92,9 @@ public struct ConfigLoader {
             encoder.outputFormatting = .prettyPrinted
             let data = try encoder.encode(provider)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
-            logger.info("  - ✅ 保存成功。")
+            logger.info("  - 保存成功。")
         } catch {
-            logger.error("  - ❌ 保存失败: \(error.localizedDescription)")
+            logger.error("  - 保存失败: \(error.localizedDescription)")
         }
     }
     
@@ -102,13 +102,13 @@ public struct ConfigLoader {
     /// - Parameter provider: 需要删除的 `Provider` 对象。
     public static func deleteProvider(_ provider: Provider) {
         let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
-        logger.info("🗑️ 正在删除提供商 \(provider.name) 的配置文件: \(fileURL.path)")
+        logger.info("正在删除提供商 \(provider.name) 的配置文件: \(fileURL.path)")
 
         do {
             try FileManager.default.removeItem(at: fileURL)
-            logger.info("  - ✅ 删除成功。")
+            logger.info("  - 删除成功。")
         } catch {
-            logger.error("  - ❌ 删除失败: \(error.localizedDescription)")
+            logger.error("  - 删除失败: \(error.localizedDescription)")
         }
     }
     
@@ -128,20 +128,20 @@ public struct ConfigLoader {
             return
         }
         
-        logger.warning("⚠️ 用户背景图片目录不存在。正在创建...")
+        logger.warning("用户背景图片目录不存在。正在创建...")
         
         do {
             try fileManager.createDirectory(at: backgroundsDirectory, withIntermediateDirectories: true, attributes: nil)
             logger.info("  - 成功创建目录: \(backgroundsDirectory.path)")
         } catch {
-            logger.error("❌ 初始化背景图片目录失败: \(error.localizedDescription)")
+            logger.error("初始化背景图片目录失败: \(error.localizedDescription)")
         }
     }
 
     /// 从 `Backgrounds` 目录加载所有图片的文件名。
     /// - Returns: 一个包含所有图片文件名的数组。
     public static func loadBackgroundImages() -> [String] {
-        logger.info("🔄 正在从 \(getBackgroundsDirectory().path) 加载所有背景图片...")
+        logger.info("正在从 \(getBackgroundsDirectory().path) 加载所有背景图片...")
         let fileManager = FileManager.default
         var imageNames: [String] = []
 
@@ -155,7 +155,7 @@ public struct ConfigLoader {
                 }
             }
         } catch {
-            logger.error("❌ 无法读取 Backgrounds 目录: \(error.localizedDescription)")
+            logger.error("无法读取 Backgrounds 目录: \(error.localizedDescription)")
         }
         
         logger.info("总共加载了 \(imageNames.count) 个背景图片。")

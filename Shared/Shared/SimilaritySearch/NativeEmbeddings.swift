@@ -57,11 +57,11 @@ public class NativeEmbeddings: EmbeddingsProtocol {
                 let fallbackModel = ModelActor.loadModel(language: fallbackLanguage, type: type) {
                 model = fallbackModel
                 languageInUse = fallbackLanguage
-                ModelActor.logger.warning("⚠️ 无法加载 \(preferredLanguage.rawValue) 的嵌入模型，已回退到 \(fallbackLanguage.rawValue)。")
+                ModelActor.logger.warning("无法加载 \(preferredLanguage.rawValue) 的嵌入模型，已回退到 \(fallbackLanguage.rawValue)。")
             } else {
                 model = nil
                 languageInUse = nil
-                ModelActor.logger.error("❌ 无法加载 \(preferredLanguage.rawValue) 的嵌入模型，且缺少有效回退。记忆搜索将被禁用。")
+                ModelActor.logger.error("无法加载 \(preferredLanguage.rawValue) 的嵌入模型，且缺少有效回退。记忆搜索将被禁用。")
             }
         }
 

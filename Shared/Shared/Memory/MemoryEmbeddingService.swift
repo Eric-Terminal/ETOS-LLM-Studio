@@ -114,7 +114,7 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         guard embeddings.count == texts.count else {
             throw MemoryEmbeddingError.resultCountMismatch(expected: texts.count, actual: embeddings.count)
         }
-        logger.debug("✅ 嵌入请求成功，模型: \(targetModel.model.displayName), 条数: \(embeddings.count)")
+        logger.debug("嵌入请求成功，模型: \(targetModel.model.displayName), 条数: \(embeddings.count)")
         return embeddings
     }
     

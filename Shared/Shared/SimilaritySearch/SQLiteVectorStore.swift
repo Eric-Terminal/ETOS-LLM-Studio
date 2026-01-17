@@ -52,7 +52,7 @@ public final class SQLiteVectorStore: VectorStoreProtocol {
             let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
             return files.filter { $0.pathExtension == "sqlite" }
         } catch {
-            logger.error("❌ 列出 SQLite 索引失败: \(error.localizedDescription)")
+            logger.error("列出 SQLite 索引失败: \(error.localizedDescription)")
             return []
         }
     }

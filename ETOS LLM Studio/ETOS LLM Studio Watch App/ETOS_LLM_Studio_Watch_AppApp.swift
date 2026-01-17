@@ -18,7 +18,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     @StateObject private var syncManager = WatchSyncManager.shared
     
     init() {
-        // 🔥 在 App 启动时预先触发本地网络权限
+        // 在 App 启动时预先触发本地网络权限
         // 这样用户在第一次使用远程调试前就会看到权限弹窗
         #if !targetEnvironment(simulator)
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) {
@@ -38,7 +38,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     /// 在后台尝试一个虚拟的本地网络连接，触发系统权限弹窗
     private static func preWarmLocalNetworkPermission() {
         let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Permission")
-        logger.info("🔥 预热本地网络权限...")
+        logger.info("预热本地网络权限。")
         
         // 尝试连接到本地保留地址（不会实际连接成功，但会触发权限）
         let endpoint = NWEndpoint.hostPort(host: "192.168.1.1", port: 1)
@@ -49,13 +49,13 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
         let connection = NWConnection(to: endpoint, using: params)
         
         connection.stateUpdateHandler = { state in
-            logger.info("🔍 预热状态: \(String(describing: state))")
+            logger.info("预热状态: \(String(describing: state))")
             
             switch state {
             case .ready, .failed:
                 // 任务完成，取消连接
                 connection.cancel()
-                logger.info("✅ 预热完成")
+                logger.info("预热完成。")
             default:
                 break
             }

@@ -134,11 +134,11 @@ public class LocalDebugServer: ObservableObject {
     private func triggerLocalNetworkPermission(host: String, completion: @escaping @Sendable () -> Void) {
         // 检测是否是模拟器
         #if targetEnvironment(simulator)
-        logger.info("📱 检测到模拟器环境，跳过权限检查")
+        logger.info("检测到模拟器环境，跳过权限检查")
         completion()
         return
         #else
-        logger.info("🔐 真机环境：触发本地网络权限请求...")
+        logger.info("真机环境：触发本地网络权限请求...")
         
         // 🔥 关键修复：使用目标端口而不是端口1！
         // watchOS需要实际尝试连接到真实的服务端口才会触发权限
@@ -153,7 +153,7 @@ public class LocalDebugServer: ObservableObject {
         // 使用实际的host（不带端口）
         let actualHost = host.components(separatedBy: ":").first ?? host
         
-        logger.info("🎯 尝试连接到 \(actualHost):\(targetPort) 以触发权限")
+        logger.info("尝试连接到 \(actualHost):\(targetPort) 以触发权限")
         
         // 创建临时的TCP连接
         let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(actualHost), port: NWEndpoint.Port(rawValue: targetPort)!)
@@ -185,7 +185,7 @@ public class LocalDebugServer: ObservableObject {
             guard let self = self else { return }
             
             // 使用 nonisolated 方式记录日志
-            let logMessage = "🔍 权限探测状态: \(String(describing: state))"
+            let logMessage = "权限探测状态: \(String(describing: state))"
             Task { @MainActor in
                 self.logger.info("\(logMessage)")
             }
@@ -196,7 +196,7 @@ public class LocalDebugServer: ObservableObject {
                 guard probeState.tryComplete() else { return }
                 probeState.permissionGranted = true
                 Task { @MainActor in
-                    self.logger.info("✅ 权限探测成功，连接已建立")
+                    self.logger.info("权限探测成功，连接已建立")
                 }
                 probeConnection.cancel()
                 Task { @MainActor [weak self] in
@@ -217,18 +217,18 @@ public class LocalDebugServer: ObservableObject {
                     // 连接被拒绝 = 权限OK，但服务器未启动
                     probeState.permissionGranted = true
                     Task { @MainActor in
-                        self.logger.info("✅ 权限已授予（连接被拒绝是正常的）")
+                        self.logger.info("权限已授予（连接被拒绝是正常的）")
                     }
                 } else if errorDesc.contains("timed out") || errorDesc.contains("超时") {
                     // 超时也可能是权限OK的
                     probeState.permissionGranted = true
                     Task { @MainActor in
-                        self.logger.info("⚠️ 探测超时，假设权限已授予")
+                        self.logger.info("探测超时，假设权限已授予")
                     }
                 } else {
                     // 其他错误，可能是权限问题
                     Task { @MainActor in
-                        self.logger.warning("⚠️ 探测失败: \(error.localizedDescription)")
+                        self.logger.warning("探测失败: \(error.localizedDescription)")
                     }
                 }
                 
@@ -248,24 +248,24 @@ public class LocalDebugServer: ObservableObject {
                 
             case .preparing:
                 Task { @MainActor in
-                    self.logger.info("🔧 准备连接...")
+                    self.logger.info("准备连接...")
                 }
                 
             case .setup:
                 Task { @MainActor in
-                    self.logger.info("⚙️ 设置连接...")
+                    self.logger.info("设置连接...")
                 }
                 
             case .cancelled:
                 guard probeState.tryComplete() else { return }
                 Task { @MainActor in
-                    self.logger.info("🚫 探测被取消")
+                    self.logger.info("探测被取消")
                 }
                 completion()
                 
             @unknown default:
                 Task { @MainActor in
-                    self.logger.warning("⚠️ 未知状态: \(String(describing: state))")
+                    self.logger.warning("未知状态: \(String(describing: state))")
                 }
             }
         }
@@ -277,11 +277,11 @@ public class LocalDebugServer: ObservableObject {
             
             if probeState.permissionGranted {
                 Task { @MainActor in
-                    self?.logger.info("✅ 权限检查完成（已授予）")
+                    self?.logger.info("权限检查完成（已授予）")
                 }
             } else {
                 Task { @MainActor in
-                    self?.logger.warning("⚠️ 权限检查超时，强制继续")
+                    self?.logger.warning("权限检查超时，强制继续")
                 }
             }
             
@@ -309,7 +309,7 @@ public class LocalDebugServer: ObservableObject {
         
         if useHTTP {
             // HTTP 轮询模式，直接启动
-            logger.info("🌐 使用 HTTP 轮询模式")
+            logger.info("使用 HTTP 轮询模式")
             connectionStatus = "正在连接..."
             performHTTPConnection(host: host, port: port)
         } else {
@@ -327,7 +327,7 @@ public class LocalDebugServer: ObservableObject {
     /// 执行实际的WebSocket连接
     @MainActor
     private func performConnection(host: String, port: String) {
-        logger.info("🔌 开始建立WebSocket连接到 \(host):\(port)")
+        logger.info("开始建立WebSocket连接到 \(host):\(port)")
         
         // 创建 WebSocket URL
         let urlString = "ws://\(host):\(port)/"
@@ -363,7 +363,7 @@ public class LocalDebugServer: ObservableObject {
                     self.isRunning = true
                     self.connectionStatus = "已连接"
                     self.errorMessage = nil
-                    self.logger.info("✅ 已连接到 \(host):\(port)")
+                    self.logger.info("已连接到 \(host):\(port)")
                 case .failed(let error):
                     self.isRunning = false
                     self.connectionStatus = "连接失败"
@@ -378,7 +378,7 @@ public class LocalDebugServer: ObservableObject {
                     } else {
                         self.errorMessage = "连接失败: \(error.localizedDescription)"
                     }
-                    self.logger.error("❌ 连接失败: \(error.localizedDescription)")
+                    self.logger.error("连接失败: \(error.localizedDescription)")
                 case .cancelled:
                     self.isRunning = false
                     self.connectionStatus = "未连接"
@@ -391,7 +391,7 @@ public class LocalDebugServer: ObservableObject {
                 case .setup:
                     self.connectionStatus = "设置中..."
                 @unknown default:
-                    self.logger.warning("⚠️ 未知连接状态")
+                    self.logger.warning("未知连接状态")
                 }
             }
         }
@@ -433,7 +433,7 @@ public class LocalDebugServer: ObservableObject {
     /// 执行 HTTP 连接和轮询
     @MainActor
     private func performHTTPConnection(host: String, port: String) {
-        logger.info("🌐 开始 HTTP 轮询模式，目标: \(host):\(port)")
+        logger.info("开始 HTTP 轮询模式，目标: \(host):\(port)")
         
         // 创建 URLSession，支持大文件传输
         let config = URLSessionConfiguration.default
@@ -450,14 +450,14 @@ public class LocalDebugServer: ObservableObject {
                     self.isRunning = true
                     self.connectionStatus = "已连接 (HTTP)"
                     self.errorMessage = nil
-                    self.logger.info("✅ HTTP 连接测试成功")
+                    self.logger.info("HTTP 连接测试成功")
                     // 启动轮询定时器
                     self.startHTTPPolling(host: host, port: port)
                 } else {
                     self.isRunning = false
                     self.connectionStatus = "连接失败"
                     self.errorMessage = "无法连接到服务器，请检查地址和端口"
-                    self.logger.error("❌ HTTP 连接测试失败")
+                    self.logger.error("HTTP 连接测试失败")
                 }
             }
         }
@@ -476,7 +476,7 @@ public class LocalDebugServer: ObservableObject {
         
         httpSession?.dataTask(with: request) { data, response, error in
             if let error = error {
-                self.logger.error("❌ HTTP 测试失败: \(error.localizedDescription)")
+                self.logger.error("HTTP 测试失败: \(error.localizedDescription)")
                 completion(false)
                 return
             }
@@ -493,7 +493,7 @@ public class LocalDebugServer: ObservableObject {
     /// 启动 HTTP 轮询
     @MainActor
     private func startHTTPPolling(host: String, port: String) {
-        logger.info("🔄 启动 HTTP 轮询，间隔: \(self.httpPollingInterval)秒")
+        logger.info("启动 HTTP 轮询，间隔: \(self.httpPollingInterval)秒")
         
         // 使用主线程的 Timer
         httpPollingTimer = Timer.scheduledTimer(withTimeInterval: self.httpPollingInterval, repeats: true) { [weak self] _ in
@@ -575,9 +575,9 @@ public class LocalDebugServer: ObservableObject {
                 Task { @MainActor in
                     if command == "none" {
                         // 心跳包，无命令
-                        self.addLog("💓 心跳", type: .heartbeat)
+                        self.addLog("心跳", type: .heartbeat)
                     } else {
-                        self.addLog("📥 收到命令: \(command)", type: .receive)
+                        self.addLog("收到命令: \(command)", type: .receive)
                         self.handleReceivedMessage(data)
                     }
                 }
@@ -605,11 +605,11 @@ public class LocalDebugServer: ObservableObject {
             
             Task { @MainActor in
                 if dataSize > 1_000_000 {
-                    self.addLog("📤 发送大响应: \(String(format: "%.2f", Double(dataSize) / 1_000_000)) MB", type: .send)
+                    self.addLog("发送大响应: \(String(format: "%.2f", Double(dataSize) / 1_000_000)) MB", type: .send)
                 } else if !path.isEmpty {
-                    self.addLog("📤 发送: \(path) (\(self.formatSize(dataSize)))", type: .send)
+                    self.addLog("发送: \(path) (\(self.formatSize(dataSize)))", type: .send)
                 } else {
-                    self.addLog("📤 响应: \(status)", type: .send)
+                    self.addLog("响应: \(status)", type: .send)
                 }
             }
             
@@ -617,7 +617,7 @@ public class LocalDebugServer: ObservableObject {
                 guard let self = self else { return }
                 Task { @MainActor in
                     if let error = error {
-                        self.addLog("❌ 发送失败: \(error.localizedDescription)", type: .error)
+                        self.addLog("发送失败: \(error.localizedDescription)", type: .error)
                     }
                 }
             }.resume()
@@ -651,7 +651,7 @@ public class LocalDebugServer: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                self.logger.error("❌ 接收错误: \(error.localizedDescription)")
+                self.logger.error("接收错误: \(error.localizedDescription)")
                 Task { @MainActor in
                     self.disconnect()
                 }
@@ -681,7 +681,7 @@ public class LocalDebugServer: ObservableObject {
             return
         }
         
-        logger.info("📨 收到命令: \(command)")
+        logger.info("收到命令: \(command)")
         
         Task {
             switch command {
@@ -719,7 +719,7 @@ public class LocalDebugServer: ObservableObject {
                 sendResponse(response)
             case "upload_complete":
                 // HTTP 流式上传完成
-                logger.info("✅ 流式上传完成")
+                logger.info("流式上传完成")
                 sendResponse(["status": "ok", "message": "上传完成"])
             case "delete":
                 let response = await handleDelete(json)
@@ -891,13 +891,13 @@ public class LocalDebugServer: ObservableObject {
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         
         do {
-            logger.info("📦 开始扫描 Documents 目录...")
+            logger.info("开始扫描 Documents 目录...")
             var fileList: [[String: Any]] = []
             
             // 递归扫描所有文件
             try scanDirectory(documentsURL, baseURL: documentsURL, fileList: &fileList)
             
-            logger.info("✅ 扫描完成: \(fileList.count) 个文件")
+            logger.info("扫描完成: \(fileList.count) 个文件")
             
             return [
                 "status": "ok",
@@ -915,30 +915,30 @@ public class LocalDebugServer: ObservableObject {
         
         // 先检查 httpSession 是否可用
         guard httpSession != nil else {
-            logger.error("❌ httpSession 为 nil，无法执行流式下载")
+            logger.error("httpSession 为 nil，无法执行流式下载")
             return
         }
         
         // 标记开始批量传输，暂停轮询
         isTransferring = true
-        addLog("📦 开始流式下载（暂停轮询）", type: .info)
+        addLog("开始流式下载（暂停轮询）", type: .info)
         
         defer {
             // 传输完成后恢复轮询
             Task { @MainActor in
                 self.isTransferring = false
-                self.addLog("📦 流式下载结束（恢复轮询）", type: .info)
+                self.addLog("流式下载结束（恢复轮询）", type: .info)
             }
         }
         
         do {
-            logger.info("📦 开始流式下载 Documents 目录...")
+            logger.info("开始流式下载 Documents 目录...")
             
             // 收集所有文件路径
             var filePaths: [String] = []
             try collectFilePaths(documentsURL, baseURL: documentsURL, filePaths: &filePaths)
             
-            logger.info("📂 发现 \(filePaths.count) 个文件，开始连续传输")
+            logger.info("发现 \(filePaths.count) 个文件，开始连续传输")
             
             var successCount = 0
             var failCount = 0
@@ -964,29 +964,36 @@ public class LocalDebugServer: ObservableObject {
                     
                     // 每10个文件打印一次进度
                     if (index + 1) % 10 == 0 || index + 1 == filePaths.count {
-                        logger.info("📤 进度: \(index + 1)/\(filePaths.count) (成功: \(successCount), 失败: \(failCount))")
+                        logger.info("进度: \(index + 1)/\(filePaths.count) (成功: \(successCount), 失败: \(failCount))")
                     }
                     
                 } catch {
                     failCount += 1
-                    logger.error("❌ 读取文件失败: \(relativePath) - \(error.localizedDescription)")
+                    logger.error("读取文件失败: \(relativePath) - \(error.localizedDescription)")
                 }
             }
             
-            logger.info("📊 传输统计: 成功 \(successCount), 失败 \(failCount), 总计 \(filePaths.count)")
+            logger.info("传输统计: 成功 \(successCount), 失败 \(failCount), 总计 \(filePaths.count)")
             
-            // 发送完成消息
+            // 🔥 关键修复：在发送完成信号前等待一小段时间
+            // 确保服务器有时间处理最后几个文件响应
+            // 实体机网络比虚拟机更快，可能导致完成信号"超车"到达
+            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+            
+            // 发送完成消息（包含实际发送的文件数，让服务器验证）
             let completeResponse: [String: Any] = [
                 "status": "ok",
                 "message": "流式下载完成",
                 "total": filePaths.count,
+                "success_count": successCount,
+                "fail_count": failCount,
                 "stream_complete": true
             ]
             await sendHTTPResponseAsync(completeResponse)
-            logger.info("✅ 流式下载完成，共 \(filePaths.count) 个文件")
+            logger.info("流式下载完成，共 \(filePaths.count) 个文件")
             
         } catch {
-            logger.error("❌ 流式下载出错: \(error.localizedDescription)")
+            logger.error("流式下载出错: \(error.localizedDescription)")
             let errorResponse: [String: Any] = [
                 "status": "error",
                 "message": error.localizedDescription
@@ -1013,25 +1020,28 @@ public class LocalDebugServer: ObservableObject {
     }
     
     /// 异步发送 HTTP 响应（等待完成）
+    /// 🔥 重要：确保每个请求完全完成后再返回，避免并发导致的乱序问题
     private func sendHTTPResponseAsync(_ response: [String: Any]) async {
         let components = serverURL.split(separator: ":").map(String.init)
         let host = components.first ?? ""
         let port = components.count > 1 ? components[1] : "7654"
         
         guard let url = URL(string: "http://\(host):\(port)/response") else {
-            logger.error("❌ 无效的 URL: http://\(host):\(port)/response")
+            logger.error("无效的 URL: http://\(host):\(port)/response")
             return
         }
         
         // 安全获取 httpSession
         guard let session = httpSession else {
-            logger.error("❌ httpSession 为 nil，无法发送响应")
+            logger.error("httpSession 为 nil，无法发送响应")
             return
         }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // 🔥 添加 Connection: close 避免 HTTP keep-alive 造成的乱序
+        request.setValue("close", forHTTPHeaderField: "Connection")
         request.timeoutInterval = 60.0
         
         // JSON 序列化并记录错误
@@ -1039,18 +1049,32 @@ public class LocalDebugServer: ObservableObject {
         do {
             jsonData = try JSONSerialization.data(withJSONObject: response)
         } catch {
-            logger.error("❌ JSON 序列化失败: \(error.localizedDescription), 响应键: \(response.keys.joined(separator: ", "))")
+            logger.error("JSON 序列化失败: \(error.localizedDescription), 响应键: \(response.keys.joined(separator: ", "))")
             return
         }
         request.httpBody = jsonData
         
+        // 记录发送的索引（用于调试）
+        let index = response["index"] as? Int
+        let isComplete = response["stream_complete"] as? Bool ?? false
+        
         do {
             let (_, httpResponse) = try await session.data(for: request)
-            if let httpRes = httpResponse as? HTTPURLResponse, httpRes.statusCode != 200 {
-                logger.error("❌ 服务器返回错误状态码: \(httpRes.statusCode)")
+            if let httpRes = httpResponse as? HTTPURLResponse {
+                if httpRes.statusCode != 200 {
+                    logger.error("服务器返回错误状态码: \(httpRes.statusCode)")
+                } else if isComplete {
+                    logger.info("✅ 完成信号已确认送达服务器")
+                }
+            }
+            
+            // 🔥 每个请求后添加小延迟，确保服务器有时间处理
+            // 这对实体机尤其重要，因为实体机网络速度可能比服务器处理速度快
+            if index != nil && !isComplete {
+                try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
             }
         } catch {
-            logger.error("❌ 发送响应失败: \(error.localizedDescription)")
+            logger.error("发送响应失败 (index=\(index ?? -1)): \(error.localizedDescription)")
         }
     }
     
@@ -1091,37 +1115,37 @@ public class LocalDebugServer: ObservableObject {
     private func handleUploadList(_ json: [String: Any]) async {
         guard let paths = json["paths"] as? [String],
               let total = json["total"] as? Int else {
-            logger.error("❌ 无效的文件列表")
+            logger.error("无效的文件列表")
             return
         }
         
         // 标记开始批量传输，暂停轮询
         isTransferring = true
-        addLog("📦 开始流式上传（暂停轮询）", type: .info)
+        addLog("开始流式上传（暂停轮询）", type: .info)
         
         defer {
             // 传输完成后恢复轮询
             Task { @MainActor in
                 self.isTransferring = false
-                self.addLog("📦 流式上传结束（恢复轮询）", type: .info)
+                self.addLog("流式上传结束（恢复轮询）", type: .info)
             }
         }
         
-        logger.info("📋 收到文件列表: \(total) 个文件")
+        logger.info("收到文件列表: \(total) 个文件")
         
         // 先清空Documents目录
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fileManager = FileManager.default
         
         do {
-            logger.info("🗑️ 清空 Documents 目录...")
+            logger.info("清空 Documents 目录...")
             let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
             for item in contents {
                 try fileManager.removeItem(at: item)
             }
-            logger.info("✅ Documents 目录已清空")
+            logger.info("Documents 目录已清空")
         } catch {
-            logger.error("❌ 清空目录失败: \(error.localizedDescription)")
+            logger.error("清空目录失败: \(error.localizedDescription)")
             return
         }
         
@@ -1130,7 +1154,7 @@ public class LocalDebugServer: ObservableObject {
             await fetchAndWriteFile(path: path, index: index + 1, total: total)
         }
         
-        logger.info("✅ 所有文件上传完成！")
+        logger.info("所有文件上传完成！")
     }
     
     /// 请求并写入单个文件
@@ -1140,13 +1164,13 @@ public class LocalDebugServer: ObservableObject {
         let port = components.count > 1 ? components[1] : "7654"
         
         guard let url = URL(string: "http://\(host):\(port)/fetch_file") else {
-            logger.error("❌ 无效的URL")
+            logger.error("无效的URL")
             return
         }
         
         // 安全获取 httpSession
         guard let session = httpSession else {
-            logger.error("❌ httpSession 为 nil，无法请求文件")
+            logger.error("httpSession 为 nil，无法请求文件")
             return
         }
         
@@ -1157,7 +1181,7 @@ public class LocalDebugServer: ObservableObject {
         
         let requestBody: [String: Any] = ["path": path]
         guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            logger.error("❌ 无法序列化请求")
+            logger.error("无法序列化请求")
             return
         }
         request.httpBody = jsonData
@@ -1170,7 +1194,7 @@ public class LocalDebugServer: ObservableObject {
                   status == "ok",
                   let fileData = json["data"] as? String,
                   let decodedData = Data(base64Encoded: fileData) else {
-                logger.error("❌ 无效的响应: \(path)")
+                logger.error("无效的响应: \(path)")
                 return
             }
             
@@ -1183,10 +1207,10 @@ public class LocalDebugServer: ObservableObject {
             try decodedData.write(to: fileURL)
             
             let remaining = json["remaining"] as? Int ?? 0
-            logger.info("📥 [\(index)/\(total)] 写入: \(path) (\(decodedData.count) bytes) [剩余 \(remaining)]")
+            logger.info("[\(index)/\(total)] 写入: \(path) (\(decodedData.count) bytes) [剩余 \(remaining)]")
             
         } catch {
-            logger.error("❌ 请求文件失败 \(path): \(error.localizedDescription)")
+            logger.error("请求文件失败 \(path): \(error.localizedDescription)")
         }
     }
     
@@ -1213,7 +1237,7 @@ public class LocalDebugServer: ObservableObject {
             try fileManager.createDirectory(at: dirURL, withIntermediateDirectories: true)
             try data.write(to: fileURL)
             
-            logger.info("📥 写入: \(path) (\(data.count) bytes) [剩余 \(remaining)]")
+            logger.info("写入: \(path) (\(data.count) bytes) [剩余 \(remaining)]")
             
             return [
                 "status": "ok",
@@ -1231,12 +1255,12 @@ public class LocalDebugServer: ObservableObject {
         let fileManager = FileManager.default
         
         do {
-            logger.info("🗑️ 清空 Documents 目录...")
+            logger.info("清空 Documents 目录...")
             let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
             for item in contents {
                 try fileManager.removeItem(at: item)
             }
-            logger.info("✅ Documents 目录已清空")
+            logger.info("Documents 目录已清空")
             return ["status": "ok", "message": "目录已清空"]
         } catch {
             return ["status": "error", "message": error.localizedDescription]
@@ -1250,14 +1274,14 @@ public class LocalDebugServer: ObservableObject {
         
         do {
             // 清空目录
-            logger.info("🗑️ 清空 Documents 目录...")
+            logger.info("清空 Documents 目录...")
             let contents = try fileManager.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
             for item in contents {
                 try fileManager.removeItem(at: item)
             }
             
             // 递归创建文件
-            logger.info("📤 开始上传 \(files.count) 个文件...")
+            logger.info("开始上传 \(files.count) 个文件...")
             for fileInfo in files {
                 guard let relativePath = fileInfo["path"] as? String,
                       let base64Data = fileInfo["data"] as? String,
@@ -1277,7 +1301,7 @@ public class LocalDebugServer: ObservableObject {
                 try data.write(to: targetURL)
             }
             
-            logger.info("✅ 上传完成")
+            logger.info("上传完成")
             return [
                 "status": "ok",
                 "message": "已覆盖 Documents 目录，共 \(files.count) 个文件"
@@ -1328,7 +1352,7 @@ public class LocalDebugServer: ObservableObject {
             self.updatePendingOpenAIState()
         }
         
-        logger.info("📥 捕获 OpenAI 请求: \(model ?? "unknown")")
+        logger.info("捕获 OpenAI 请求: \(model ?? "unknown")")
         
         return [
             "status": "ok",

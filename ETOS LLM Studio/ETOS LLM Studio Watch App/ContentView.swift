@@ -22,6 +22,7 @@ struct ContentView: View {
     @StateObject private var announcementManager = AnnouncementManager.shared
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
+    @State private var fullErrorContent: String?
     
     private var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
@@ -67,6 +68,12 @@ struct ContentView: View {
                 .navigationTitle(viewModel.currentSession?.name ?? "新对话")
                 .sheet(item: $viewModel.activeSheet) { item in
                     sheetView(for: item)
+                }
+                .sheet(item: Binding(
+                    get: { fullErrorContent.map { FullErrorContentWrapper(content: $0) } },
+                    set: { _ in fullErrorContent = nil }
+                )) { wrapper in
+                    FullErrorContentView(content: wrapper.content)
                 }
             }
             .onChange(of: viewModel.activeSheet) {
@@ -198,6 +205,9 @@ struct ContentView: View {
                     },
                     onBranch: { copyPrompts in
                         _ = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: copyPrompts)
+                    },
+                    onShowFullError: { content in
+                        fullErrorContent = content
                     },
                     messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                     totalMessages: viewModel.allMessagesForSession.count
@@ -384,5 +394,37 @@ struct ContentView: View {
             .task {
                 await announcementManager.checkAnnouncement()
             }
+    }
+}
+
+// MARK: - 完整错误响应辅助类型
+
+/// 用于包装完整错误内容的 Identifiable 结构
+private struct FullErrorContentWrapper: Identifiable {
+    let id = UUID()
+    let content: String
+}
+
+/// 完整错误响应内容视图
+private struct FullErrorContentView: View {
+    let content: String
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(content)
+                    .font(.system(.caption, design: .monospaced))
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle("完整响应")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
     }
 }

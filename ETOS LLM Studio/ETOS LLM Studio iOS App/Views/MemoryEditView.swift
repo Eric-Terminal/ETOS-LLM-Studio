@@ -38,8 +38,8 @@ struct MemoryEditView: View {
             }
             
             Section {
-                LabeledContent("创建时间") {
-                    Text(memory.createdAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("更新时间") {
+                    Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
                         .foregroundStyle(.secondary)
                 }
             }

@@ -25,9 +25,9 @@ public struct MCPServerStore {
         if !fm.fileExists(atPath: serversDirectory.path) {
             do {
                 try fm.createDirectory(at: serversDirectory, withIntermediateDirectories: true)
-                mcpStoreLogger.info("✅ MCPServers 目录已创建: \(serversDirectory.path, privacy: .public)")
+                mcpStoreLogger.info("MCPServers 目录已创建: \(serversDirectory.path, privacy: .public)")
             } catch {
-                mcpStoreLogger.error("❌ 创建 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
+                mcpStoreLogger.error("创建 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
             }
         }
         return serversDirectory
@@ -45,11 +45,11 @@ public struct MCPServerStore {
                     let server = try JSONDecoder().decode(MCPServerConfiguration.self, from: data)
                     result.append(server)
                 } catch {
-                    mcpStoreLogger.error("⚠️ 解析 MCP Server 文件失败 \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    mcpStoreLogger.error("解析 MCP Server 文件失败 \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 }
             }
         } catch {
-            mcpStoreLogger.error("❌ 读取 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
+            mcpStoreLogger.error("读取 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
         }
         return result.sorted { $0.displayName.lowercased() < $1.displayName.lowercased() }
     }
@@ -62,9 +62,9 @@ public struct MCPServerStore {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(server)
             try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
-            mcpStoreLogger.info("💾 已保存 MCP Server: \(server.displayName, privacy: .public)")
+            mcpStoreLogger.info("已保存 MCP Server: \(server.displayName, privacy: .public)")
         } catch {
-            mcpStoreLogger.error("❌ 保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
+            mcpStoreLogger.error("保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
         }
     }
     
@@ -73,9 +73,9 @@ public struct MCPServerStore {
         let url = serversDirectory.appendingPathComponent("\(server.id.uuidString).json")
         do {
             try fm.removeItem(at: url)
-            mcpStoreLogger.info("🗑️ 已删除 MCP Server: \(server.displayName, privacy: .public)")
+            mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
         } catch {
-            mcpStoreLogger.error("❌ 删除 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
+            mcpStoreLogger.error("删除 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

@@ -104,7 +104,7 @@ public class ChatService {
     // MARK: - 初始化
     
     public init(adapters: [String: APIAdapter]? = nil, memoryManager: MemoryManager = .shared, urlSession: URLSession = .shared) {
-        logger.info("🚀 ChatService 正在初始化 (v2.1 重构版)...")
+        logger.info("ChatService 正在初始化 (v2.1 重构版)...")
         
         self.memoryManager = memoryManager
         self.urlSession = urlSession
@@ -142,7 +142,7 @@ public class ChatService {
     // MARK: - 公开方法 (配置管理)
 
     public func reloadProviders() {
-        logger.info("🔄 正在重新加载提供商配置...")
+        logger.info("正在重新加载提供商配置...")
         let currentSelectedID = selectedModelSubject.value?.id // 1. 记住当前选中模型的 ID
 
         self.providers = ConfigLoader.loadProviders() // 2. 从磁盘重载
@@ -165,24 +165,24 @@ public class ChatService {
         selectedModelSubject.send(newSelectedModel)
         // (我们直接操作 subject, 以绕过 setSelectedModel 里的“无变化则不更新”的检查)
         
-        logger.info("✅ 提供商配置已刷新，并已更新当前选中模型。")
+        logger.info("提供商配置已刷新，并已更新当前选中模型。")
     }
 
     public func setSelectedModel(_ model: RunnableModel?) {
         guard selectedModelSubject.value?.id != model?.id else { return }
         selectedModelSubject.send(model)
         UserDefaults.standard.set(model?.id, forKey: "selectedRunnableModelID")
-        logger.info("⚙️ 已将模型切换为: \(model?.model.displayName ?? "无")")
+        logger.info("已将模型切换为: \(model?.model.displayName ?? "无")")
     }
     
     public func fetchModels(for provider: Provider) async throws -> [Model] {
-        logger.info("☁️ 正在为提供商 '\(provider.name)' 获取云端模型列表...")
+        logger.info("正在为提供商 '\(provider.name)' 获取云端模型列表...")
         guard let adapter = adapters[provider.apiFormat] else {
             throw NetworkError.adapterNotFound(format: provider.apiFormat)
         }
         
         guard let request = adapter.buildModelListRequest(for: provider) else {
-            logger.warning("  - ⚠️ 提供商 '\(provider.name)' (\(provider.apiFormat)) 不支持在线获取模型列表。")
+            logger.warning("  - 提供商 '\(provider.name)' (\(provider.apiFormat)) 不支持在线获取模型列表。")
             throw NetworkError.modelListUnavailable(provider: provider.name, apiFormat: provider.apiFormat)
         }
         
@@ -191,10 +191,10 @@ public class ChatService {
             // 注意: ModelListResponse 需要在某个地方定义，或者让 Adapter 直接返回 [Model]
             let modelResponse = try JSONDecoder().decode(ModelListResponse.self, from: data)
             let fetchedModels = modelResponse.data.map { Model(modelName: $0.id) }
-            logger.info("  - ✅ 成功获取并解析了 \(fetchedModels.count) 个模型。")
+            logger.info("  - 成功获取并解析了 \(fetchedModels.count) 个模型。")
             return fetchedModels
         } catch {
-            logger.error("  - ❌ 获取或解析模型列表失败: \(error.localizedDescription)")
+            logger.error("  - 获取或解析模型列表失败: \(error.localizedDescription)")
             throw error
         }
     }
@@ -214,7 +214,7 @@ public class ChatService {
         mimeType: String,
         language: String? = nil
     ) async throws -> String {
-        logger.info("🎙️ 正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
+        logger.info("正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
         
         guard let adapter = adapters[model.provider.apiFormat] else {
             throw NetworkError.adapterNotFound(format: model.provider.apiFormat)
@@ -233,10 +233,10 @@ public class ChatService {
         do {
             let data = try await fetchData(for: request)
             let transcript = try adapter.parseTranscriptionResponse(data: data)
-            logger.info("✅ 语音转文字完成，长度 \(transcript.count) 字符。")
+            logger.info("语音转文字完成，长度 \(transcript.count) 字符。")
             return transcript
         } catch {
-            logger.error("❌ 语音转文字失败: \(error.localizedDescription)")
+            logger.error("语音转文字失败: \(error.localizedDescription)")
             throw error
         }
     }
@@ -250,13 +250,13 @@ public class ChatService {
         do {
             try await task.value
         } catch is CancellationError {
-            logger.info("🛑 用户已手动取消当前请求。")
+            logger.info("用户已手动取消当前请求。")
         } catch {
             // URLError.cancelled 不会匹配 CancellationError，需要单独检测
             if isCancellationError(error) {
-                logger.info("🛑 用户已手动取消当前请求 (URLError)。")
+                logger.info("用户已手动取消当前请求 (URLError)。")
             } else {
-                logger.error("⚠️ 取消请求时出现意外错误: \(error.localizedDescription)")
+                logger.error("取消请求时出现意外错误: \(error.localizedDescription)")
             }
         }
         
@@ -274,7 +274,7 @@ public class ChatService {
     }
     
     public func saveAndReloadProviders(from providers: [Provider]) {
-        logger.info("💾 正在保存并重载提供商配置...")
+        logger.info("正在保存并重载提供商配置...")
         self.providers = providers
         for provider in self.providers {
             ConfigLoader.saveProvider(provider)
@@ -291,7 +291,7 @@ public class ChatService {
         chatSessionsSubject.send(updatedSessions)
         currentSessionSubject.send(newSession)
         messagesForSessionSubject.send([])
-        logger.info("✨ 创建了新的临时会话。" )
+        logger.info("创建了新的临时会话。")
     }
     
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
@@ -304,7 +304,7 @@ public class ChatService {
             
             let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
             try? FileManager.default.removeItem(at: fileURL)
-            logger.info("🗑️ 删除了会话的消息文件: \(session.name)")
+            logger.info("删除了会话的消息文件: \(session.name)")
         }
         currentSessions.removeAll { session in sessionsToDelete.contains { $0.id == session.id } }
         var newCurrentSession = currentSessionSubject.value
@@ -322,13 +322,13 @@ public class ChatService {
             setCurrentSession(newCurrentSession)
         }
         Persistence.saveChatSessions(currentSessions)
-        logger.info("💾 删除后已保存会话列表。" )
+        logger.info("删除后已保存会话列表。")
     }
     
     @discardableResult
     public func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
         let newSession = ChatSession(id: UUID(), name: "分支: \(sourceSession.name)", topicPrompt: sourceSession.topicPrompt, enhancedPrompt: sourceSession.enhancedPrompt, isTemporary: false)
-        logger.info("🌿 创建了分支会话: \(newSession.name)")
+        logger.info("创建了分支会话: \(newSession.name)")
         if copyMessages {
             var sourceMessages = Persistence.loadMessages(for: sourceSession.id)
             if !sourceMessages.isEmpty {
@@ -345,7 +345,7 @@ public class ChatService {
                     }
                 }
                 Persistence.saveMessages(sourceMessages, for: newSession.id)
-                logger.info("  - 复制了 \(sourceMessages.count) 条消息到新会话。" )
+                logger.info("  - 复制了 \(sourceMessages.count) 条消息到新会话。")
             }
         }
         var updatedSessions = chatSessionsSubject.value
@@ -353,7 +353,7 @@ public class ChatService {
         chatSessionsSubject.send(updatedSessions)
         setCurrentSession(newSession)
         Persistence.saveChatSessions(updatedSessions)
-        logger.info("💾 保存了会话列表。" )
+        logger.info("保存了会话列表。")
         return newSession
     }
     
@@ -372,7 +372,7 @@ public class ChatService {
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             isTemporary: false
         )
-        logger.info("🌿 从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）" : "（不含提示词）")")
+        logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
         
         let sourceMessages = Persistence.loadMessages(for: sourceSession.id)
         if let messageIndex = sourceMessages.firstIndex(where: { $0.id == upToMessage.id }) {
@@ -412,7 +412,7 @@ public class ChatService {
             }
             
             Persistence.saveMessages(messagesToCopy, for: newSession.id)
-            logger.info("  - 复制了 \(messagesToCopy.count) 条消息到新会话（截止到指定消息）。" )
+            logger.info("  - 复制了 \(messagesToCopy.count) 条消息到新会话（截止到指定消息）。")
         } else {
             logger.warning("  - 未找到指定的消息，创建空分支会话。")
         }
@@ -422,7 +422,7 @@ public class ChatService {
         chatSessionsSubject.send(updatedSessions)
         setCurrentSession(newSession)
         Persistence.saveChatSessions(updatedSessions)
-        logger.info("💾 保存了会话列表。" )
+        logger.info("保存了会话列表。")
         return newSession
     }
     
@@ -441,7 +441,7 @@ public class ChatService {
                 }
             }
             Persistence.saveMessages(messages, for: session.id)
-            logger.info("🗑️ 删除了会话的最后一条消息: \(session.name)")
+            logger.info("删除了会话的最后一条消息: \(session.name)")
             if session.id == currentSessionSubject.value?.id {
                 messagesForSessionSubject.send(messages)
             }
@@ -468,7 +468,7 @@ public class ChatService {
         
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: currentSession.id)
-        logger.info("🗑️ 已删除消息: \(message.id.uuidString)")
+        logger.info("已删除消息: \(message.id.uuidString)")
     }
     
     public func updateMessageContent(_ message: ChatMessage, with newContent: String) {
@@ -478,14 +478,14 @@ public class ChatService {
         messages[index].content = newContent
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: currentSession.id)
-        logger.info("✏️ 已更新消息内容: \(message.id.uuidString)")
+        logger.info("已更新消息内容: \(message.id.uuidString)")
     }
     
     /// 更新整个消息列表（用于版本管理等批量操作）
     public func updateMessages(_ messages: [ChatMessage], for sessionID: UUID) {
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: sessionID)
-        logger.info("✏️ 已更新会话消息列表: \(sessionID.uuidString)")
+        logger.info("已更新会话消息列表: \(sessionID.uuidString)")
     }
     
     public func updateSession(_ session: ChatSession) {
@@ -502,14 +502,14 @@ public class ChatService {
             }
             
             Persistence.saveChatSessions(currentSessions)
-            logger.info("💾 更新了会话详情: \(session.name)")
+            logger.info("更新了会话详情: \(session.name)")
         }
     }
     
     public func forceSaveSessions() {
         let sessions = chatSessionsSubject.value
         Persistence.saveChatSessions(sessions)
-        logger.info("💾 已强制保存所有会话。" )
+        logger.info("已强制保存所有会话。")
     }
     
     public func setCurrentSession(_ session: ChatSession?) {
@@ -517,7 +517,7 @@ public class ChatService {
         currentSessionSubject.send(session)
         let messages = session != nil ? Persistence.loadMessages(for: session!.id) : []
         messagesForSessionSubject.send(messages)
-        logger.info("🔄 已切换到会话: \(session?.name ?? "无")")
+        logger.info("已切换到会话: \(session?.name ?? "无")")
     }
 
     /// 当老会话重新变为活跃状态时，将其移动到列表顶部以保持最近使用的排序
@@ -528,17 +528,17 @@ public class ChatService {
         sessions.insert(session, at: 0)
         chatSessionsSubject.send(sessions)
         Persistence.saveChatSessions(sessions)
-        logger.info("📌 已将会话移动到列表顶部: \(session.name)")
+        logger.info("已将会话移动到列表顶部: \(session.name)")
     }
     
     // MARK: - 公开方法 (消息处理)
     
-    public func addErrorMessage(_ content: String) {
+    public func addErrorMessage(_ content: String, httpStatusCode: Int? = nil) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
         
         // 格式化错误内容，使其更简洁易读
-        let formattedContent = formatErrorContent(content)
+        let (formattedContent, fullContent) = formatErrorContent(content, httpStatusCode: httpStatusCode)
         
         // 找到正在加载中的消息
         if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
@@ -549,55 +549,112 @@ public class ChatService {
                 // 注意：loadingIndex 和 targetID 指向同一个消息
                 var targetMessage = messages[loadingIndex]
                 // 直接更新当前版本（空的 loading 版本）为错误消息
-                targetMessage.content = "❌ 重试失败\n\n\(formattedContent)"
+                targetMessage.content = "重试失败\n\n\(formattedContent)"
+                if fullContent != nil {
+                    targetMessage.fullErrorContent = "重试失败\n\n\(content)"
+                }
                 messages[loadingIndex] = targetMessage
                 
                 retryTargetMessageID = nil
-                logger.error("❌ 重试失败，已更新当前版本: \(content)")
+                logger.error("重试失败，已更新当前版本: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
-                messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: formattedContent)
-                logger.error("❌ 错误消息已添加: \(content)")
+                messages[loadingIndex] = ChatMessage(
+                    id: messages[loadingIndex].id,
+                    role: .error,
+                    content: formattedContent,
+                    fullErrorContent: fullContent
+                )
+                logger.error("错误消息已添加: \(content)")
             }
         } else {
             // 没有 loading message，直接添加错误
-            messages.append(ChatMessage(id: UUID(), role: .error, content: formattedContent))
-            logger.error("❌ 错误消息已添加: \(content)")
+            messages.append(ChatMessage(
+                id: UUID(),
+                role: .error,
+                content: formattedContent,
+                fullErrorContent: fullContent
+            ))
+            logger.error("错误消息已添加: \(content)")
         }
         
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: currentSession.id)
     }
     
+    /// 获取 HTTP 状态码的描述信息
+    private func httpStatusCodeDescription(_ code: Int) -> String {
+        switch code {
+        // 4xx 客户端错误
+        case 400: return NSLocalizedString("请求格式错误 (Bad Request)", comment: "HTTP 400 description")
+        case 401: return NSLocalizedString("未授权，请检查 API Key (Unauthorized)", comment: "HTTP 401 description")
+        case 403: return NSLocalizedString("访问被拒绝，权限不足 (Forbidden)", comment: "HTTP 403 description")
+        case 404: return NSLocalizedString("请求的资源不存在 (Not Found)", comment: "HTTP 404 description")
+        case 405: return NSLocalizedString("请求方法不被允许 (Method Not Allowed)", comment: "HTTP 405 description")
+        case 408: return NSLocalizedString("请求超时 (Request Timeout)", comment: "HTTP 408 description")
+        case 409: return NSLocalizedString("请求冲突 (Conflict)", comment: "HTTP 409 description")
+        case 413: return NSLocalizedString("请求体过大 (Payload Too Large)", comment: "HTTP 413 description")
+        case 415: return NSLocalizedString("不支持的媒体类型 (Unsupported Media Type)", comment: "HTTP 415 description")
+        case 422: return NSLocalizedString("请求参数无法处理 (Unprocessable Entity)", comment: "HTTP 422 description")
+        case 429: return NSLocalizedString("请求过于频繁，请稍后重试 (Too Many Requests)", comment: "HTTP 429 description")
+        // 5xx 服务端错误
+        case 500: return NSLocalizedString("服务器内部错误 (Internal Server Error)", comment: "HTTP 500 description")
+        case 501: return NSLocalizedString("功能未实现 (Not Implemented)", comment: "HTTP 501 description")
+        case 502: return NSLocalizedString("网关错误，上游服务无响应 (Bad Gateway)", comment: "HTTP 502 description")
+        case 503: return NSLocalizedString("服务暂时不可用 (Service Unavailable)", comment: "HTTP 503 description")
+        case 504: return NSLocalizedString("网关超时 (Gateway Timeout)", comment: "HTTP 504 description")
+        case 520: return NSLocalizedString("未知错误 (Cloudflare)", comment: "HTTP 520 description")
+        case 521: return NSLocalizedString("服务器宕机 (Cloudflare)", comment: "HTTP 521 description")
+        case 522: return NSLocalizedString("连接超时 (Cloudflare)", comment: "HTTP 522 description")
+        case 523: return NSLocalizedString("源站不可达 (Cloudflare)", comment: "HTTP 523 description")
+        case 524: return NSLocalizedString("响应超时 (Cloudflare)", comment: "HTTP 524 description")
+        case 525: return NSLocalizedString("SSL 握手失败 (Cloudflare)", comment: "HTTP 525 description")
+        case 526: return NSLocalizedString("无效的 SSL 证书 (Cloudflare)", comment: "HTTP 526 description")
+        // 其他
+        default:
+            if code >= 400 && code < 500 {
+                return NSLocalizedString("客户端错误", comment: "Generic 4xx error description")
+            } else if code >= 500 && code < 600 {
+                return NSLocalizedString("服务器错误", comment: "Generic 5xx error description")
+            }
+            return NSLocalizedString("HTTP 错误", comment: "Generic HTTP error description")
+        }
+    }
+    
     /// 格式化错误内容，使其更简洁易读
-    private func formatErrorContent(_ content: String) -> String {
-        var message = content
+    /// - Returns: (显示内容, 完整内容（如果被截断则非空）)
+    private func formatErrorContent(_ content: String, httpStatusCode: Int? = nil) -> (String, String?) {
+        let maxLength = 500
+        var displayMessage: String
+        var fullContent: String? = nil
         
-        // 检测并简化 HTML 响应（如 Cloudflare 错误页面）
-        if content.contains("<html") || content.contains("<!DOCTYPE") {
-            // 尝试提取 <title> 标签内容
-            if let titleMatch = content.range(of: #"<title>(.*?)</title>"#, options: [.regularExpression, .caseInsensitive]) {
-                let titleText = content[titleMatch]
-                    .replacingOccurrences(of: #"</?title>"#, with: "", options: [.regularExpression, .caseInsensitive])
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !titleText.isEmpty {
-                    // 限制 title 长度
-                    let truncatedTitle = titleText.count > 80 ? String(titleText.prefix(80)) + "..." : titleText
-                    message = "🌐 服务器返回了网页响应\n\n📄 页面标题: \(truncatedTitle)\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
-                } else {
-                    message = "🌐 服务器返回了 HTML 网页响应\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
-                }
-            } else {
-                message = "🌐 服务器返回了 HTML 网页响应\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
-            }
-        } else {
-            // 限制普通错误消息长度，避免过长
-            if message.count > 500 {
-                message = String(message.prefix(500)) + "...\n\n（消息已截断）"
-            }
+        // 构建状态码描述前缀
+        var statusPrefix = ""
+        if let code = httpStatusCode {
+            let description = httpStatusCodeDescription(code)
+            statusPrefix = String(
+                format: NSLocalizedString("HTTP %d: %@\n\n", comment: "HTTP status prefix with code and description"),
+                code,
+                description
+            )
         }
         
-        return message
+        // 检查内容是否需要截断
+        if content.count > maxLength {
+            // 内容过长，需要截断
+            let truncatedContent = String(content.prefix(maxLength))
+            let truncationNotice = NSLocalizedString(
+                "...\n\n(响应已截断，可在更多操作中查看完整内容)",
+                comment: "Truncation notice for long error content"
+            )
+            displayMessage = statusPrefix + truncatedContent + truncationNotice
+            fullContent = statusPrefix + content
+        } else {
+            // 内容长度合适，直接显示
+            displayMessage = statusPrefix + content
+        }
+        
+        return (displayMessage, fullContent)
     }
         
     public func sendAndProcessMessage(
@@ -615,14 +672,14 @@ public class ChatService {
         imageAttachments: [ImageAttachment] = []
     ) async {
         guard var currentSession = currentSessionSubject.value else {
-            addErrorMessage("错误: 没有当前会话。" )
+            addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
             requestStatusSubject.send(.error)
             return
         }
 
         // 准备用户消息和UI占位消息
-        let audioPlaceholder = "[语音消息]"
-        let imagePlaceholder = "[图片]"
+        let audioPlaceholder = NSLocalizedString("[语音消息]", comment: "Audio message placeholder")
+        let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
         var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
@@ -637,7 +694,7 @@ public class ChatService {
             let audioFileName = "语音_\(timestamp).\(audioAttachment.format)"
             if Persistence.saveAudio(audioAttachment.data, fileName: audioFileName) != nil {
                 savedAudioFileName = audioFileName
-                logger.info("🎙️ 音频文件已保存: \(audioFileName)")
+                logger.info("音频文件已保存: \(audioFileName)")
             }
             
             if messageContent.isEmpty {
@@ -650,7 +707,7 @@ public class ChatService {
             let imageFileName = imageAttachment.fileName
             if Persistence.saveImage(imageAttachment.data, fileName: imageFileName) != nil {
                 savedImageFileNames.append(imageFileName)
-                logger.info("🖼️ 图片文件已保存: \(imageFileName)")
+                logger.info("图片文件已保存: \(imageFileName)")
             }
         }
         
@@ -685,7 +742,7 @@ public class ChatService {
         
         // 兜底：如果没有生成任何用户消息，直接报错返回
         guard !userMessages.isEmpty else {
-            addErrorMessage("错误: 待发送消息为空。" )
+            addErrorMessage(NSLocalizedString("错误: 待发送消息为空。", comment: "Empty message error"))
             requestStatusSubject.send(.error)
             return
         }
@@ -718,7 +775,7 @@ public class ChatService {
             if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) { updatedSessions[index] = currentSession }
             chatSessionsSubject.send(updatedSessions)
             Persistence.saveChatSessions(updatedSessions)
-            logger.info("✨ 临时会话已转为永久会话: \(currentSession.name)")
+            logger.info("临时会话已转为永久会话: \(currentSession.name)")
             
             // 用户发送第一条消息时，立即异步生成标题（无需等待AI响应）
             let sessionIDForTitle = currentSession.id
@@ -782,13 +839,13 @@ public class ChatService {
         do {
             try await requestTask.value
         } catch is CancellationError {
-            logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
+            logger.info("请求已被用户取消，将等待后续动作。")
         } catch {
             // URLError.cancelled 不会匹配 CancellationError，需要单独检测
             if isCancellationError(error) {
-                logger.info("⚠️ 请求已被用户取消 (URLError)，将等待后续动作。")
+                logger.info("请求已被用户取消 (URLError)，将等待后续动作。")
             } else {
-                logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+                logger.error("请求执行过程中出现未预期错误: \(error.localizedDescription)")
             }
         }
     }
@@ -830,7 +887,7 @@ public class ChatService {
     
     /// 处理单个工具调用
     private func handleToolCall(_ toolCall: InternalToolCall) async -> (ChatMessage, String?) {
-        logger.info("🤖 正在处理工具调用: \(toolCall.toolName)")
+        logger.info("正在处理工具调用: \(toolCall.toolName)")
         
         var content = ""
         var displayResult: String?
@@ -845,11 +902,11 @@ public class ChatService {
                 await self.memoryManager.addMemory(content: args.content)
                 content = "成功将内容 \"\(args.content)\" 存入记忆。"
                 displayResult = content
-                logger.info("  - ✅ 记忆保存成功。")
+                logger.info("  - 记忆保存成功。")
             } else {
                 content = "错误：无法解析 save_memory 的参数。"
                 displayResult = content
-                logger.error("  - ❌ 无法解析 save_memory 的参数: \(toolCall.arguments)")
+                logger.error("  - 无法解析 save_memory 的参数: \(toolCall.arguments)")
             }
             
         case _ where toolCall.toolName.hasPrefix(MCPManager.toolNamePrefix):
@@ -860,17 +917,17 @@ public class ChatService {
                 let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
                 content = result
                 displayResult = result
-                logger.info("  - ✅ MCP 工具调用成功: \(toolCall.toolName)")
+                logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
             } catch {
                 content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
                 displayResult = content
-                logger.error("  - ❌ MCP 工具调用失败: \(error.localizedDescription)")
+                logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
             }
             
         default:
             content = "错误：未知的工具名称 \(toolCall.toolName)。"
             displayResult = content
-            logger.error("  - ❌ 未知的工具名称: \(toolCall.toolName)")
+            logger.error("  - 未知的工具名称: \(toolCall.toolName)")
         }
         
         let message = ChatMessage(
@@ -930,18 +987,21 @@ public class ChatService {
                 }
             }
             if !memories.isEmpty {
-                logger.info("📚 已检索到 \(memories.count) 条相关记忆。")
+                logger.info("已检索到 \(memories.count) 条相关记忆。")
             }
         }
         
         guard let runnableModel = selectedModelSubject.value else {
-            addErrorMessage("错误: 没有选中的可用模型。请在设置中激活一个模型。" )
+            addErrorMessage(NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"))
             requestStatusSubject.send(.error)
             return
         }
         
         guard let adapter = adapters[runnableModel.provider.apiFormat] else {
-            addErrorMessage("错误: 找不到适用于 '\(runnableModel.provider.apiFormat)' 格式的 API 适配器。" )
+            addErrorMessage(String(
+                format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
+                runnableModel.provider.apiFormat
+            ))
             requestStatusSubject.send(.error)
             return
         }
@@ -989,7 +1049,7 @@ public class ChatService {
                 let mimeType = "audio/\(fileExtension)"
                 let attachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
                 audioAttachments[msg.id] = attachment
-                logger.info("🎙️ 已加载历史音频: \(audioFileName) 用于消息 \(msg.id)")
+                logger.info("已加载历史音频: \(audioFileName) 用于消息 \(msg.id)")
             }
         }
         
@@ -1005,7 +1065,7 @@ public class ChatService {
                     let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
                     let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
                     attachments.append(attachment)
-                    logger.info("🖼️ 已加载历史图片: \(fileName) 用于消息 \(msg.id)")
+                    logger.info("已加载历史图片: \(fileName) 用于消息 \(msg.id)")
                 }
             }
             if !attachments.isEmpty {
@@ -1016,7 +1076,7 @@ public class ChatService {
         let commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
         
         guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachments: audioAttachments, imageAttachments: imageAttachments) else {
-            addErrorMessage("错误: 无法构建 API 请求。" )
+            addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
             requestStatusSubject.send(.error)
             return
         }
@@ -1049,11 +1109,11 @@ public class ChatService {
         let messages = messagesForSessionSubject.value
         
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
-            logger.warning("⚠️ 未找到要重试的消息")
+            logger.warning("未找到要重试的消息")
             return
         }
         
-        logger.info("🔄 重试消息: \(String(describing: message.role)) - 索引 \(messageIndex)")
+        logger.info("重试消息: \(String(describing: message.role)) - 索引 \(messageIndex)")
 
         // 决定重试时要重发的 user 消息，以及保留下来的前缀/后缀
         // 核心逻辑：无论重试什么消息，都找到对应的 user 消息重新发送
@@ -1068,13 +1128,13 @@ public class ChatService {
         case .assistant, .error:
             // assistant/error 重试：回到上一个 user，本质等同于重试那个 user
             guard let previousUserIndex = messages[..<messageIndex].lastIndex(where: { $0.role == .user }) else {
-                logger.warning("⚠️ 未找到该 \(message.role.rawValue) 消息之前的 user 消息，无法重试")
+                logger.warning("未找到该 \(message.role.rawValue) 消息之前的 user 消息，无法重试")
                 return
             }
             anchorUserIndex = previousUserIndex
             messageToSend = messages[previousUserIndex]
         default:
-            logger.warning("⚠️ 不支持重试 \(String(describing: message.role)) 类型的消息")
+            logger.warning("不支持重试 \(String(describing: message.role)) 类型的消息")
             return
         }
         
@@ -1185,7 +1245,7 @@ public class ChatService {
             let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
             let mimeType = "audio/\(fileExtension)"
             audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
-            logger.info("🔄 重试时恢复音频附件: \(audioFileName)")
+            logger.info("重试时恢复音频附件: \(audioFileName)")
         }
         
         // 恢复原消息的图片附件（如果有）
@@ -1197,7 +1257,7 @@ public class ChatService {
                     let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
                     let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
                     imageAttachments.append(attachment)
-                    logger.info("🔄 重试时恢复图片附件: \(fileName)")
+                    logger.info("重试时恢复图片附件: \(fileName)")
                 }
             }
         }
@@ -1289,13 +1349,13 @@ public class ChatService {
         do {
             try await requestTask.value
         } catch is CancellationError {
-            logger.info("⚠️ 请求已被用户取消，将等待后续动作。")
+            logger.info("请求已被用户取消，将等待后续动作。")
         } catch {
             // URLError.cancelled 不会匹配 CancellationError，需要单独检测
             if isCancellationError(error) {
-                logger.info("⚠️ 请求已被用户取消 (URLError)，将等待后续动作。")
+                logger.info("请求已被用户取消 (URLError)，将等待后续动作。")
             } else {
-                logger.error("❌ 请求执行过程中出现未预期错误: \(error.localizedDescription)")
+                logger.error("请求执行过程中出现未预期错误: \(error.localizedDescription)")
             }
         }
     }
@@ -1333,7 +1393,7 @@ public class ChatService {
             let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
             let mimeType = "audio/\(fileExtension)"
             audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
-            logger.info("🔄 重试时恢复音频附件: \(audioFileName)")
+            logger.info("重试时恢复音频附件: \(audioFileName)")
         }
         
         // 5. 恢复原消息的图片附件（如果有）
@@ -1345,7 +1405,7 @@ public class ChatService {
                     let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
                     let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
                     imageAttachments.append(attachment)
-                    logger.info("🔄 重试时恢复图片附件: \(fileName)")
+                    logger.info("重试时恢复图片附件: \(fileName)")
                 }
             }
         }
@@ -1404,11 +1464,11 @@ public class ChatService {
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             if let prettyBody = String(data: data, encoding: .utf8) {
-                logger.error("  - ❌ 网络请求失败，状态码: \(statusCode)，响应体:\n---\n\(prettyBody)\n---")
+                logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体:\n---\n\(prettyBody)\n---")
             } else if !data.isEmpty {
-                logger.error("  - ❌ 网络请求失败，状态码: \(statusCode)，响应体包含 \(data.count) 字节的二进制数据。")
+                logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体包含 \(data.count) 字节的二进制数据。")
             } else {
-                logger.error("  - ❌ 网络请求失败，状态码: \(statusCode)，响应体为空。")
+                logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体为空。")
             }
             throw NetworkError.badStatusCode(code: statusCode, responseBody: data.isEmpty ? nil : data)
         }
@@ -1419,7 +1479,7 @@ public class ChatService {
         let (bytes, response) = try await urlSession.bytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            logger.error("  - ❌ 流式网络请求失败，状态码: \(statusCode)")
+            logger.error("  - 流式网络请求失败，状态码: \(statusCode)")
             throw NetworkError.badStatusCode(code: statusCode, responseBody: nil)
         }
         return bytes
@@ -1429,11 +1489,11 @@ public class ChatService {
         guard let speechModel = resolveSelectedSpeechModel() else {
             // 当开启直接发送音频给模型时，后台转文字是可选的增强功能
             // 没有配置语音模型时只记录日志，不显示错误打扰用户
-            logger.info("ℹ️ 后台语音转文字跳过: 未配置语音模型。消息将保持为 [语音消息] 显示。")
+            logger.info(" 后台语音转文字跳过: 未配置语音模型。消息将保持为 [语音消息] 显示。")
             return
         }
         
-        logger.info("📝 (后台) 正在使用 \(speechModel.model.displayName) 进行语音转文字...")
+        logger.info("(后台) 正在使用 \(speechModel.model.displayName) 进行语音转文字...")
         
         do {
             let rawTranscript = try await transcribeAudio(
@@ -1446,7 +1506,7 @@ public class ChatService {
             
             guard !transcript.isEmpty else {
                 // 转写结果为空时静默处理，不显示错误
-                logger.warning("⚠️ 后台语音转文字返回空结果，消息将保持为 [语音消息] 显示。")
+                logger.warning("后台语音转文字返回空结果，消息将保持为 [语音消息] 显示。")
                 return
             }
             
@@ -1461,7 +1521,7 @@ public class ChatService {
         } catch {
             // 后台转文字失败时静默处理，不显示错误打扰用户
             // 因为音频已经成功发送给模型了，转文字只是可选的UI增强
-            logger.warning("⚠️ 后台语音转文字失败: \(error.localizedDescription)。消息将保持为 [语音消息] 显示。")
+            logger.warning("后台语音转文字失败: \(error.localizedDescription)。消息将保持为 [语音消息] 显示。")
         }
     }
     
@@ -1477,7 +1537,7 @@ public class ChatService {
         }
         
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
-            logger.warning("⚠️ 未找到需要更新的语音消息（可能会话已被切换或删除）。")
+            logger.warning("未找到需要更新的语音消息（可能会话已被切换或删除）。")
             return
         }
         
@@ -1513,38 +1573,47 @@ public class ChatService {
     private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
         do {
             let data = try await fetchData(for: request)
-            let rawResponse = String(data: data, encoding: .utf8) ?? "<二进制数据，无法以 UTF-8 解码>"
-            logger.log("✅ [Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
+            let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
+            logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
             
             do {
                 let parsedMessage = try adapter.parseResponse(data: data)
                 await processResponseMessage(responseMessage: parsedMessage, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
             } catch is CancellationError {
-                logger.info("⚠️ 请求在解析阶段被取消，已忽略后续处理。")
+                logger.info("请求在解析阶段被取消，已忽略后续处理。")
             } catch {
-                logger.error("❌ 解析响应失败: \(error.localizedDescription)")
-                addErrorMessage("解析响应失败，请查看原始响应:\n\(rawResponse)")
+                logger.error("解析响应失败: \(error.localizedDescription)")
+                addErrorMessage(String(
+                    format: NSLocalizedString("解析响应失败，请查看原始响应:\n%@", comment: "Response parse failed with raw response"),
+                    rawResponse
+                ))
                 requestStatusSubject.send(.error)
             }
         } catch is CancellationError {
-            logger.info("⚠️ 请求在拉取数据时被取消。")
+            logger.info("请求在拉取数据时被取消。")
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodyString: String
             if let bodyData, let utf8Text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !utf8Text.isEmpty {
                 bodyString = utf8Text
             } else if let bodyData, !bodyData.isEmpty {
-                bodyString = "响应体包含 \(bodyData.count) 字节，无法以 UTF-8 解码。"
+                bodyString = String(
+                    format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                    bodyData.count
+                )
             } else {
-                bodyString = "响应体为空。"
+                bodyString = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
-            addErrorMessage("服务器响应错误 (状态码 \(code)):\n\(bodyString)")
+            addErrorMessage(bodyString, httpStatusCode: code)
             requestStatusSubject.send(.error)
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
             if isCancellationError(error) {
-                logger.info("⚠️ 请求在拉取数据时被取消 (URLError)。")
+                logger.info("请求在拉取数据时被取消 (URLError)。")
             } else {
-                addErrorMessage("网络错误: \(error.localizedDescription)")
+                addErrorMessage(String(
+                    format: NSLocalizedString("网络错误: %@", comment: "Network error with description"),
+                    error.localizedDescription
+                ))
                 requestStatusSubject.send(.error)
             }
         }
@@ -1578,7 +1647,7 @@ public class ChatService {
         // 2. 根据 isBlocking 标志将工具调用分类
         let toolDefs = availableTools ?? []
         if toolDefs.isEmpty {
-            logger.info("🔇 当前未提供任何工具定义，忽略 AI 返回的 \(toolCalls.count) 个工具调用。")
+            logger.info("当前未提供任何工具定义，忽略 AI 返回的 \(toolCalls.count) 个工具调用。")
             requestStatusSubject.send(.finished)
             // 标题已在用户发送消息时异步生成，无需等待AI响应
             return
@@ -1596,7 +1665,7 @@ public class ChatService {
         // 4. 收集需要同步等待结果的工具调用
         var blockingResultMessages: [ChatMessage] = []
         if !blockingCalls.isEmpty {
-            logger.info("🤖 正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
+            logger.info("正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             for toolCall in blockingCalls {
                 let (resultMessage, toolResult) = await handleToolCall(toolCall)
                 if let toolResult {
@@ -1610,7 +1679,7 @@ public class ChatService {
         if !nonBlockingCalls.isEmpty {
             if hasAssistantContent {
                 // 仅当 AI 已经给出正文时，才异步执行非阻塞式工具，避免阻塞 UI
-                logger.info("🔥 在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
+                logger.info("在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
                 Task {
                     for toolCall in nonBlockingCalls {
                         let (resultMessage, toolResult) = await handleToolCall(toolCall)
@@ -1621,12 +1690,12 @@ public class ChatService {
                         var messages = Persistence.loadMessages(for: currentSessionID)
                         messages.append(resultMessage)
                         Persistence.saveMessages(messages, for: currentSessionID)
-                        logger.info("  - ✅ 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
+                        logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
                 }
             } else {
                 // 没有正文时需要等待工具结果，再次回传给 AI 生成最终回答
-                logger.info("📎 非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
+                logger.info("非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
                 for toolCall in nonBlockingCalls {
                     let (resultMessage, toolResult) = await handleToolCall(toolCall)
                     if let toolResult {
@@ -1645,7 +1714,7 @@ public class ChatService {
             self.messagesForSessionSubject.send(updatedMessages)
             Persistence.saveMessages(updatedMessages, for: currentSessionID)
             
-            logger.info("🔄 正在将工具结果发回 AI 以生成最终回复...")
+            logger.info("正在将工具结果发回 AI 以生成最终回复...")
             await executeMessageRequest(
                 messages: updatedMessages, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
@@ -1739,7 +1808,7 @@ public class ChatService {
                 if messages[index].toolCalls == nil && !toolCallOrder.isEmpty {
                     let finalToolCalls: [InternalToolCall] = toolCallOrder.compactMap { orderIdx in
                         guard let builder = toolCallBuilders[orderIdx], let name = builder.name else {
-                            logger.error("⚠️ 流式响应中检测到未完成的工具调用 (index: \(orderIdx))，缺少名称。")
+                            logger.error("流式响应中检测到未完成的工具调用 (index: \(orderIdx))，缺少名称。")
                             return nil
                         }
                         let id = builder.id ?? "tool-\(orderIdx)"
@@ -1778,24 +1847,30 @@ public class ChatService {
             }
 
         } catch is CancellationError {
-            logger.info("⚠️ 流式请求在处理中被取消。")
+            logger.info("流式请求在处理中被取消。")
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodySnippet: String
             if let bodyData, let text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
                 bodySnippet = text
             } else if let bodyData, !bodyData.isEmpty {
-                bodySnippet = "响应体包含 \(bodyData.count) 字节，无法以 UTF-8 解码。"
+                bodySnippet = String(
+                    format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                    bodyData.count
+                )
             } else {
-                bodySnippet = "响应体为空。"
+                bodySnippet = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
-            addErrorMessage("流式请求失败 (状态码 \(code)):\n\(bodySnippet)")
+            addErrorMessage(bodySnippet, httpStatusCode: code)
             requestStatusSubject.send(.error)
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
             if isCancellationError(error) {
-                logger.info("⚠️ 流式请求在处理中被取消 (URLError)。")
+                logger.info("流式请求在处理中被取消 (URLError)。")
             } else {
-                addErrorMessage("流式传输错误: \(error.localizedDescription)")
+                addErrorMessage(String(
+                    format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
+                    error.localizedDescription
+                ))
                 requestStatusSubject.send(.error)
             }
         }
@@ -1808,7 +1883,7 @@ public class ChatService {
             messages.remove(at: index)
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)
-            logger.info("🗑️ 已移除占位消息 \(messageID.uuidString)。")
+            logger.info("已移除占位消息 \(messageID.uuidString)。")
         }
     }
     
@@ -1852,7 +1927,7 @@ public class ChatService {
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)
             
-            logger.info("✅ 已将新内容添加为版本到消息 \(targetID)")
+            logger.info("已将新内容添加为版本到消息 \(targetID)")
         } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
             // 正常流程：替换loading message
             let preservedToolCalls = messages[index].toolCalls
@@ -2045,7 +2120,7 @@ public class ChatService {
             return
         }
         
-        logger.info("🚀 开始为会话 \(sessionID.uuidString) 生成标题...")
+        logger.info("开始为会话 \(sessionID.uuidString) 生成标题...")
 
         // 3. 准备生成标题的提示（只基于用户的第一条消息）
         let titlePromptTemplate = NSLocalizedString("""
@@ -2072,7 +2147,7 @@ public class ChatService {
 
         do {
             let data = try await fetchData(for: request)
-            logger.log("✅ [Log] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
+            logger.log("[Log] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
             let responseMessage = try adapter.parseResponse(data: data)
             
             // 6. 清理和应用标题
@@ -2098,7 +2173,7 @@ public class ChatService {
                 
                 chatSessionsSubject.send(currentSessions)
                 Persistence.saveChatSessions(currentSessions)
-                logger.info("✅ 成功生成并应用新标题: '\(newTitle)'")
+                logger.info("成功生成并应用新标题: '\(newTitle)'")
             }
         } catch {
             logger.error("生成会话标题时发生网络或解析错误: \(error.localizedDescription)")
