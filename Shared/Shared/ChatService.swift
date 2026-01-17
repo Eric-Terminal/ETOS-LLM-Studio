@@ -696,10 +696,6 @@ public class ChatService {
                 savedAudioFileName = audioFileName
                 logger.info("音频文件已保存: \(audioFileName)")
             }
-            
-            if messageContent.isEmpty {
-                messageContent = audioPlaceholder
-            }
         }
         
         // 保存图片附件
@@ -711,7 +707,7 @@ public class ChatService {
             }
         }
         
-        if messageContent.isEmpty && !savedImageFileNames.isEmpty {
+        if messageContent.isEmpty && !savedImageFileNames.isEmpty && savedAudioFileName == nil {
             messageContent = imagePlaceholder
         }
         
@@ -721,7 +717,7 @@ public class ChatService {
         if let savedAudioFileName {
             let audioMessage = ChatMessage(
                 role: .user,
-                content: messageContent.isEmpty ? audioPlaceholder : audioPlaceholder,
+                content: audioPlaceholder,
                 audioFileName: savedAudioFileName,
                 imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
             )
@@ -778,10 +774,16 @@ public class ChatService {
             logger.info("临时会话已转为永久会话: \(currentSession.name)")
             
             // 用户发送第一条消息时，立即异步生成标题（无需等待AI响应）
-            let sessionIDForTitle = currentSession.id
-            let userMessageForTitle = sessionTitleSource
-            Task {
-                await self.generateAndApplySessionTitle(for: sessionIDForTitle, firstUserMessage: userMessageForTitle)
+            let trimmedTitleSource = sessionTitleSource.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isPlaceholderTitle = trimmedTitleSource == audioPlaceholder || trimmedTitleSource == imagePlaceholder
+            if !trimmedTitleSource.isEmpty && !isPlaceholderTitle {
+                let sessionIDForTitle = currentSession.id
+                let userMessageForTitle = sessionTitleSource
+                Task {
+                    await self.generateAndApplySessionTitle(for: sessionIDForTitle, firstUserMessage: userMessageForTitle)
+                }
+            } else {
+                logger.info("跳过自动标题生成：首条消息为空或仅包含附件占位。")
             }
         } else {
             // 老会话重新收到消息时，将其排到列表顶部

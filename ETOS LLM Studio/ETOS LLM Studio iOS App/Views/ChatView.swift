@@ -42,6 +42,8 @@ struct ChatView: View {
     @State private var messageInfo: MessageInfoPayload?
     @State private var showBranchOptions = false
     @State private var messageToBranch: ChatMessage?
+    @State private var messageToDelete: ChatMessage?
+    @State private var messageVersionToDelete: ChatMessage?
     @State private var fullErrorContent: FullErrorContentPayload?
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
@@ -184,6 +186,40 @@ struct ChatView: View {
                 if let message = messageToBranch, let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
                     Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
                 }
+            }
+            .alert("确认删除消息", isPresented: Binding(
+                get: { messageToDelete != nil },
+                set: { if !$0 { messageToDelete = nil } }
+            )) {
+                Button("删除", role: .destructive) {
+                    if let message = messageToDelete {
+                        viewModel.deleteMessage(message)
+                    }
+                    messageToDelete = nil
+                }
+                Button("取消", role: .cancel) {
+                    messageToDelete = nil
+                }
+            } message: {
+                Text(messageToDelete?.hasMultipleVersions == true
+                     ? "删除后将无法恢复这条消息的所有版本。"
+                     : "删除后无法恢复这条消息。")
+            }
+            .alert("确认删除当前版本", isPresented: Binding(
+                get: { messageVersionToDelete != nil },
+                set: { if !$0 { messageVersionToDelete = nil } }
+            )) {
+                Button("删除", role: .destructive) {
+                    if let message = messageVersionToDelete {
+                        viewModel.deleteCurrentVersion(of: message)
+                    }
+                    messageVersionToDelete = nil
+                }
+                Button("取消", role: .cancel) {
+                    messageVersionToDelete = nil
+                }
+            } message: {
+                Text("删除后将无法恢复此版本的内容。")
             }
         }
     }
@@ -451,7 +487,7 @@ struct ChatView: View {
             
             if message.getAllVersions().count > 1 {
                 Button(role: .destructive) {
-                    viewModel.deleteCurrentVersion(of: message)
+                    messageVersionToDelete = message
                 } label: {
                     Label("删除当前版本", systemImage: "trash")
                 }
@@ -461,7 +497,7 @@ struct ChatView: View {
         }
         
         Button(role: .destructive) {
-            viewModel.deleteMessage(message)
+            messageToDelete = message
         } label: {
             Label(message.hasMultipleVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
         }

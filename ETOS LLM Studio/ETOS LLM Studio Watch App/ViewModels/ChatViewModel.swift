@@ -266,11 +266,8 @@ class ChatViewModel: ObservableObject {
         userInput = ""
         pendingAudioAttachment = nil
         
-        // 构建消息内容
-        var messageContent = userMessageContent
-        if messageContent.isEmpty && audioToSend != nil {
-            messageContent = "[语音消息]"
-        }
+        // 构建消息内容（仅使用用户输入文本）
+        let messageContent = userMessageContent
         
         Task {
             await chatService.sendAndProcessMessage(
