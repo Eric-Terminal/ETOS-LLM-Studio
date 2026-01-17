@@ -166,7 +166,7 @@ struct ChatBubble: View {
             if enableBackground {
                 return AnyShapeStyle(Color(UIColor.secondarySystemBackground))
             } else {
-                return AnyShapeStyle(Color.white)
+                return AnyShapeStyle(Color(uiColor: .systemBackground))
             }
         case .error:
             return AnyShapeStyle(Color.red.opacity(0.15))

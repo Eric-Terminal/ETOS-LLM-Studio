@@ -991,6 +991,7 @@ private struct AudioRecorderSheet: View {
     let format: AudioRecordingFormat
     let onComplete: (AudioAttachment) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     
     @State private var isRecording = false
     @State private var recordingDuration: TimeInterval = 0
@@ -1023,7 +1024,7 @@ private struct AudioRecorderSheet: View {
                         
                         Image(systemName: isRecording ? "stop.fill" : "mic.fill")
                             .font(.system(size: 30))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(isRecording ? .white : (colorScheme == .dark ? .black : .white))
                     }
                 }
                 
