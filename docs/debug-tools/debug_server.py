@@ -108,21 +108,37 @@ class DebugServer:
             # 流式下载完成标志
             if data.get('stream_complete'):
                 total = data.get('total', 0)
-                self.download_in_progress = False  # 下载完成
+                success_count = data.get('success_count', total)  # 实际成功发送的文件数
+                fail_count = data.get('fail_count', 0)
                 
                 # 保存目录路径（在重置前）
                 saved_dir = self.stream_backup_dir
+                received_count = self.download_file_count
                 
-                print(f"\n\n✅ 流式下载完成！共 {total} 个文件")
+                self.download_in_progress = False  # 下载完成
+                
+                print(f"\n\n✅ 流式下载完成！")
+                print(f"   📊 设备报告: 总计 {total}, 成功发送 {success_count}, 失败 {fail_count}")
+                print(f"   📥 服务器收到: {received_count} 个文件")
+                
+                # 🔥 验证：检查实际收到的文件数是否与设备发送的一致
+                if received_count < success_count:
+                    print(f"   ⚠️  警告: 有 {success_count - received_count} 个文件可能丢失！")
+                    print(f"      (设备发送了 {success_count} 个，但只收到 {received_count} 个)")
+                elif received_count == success_count and success_count > 0:
+                    print(f"   ✅ 验证通过: 所有文件都已收到")
+                
                 if saved_dir:
                     print(f"💾 保存目录: {saved_dir}")
-                elif total > 0:
-                    print(f"⚠️  警告: 收到完成信号但未创建保存目录（可能未收到文件数据）")
+                elif total > 0 and received_count == 0:
+                    print(f"⚠️  警告: 收到完成信号但未收到任何文件数据！")
+                    print(f"      这可能是网络乱序问题，请重试")
                 else:
                     print(f"💾 保存目录: 无文件需要保存")
                 
                 self.stream_backup_dir = None  # 重置
                 self.download_file_count = 0  # 重置计数
+                self.download_expected_total = 0  # 重置期望总数
                 return
             
             # 流式下载：单个文件

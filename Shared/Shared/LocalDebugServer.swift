@@ -975,11 +975,18 @@ public class LocalDebugServer: ObservableObject {
             
             logger.info("传输统计: 成功 \(successCount), 失败 \(failCount), 总计 \(filePaths.count)")
             
-            // 发送完成消息
+            // 🔥 关键修复：在发送完成信号前等待一小段时间
+            // 确保服务器有时间处理最后几个文件响应
+            // 实体机网络比虚拟机更快，可能导致完成信号"超车"到达
+            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+            
+            // 发送完成消息（包含实际发送的文件数，让服务器验证）
             let completeResponse: [String: Any] = [
                 "status": "ok",
                 "message": "流式下载完成",
                 "total": filePaths.count,
+                "success_count": successCount,
+                "fail_count": failCount,
                 "stream_complete": true
             ]
             await sendHTTPResponseAsync(completeResponse)
@@ -1013,6 +1020,7 @@ public class LocalDebugServer: ObservableObject {
     }
     
     /// 异步发送 HTTP 响应（等待完成）
+    /// 🔥 重要：确保每个请求完全完成后再返回，避免并发导致的乱序问题
     private func sendHTTPResponseAsync(_ response: [String: Any]) async {
         let components = serverURL.split(separator: ":").map(String.init)
         let host = components.first ?? ""
@@ -1032,6 +1040,8 @@ public class LocalDebugServer: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // 🔥 添加 Connection: close 避免 HTTP keep-alive 造成的乱序
+        request.setValue("close", forHTTPHeaderField: "Connection")
         request.timeoutInterval = 60.0
         
         // JSON 序列化并记录错误
@@ -1044,13 +1054,27 @@ public class LocalDebugServer: ObservableObject {
         }
         request.httpBody = jsonData
         
+        // 记录发送的索引（用于调试）
+        let index = response["index"] as? Int
+        let isComplete = response["stream_complete"] as? Bool ?? false
+        
         do {
             let (_, httpResponse) = try await session.data(for: request)
-            if let httpRes = httpResponse as? HTTPURLResponse, httpRes.statusCode != 200 {
-                logger.error("服务器返回错误状态码: \(httpRes.statusCode)")
+            if let httpRes = httpResponse as? HTTPURLResponse {
+                if httpRes.statusCode != 200 {
+                    logger.error("服务器返回错误状态码: \(httpRes.statusCode)")
+                } else if isComplete {
+                    logger.info("✅ 完成信号已确认送达服务器")
+                }
+            }
+            
+            // 🔥 每个请求后添加小延迟，确保服务器有时间处理
+            // 这对实体机尤其重要，因为实体机网络速度可能比服务器处理速度快
+            if index != nil && !isComplete {
+                try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
             }
         } catch {
-            logger.error("发送响应失败: \(error.localizedDescription)")
+            logger.error("发送响应失败 (index=\(index ?? -1)): \(error.localizedDescription)")
         }
     }
     
