@@ -25,9 +25,9 @@ enum MemoryStoragePaths {
         if !FileManager.default.fileExists(atPath: rootDirectory.path) {
             do {
                 try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
-                logger.info("📁 创建 Memory 根目录: \(rootDirectory.path)")
+                logger.info("创建 Memory 根目录: \(rootDirectory.path)")
             } catch {
-                logger.error("❌ 创建 Memory 根目录失败: \(error.localizedDescription)")
+                logger.error("创建 Memory 根目录失败: \(error.localizedDescription)")
             }
         }
         return rootDirectory

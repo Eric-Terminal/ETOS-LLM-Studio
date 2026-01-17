@@ -84,7 +84,7 @@ public class MemoryManager {
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
         self.embeddingRetryPolicy = retryPolicy
-        logger.info("🧠 MemoryManager v2 (wrapper) 正在初始化...")
+        logger.info("MemoryManager v2 (wrapper) 正在初始化...")
         self.initializationTask = Task {
             await self.setup()
         }
@@ -97,7 +97,7 @@ public class MemoryManager {
         chunkSize: Int = 200,
         retryPolicy: MemoryEmbeddingRetryPolicy = .default
     ) {
-        logger.info("🧠 MemoryManager v2 (wrapper) 正在使用测试索引进行初始化...")
+        logger.info("MemoryManager v2 (wrapper) 正在使用测试索引进行初始化...")
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
         self.embeddingRetryPolicy = retryPolicy
@@ -110,7 +110,7 @@ public class MemoryManager {
                 self.internalMemoriesPublisher.send(memories)
                 logger.info("  - 测试初始化完成。从磁盘加载了 \(memories.count) 条记忆。")
             } catch {
-                logger.error("  - ❌ (测试) 加载记忆索引失败: \(error.localizedDescription)")
+                logger.error("  - (测试) 加载记忆索引失败: \(error.localizedDescription)")
                 self.internalMemoriesPublisher.send([])
             }
         }
@@ -141,7 +141,7 @@ public class MemoryManager {
             )
             logger.info("  - 向量索引初始化完成，当前条目: \(self.similarityIndex.indexItems.count)。")
         } catch {
-            logger.error("  - ❌ 加载记忆索引失败: \(error.localizedDescription)")
+            logger.error("  - 加载记忆索引失败: \(error.localizedDescription)")
         }
         
         var rawMemories = rawStore.loadMemories().sorted(by: { $0.createdAt > $1.createdAt })
@@ -178,16 +178,16 @@ public class MemoryManager {
         
         // 如果没有配置嵌入模型，只保存原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
-            logger.warning("⚠️ 尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
+            logger.warning("尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
             return
         }
         
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
-            logger.info("✅ 已添加新的记忆。")
+            logger.info("已添加新的记忆。")
         } catch {
-            logger.error("❌ 添加记忆失败：\(error.localizedDescription)")
+            logger.error("添加记忆失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
         }
@@ -207,17 +207,17 @@ public class MemoryManager {
         
         // 如果没有配置嵌入模型，只保存原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
-            logger.warning("⚠️ 尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
+            logger.warning("尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
             return true
         }
         
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
-            logger.info("🔁 已恢复外部记忆。")
+            logger.info("已恢复外部记忆。")
             return true
         } catch {
-            logger.error("❌ 恢复外部记忆失败：\(error.localizedDescription)")
+            logger.error("恢复外部记忆失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
             return false
@@ -241,7 +241,7 @@ public class MemoryManager {
         
         // 如果没有配置嵌入模型，只更新原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
-            logger.warning("⚠️ 尚未配置嵌入模型，记忆已更新但无法生成嵌入向量。")
+            logger.warning("尚未配置嵌入模型，记忆已更新但无法生成嵌入向量。")
             return
         }
         
@@ -249,9 +249,9 @@ public class MemoryManager {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             removeVectorEntries(for: [item.id])
             await ingest(memory: updatedMemory, chunkTexts: chunkTexts, embeddings: embeddings)
-            logger.info("✅ 已更新记忆项。")
+            logger.info("已更新记忆项。")
         } catch {
-            logger.error("❌ 更新记忆失败：\(error.localizedDescription)")
+            logger.error("更新记忆失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
         }
@@ -267,7 +267,7 @@ public class MemoryManager {
         
         removeVectorEntries(for: idsToDelete)
         saveIndex()
-        logger.info("🗑️ 已删除 \(items.count) 条记忆。")
+        logger.info("已删除 \(items.count) 条记忆。")
     }
     
     /// 归档记忆（被遗忘），不再参与检索，但保留原文和向量。
@@ -278,7 +278,7 @@ public class MemoryManager {
         cachedMemories.sort(by: { $0.createdAt > $1.createdAt })
         internalMemoriesPublisher.send(cachedMemories)
         persistRawMemories()
-        logger.info("📦 记忆已归档：\(item.id.uuidString)")
+        logger.info("记忆已归档：\(item.id.uuidString)")
     }
     
     /// 恢复归档的记忆，使其重新参与检索。
@@ -289,7 +289,7 @@ public class MemoryManager {
         cachedMemories.sort(by: { $0.createdAt > $1.createdAt })
         internalMemoriesPublisher.send(cachedMemories)
         persistRawMemories()
-        logger.info("🔓 记忆已恢复：\(item.id.uuidString)")
+        logger.info("记忆已恢复：\(item.id.uuidString)")
     }
     
     /// 获取所有记忆（包括归档的），用于 UI 显示。
@@ -308,14 +308,14 @@ public class MemoryManager {
     @discardableResult
     public func reembedAllMemories() async throws -> MemoryReembeddingSummary {
         await initializationTask.value
-        logger.info("🔁 正在重新生成全部记忆嵌入...")
+        logger.info("正在重新生成全部记忆嵌入...")
         let memories = cachedMemories
         similarityIndex.removeAll()
         purgePersistedVectorStores()
         
         guard !memories.isEmpty else {
             saveIndex()
-            logger.info("ℹ️ 记忆列表为空，已写入空索引。")
+            logger.info(" 记忆列表为空，已写入空索引。")
             return MemoryReembeddingSummary(processedMemories: 0, chunkCount: 0)
         }
         
@@ -325,7 +325,7 @@ public class MemoryManager {
         for memory in memories {
             let chunkTexts = chunker.chunk(text: memory.content)
             guard !chunkTexts.isEmpty else {
-                logger.error("⚠️ 记忆 \(memory.id.uuidString) 无有效分块，跳过。")
+                logger.error("记忆 \(memory.id.uuidString) 无有效分块，跳过。")
                 continue
             }
             
@@ -346,7 +346,7 @@ public class MemoryManager {
         }
         
         saveIndex()
-        logger.info("✅ 记忆重嵌入完成：\(processedMemories) 条记忆 -> \(chunkCount) 个分块。")
+        logger.info("记忆重嵌入完成：\(processedMemories) 条记忆 -> \(chunkCount) 个分块。")
         return MemoryReembeddingSummary(processedMemories: processedMemories, chunkCount: chunkCount)
     }
 
@@ -372,7 +372,7 @@ public class MemoryManager {
             // 检测维度不匹配
             let indexDimension = similarityIndex.dimension
             if indexDimension > 0 && indexDimension != queryEmbedding.count {
-                logger.fault("⚠️ 嵌入维度不匹配！查询维度: \(queryEmbedding.count), 索引维度: \(indexDimension)。需要重新生成全部嵌入。")
+                logger.fault("嵌入维度不匹配！查询维度: \(queryEmbedding.count), 索引维度: \(indexDimension)。需要重新生成全部嵌入。")
                 internalDimensionMismatchPublisher.send((query: queryEmbedding.count, index: indexDimension))
                 return []
             }
@@ -393,7 +393,7 @@ public class MemoryManager {
             
             return resolvedMemories
         } catch {
-            logger.error("❌ 记忆检索失败：\(error.localizedDescription)")
+            logger.error("记忆检索失败：\(error.localizedDescription)")
             return []
         }
     }
@@ -417,13 +417,13 @@ public class MemoryManager {
             } catch {
                 // 识别硬错误（400/401/403等），不应重试
                 if isHardError(error) {
-                    logger.fault("❌ 遇到硬错误，停止重试：\(error.localizedDescription)")
+                    logger.fault("遇到硬错误，停止重试：\(error.localizedDescription)")
                     throw error
                 }
                 
-                logger.error("❌ 嵌入生成失败（第 \(attempt) 次）：\(error.localizedDescription)")
+                logger.error("嵌入生成失败（第 \(attempt) 次）：\(error.localizedDescription)")
                 if attempt >= embeddingRetryPolicy.maxAttempts {
-                    logger.fault("❌ 超过最大嵌入重试次数，放弃本次记忆写入。")
+                    logger.fault("超过最大嵌入重试次数，放弃本次记忆写入。")
                     throw error
                 }
                 
@@ -459,16 +459,16 @@ public class MemoryManager {
                     toDirectory: directory,
                     name: MemoryStoragePaths.vectorStoreName
                 )
-                self.logger.info("💾 向量索引已保存。")
+                self.logger.info("向量索引已保存。")
             } catch {
-                self.logger.error("❌ 自动保存记忆索引失败: \(error.localizedDescription)")
+                self.logger.error("自动保存记忆索引失败: \(error.localizedDescription)")
             }
         }
     }
     
     private func ingest(memory: MemoryItem, chunkTexts: [String], embeddings: [[Float]]) async {
         guard chunkTexts.count == embeddings.count else {
-            logger.error("❌ 嵌入数量与分块数量不一致，取消写入。")
+            logger.error("嵌入数量与分块数量不一致，取消写入。")
             return
         }
         
@@ -538,9 +538,9 @@ public class MemoryManager {
             guard let self else { return }
             do {
                 try self.rawStore.saveMemories(memoriesToPersist)
-                self.logger.info("💾 原文记忆已保存。")
+                self.logger.info("原文记忆已保存。")
             } catch {
-                self.logger.error("❌ 保存原文记忆失败: \(error.localizedDescription)")
+                self.logger.error("保存原文记忆失败: \(error.localizedDescription)")
             }
         }
     }
@@ -563,7 +563,7 @@ public class MemoryManager {
         
         // 保护措施：没有配置嵌入模型时不要尝试补偿
         guard hasConfiguredEmbeddingModel() else {
-            logger.info("⚠️ 尚未配置嵌入模型，跳过自动补偿嵌入。")
+            logger.info("尚未配置嵌入模型，跳过自动补偿嵌入。")
             return 0
         }
         
@@ -571,7 +571,7 @@ public class MemoryManager {
         let missingMemories = memoriesMissingEmbeddings(validMemoryIDs: memoryIDs)
         guard !missingMemories.isEmpty else { return 0 }
         
-        logger.info("🔍 检测到 \(missingMemories.count) 条记忆缺少嵌入，尝试自动补偿。")
+        logger.info("检测到 \(missingMemories.count) 条记忆缺少嵌入，尝试自动补偿。")
         for memory in missingMemories {
             await backfillEmbedding(for: memory)
         }
@@ -596,16 +596,16 @@ public class MemoryManager {
     private func backfillEmbedding(for memory: MemoryItem) async {
         let chunkTexts = chunker.chunk(text: memory.content)
         guard !chunkTexts.isEmpty else {
-            logger.error("⚠️ 记忆 \(memory.id.uuidString) 内容无法分块，跳过补偿。")
+            logger.error("记忆 \(memory.id.uuidString) 内容无法分块，跳过补偿。")
             return
         }
         
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
-            logger.info("🔁 已补齐记忆嵌入：\(memory.id.uuidString)。")
+            logger.info("已补齐记忆嵌入：\(memory.id.uuidString)。")
         } catch {
-            logger.error("❌ 补写记忆嵌入失败：\(error.localizedDescription)")
+            logger.error("补写记忆嵌入失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: max(consistencyCheckDefaultDelay, embeddingRetryPolicy.initialDelay))
         }
@@ -625,7 +625,7 @@ public class MemoryManager {
         for chunkId in orphanChunkIDs {
             similarityIndex.removeItem(id: chunkId)
         }
-        logger.info("🧹 已移除 \(orphanChunkIDs.count) 条孤立的向量分块。")
+        logger.info("已移除 \(orphanChunkIDs.count) 条孤立的向量分块。")
         saveIndex()
     }
     
@@ -655,10 +655,10 @@ public class MemoryManager {
             }
             for file in sqliteFiles {
                 try fileManager.removeItem(at: file)
-                logger.info("🗑️ 已删除旧向量存储：\(file.lastPathComponent)")
+                logger.info("已删除旧向量存储：\(file.lastPathComponent)")
             }
         } catch {
-            logger.error("⚠️ 清理旧向量存储失败：\(error.localizedDescription)")
+            logger.error("清理旧向量存储失败：\(error.localizedDescription)")
         }
     }
     
@@ -687,12 +687,12 @@ public class MemoryManager {
                     uniqueMemories.append(memory)
                     seenParentIDs.insert(parentId)
                 } else {
-                    logger.error("⚠️ 找不到 parentMemoryId=\(parentId.uuidString) 对应的原文，使用分块文本作为回退。")
+                    logger.error("找不到 parentMemoryId=\(parentId.uuidString) 对应的原文，使用分块文本作为回退。")
                     uniqueMemories.append(MemoryItem(from: result))
                     seenParentIDs.insert(parentId)
                 }
             } else {
-                logger.error("⚠️ 分块缺少 parentMemoryId 元数据，使用分块文本作为回退。")
+                logger.error("分块缺少 parentMemoryId 元数据，使用分块文本作为回退。")
                 guard !seenChunkIDs.contains(result.id) else { continue }
                 uniqueMemories.append(MemoryItem(from: result))
                 seenChunkIDs.insert(result.id)

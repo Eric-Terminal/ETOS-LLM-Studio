@@ -86,7 +86,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
     
     public func connectSSE() {
         guard let sseURL = sseEndpoint else {
-            streamingLogger.warning("⚠️ 未配置 SSE endpoint，无法建立长连接")
+            streamingLogger.warning("未配置 SSE endpoint，无法建立长连接")
             return
         }
         
@@ -123,11 +123,11 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
             let (bytes, response) = try await session.bytes(for: request)
             guard let httpResponse = response as? HTTPURLResponse,
                   (200..<300).contains(httpResponse.statusCode) else {
-                streamingLogger.error("❌ SSE 连接失败")
+                streamingLogger.error("SSE 连接失败")
                 return
             }
             
-            streamingLogger.info("✅ SSE 连接已建立")
+            streamingLogger.info("SSE 连接已建立")
             
             var buffer = ""
             for try await line in bytes.lines {
@@ -148,7 +148,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
             }
         } catch {
             if !Task.isCancelled {
-                streamingLogger.error("❌ SSE 连接错误: \(error.localizedDescription)")
+                streamingLogger.error("SSE 连接错误: \(error.localizedDescription)")
             }
         }
     }
@@ -177,7 +177,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
     }
     
     private func handleNotification(_ notification: MCPNotification) async {
-        streamingLogger.debug("📥 收到通知: \(notification.method)")
+        streamingLogger.debug("收到通知: \(notification.method)")
         
         // 处理日志消息
         if notification.method == MCPNotificationType.logMessage.rawValue,
@@ -207,7 +207,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
     
     private func handleSamplingRequest(_ request: MCPServerSamplingRequest) async {
         guard let handler = samplingHandler else {
-            streamingLogger.warning("⚠️ 收到 Sampling 请求但未设置 handler")
+            streamingLogger.warning("收到 Sampling 请求但未设置 handler")
             await sendSamplingError(requestId: request.id, message: "Client does not support sampling")
             return
         }
@@ -227,7 +227,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         do {
             _ = try await sendMessage(data)
         } catch {
-            streamingLogger.error("❌ 发送 Sampling 响应失败: \(error.localizedDescription)")
+            streamingLogger.error("发送 Sampling 响应失败: \(error.localizedDescription)")
         }
     }
     
@@ -241,7 +241,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         do {
             _ = try await sendMessage(data)
         } catch {
-            streamingLogger.error("❌ 发送 Sampling 错误响应失败: \(error.localizedDescription)")
+            streamingLogger.error("发送 Sampling 错误响应失败: \(error.localizedDescription)")
         }
     }
     

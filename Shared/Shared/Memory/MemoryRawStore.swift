@@ -35,7 +35,7 @@ struct MemoryRawStore {
             let memories = try decoder.decode([MemoryItem].self, from: data)
             return memories
         } catch {
-            logger.error("❌ 读取 Memory JSON 失败: \(error.localizedDescription)")
+            logger.error("读取 Memory JSON 失败: \(error.localizedDescription)")
             return []
         }
     }

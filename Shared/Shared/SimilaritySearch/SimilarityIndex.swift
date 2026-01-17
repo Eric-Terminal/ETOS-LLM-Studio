@@ -195,7 +195,7 @@ public class SimilarityIndex: Identifiable, Hashable {
             if let item = self.getItem(id: id) {
                 return SearchResult(id: item.id, score: score, text: item.text, metadata: item.metadata)
             } else {
-                logger.error("在 indexItems 中未找到ID为 '\(id)' 的项。" )
+                logger.error("在 indexItems 中未找到ID为 '\(id)' 的项。")
                 return SearchResult(id: "000000", score: 0.0, text: "fail", metadata: [:])
             }
         }
