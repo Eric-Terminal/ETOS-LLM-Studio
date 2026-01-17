@@ -1,10 +1,11 @@
 // ============================================================================
 // ChatBubble.swift
 // ============================================================================
-// 聊天气泡 (iOS 样式)
-// - 根据消息角色切换配色
+// 聊天气泡 (Telegram 风格)
+// - 仿 Telegram 气泡形状与配色
+// - 用户消息：绿色渐变 + 右侧尾巴
+// - AI 消息：白色/灰色 + 左侧尾巴
 // - 支持 Markdown 与推理展开
-// - 为工具调用提供可折叠区域
 // - 支持语音消息播放
 // ============================================================================
 
@@ -15,6 +16,72 @@ import Shared
 import UIKit
 import AVFoundation
 import Combine
+
+// MARK: - Telegram 风格气泡形状
+
+/// Telegram 风格的气泡形状，带有尖角尾巴
+struct TelegramBubbleShape: Shape {
+    let isOutgoing: Bool  // 是否是发出的消息（用户消息）
+    let tailSize: CGFloat
+    let cornerRadius: CGFloat
+    
+    init(isOutgoing: Bool, tailSize: CGFloat = 8, cornerRadius: CGFloat = 18) {
+        self.isOutgoing = isOutgoing
+        self.tailSize = tailSize
+        self.cornerRadius = cornerRadius
+    }
+    
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        
+        let bubbleRect: CGRect
+        if isOutgoing {
+            // 发出消息：右侧留出尾巴空间
+            bubbleRect = CGRect(x: rect.minX, y: rect.minY,
+                               width: rect.width - tailSize, height: rect.height)
+        } else {
+            // 接收消息：左侧留出尾巴空间
+            bubbleRect = CGRect(x: rect.minX + tailSize, y: rect.minY,
+                               width: rect.width - tailSize, height: rect.height)
+        }
+        
+        // 绘制圆角矩形主体
+        let roundedRect = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .path(in: bubbleRect)
+        path.addPath(roundedRect)
+        
+        // 绘制尾巴
+        if isOutgoing {
+            // 右侧尾巴（底部）
+            let tailStartY = bubbleRect.maxY - cornerRadius - tailSize
+            path.move(to: CGPoint(x: bubbleRect.maxX, y: tailStartY))
+            path.addQuadCurve(
+                to: CGPoint(x: rect.maxX, y: bubbleRect.maxY - 4),
+                control: CGPoint(x: bubbleRect.maxX + tailSize * 0.3, y: tailStartY + tailSize * 0.5)
+            )
+            path.addQuadCurve(
+                to: CGPoint(x: bubbleRect.maxX - 2, y: bubbleRect.maxY),
+                control: CGPoint(x: bubbleRect.maxX + tailSize * 0.2, y: bubbleRect.maxY)
+            )
+            path.addLine(to: CGPoint(x: bubbleRect.maxX, y: bubbleRect.maxY - cornerRadius))
+        } else {
+            // 左侧尾巴（底部）
+            let tailStartY = bubbleRect.maxY - cornerRadius - tailSize
+            path.move(to: CGPoint(x: bubbleRect.minX, y: tailStartY))
+            path.addQuadCurve(
+                to: CGPoint(x: rect.minX, y: bubbleRect.maxY - 4),
+                control: CGPoint(x: bubbleRect.minX - tailSize * 0.3, y: tailStartY + tailSize * 0.5)
+            )
+            path.addQuadCurve(
+                to: CGPoint(x: bubbleRect.minX + 2, y: bubbleRect.maxY),
+                control: CGPoint(x: bubbleRect.minX - tailSize * 0.2, y: bubbleRect.maxY)
+            )
+            path.addLine(to: CGPoint(x: bubbleRect.minX, y: bubbleRect.maxY - cornerRadius))
+        }
+        
+        return path
+    }
+}
 
 struct ChatBubble: View {
     let message: ChatMessage
@@ -27,33 +94,62 @@ struct ChatBubble: View {
     @State private var imagePreview: ImagePreviewPayload?
     @EnvironmentObject private var viewModel: ChatViewModel
     
+    // Telegram 颜色
+    private let telegramGreen = Color(red: 0.29, green: 0.73, blue: 0.45)
+    private let telegramGreenDark = Color(red: 0.22, green: 0.58, blue: 0.35)
+    
+    private var isOutgoing: Bool {
+        message.role == .user
+    }
+    
+    private var isError: Bool {
+        message.role == .error || (message.role == .assistant && message.content.hasPrefix("重试失败"))
+    }
+    
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if message.role == .assistant || message.role == .system || message.role == .tool {
-                roleBadge
+        HStack(alignment: .bottom, spacing: 0) {
+            if isOutgoing {
+                Spacer(minLength: 60)
             }
             
-            VStack(alignment: .leading, spacing: 8) {
-                contentStack
-                
-                // 版本指示器（仅当有多个版本时显示）
-                if message.hasMultipleVersions {
-                    versionIndicator
+            VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+                // 气泡内容
+                VStack(alignment: .leading, spacing: 6) {
+                    contentStack
+                    
+                    // 版本指示器 + 状态（Telegram 风格：右下角）
+                    if message.hasMultipleVersions || isOutgoing {
+                        HStack(spacing: 6) {
+                            if message.hasMultipleVersions {
+                                compactVersionIndicator
+                            }
+                            
+                            // 发送状态指示器（仅用户消息）
+                            if isOutgoing {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(Color.white.opacity(0.7))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    TelegramBubbleShape(isOutgoing: isOutgoing)
+                        .fill(bubbleGradient)
+                )
+                .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
             }
-            .padding(14)
-            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(bubbleStrokeColor, lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.06), radius: 12, y: 8)
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.78, alignment: isOutgoing ? .trailing : .leading)
             
-            if message.role == .user {
-                roleBadge
+            if !isOutgoing {
+                Spacer(minLength: 60)
             }
         }
-        .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -65,53 +161,79 @@ struct ChatBubble: View {
         }
     }
     
-    // MARK: - Version Indicator
+    // MARK: - 紧凑版本指示器 (Telegram 风格)
     
     @ViewBuilder
-    private var versionIndicator: some View {
-        HStack(spacing: 8) {
+    private var compactVersionIndicator: some View {
+        HStack(spacing: 4) {
             Button {
                 viewModel.switchToPreviousVersion(of: message)
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(message.getCurrentVersionIndex() > 0 ? Color.accentColor : Color.secondary.opacity(0.5))
+                    .font(.system(size: 9, weight: .bold))
             }
             .buttonStyle(.plain)
             .disabled(message.getCurrentVersionIndex() == 0)
+            .opacity(message.getCurrentVersionIndex() > 0 ? 1 : 0.4)
             
-            HStack(spacing: 4) {
-                // 显示版本号
-                Text("\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count)")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                
-                // 如果当前版本是错误，显示错误标识
-                if message.content.hasPrefix("重试失败") {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.red)
-                }
-            }
+            Text("\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count)")
+                .font(.system(size: 10, weight: .medium))
+                .monospacedDigit()
             
             Button {
                 viewModel.switchToNextVersion(of: message)
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? Color.accentColor : Color.secondary.opacity(0.5))
+                    .font(.system(size: 9, weight: .bold))
             }
             .buttonStyle(.plain)
             .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
+            .opacity(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? 1 : 0.4)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .foregroundStyle(isOutgoing ? Color.white.opacity(0.8) : Color.secondary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
         .background(
             Capsule()
-                .fill(Color.secondary.opacity(0.08))
+                .fill(isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
         )
+    }
+    
+    // MARK: - 气泡渐变背景
+    
+    private var bubbleGradient: some ShapeStyle {
+        if isError {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [Color.red.opacity(0.85), Color.red.opacity(0.7)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        
+        switch message.role {
+        case .user:
+            // Telegram 绿色渐变
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [telegramGreen, telegramGreenDark],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        case .assistant, .system, .tool:
+            // 接收消息：浅灰/白色
+            if enableBackground {
+                return AnyShapeStyle(Color(UIColor.secondarySystemBackground))
+            } else {
+                return AnyShapeStyle(Color.white)
+            }
+        case .error:
+            return AnyShapeStyle(Color.red.opacity(0.15))
+        @unknown default:
+            return AnyShapeStyle(Color(UIColor.secondarySystemBackground))
+        }
     }
     
     // MARK: - Content
@@ -122,96 +244,112 @@ struct ChatBubble: View {
             imageAttachmentsView(fileNames: imageFileNames)
         }
         
+        // 思考过程 (Telegram 风格折叠)
         if let reasoning = message.reasoningContent,
            !reasoning.isEmpty {
             DisclosureGroup(isExpanded: $isReasoningExpanded) {
                 Text(reasoning)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
                     .textSelection(.enabled)
             } label: {
-                Label("思考过程", systemImage: "brain.head.profile")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 12))
+                    Text("思考过程")
+                        .font(.subheadline.weight(.medium))
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
             }
+            .tint(isOutgoing ? .white : .secondary)
         }
         
+        // 工具调用
         if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
             DisclosureGroup(isExpanded: $isToolCallsExpanded) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(toolCalls, id: \.id) { call in
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(call.toolName)
                                 .font(.footnote.weight(.semibold))
                             if let result = call.result, !result.isEmpty {
                                 Text(result)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
                             }
                         }
-                        .padding(8)
-                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                        )
                     }
                 }
             } label: {
-                Label("使用工具", systemImage: "wrench.and.screwdriver")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Image(systemName: "wrench.and.screwdriver")
+                        .font(.system(size: 12))
+                    Text("使用工具")
+                        .font(.subheadline.weight(.medium))
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
             }
+            .tint(isOutgoing ? .white : .secondary)
         }
         
+        // 消息正文
         if !message.content.isEmpty {
-            // 如果是语音消息，显示播放控件
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName)
             } else {
                 renderContent(message.content)
                     .font(.body)
-                    .foregroundStyle(message.role == .user ? Color.white : Color.primary)
+                    .foregroundStyle(isOutgoing ? Color.white : Color.primary)
                     .textSelection(.enabled)
             }
         } else if message.role == .assistant {
-            HStack(spacing: 6) {
-                ProgressView()
-                Text("正在思考…")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            // 加载指示器
+            HStack(spacing: 8) {
+                TelegramTypingIndicator()
+                Text("正在输入...")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
             }
         }
     }
     
     @ViewBuilder
     private func imageAttachmentsView(fileNames: [String]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(fileNames, id: \.self) { fileName in
-                    if let image = loadImage(fileName: fileName) {
-                        Button {
-                            imagePreview = ImagePreviewPayload(image: image)
-                        } label: {
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 140, height: 140)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.secondary.opacity(0.12))
-                            .frame(width: 140, height: 140)
-                            .overlay(
-                                VStack(spacing: 6) {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 22, weight: .semibold))
-                                        .foregroundStyle(.secondary)
-                                    Text("图片丢失")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            )
+        let columns = [GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 4)]
+        LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(fileNames, id: \.self) { fileName in
+                if let image = loadImage(fileName: fileName) {
+                    Button {
+                        imagePreview = ImagePreviewPayload(image: image)
+                    } label: {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(minWidth: 80, maxWidth: 140)
+                            .frame(height: 100)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(height: 100)
+                        .overlay(
+                            VStack(spacing: 4) {
+                                Image(systemName: "photo")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(.secondary)
+                                Text("图片丢失")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        )
                 }
             }
         }
@@ -226,7 +364,9 @@ struct ChatBubble: View {
     private func renderContent(_ content: String) -> some View {
         if enableMarkdown {
             Markdown(content)
-                .padding(.top, message.reasoningContent == nil ? 0 : 4)
+                .markdownTextStyle {
+                    ForegroundColor(isOutgoing ? .white : .primary)
+                }
         } else {
             Text(content)
         }
@@ -234,125 +374,102 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func audioPlayerView(fileName: String) -> some View {
-        let isUser = message.role == .user
-        let foregroundColor = isUser ? Color.white : Color.primary
-        let secondaryColor = isUser ? Color.white.opacity(0.7) : Color.secondary
+        let foregroundColor = isOutgoing ? Color.white : Color.primary
+        let secondaryColor = isOutgoing ? Color.white.opacity(0.7) : Color.secondary
         
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Button {
-                    audioPlayer.togglePlayback(fileName: fileName)
-                } label: {
-                    Image(systemName: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 32))
+        HStack(spacing: 12) {
+            // 播放按钮
+            Button {
+                audioPlayer.togglePlayback(fileName: fileName)
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName ? "stop.fill" : "play.fill")
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(foregroundColor)
                 }
-                .buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                // 波形动画 / 进度条
+                TelegramWaveformView(
+                    progress: audioPlayer.currentFileName == fileName ? audioPlayer.progress : 0,
+                    isPlaying: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName,
+                    foregroundColor: foregroundColor,
+                    backgroundColor: secondaryColor.opacity(0.4)
+                )
+                .frame(height: 20)
                 
-                VStack(alignment: .leading, spacing: 2) {
+                // 时长
+                if audioPlayer.currentFileName == fileName && audioPlayer.duration > 0 {
+                    Text(audioPlayer.timeString)
+                        .font(.caption2)
+                        .foregroundStyle(secondaryColor)
+                        .monospacedDigit()
+                } else {
                     Text(fileName)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(secondaryColor)
                         .lineLimit(1)
-                    
-                    if audioPlayer.currentFileName == fileName && audioPlayer.duration > 0 {
-                        // 进度条
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(secondaryColor.opacity(0.3))
-                                    .frame(height: 4)
-                                Capsule()
-                                    .fill(foregroundColor)
-                                    .frame(width: geo.size.width * audioPlayer.progress, height: 4)
-                            }
-                        }
-                        .frame(height: 4)
-                        
-                        Text(audioPlayer.timeString)
-                            .font(.caption2)
-                            .foregroundStyle(secondaryColor)
-                            .monospacedDigit()
-                    }
                 }
             }
         }
+        .frame(minWidth: 180)
     }
+}
+
+// MARK: - Telegram 输入指示器动画
+
+struct TelegramTypingIndicator: View {
+    @State private var animationPhase = 0
     
-    // MARK: - Badge & Background
-    
-    private var bubbleBackground: some ShapeStyle {
-        switch message.role {
-        case .user:
-            return enableBackground ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color.accentColor)
-        case .error:
-            return AnyShapeStyle(Color.red.opacity(0.15))
-        case .assistant, .system, .tool:
-            // 如果是 assistant 且当前版本是错误，使用红色背景
-            if message.role == .assistant && message.content.hasPrefix("重试失败") {
-                return AnyShapeStyle(Color.red.opacity(0.15))
-            }
-            return enableBackground ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(UIColor.secondarySystemBackground))
-        @unknown default:
-            return enableBackground ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(UIColor.secondarySystemBackground))
-        }
-    }
-    
-    private var bubbleStrokeColor: Color {
-        switch message.role {
-        case .user:
-            return Color.white.opacity(0.35)
-        case .assistant, .system, .tool:
-            // 如果是 assistant 且当前版本是错误，使用红色边框
-            if message.role == .assistant && message.content.hasPrefix("重试失败") {
-                return Color.red.opacity(0.2)
-            }
-            return Color.black.opacity(0.05)
-        case .error:
-            return Color.red.opacity(0.2)
-        @unknown default:
-            return Color.black.opacity(0.05)
-        }
-    }
-    
-    private var roleBadge: some View {
-        let symbol: String
-        let color: Color
-        
-        switch message.role {
-        case .user:
-            symbol = "person.fill"
-            color = .accentColor
-        case .assistant:
-            symbol = "sparkles"
-            color = .purple
-        case .system:
-            symbol = "gear"
-            color = .indigo
-        case .tool:
-            symbol = "wrench.adjustable"
-            color = .orange
-        case .error:
-            symbol = "exclamationmark.triangle.fill"
-            color = .red
-        @unknown default:
-            symbol = "questionmark.circle"
-            color = .gray
-        }
-        
-        return Image(systemName: symbol)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(color)
-            .padding(10)
-            .background(
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .fill(Color(uiColor: .systemBackground).opacity(0.92))
-                    .overlay(
-                        Circle()
-                            .stroke(color.opacity(message.role == .user ? 0.35 : 0.2), lineWidth: 1)
-                    )
-            )
-            .shadow(color: color.opacity(0.2), radius: 8, y: 4)
+                    .fill(Color.secondary)
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(animationPhase == index ? 1.2 : 0.8)
+                    .opacity(animationPhase == index ? 1 : 0.5)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.4).repeatForever(autoreverses: false)) {
+                animationPhase = 3
+            }
+        }
+        .onReceive(Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()) { _ in
+            animationPhase = (animationPhase + 1) % 3
+        }
+    }
+}
+
+// MARK: - Telegram 波形视图
+
+struct TelegramWaveformView: View {
+    let progress: Double
+    let isPlaying: Bool
+    let foregroundColor: Color
+    let backgroundColor: Color
+    
+    private let barCount = 28
+    private let heights: [CGFloat] = (0..<28).map { _ in CGFloat.random(in: 0.3...1.0) }
+    
+    var body: some View {
+        GeometryReader { geo in
+            HStack(spacing: 2) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    let barProgress = Double(index) / Double(barCount)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(barProgress <= progress ? foregroundColor : backgroundColor)
+                        .frame(width: 2, height: geo.size.height * heights[index])
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .center)
+        }
     }
 }
 
