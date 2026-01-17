@@ -176,9 +176,9 @@ public class MemoryManager {
         let memory = MemoryItem(id: UUID(), content: trimmed, embedding: [], createdAt: Date())
         cacheMemory(memory)
         
-        // 如果没有配置嵌入模型，只保存原文，跳过嵌入生成
+        // 如果没有选择嵌入模型，只保存原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
-            logger.warning("尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
+            logger.warning("尚未选择嵌入模型，记忆已保存但无法生成嵌入向量。")
             return
         }
         
@@ -205,9 +205,9 @@ public class MemoryManager {
         let memory = MemoryItem(id: id, content: trimmed, embedding: [], createdAt: createdAt)
         cacheMemory(memory)
         
-        // 如果没有配置嵌入模型，只保存原文，跳过嵌入生成
+        // 如果没有选择嵌入模型，只保存原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
-            logger.warning("尚未配置嵌入模型，记忆已保存但无法生成嵌入向量。")
+            logger.warning("尚未选择嵌入模型，记忆已保存但无法生成嵌入向量。")
             return true
         }
         
@@ -239,9 +239,9 @@ public class MemoryManager {
         let updatedMemory = MemoryItem(id: item.id, content: trimmed, embedding: [], createdAt: item.createdAt, updatedAt: Date(), isArchived: item.isArchived)
         cacheMemory(updatedMemory)
         
-        // 如果没有配置嵌入模型，只更新原文，跳过嵌入生成
+        // 如果没有选择嵌入模型，只更新原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
-            logger.warning("尚未配置嵌入模型，记忆已更新但无法生成嵌入向量。")
+            logger.warning("尚未选择嵌入模型，记忆已更新但无法生成嵌入向量。")
             return
         }
         
@@ -308,6 +308,10 @@ public class MemoryManager {
     @discardableResult
     public func reembedAllMemories() async throws -> MemoryReembeddingSummary {
         await initializationTask.value
+        guard hasConfiguredEmbeddingModel() else {
+            logger.warning("尚未选择嵌入模型，无法重新生成嵌入。")
+            throw MemoryEmbeddingError.noAvailableModel
+        }
         logger.info("正在重新生成全部记忆嵌入...")
         let memories = cachedMemories
         similarityIndex.removeAll()
@@ -357,6 +361,8 @@ public class MemoryManager {
         await initializationTask.value
         guard topK > 0 else { return [] }
         
+        guard hasConfiguredEmbeddingModel() else { return [] }
+
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         
@@ -503,8 +509,17 @@ public class MemoryManager {
         UserDefaults.standard.string(forKey: preferredEmbeddingModelKey)
     }
     
-    /// 检查是否配置了可用的嵌入模型
+    /// 检查是否配置了可用的嵌入模型（云端嵌入必须先选择模型）
     private func hasConfiguredEmbeddingModel() -> Bool {
+        if !(embeddingGenerator is CloudEmbeddingService) {
+            return true
+        }
+        
+        guard let selectedModelID = preferredEmbeddingModelIdentifier(),
+              !selectedModelID.isEmpty else {
+            return false
+        }
+        
         let providers = ConfigLoader.loadProviders()
         return !providers.isEmpty && providers.contains { !$0.models.isEmpty }
     }
@@ -561,9 +576,9 @@ public class MemoryManager {
         let memoryIDs = Set(cachedMemories.map { $0.id })
         guard !memoryIDs.isEmpty else { return 0 }
         
-        // 保护措施：没有配置嵌入模型时不要尝试补偿
+        // 保护措施：没有选择嵌入模型时不要尝试补偿
         guard hasConfiguredEmbeddingModel() else {
-            logger.info("尚未配置嵌入模型，跳过自动补偿嵌入。")
+            logger.info("尚未选择嵌入模型，跳过自动补偿嵌入。")
             return 0
         }
         

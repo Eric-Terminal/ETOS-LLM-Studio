@@ -42,11 +42,26 @@ struct ChatView: View {
     @State private var messageInfo: MessageInfoPayload?
     @State private var showBranchOptions = false
     @State private var messageToBranch: ChatMessage?
+    @State private var messageToDelete: ChatMessage?
+    @State private var messageVersionToDelete: ChatMessage?
     @State private var fullErrorContent: FullErrorContentPayload?
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
+    private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
+    private let navBarSubtitleFont = UIFont.systemFont(ofSize: 12)
+    private let navBarPillVerticalPadding: CGFloat = 6
+    private let navBarPillSpacing: CGFloat = 1
+    private var navBarPillHeight: CGFloat {
+        navBarTitleFont.lineHeight
+            + navBarSubtitleFont.lineHeight
+            + navBarPillSpacing
+            + navBarPillVerticalPadding * 2
+    }
+    private var navBarIconSize: CGFloat {
+        navBarPillHeight
+    }
     
     var body: some View {
         NavigationStack {
@@ -185,6 +200,40 @@ struct ChatView: View {
                     Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
                 }
             }
+            .alert("确认删除消息", isPresented: Binding(
+                get: { messageToDelete != nil },
+                set: { if !$0 { messageToDelete = nil } }
+            )) {
+                Button("删除", role: .destructive) {
+                    if let message = messageToDelete {
+                        viewModel.deleteMessage(message)
+                    }
+                    messageToDelete = nil
+                }
+                Button("取消", role: .cancel) {
+                    messageToDelete = nil
+                }
+            } message: {
+                Text(messageToDelete?.hasMultipleVersions == true
+                     ? "删除后将无法恢复这条消息的所有版本。"
+                     : "删除后无法恢复这条消息。")
+            }
+            .alert("确认删除当前版本", isPresented: Binding(
+                get: { messageVersionToDelete != nil },
+                set: { if !$0 { messageVersionToDelete = nil } }
+            )) {
+                Button("删除", role: .destructive) {
+                    if let message = messageVersionToDelete {
+                        viewModel.deleteCurrentVersion(of: message)
+                    }
+                    messageVersionToDelete = nil
+                }
+                Button("取消", role: .cancel) {
+                    messageVersionToDelete = nil
+                }
+            } message: {
+                Text("删除后将无法恢复此版本的内容。")
+            }
         }
     }
     
@@ -217,97 +266,130 @@ struct ChatView: View {
     @ViewBuilder
     private var telegramNavBar: some View {
         HStack(spacing: 12) {
-            // 返回按钮区域 - 点击打开会话列表
-            VStack(alignment: .leading, spacing: 2) {
-                Button {
-                    navigationDestination = .sessions
-                } label: {
-                    Text(viewModel.currentSession?.name ?? "新的对话")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(TelegramColors.navBarText)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                
-                if viewModel.activatedModels.isEmpty {
-                    Text("选择模型以开始")
-                        .font(.system(size: 13))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                        .lineLimit(1)
-                } else {
-                    Menu {
-                        ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                            Button {
-                                viewModel.setSelectedModel(runnable)
-                            } label: {
-                                if runnable.id == viewModel.selectedModel?.id {
-                                    Label(
-                                        "\(runnable.model.displayName) · \(runnable.provider.name)",
-                                        systemImage: "checkmark"
-                                    )
-                                } else {
-                                    Text("\(runnable.model.displayName) · \(runnable.provider.name)")
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(viewModel.selectedModel?.model.displayName ?? "选择模型")
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .font(.system(size: 13))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                    }
-                    .buttonStyle(.plain)
-                }
+            navBarModelMenu
+
+            Spacer(minLength: 12)
+
+            Button {
+                navigationDestination = .sessions
+            } label: {
+                navBarCenterPill
             }
-            
-            Spacer()
-            
-            // 右侧操作按钮
-            HStack(spacing: 20) {
-                // 新建会话按钮
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 12)
+
+            Menu {
                 Button {
                     viewModel.createNewSession()
                 } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(TelegramColors.navBarText)
+                    Label("新建会话", systemImage: "square.and.pencil")
                 }
-                
-                // 更多菜单
-                Menu {
-                    Button {
-                        navigationDestination = .sessions
-                    } label: {
-                        Label("会话列表", systemImage: "list.bullet")
-                    }
-                    
-                    Button {
-                        navigationDestination = .settings
-                    } label: {
-                        Label("设置", systemImage: "gearshape")
-                    }
+
+                Button {
+                    navigationDestination = .sessions
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(TelegramColors.navBarText)
+                    Label("会话列表", systemImage: "list.bullet")
                 }
+
+                Button {
+                    navigationDestination = .settings
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+            } label: {
+                navBarIconLabel(systemName: "ellipsis", accessibilityLabel: "更多")
             }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .overlay(
-            Rectangle()
-                .fill(Color(uiColor: .separator))
-                .frame(height: 0.5),
-            alignment: .bottom
-        )
+        .padding(.vertical, 8)
     }
-    
+
+    private var navBarModelMenu: some View {
+        Menu {
+            if viewModel.activatedModels.isEmpty {
+                Button("暂无可用模型") {}
+                    .disabled(true)
+            } else {
+                ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                    Button {
+                        viewModel.setSelectedModel(runnable)
+                    } label: {
+                        if runnable.id == viewModel.selectedModel?.id {
+                            Label(
+                                "\(runnable.model.displayName) · \(runnable.provider.name)",
+                                systemImage: "checkmark"
+                            )
+                        } else {
+                            Text("\(runnable.model.displayName) · \(runnable.provider.name)")
+                        }
+                    }
+                }
+            }
+        } label: {
+            navBarIconLabel(systemName: "cpu", accessibilityLabel: "切换模型")
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(TelegramColors.navBarText)
+            .frame(width: navBarIconSize, height: navBarIconSize)
+            .background(
+                Circle()
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+            )
+            .contentShape(Circle())
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var navBarCenterPill: some View {
+        VStack(spacing: navBarPillSpacing) {
+            MarqueeText(
+                content: viewModel.currentSession?.name ?? "新的对话",
+                uiFont: navBarTitleFont
+            )
+            .foregroundColor(TelegramColors.navBarText)
+            .allowsHitTesting(false)
+
+            if viewModel.activatedModels.isEmpty {
+                MarqueeText(content: "选择模型以开始", uiFont: navBarSubtitleFont)
+                    .foregroundColor(TelegramColors.navBarSubtitle)
+                    .allowsHitTesting(false)
+            } else {
+                MarqueeText(content: modelSubtitle, uiFont: navBarSubtitleFont)
+                    .foregroundColor(TelegramColors.navBarSubtitle)
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, navBarPillVerticalPadding)
+        .frame(height: navBarPillHeight)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+    }
+
+    private var modelSubtitle: String {
+        if let selectedModel = viewModel.selectedModel {
+            return "\(selectedModel.model.displayName) · \(selectedModel.provider.name)"
+        }
+        return "选择模型"
+    }
+
     /// Telegram 风格输入栏
     @ViewBuilder
     private var telegramInputBar: some View {
@@ -324,6 +406,9 @@ struct ChatView: View {
                 guard viewModel.canSendMessage else { return }
                 viewModel.sendMessage()
                 draftText = ""
+            },
+            stopAction: {
+                viewModel.cancelSending()
             },
             focus: $composerFocused
         )
@@ -451,7 +536,7 @@ struct ChatView: View {
             
             if message.getAllVersions().count > 1 {
                 Button(role: .destructive) {
-                    viewModel.deleteCurrentVersion(of: message)
+                    messageVersionToDelete = message
                 } label: {
                     Label("删除当前版本", systemImage: "trash")
                 }
@@ -461,7 +546,7 @@ struct ChatView: View {
         }
         
         Button(role: .destructive) {
-            viewModel.deleteMessage(message)
+            messageToDelete = message
         } label: {
             Label(message.hasMultipleVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
         }
@@ -593,9 +678,11 @@ private struct TelegramPatternView: View {
 /// Telegram 风格的消息输入框
 private struct TelegramMessageComposer: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var text: String
     let isSending: Bool
     let sendAction: () -> Void
+    let stopAction: () -> Void
     let focus: FocusState<Bool>.Binding
     
     @State private var showAttachmentMenu = false
@@ -603,29 +690,29 @@ private struct TelegramMessageComposer: View {
     @State private var showAudioRecorder = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
+    private let controlSize: CGFloat = 40
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // 分隔线
-            Rectangle()
-                .fill(Color(uiColor: .separator))
-                .frame(height: 0.5)
-            
+        VStack(spacing: 8) {
             // 附件预览区域
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
                 telegramAttachmentPreview
+                    .padding(.horizontal, 16)
             }
             
             // 主输入栏
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .bottom, spacing: 12) {
                 // 附件按钮
                 Button {
                     showAttachmentMenu = true
                 } label: {
                     Image(systemName: "paperclip")
-                        .font(.system(size: 22, weight: .medium))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(TelegramColors.attachButtonColor)
-                        .frame(width: 36, height: 36)
+                        .frame(width: controlSize, height: controlSize)
+                        .background(glassCircleBackground)
                 }
+                .buttonStyle(.plain)
                 .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
                     Button("选择图片") {
                         showImagePicker = true
@@ -639,66 +726,40 @@ private struct TelegramMessageComposer: View {
                 // 输入框容器
                 HStack(alignment: .bottom, spacing: 8) {
                     // 文本输入框
-                    TextField("消息", text: $text, axis: .vertical)
+                    TextField("Message", text: $text, axis: .vertical)
                         .lineLimit(1...8)
                         .textFieldStyle(.plain)
                         .focused(focus)
                         .font(.system(size: 16))
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(TelegramColors.inputFieldBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(TelegramColors.inputBorder, lineWidth: 0.5)
-                )
+                .frame(minHeight: controlSize)
+                .background(glassCapsuleBackground)
                 
-                // 发送按钮或麦克风按钮
-                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && viewModel.pendingImageAttachments.isEmpty && viewModel.pendingAudioAttachment == nil {
-                    // 麦克风按钮（无内容时）
-                    Button {
-                        showAudioRecorder = true
-                    } label: {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(TelegramColors.attachButtonColor)
-                            .frame(width: 36, height: 36)
-                    }
-                } else {
-                    // 发送按钮
-                    Button {
+                // 麦克风 / 发送 / 停止按钮
+                Button {
+                    if isSending {
+                        stopAction()
+                    } else if hasContent {
                         sendAction()
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    viewModel.canSendMessage
-                                        ? TelegramColors.sendButtonColor
-                                        : Color.gray.opacity(0.3)
-                                )
-                                .frame(width: 36, height: 36)
-                            
-                            if isSending {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.8)
-                            } else {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                        }
+                    } else {
+                        showAudioRecorder = true
                     }
-                    .disabled(!viewModel.canSendMessage)
+                } label: {
+                    Image(systemName: actionIconName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(actionForegroundColor)
+                        .frame(width: controlSize, height: controlSize)
+                        .background(actionBackground)
                 }
+                .buttonStyle(.plain)
+                .disabled(!isSending && hasContent && !viewModel.canSendMessage)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(TelegramColors.inputBackground)
         }
+        .padding(.bottom, 6)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
@@ -787,7 +848,99 @@ private struct TelegramMessageComposer: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .background(TelegramColors.inputBackground)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(glassOverlayColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(glassStrokeColor, lineWidth: 0.5)
+                )
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        )
+    }
+
+    private var hasContent: Bool {
+        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty
+        return hasText || hasAttachments
+    }
+    
+    private var actionIconName: String {
+        if isSending {
+            return "stop.fill"
+        }
+        return hasContent ? "arrow.up" : "mic.fill"
+    }
+    
+    private var actionForegroundColor: Color {
+        if isSending || hasContent {
+            return .white
+        }
+        return TelegramColors.attachButtonColor
+    }
+    
+    @ViewBuilder
+    private var actionBackground: some View {
+        if isSending {
+            Circle()
+                .fill(Color.red.opacity(0.85))
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        } else if hasContent {
+            Circle()
+                .fill(
+                    viewModel.canSendMessage
+                        ? TelegramColors.sendButtonColor
+                        : Color.gray.opacity(0.3)
+                )
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        } else {
+            glassCircleBackground
+        }
+    }
+    
+    private var glassCircleBackground: some View {
+        Circle()
+            .fill(.ultraThinMaterial)
+            .overlay(
+                Circle()
+                    .fill(glassOverlayColor)
+            )
+            .overlay(
+                Circle()
+                    .stroke(glassStrokeColor, lineWidth: 0.5)
+            )
+            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+    }
+    
+    private var glassCapsuleBackground: some View {
+        Capsule()
+            .fill(.ultraThinMaterial)
+            .overlay(
+                Capsule()
+                    .fill(glassOverlayColor)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(glassStrokeColor, lineWidth: 0.5)
+            )
+            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+    }
+    
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.2)
+    }
+    
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+    
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
     }
 }
 

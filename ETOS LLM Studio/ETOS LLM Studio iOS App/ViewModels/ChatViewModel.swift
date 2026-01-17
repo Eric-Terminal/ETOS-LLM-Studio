@@ -248,15 +248,8 @@ final class ChatViewModel: ObservableObject {
         pendingAudioAttachment = nil
         pendingImageAttachments = []
         
-        // 构建消息内容
-        var messageContent = userMessageContent
-        if messageContent.isEmpty {
-            if hasAudio {
-                messageContent = "[语音消息]"
-            } else if hasImages {
-                messageContent = "[图片]"
-            }
-        }
+        // 构建消息内容（仅使用用户输入文本）
+        let messageContent = userMessageContent
         
         Task {
             await chatService.sendAndProcessMessage(
@@ -273,6 +266,12 @@ final class ChatViewModel: ObservableObject {
                 audioAttachment: audioToSend,
                 imageAttachments: imagesToSend
             )
+        }
+    }
+
+    func cancelSending() {
+        Task {
+            await chatService.cancelOngoingRequest()
         }
     }
     
