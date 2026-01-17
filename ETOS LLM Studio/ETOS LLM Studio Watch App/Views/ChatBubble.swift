@@ -111,7 +111,7 @@ struct ChatBubble: View {
             
             let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
             let hasToolCalls = message.toolCalls != nil && !message.toolCalls!.isEmpty
-            let isErrorVersion = message.content.hasPrefix("❌ 重试失败")
+            let isErrorVersion = message.content.hasPrefix("重试失败")
             
             // 思考过程区域
             if let reasoning = message.reasoningContent, !reasoning.isEmpty {
@@ -154,12 +154,12 @@ struct ChatBubble: View {
             if enableLiquidGlass {
                 if #available(watchOS 26.0, *) {
                     content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                        .background(message.content.hasPrefix("❌ 重试失败") ? Color.red.opacity(0.5) : nil)
+                        .background(message.content.hasPrefix("重试失败") ? Color.red.opacity(0.5) : nil)
                 } else {
-                    assistantBubbleFallback(content, isError: message.content.hasPrefix("❌ 重试失败"))
+                    assistantBubbleFallback(content, isError: message.content.hasPrefix("重试失败"))
                 }
             } else {
-                assistantBubbleFallback(content, isError: message.content.hasPrefix("❌ 重试失败"))
+                assistantBubbleFallback(content, isError: message.content.hasPrefix("重试失败"))
             }
         }
         .contentShape(Rectangle())
@@ -360,7 +360,7 @@ class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate
         stop()
         
         guard let data = Persistence.loadAudio(fileName: fileName) else {
-            print(String(format: NSLocalizedString("❌ 无法加载音频文件: %@", comment: ""), fileName))
+            print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), fileName))
             return
         }
         
@@ -387,7 +387,7 @@ class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate
             #if DEBUG
             print(
                 String(
-                    format: NSLocalizedString("❌ 播放音频失败: %@", comment: ""),
+                    format: NSLocalizedString("播放音频失败: %@", comment: ""),
                     error.localizedDescription
                 )
             )

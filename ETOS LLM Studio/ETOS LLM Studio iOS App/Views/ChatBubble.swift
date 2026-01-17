@@ -89,7 +89,7 @@ struct ChatBubble: View {
                     .monospacedDigit()
                 
                 // 如果当前版本是错误，显示错误标识
-                if message.content.hasPrefix("❌ 重试失败") {
+                if message.content.hasPrefix("重试失败") {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(.red)
@@ -289,7 +289,7 @@ struct ChatBubble: View {
             return AnyShapeStyle(Color.red.opacity(0.15))
         case .assistant, .system, .tool:
             // 如果是 assistant 且当前版本是错误，使用红色背景
-            if message.role == .assistant && message.content.hasPrefix("❌ 重试失败") {
+            if message.role == .assistant && message.content.hasPrefix("重试失败") {
                 return AnyShapeStyle(Color.red.opacity(0.15))
             }
             return enableBackground ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(UIColor.secondarySystemBackground))
@@ -304,7 +304,7 @@ struct ChatBubble: View {
             return Color.white.opacity(0.35)
         case .assistant, .system, .tool:
             // 如果是 assistant 且当前版本是错误，使用红色边框
-            if message.role == .assistant && message.content.hasPrefix("❌ 重试失败") {
+            if message.role == .assistant && message.content.hasPrefix("重试失败") {
                 return Color.red.opacity(0.2)
             }
             return Color.black.opacity(0.05)
@@ -398,7 +398,7 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         stop()
         
         guard let data = Persistence.loadAudio(fileName: fileName) else {
-            print(String(format: NSLocalizedString("❌ 无法加载音频文件: %@", comment: ""), fileName))
+            print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), fileName))
             return
         }
         

@@ -183,8 +183,8 @@
 "模型 %@ · 消息 %d" = "Model %@ · messages %d";
 "剩余 %d 条" = "Remaining %d";
 "OpenAI 兼容请求(免 PIN)" = "OpenAI-compatible request (no PIN)";
-"❌ 无法加载音频文件: %@" = "❌ Failed to load audio file: %@";
-"❌ 播放音频失败: %@" = "❌ Audio playback failed: %@";
+"无法加载音频文件: %@" = "Failed to load audio file: %@";
+"播放音频失败: %@" = "Audio playback failed: %@";
 "删除“%@”后无法恢复。" = "“%@” can’t be restored after deletion.";
 "  - 自动轮换背景。新背景: %@" = "  - Auto-rotated background. New background: %@";
 "开始录音失败: %@" = "Failed to start recording: %@";
@@ -577,7 +577,7 @@
 "检测幽灵会话" = "Detect Ghosts";
 "幽灵会话" = "Ghost Sessions";
 "清理幽灵会话" = "Clean Ghosts";
-"👻 驱鬼成功" = "👻 Exorcism Done";
+"驱鬼成功" = "Exorcism Done";
 "清理缓存" = "Clear Cache";
 "清理" = "Clear";
 "无孤立文件" = "No Orphans";
@@ -595,7 +595,7 @@
 "http://电脑IP:8080" = "http://your-computer-ip:8080";
 "iPhone 与 Apple Watch 之间的数据同步通过 WatchConnectivity 框架完成。这是一种加密的点对点直接传输，数据不会离开您的个人设备生态系统。" = "Data sync between iPhone and Apple Watch uses WatchConnectivity. This is encrypted peer-to-peer transfer; data never leaves your personal device ecosystem.";
 "yyyy年MM月dd日 HH:mm:ss" = "yyyy-MM-dd HH:mm:ss";
-"❌ 重试失败" = "❌ Retry failed";
+"重试失败" = "Retry failed";
 "不再显示" = "Don't show again";
 "不再显示此通知" = "Don't show this notification again";
 "保存更改" = "Save changes";

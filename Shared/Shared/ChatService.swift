@@ -549,11 +549,11 @@ public class ChatService {
                 // 注意：loadingIndex 和 targetID 指向同一个消息
                 var targetMessage = messages[loadingIndex]
                 // 直接更新当前版本（空的 loading 版本）为错误消息
-                targetMessage.content = "❌ 重试失败\n\n\(formattedContent)"
+                targetMessage.content = "重试失败\n\n\(formattedContent)"
                 messages[loadingIndex] = targetMessage
                 
                 retryTargetMessageID = nil
-                logger.error("❌ 重试失败，已更新当前版本: \(content)")
+                logger.error("重试失败，已更新当前版本: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: formattedContent)

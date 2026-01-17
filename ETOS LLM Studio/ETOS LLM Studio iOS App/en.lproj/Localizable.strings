@@ -183,8 +183,8 @@
 "收到请求：模型 %@ · 消息数 %d" = "Request received: model %@ · messages %d";
 "队列中还有 %d 条未处理请求" = "%d request(s) still pending in queue";
 "OpenAI 兼容请求 (免 PIN，支持捕获保存)" = "OpenAI-compatible request (no PIN, capture supported)";
-"❌ 无法加载音频文件: %@" = "❌ Failed to load audio file: %@";
-"❌ 播放音频失败: %@" = "❌ Audio playback failed: %@";
+"无法加载音频文件: %@" = "Failed to load audio file: %@";
+"播放音频失败: %@" = "Audio playback failed: %@";
 "删除“%@”后无法恢复。" = "“%@” can’t be restored after deletion.";
 "  - 自动轮换背景。新背景: %@" = "  - Auto-rotated background. New background: %@";
 "开始录音失败: %@" = "Failed to start recording: %@";
@@ -579,11 +579,11 @@
 "检测幽灵会话" = "Detect Ghost Sessions";
 "幽灵会话" = "Ghost Sessions";
 "清理幽灵会话" = "Clean Ghost Sessions";
-"👻 驱鬼成功" = "👻 Exorcism Complete";
+"驱鬼成功" = "Exorcism Complete";
 "孤立文件是指不再被任何会话引用的语音和图片文件。清理缓存将删除所有语音和图片文件。" = "Orphaned files are audio and image files no longer referenced by any session. Ghost sessions are session records that exist but their message files are missing.";
 "幽灵会话是指会话记录存在但消息文件已丢失的异常情况。" = "Ghost sessions are session records that exist but their message files are missing.";
-"👻 一切正常！没有发现幽灵会话。" = "👻 All clear! No ghost sessions found.";
-"👻 发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "👻 Found 1 ghost session! Someone deleted the message file but forgot to clean up the record...";
+"一切正常！没有发现幽灵会话。" = "All clear! No ghost sessions found.";
+"发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "Found 1 ghost session! Someone deleted the message file but forgot to clean up the record...";
 "已清理 \(count) 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。" = "Cleaned up \(count) ghost session(s). Their message files were missing and the records have been removed.";
 "孤立文件是指不再被任何会话引用的语音和图片文件。清理缓存将删除所有语音和图片文件。" = "Orphaned files are audio and image files no longer referenced by any session. Clearing cache removes all audio and image files.";
 "清理缓存" = "Clear Cache";
@@ -672,7 +672,7 @@
 "http://电脑IP:8080" = "http://your-computer-ip:8080";
 "iPhone 与 Apple Watch 之间的数据同步通过 WatchConnectivity 框架完成。这是一种加密的点对点直接传输，数据不会离开您的个人设备生态系统。" = "Data sync between iPhone and Apple Watch uses WatchConnectivity. This is encrypted peer-to-peer transfer; data never leaves your personal device ecosystem.";
 "yyyy年MM月dd日 HH:mm:ss" = "yyyy-MM-dd HH:mm:ss";
-"❌ 重试失败" = "❌ Retry failed";
+"重试失败" = "Retry failed";
 "不再显示" = "Don't show again";
 "不再显示此通知" = "Don't show this notification again";
 "保存更改" = "Save changes";

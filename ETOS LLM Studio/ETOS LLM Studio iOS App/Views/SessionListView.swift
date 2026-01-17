@@ -102,7 +102,7 @@ struct SessionListView: View {
         .sheet(item: $sessionInfo) { info in
             SessionInfoSheet(payload: info)
         }
-        .alert("👻 发现幽灵会话", isPresented: $showGhostSessionAlert) {
+        .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
             Button("删除幽灵", role: .destructive) {
                 if let session = ghostSession {
                     viewModel.deleteSessions([session])
