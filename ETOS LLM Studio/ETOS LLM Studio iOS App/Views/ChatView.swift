@@ -2,7 +2,7 @@
 // ChatView.swift
 // ============================================================================
 // 聊天主界面 (iOS) - Telegram 风格
-// - Telegram 风格的顶部导航栏（头像 + 标题 + 副标题）
+// - Telegram 风格的顶部导航栏（标题 + 副标题）
 // - Telegram 风格的底部输入栏（圆角输入框 + 附件 + 发送按钮）
 // - 支持壁纸背景、消息气泡
 // ============================================================================
@@ -222,45 +222,23 @@ struct ChatView: View {
             Button {
                 navigationDestination = .sessions
             } label: {
-                HStack(spacing: 10) {
-                    // AI 助手头像
-                    ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(red: 0.4, green: 0.6, blue: 0.9),
-                                        Color(red: 0.3, green: 0.5, blue: 0.8)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 40, height: 40)
-                        
-                        Image(systemName: "brain.head.profile")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                    }
+                // 标题和副标题
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.currentSession?.name ?? "新的对话")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(TelegramColors.navBarText)
+                        .lineLimit(1)
                     
-                    // 标题和副标题
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(viewModel.currentSession?.name ?? "新的对话")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(TelegramColors.navBarText)
+                    // 显示当前模型或在线状态
+                    if let model = viewModel.selectedModel {
+                        Text(model.model.displayName)
+                            .font(.system(size: 13))
+                            .foregroundColor(TelegramColors.navBarSubtitle)
                             .lineLimit(1)
-                        
-                        // 显示当前模型或在线状态
-                        if let model = viewModel.selectedModel {
-                            Text(model.model.displayName)
-                                .font(.system(size: 13))
-                                .foregroundColor(TelegramColors.navBarSubtitle)
-                                .lineLimit(1)
-                        } else {
-                            Text("选择模型以开始")
-                                .font(.system(size: 13))
-                                .foregroundColor(TelegramColors.navBarSubtitle)
-                        }
+                    } else {
+                        Text("选择模型以开始")
+                            .font(.system(size: 13))
+                            .foregroundColor(TelegramColors.navBarSubtitle)
                     }
                 }
             }
