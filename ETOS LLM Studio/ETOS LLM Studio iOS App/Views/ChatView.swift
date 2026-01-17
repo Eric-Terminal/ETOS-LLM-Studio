@@ -192,18 +192,21 @@ struct ChatView: View {
     
     /// Telegram 风格的背景层
     private var telegramBackgroundLayer: some View {
-        Group {
-            if viewModel.enableBackground,
-               let image = viewModel.currentBackgroundImageUIImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .ignoresSafeArea()
-                    .blur(radius: viewModel.backgroundBlur)
-                    .opacity(viewModel.backgroundOpacity)
-            } else {
-                // Telegram 默认背景 - 浅色图案背景
-                TelegramDefaultBackground()
+        GeometryReader { geometry in
+            Group {
+                if viewModel.enableBackground,
+                   let image = viewModel.currentBackgroundImageUIImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                        .blur(radius: viewModel.backgroundBlur)
+                        .opacity(viewModel.backgroundOpacity)
+                } else {
+                    // Telegram 默认背景 - 浅色图案背景
+                    TelegramDefaultBackground()
+                }
             }
         }
     }
