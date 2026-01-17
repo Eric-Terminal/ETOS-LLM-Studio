@@ -19,67 +19,19 @@ import Combine
 
 // MARK: - Telegram 风格气泡形状
 
-/// Telegram 风格的气泡形状，带有尖角尾巴
+/// Telegram 风格的气泡形状（无尾巴）
 struct TelegramBubbleShape: Shape {
     let isOutgoing: Bool  // 是否是发出的消息（用户消息）
-    let tailSize: CGFloat
     let cornerRadius: CGFloat
     
-    init(isOutgoing: Bool, tailSize: CGFloat = 8, cornerRadius: CGFloat = 18) {
+    init(isOutgoing: Bool, cornerRadius: CGFloat = 18) {
         self.isOutgoing = isOutgoing
-        self.tailSize = tailSize
         self.cornerRadius = cornerRadius
     }
     
     func path(in rect: CGRect) -> Path {
-        var path = Path()
-        
-        let bubbleRect: CGRect
-        if isOutgoing {
-            // 发出消息：右侧留出尾巴空间
-            bubbleRect = CGRect(x: rect.minX, y: rect.minY,
-                               width: rect.width - tailSize, height: rect.height)
-        } else {
-            // 接收消息：左侧留出尾巴空间
-            bubbleRect = CGRect(x: rect.minX + tailSize, y: rect.minY,
-                               width: rect.width - tailSize, height: rect.height)
-        }
-        
-        // 绘制圆角矩形主体
-        let roundedRect = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .path(in: bubbleRect)
-        path.addPath(roundedRect)
-        
-        // 绘制尾巴
-        if isOutgoing {
-            // 右侧尾巴（底部）
-            let tailStartY = bubbleRect.maxY - cornerRadius - tailSize
-            path.move(to: CGPoint(x: bubbleRect.maxX, y: tailStartY))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.maxX, y: bubbleRect.maxY - 4),
-                control: CGPoint(x: bubbleRect.maxX + tailSize * 0.3, y: tailStartY + tailSize * 0.5)
-            )
-            path.addQuadCurve(
-                to: CGPoint(x: bubbleRect.maxX - 2, y: bubbleRect.maxY),
-                control: CGPoint(x: bubbleRect.maxX + tailSize * 0.2, y: bubbleRect.maxY)
-            )
-            path.addLine(to: CGPoint(x: bubbleRect.maxX, y: bubbleRect.maxY - cornerRadius))
-        } else {
-            // 左侧尾巴（底部）
-            let tailStartY = bubbleRect.maxY - cornerRadius - tailSize
-            path.move(to: CGPoint(x: bubbleRect.minX, y: tailStartY))
-            path.addQuadCurve(
-                to: CGPoint(x: rect.minX, y: bubbleRect.maxY - 4),
-                control: CGPoint(x: bubbleRect.minX - tailSize * 0.3, y: tailStartY + tailSize * 0.5)
-            )
-            path.addQuadCurve(
-                to: CGPoint(x: bubbleRect.minX + 2, y: bubbleRect.maxY),
-                control: CGPoint(x: bubbleRect.minX - tailSize * 0.2, y: bubbleRect.maxY)
-            )
-            path.addLine(to: CGPoint(x: bubbleRect.minX, y: bubbleRect.maxY - cornerRadius))
-        }
-        
-        return path
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .path(in: rect)
     }
 }
 
@@ -95,8 +47,8 @@ struct ChatBubble: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     
     // Telegram 颜色
-    private let telegramGreen = Color(red: 0.29, green: 0.73, blue: 0.45)
-    private let telegramGreenDark = Color(red: 0.22, green: 0.58, blue: 0.35)
+    private let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
+    private let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
     
     private var isOutgoing: Bool {
         message.role == .user
@@ -108,28 +60,17 @@ struct ChatBubble: View {
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
-            if isOutgoing {
-                Spacer(minLength: 60)
-            }
+            Spacer(minLength: 20)
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 // 气泡内容
                 VStack(alignment: .leading, spacing: 6) {
                     contentStack
                     
-                    // 版本指示器 + 状态（Telegram 风格：右下角）
-                    if message.hasMultipleVersions || isOutgoing {
+                    // 版本指示器（Telegram 风格：右下角）
+                    if message.hasMultipleVersions {
                         HStack(spacing: 6) {
-                            if message.hasMultipleVersions {
-                                compactVersionIndicator
-                            }
-                            
-                            // 发送状态指示器（仅用户消息）
-                            if isOutgoing {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(Color.white.opacity(0.7))
-                            }
+                            compactVersionIndicator
                         }
                         .frame(maxWidth: .infinity, alignment: .trailing)
                     }
@@ -142,11 +83,9 @@ struct ChatBubble: View {
                 )
                 .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
             }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.78, alignment: isOutgoing ? .trailing : .leading)
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.88, alignment: isOutgoing ? .trailing : .leading)
             
-            if !isOutgoing {
-                Spacer(minLength: 60)
-            }
+            Spacer(minLength: 20)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -170,29 +109,29 @@ struct ChatBubble: View {
                 viewModel.switchToPreviousVersion(of: message)
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
             }
             .buttonStyle(.plain)
             .disabled(message.getCurrentVersionIndex() == 0)
             .opacity(message.getCurrentVersionIndex() > 0 ? 1 : 0.4)
             
             Text("\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count)")
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 14, weight: .semibold))
                 .monospacedDigit()
             
             Button {
                 viewModel.switchToNextVersion(of: message)
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
             }
             .buttonStyle(.plain)
             .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
             .opacity(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? 1 : 0.4)
         }
         .foregroundStyle(isOutgoing ? Color.white.opacity(0.8) : Color.secondary)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(
             Capsule()
                 .fill(isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
@@ -214,10 +153,10 @@ struct ChatBubble: View {
         
         switch message.role {
         case .user:
-            // Telegram 绿色渐变
+            // Telegram 蓝色渐变
             return AnyShapeStyle(
                 LinearGradient(
-                    colors: [telegramGreen, telegramGreenDark],
+                    colors: [telegramBlue, telegramBlueDark],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -312,7 +251,7 @@ struct ChatBubble: View {
             // 加载指示器
             HStack(spacing: 8) {
                 TelegramTypingIndicator()
-                Text("正在输入...")
+                Text("正在思考...")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
             }

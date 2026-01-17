@@ -18,9 +18,8 @@ import AVFoundation
 // MARK: - Telegram 主题颜色
 private struct TelegramColors {
     // 导航栏颜色
-    static let navBarBackground = Color(red: 0.33, green: 0.47, blue: 0.65) // Telegram 蓝色
-    static let navBarText = Color.white
-    static let navBarSubtitle = Color.white.opacity(0.7)
+    static let navBarText = Color.primary
+    static let navBarSubtitle = Color.secondary
     
     // 输入栏颜色
     static let inputBackground = Color(uiColor: .systemBackground)
@@ -62,9 +61,6 @@ struct ChatView: View {
                         LazyVStack(alignment: .leading, spacing: 2, pinnedViews: []) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear.frame(height: 8)
-                            
-                            // 模型选择器（Telegram 风格卡片）
-                            telegramModelSelector
                             
                             // 历史加载提示
                             historyBanner
@@ -219,30 +215,51 @@ struct ChatView: View {
     private var telegramNavBar: some View {
         HStack(spacing: 12) {
             // 返回按钮区域 - 点击打开会话列表
-            Button {
-                navigationDestination = .sessions
-            } label: {
-                // 标题和副标题
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 2) {
+                Button {
+                    navigationDestination = .sessions
+                } label: {
                     Text(viewModel.currentSession?.name ?? "新的对话")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(TelegramColors.navBarText)
                         .lineLimit(1)
-                    
-                    // 显示当前模型或在线状态
-                    if let model = viewModel.selectedModel {
-                        Text(model.model.displayName)
-                            .font(.system(size: 13))
-                            .foregroundColor(TelegramColors.navBarSubtitle)
-                            .lineLimit(1)
-                    } else {
-                        Text("选择模型以开始")
-                            .font(.system(size: 13))
-                            .foregroundColor(TelegramColors.navBarSubtitle)
+                }
+                .buttonStyle(.plain)
+                
+                if viewModel.activatedModels.isEmpty {
+                    Text("选择模型以开始")
+                        .font(.system(size: 13))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+                        .lineLimit(1)
+                } else {
+                    Menu {
+                        ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                            Button {
+                                viewModel.setSelectedModel(runnable)
+                            } label: {
+                                if runnable.id == viewModel.selectedModel?.id {
+                                    Label(
+                                        "\(runnable.model.displayName) · \(runnable.provider.name)",
+                                        systemImage: "checkmark"
+                                    )
+                                } else {
+                                    Text("\(runnable.model.displayName) · \(runnable.provider.name)")
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(viewModel.selectedModel?.model.displayName ?? "选择模型")
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .font(.system(size: 13))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .buttonStyle(.plain)
             
             Spacer()
             
@@ -259,14 +276,6 @@ struct ChatView: View {
                 
                 // 更多菜单
                 Menu {
-                    Button {
-                        composerFocused = true
-                    } label: {
-                        Label("快速输入", systemImage: "keyboard")
-                    }
-                    
-                    Divider()
-                    
                     Button {
                         navigationDestination = .sessions
                     } label: {
@@ -287,7 +296,13 @@ struct ChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(TelegramColors.navBarBackground)
+        .background(.ultraThinMaterial)
+        .overlay(
+            Rectangle()
+                .fill(Color(uiColor: .separator))
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
     }
     
     /// Telegram 风格输入栏
@@ -330,58 +345,6 @@ struct ChatView: View {
             }
         }
         .accessibilityLabel("滚动到底部")
-    }
-    
-    /// Telegram 风格模型选择器
-    @ViewBuilder
-    private var telegramModelSelector: some View {
-        if !viewModel.activatedModels.isEmpty {
-            let selection = Binding<String?>(
-                get: { viewModel.selectedModel?.id },
-                set: { newValue in
-                    guard let id = newValue,
-                          let target = viewModel.activatedModels.first(where: { $0.id == id }) else { return }
-                    viewModel.setSelectedModel(target)
-                }
-            )
-            
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Image(systemName: "cpu")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                    Text("当前模型")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                
-                Picker("选择模型", selection: selection) {
-                    Text("选择模型")
-                        .tag(Optional<String>.none)
-                    ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                        HStack {
-                            Text(runnable.model.displayName)
-                            Text("· \(runnable.provider.name)")
-                                .foregroundColor(.secondary)
-                        }
-                        .tag(Optional<String>.some(runnable.id))
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .tint(.primary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(uiColor: .systemBackground).opacity(0.9))
-                    .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 1)
-            )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-        }
     }
     
     /// Telegram 风格历史加载提示
