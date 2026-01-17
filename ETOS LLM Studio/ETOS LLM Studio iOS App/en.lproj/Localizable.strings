@@ -227,7 +227,7 @@
 "下载文件" = "Download file";
 "下载文件 (Base64)" = "Download file (Base64)";
 "下载文件:" = "Download file:";
-"仅在可信网络中使用" = "Use on trusted networks only";
+"仅在可信网络中使用" = "Use only on trusted networks";
 "仅在可信网络使用 · PIN 随机生成 · 用完及时停止" = "Trusted networks only · PIN is random · Stop when done";
 "仅对当前对话生效。" = "Applies to the current chat only.";
 "从云端获取" = "Fetch from cloud";
@@ -368,7 +368,7 @@
 "数据收集" = "Data collection";
 "数据维护" = "Data maintenance";
 "数量" = "Count";
-"文档" = "Docs";
+"文档" = "Documentation";
 "断开" = "Disconnect";
 "断开连接" = "Disconnect";
 "新增 MCP Server" = "Add MCP Server";
@@ -518,7 +518,7 @@
 "还没有任何记忆。" = "No memories yet.";
 "连接" = "Connect";
 "连接中" = "Connecting";
-"连接信息" = "Connection info";
+"连接信息" = "Connection Info";
 "连接控制" = "Connection control";
 "连接概览" = "Connection overview";
 "连接状态" = "Connection status";
@@ -545,8 +545,6 @@
 "项目链接" = "Project link";
 "麦克风权限被拒绝，请到设置中开启。" = "Microphone permission denied. Enable it in Settings.";
 "debug_error_response_example" = "{\n  \"success\": false,\n  \"error\": \"Error message\"\n}";
-
-// Memory archiving feature
 "激活的记忆" = "Active Memories";
 "归档的记忆" = "Archived Memories";
 "暂无激活的记忆" = "No Active Memories";
@@ -559,8 +557,6 @@
 "激活中" = "Active";
 "不参与检索" = "Not searchable";
 "参与检索" = "Searchable";
-
-// MARK: - 存储管理
 "存储管理" = "Storage Management";
 "总使用空间" = "Total Storage Used";
 "存储分类" = "Storage Categories";
@@ -580,11 +576,11 @@
 "幽灵会话" = "Ghost Sessions";
 "清理幽灵会话" = "Clean Ghost Sessions";
 "驱鬼成功" = "Exorcism Complete";
-"孤立文件是指不再被任何会话引用的语音和图片文件。清理缓存将删除所有语音和图片文件。" = "Orphaned files are audio and image files no longer referenced by any session. Ghost sessions are session records that exist but their message files are missing.";
+"孤立文件是指不再被任何会话引用的语音和图片文件。清理缓存将删除所有语音和图片文件。" = "Orphaned files are audio and image files no longer referenced by any session. Clearing cache removes all audio and image files.";
 "幽灵会话是指会话记录存在但消息文件已丢失的异常情况。" = "Ghost sessions are session records that exist but their message files are missing.";
 "一切正常！没有发现幽灵会话。" = "All clear! No ghost sessions found.";
 "发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "Found 1 ghost session! Someone deleted the message file but forgot to clean up the record...";
-"已清理 \(count) 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。" = "Cleaned up \(count) ghost session(s). Their message files were missing and the records have been removed.";
+"已清理 \\(count) 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。" = "Cleaned up \\(count) ghost session(s). Their message files were missing and the records have been removed.";
 "孤立文件是指不再被任何会话引用的语音和图片文件。清理缓存将删除所有语音和图片文件。" = "Orphaned files are audio and image files no longer referenced by any session. Clearing cache removes all audio and image files.";
 "清理缓存" = "Clear Cache";
 "将删除所有语音和图片缓存文件。此操作不可撤销。" = "All audio and image cache files will be deleted. This cannot be undone.";
@@ -605,8 +601,6 @@
 "无法读取此文件的内容。" = "Cannot read the content of this file.";
 "暂无其他文件" = "No Other Files";
 "Documents 根目录下没有其他文件。" = "No other files in the Documents root.";
-
-// MARK: - LocalDebugView
 "状态" = "Status";
 "连接模式" = "Connection Mode";
 "HTTP 轮询" = "HTTP Polling";
@@ -731,3 +725,55 @@
 "ISO8601：%@" = "ISO8601: %@";
 "请根据以下对话内容，为本次对话生成一个简短、精炼的标题。\n\n要求：\n- 长度在4到8个词之间。\n- 能准确概括对话的核心主题。\n- 直接返回标题内容，不要包含任何额外说明、引号或标点符号。\n\n对话内容：\n用户: %@\nAI: %@" = "Please generate a short, concise title for this conversation based on the content below.\n\nRequirements:\n- 4 to 8 words.\n- Accurately summarize the core topic of the conversation.\n- Return only the title text, without any extra notes, quotes, or punctuation.\n\nConversation:\nUser: %@\nAI: %@";
 "已清理 %d 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。" = "Cleaned up %d ghost sessions. Their message files were missing, and the records have now been cleared.";
+"%d 项" = "%d items";
+"<二进制数据，无法以 UTF-8 解码>" = "<Binary data, unable to decode as UTF-8>";
+"HTTP 错误" = "HTTP error";
+"SSL 握手失败 (Cloudflare)" = "SSL handshake failed (Cloudflare)";
+"、" = ", ";
+"不支持的媒体类型 (Unsupported Media Type)" = "Unsupported Media Type";
+"功能未实现 (Not Implemented)" = "Not Implemented";
+"加载更早的 %d 条消息" = "Load %d earlier messages";
+"响应体为空。" = "Response body is empty.";
+"响应体包含 %d 字节，无法以 UTF-8 解码。" = "Response body has %d bytes and can't be decoded as UTF-8.";
+"响应超时 (Cloudflare)" = "Response timed out (Cloudflare)";
+"客户端错误" = "Client error";
+"无效的 SSL 证书 (Cloudflare)" = "Invalid SSL certificate (Cloudflare)";
+"服务器内部错误 (Internal Server Error)" = "Internal Server Error";
+"服务器宕机 (Cloudflare)" = "Server down (Cloudflare)";
+"服务器错误" = "Server error";
+"服务暂时不可用 (Service Unavailable)" = "Service Unavailable";
+"未授权，请检查 API Key (Unauthorized)" = "Unauthorized. Check your API key.";
+"未知错误 (Cloudflare)" = "Unknown error (Cloudflare)";
+"流式传输错误: %@" = "Streaming error: %@";
+"源站不可达 (Cloudflare)" = "Origin unreachable (Cloudflare)";
+"确定要删除 \"%@\" 吗？此操作不可撤销。" = "Delete \"%@\"? This action can't be undone.";
+"网关超时 (Gateway Timeout)" = "Gateway Timeout";
+"网关错误，上游服务无响应 (Bad Gateway)" = "Bad Gateway. Upstream service not responding.";
+"网络错误: %@" = "Network error: %@";
+"访问被拒绝，权限不足 (Forbidden)" = "Forbidden. Insufficient permissions.";
+"请求体过大 (Payload Too Large)" = "Payload Too Large";
+"请求冲突 (Conflict)" = "Conflict";
+"请求参数无法处理 (Unprocessable Entity)" = "Unprocessable Entity";
+"请求方法不被允许 (Method Not Allowed)" = "Method Not Allowed";
+"请求格式错误 (Bad Request)" = "Bad Request";
+"请求的资源不存在 (Not Found)" = "Not Found";
+"请求超时 (Request Timeout)" = "Request Timeout";
+"请求过于频繁，请稍后重试 (Too Many Requests)" = "Too Many Requests. Please try again later.";
+"这些记忆会参与检索并发送给模型。左滑删除，右滑归档。" = "These memories are used for retrieval and sent to the model. Swipe left to delete, right to archive.";
+"这些记忆已被归档，不会参与检索。左滑删除，右滑恢复。" = "These memories are archived and not used for retrieval. Swipe left to delete, right to restore.";
+"连接超时 (Cloudflare)" = "Connection timed out (Cloudflare)";
+"错误: 待发送消息为空。" = "Error: Message to send is empty.";
+"错误: 找不到适用于 '%@' 格式的 API 适配器。" = "Error: No API adapter for '%@' format.";
+"错误: 无法构建 API 请求。" = "Error: Failed to build API request.";
+"错误: 没有当前会话。" = "Error: No current session.";
+"错误: 没有选中的可用模型。请在设置中激活一个模型。" = "Error: No active model selected. Enable a model in Settings.";
+"👻 一切正常！没有发现幽灵会话。" = "👻 All clear! No ghost sessions found.";
+"👻 发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "👻 Found 1 ghost session! Looks like a message file was deleted without cleaning the session record...";
+"👻 发现 \\(count) 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 Found \\(count) ghost sessions roaming around! Their message files are gone, but the records remain.";
+"👻 哇！\\(count) 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 Wow! \\(count) ghost sessions! It's like a session graveyard. Want to exorcise them?";
+"👻👻👻 天呐！发现了 \\(count) 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 Oh no! Found \\(count) ghost sessions! This place is haunted. Recommend cleaning up now.";
+"\n将信息写入长期记忆，仅在「这条信息在后续很多次对话中都可能有用」时调用。\n\n【必须满足至少一条才可调用】\n1. 用户的稳定偏好：口味、写作/编码风格、喜欢/不喜欢的输出格式、长期习惯（如默认语言、格式）。\n2. 用户的身份与长期背景：职业角色、长期项目或研究方向、长期合作对象。\n3. 用户明确要求记住：包含\"记住…以后…都…\"、\"从现在开始你要记得…\"等表达。\n\n【严禁调用的情况(除非用户明确要求你记住)】\n- 一次性任务或会话细节（某次会议数据、单个文件内容等）；\n- 短期信息（今天的临时待办、本次对话才用一次的参数）；\n- 敏感信息：精确地址、身份证号、银行卡、健康状况、政治立场等；\n- 第三方隐私信息（他人全名 + 个人细节）。\n" = "\nWrite information into long-term memory. Only call when “this information is likely useful across many future conversations”.\n\n[Must meet at least one]\n1. User's stable preferences: taste, writing/coding style, preferred output format, long-term habits (e.g., default language/format).\n2. User identity and long-term background: professional role, long-term projects or research, long-term collaborators.\n3. User explicitly asks to remember: includes phrases like \"Remember... from now on...\".\n\n[Do NOT call unless the user explicitly asks]\n- One-off tasks or session details (meeting data, a single file's content, etc.);\n- Short-term info (today's temporary todo, parameters used only in this chat);\n- Sensitive info: exact address, ID number, bank card, health status, political views, etc.;\n- Third-party private info (full name + personal details).\n";
+"\n请根据用户的问题，为本次对话生成一个简短、精炼的标题。\n\n要求：\n- 长度在2到6个词之间。\n- 能准确概括用户想要讨论的主题。\n- 直接返回标题内容，不要包含任何额外说明、引号或标点符号。\n\n用户的问题：\n%@\n" = "\nPlease generate a short, concise title for this conversation based on the user's question.\n\nRequirements:\n- 2 to 6 words long.\n- Accurately summarize the topic the user wants to discuss.\n- Return only the title text, with no extra notes, quotes, or punctuation.\n\nUser's question:\n%@\n";
+"...\n\n(响应已截断，可在更多操作中查看完整内容)" = "...\n\n(Response truncated. View full content in More actions.)";
+"HTTP %d: %@\n\n" = "HTTP %d: %@\n\n";
+"解析响应失败，请查看原始响应:\n%@" = "Failed to parse response. See raw response:\n%@";

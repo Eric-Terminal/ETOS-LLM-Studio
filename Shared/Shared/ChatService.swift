@@ -586,38 +586,38 @@ public class ChatService {
     private func httpStatusCodeDescription(_ code: Int) -> String {
         switch code {
         // 4xx 客户端错误
-        case 400: return "请求格式错误 (Bad Request)"
-        case 401: return "未授权，请检查 API Key (Unauthorized)"
-        case 403: return "访问被拒绝，权限不足 (Forbidden)"
-        case 404: return "请求的资源不存在 (Not Found)"
-        case 405: return "请求方法不被允许 (Method Not Allowed)"
-        case 408: return "请求超时 (Request Timeout)"
-        case 409: return "请求冲突 (Conflict)"
-        case 413: return "请求体过大 (Payload Too Large)"
-        case 415: return "不支持的媒体类型 (Unsupported Media Type)"
-        case 422: return "请求参数无法处理 (Unprocessable Entity)"
-        case 429: return "请求过于频繁，请稍后重试 (Too Many Requests)"
+        case 400: return NSLocalizedString("请求格式错误 (Bad Request)", comment: "HTTP 400 description")
+        case 401: return NSLocalizedString("未授权，请检查 API Key (Unauthorized)", comment: "HTTP 401 description")
+        case 403: return NSLocalizedString("访问被拒绝，权限不足 (Forbidden)", comment: "HTTP 403 description")
+        case 404: return NSLocalizedString("请求的资源不存在 (Not Found)", comment: "HTTP 404 description")
+        case 405: return NSLocalizedString("请求方法不被允许 (Method Not Allowed)", comment: "HTTP 405 description")
+        case 408: return NSLocalizedString("请求超时 (Request Timeout)", comment: "HTTP 408 description")
+        case 409: return NSLocalizedString("请求冲突 (Conflict)", comment: "HTTP 409 description")
+        case 413: return NSLocalizedString("请求体过大 (Payload Too Large)", comment: "HTTP 413 description")
+        case 415: return NSLocalizedString("不支持的媒体类型 (Unsupported Media Type)", comment: "HTTP 415 description")
+        case 422: return NSLocalizedString("请求参数无法处理 (Unprocessable Entity)", comment: "HTTP 422 description")
+        case 429: return NSLocalizedString("请求过于频繁，请稍后重试 (Too Many Requests)", comment: "HTTP 429 description")
         // 5xx 服务端错误
-        case 500: return "服务器内部错误 (Internal Server Error)"
-        case 501: return "功能未实现 (Not Implemented)"
-        case 502: return "网关错误，上游服务无响应 (Bad Gateway)"
-        case 503: return "服务暂时不可用 (Service Unavailable)"
-        case 504: return "网关超时 (Gateway Timeout)"
-        case 520: return "未知错误 (Cloudflare)"
-        case 521: return "服务器宕机 (Cloudflare)"
-        case 522: return "连接超时 (Cloudflare)"
-        case 523: return "源站不可达 (Cloudflare)"
-        case 524: return "响应超时 (Cloudflare)"
-        case 525: return "SSL 握手失败 (Cloudflare)"
-        case 526: return "无效的 SSL 证书 (Cloudflare)"
+        case 500: return NSLocalizedString("服务器内部错误 (Internal Server Error)", comment: "HTTP 500 description")
+        case 501: return NSLocalizedString("功能未实现 (Not Implemented)", comment: "HTTP 501 description")
+        case 502: return NSLocalizedString("网关错误，上游服务无响应 (Bad Gateway)", comment: "HTTP 502 description")
+        case 503: return NSLocalizedString("服务暂时不可用 (Service Unavailable)", comment: "HTTP 503 description")
+        case 504: return NSLocalizedString("网关超时 (Gateway Timeout)", comment: "HTTP 504 description")
+        case 520: return NSLocalizedString("未知错误 (Cloudflare)", comment: "HTTP 520 description")
+        case 521: return NSLocalizedString("服务器宕机 (Cloudflare)", comment: "HTTP 521 description")
+        case 522: return NSLocalizedString("连接超时 (Cloudflare)", comment: "HTTP 522 description")
+        case 523: return NSLocalizedString("源站不可达 (Cloudflare)", comment: "HTTP 523 description")
+        case 524: return NSLocalizedString("响应超时 (Cloudflare)", comment: "HTTP 524 description")
+        case 525: return NSLocalizedString("SSL 握手失败 (Cloudflare)", comment: "HTTP 525 description")
+        case 526: return NSLocalizedString("无效的 SSL 证书 (Cloudflare)", comment: "HTTP 526 description")
         // 其他
         default:
             if code >= 400 && code < 500 {
-                return "客户端错误"
+                return NSLocalizedString("客户端错误", comment: "Generic 4xx error description")
             } else if code >= 500 && code < 600 {
-                return "服务器错误"
+                return NSLocalizedString("服务器错误", comment: "Generic 5xx error description")
             }
-            return "HTTP 错误"
+            return NSLocalizedString("HTTP 错误", comment: "Generic HTTP error description")
         }
     }
     
@@ -632,14 +632,22 @@ public class ChatService {
         var statusPrefix = ""
         if let code = httpStatusCode {
             let description = httpStatusCodeDescription(code)
-            statusPrefix = "HTTP \(code): \(description)\n\n"
+            statusPrefix = String(
+                format: NSLocalizedString("HTTP %d: %@\n\n", comment: "HTTP status prefix with code and description"),
+                code,
+                description
+            )
         }
         
         // 检查内容是否需要截断
         if content.count > maxLength {
             // 内容过长，需要截断
             let truncatedContent = String(content.prefix(maxLength))
-            displayMessage = statusPrefix + truncatedContent + "...\n\n(响应已截断，可在更多操作中查看完整内容)"
+            let truncationNotice = NSLocalizedString(
+                "...\n\n(响应已截断，可在更多操作中查看完整内容)",
+                comment: "Truncation notice for long error content"
+            )
+            displayMessage = statusPrefix + truncatedContent + truncationNotice
             fullContent = statusPrefix + content
         } else {
             // 内容长度合适，直接显示
@@ -664,14 +672,14 @@ public class ChatService {
         imageAttachments: [ImageAttachment] = []
     ) async {
         guard var currentSession = currentSessionSubject.value else {
-            addErrorMessage("错误: 没有当前会话。" )
+            addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
             requestStatusSubject.send(.error)
             return
         }
 
         // 准备用户消息和UI占位消息
-        let audioPlaceholder = "[语音消息]"
-        let imagePlaceholder = "[图片]"
+        let audioPlaceholder = NSLocalizedString("[语音消息]", comment: "Audio message placeholder")
+        let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
         var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
@@ -734,7 +742,7 @@ public class ChatService {
         
         // 兜底：如果没有生成任何用户消息，直接报错返回
         guard !userMessages.isEmpty else {
-            addErrorMessage("错误: 待发送消息为空。" )
+            addErrorMessage(NSLocalizedString("错误: 待发送消息为空。", comment: "Empty message error"))
             requestStatusSubject.send(.error)
             return
         }
@@ -984,13 +992,16 @@ public class ChatService {
         }
         
         guard let runnableModel = selectedModelSubject.value else {
-            addErrorMessage("错误: 没有选中的可用模型。请在设置中激活一个模型。" )
+            addErrorMessage(NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"))
             requestStatusSubject.send(.error)
             return
         }
         
         guard let adapter = adapters[runnableModel.provider.apiFormat] else {
-            addErrorMessage("错误: 找不到适用于 '\(runnableModel.provider.apiFormat)' 格式的 API 适配器。" )
+            addErrorMessage(String(
+                format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
+                runnableModel.provider.apiFormat
+            ))
             requestStatusSubject.send(.error)
             return
         }
@@ -1065,7 +1076,7 @@ public class ChatService {
         let commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
         
         guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachments: audioAttachments, imageAttachments: imageAttachments) else {
-            addErrorMessage("错误: 无法构建 API 请求。" )
+            addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
             requestStatusSubject.send(.error)
             return
         }
@@ -1562,7 +1573,7 @@ public class ChatService {
     private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
         do {
             let data = try await fetchData(for: request)
-            let rawResponse = String(data: data, encoding: .utf8) ?? "<二进制数据，无法以 UTF-8 解码>"
+            let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
             logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
             
             do {
@@ -1572,7 +1583,10 @@ public class ChatService {
                 logger.info("请求在解析阶段被取消，已忽略后续处理。")
             } catch {
                 logger.error("解析响应失败: \(error.localizedDescription)")
-                addErrorMessage("解析响应失败，请查看原始响应:\n\(rawResponse)")
+                addErrorMessage(String(
+                    format: NSLocalizedString("解析响应失败，请查看原始响应:\n%@", comment: "Response parse failed with raw response"),
+                    rawResponse
+                ))
                 requestStatusSubject.send(.error)
             }
         } catch is CancellationError {
@@ -1582,9 +1596,12 @@ public class ChatService {
             if let bodyData, let utf8Text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !utf8Text.isEmpty {
                 bodyString = utf8Text
             } else if let bodyData, !bodyData.isEmpty {
-                bodyString = "响应体包含 \(bodyData.count) 字节，无法以 UTF-8 解码。"
+                bodyString = String(
+                    format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                    bodyData.count
+                )
             } else {
-                bodyString = "响应体为空。"
+                bodyString = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
             addErrorMessage(bodyString, httpStatusCode: code)
             requestStatusSubject.send(.error)
@@ -1593,7 +1610,10 @@ public class ChatService {
             if isCancellationError(error) {
                 logger.info("请求在拉取数据时被取消 (URLError)。")
             } else {
-                addErrorMessage("网络错误: \(error.localizedDescription)")
+                addErrorMessage(String(
+                    format: NSLocalizedString("网络错误: %@", comment: "Network error with description"),
+                    error.localizedDescription
+                ))
                 requestStatusSubject.send(.error)
             }
         }
@@ -1833,9 +1853,12 @@ public class ChatService {
             if let bodyData, let text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
                 bodySnippet = text
             } else if let bodyData, !bodyData.isEmpty {
-                bodySnippet = "响应体包含 \(bodyData.count) 字节，无法以 UTF-8 解码。"
+                bodySnippet = String(
+                    format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                    bodyData.count
+                )
             } else {
-                bodySnippet = "响应体为空。"
+                bodySnippet = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
             addErrorMessage(bodySnippet, httpStatusCode: code)
             requestStatusSubject.send(.error)
@@ -1844,7 +1867,10 @@ public class ChatService {
             if isCancellationError(error) {
                 logger.info("流式请求在处理中被取消 (URLError)。")
             } else {
-                addErrorMessage("流式传输错误: \(error.localizedDescription)")
+                addErrorMessage(String(
+                    format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
+                    error.localizedDescription
+                ))
                 requestStatusSubject.send(.error)
             }
         }
