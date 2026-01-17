@@ -43,6 +43,7 @@ struct ChatView: View {
     @State private var messageInfo: MessageInfoPayload?
     @State private var showBranchOptions = false
     @State private var messageToBranch: ChatMessage?
+    @State private var fullErrorContent: FullErrorContentPayload?
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     
@@ -161,6 +162,9 @@ struct ChatView: View {
             }
             .sheet(item: $messageInfo) { info in
                 MessageInfoSheet(payload: info)
+            }
+            .sheet(item: $fullErrorContent) { payload in
+                FullErrorContentSheet(payload: payload)
             }
             .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
                 Button("仅复制消息历史") {
@@ -454,6 +458,15 @@ struct ChatView: View {
                 viewModel.retryMessage(message)
             } label: {
                 Label("重试", systemImage: "arrow.clockwise")
+            }
+        }
+        
+        // 如果错误消息有完整内容（被截断），显示查看完整响应按钮
+        if message.role == .error, let fullContent = message.fullErrorContent {
+            Button {
+                fullErrorContent = FullErrorContentPayload(content: fullContent)
+            } label: {
+                Label("查看完整响应", systemImage: "doc.text.magnifyingglass")
             }
         }
         
@@ -1250,6 +1263,44 @@ private struct MessageInfoPayload: Identifiable {
     let message: ChatMessage
     let displayIndex: Int
     let totalCount: Int
+}
+
+/// 用于承载完整错误响应内容的数据结构
+private struct FullErrorContentPayload: Identifiable {
+    let id = UUID()
+    let content: String
+}
+
+/// 完整错误响应内容弹窗
+private struct FullErrorContentSheet: View {
+    let payload: FullErrorContentPayload
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(payload.content)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle("完整响应")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        UIPasteboard.general.string = payload.content
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// 消息详情弹窗，展示消息的唯一标识与位置索引。

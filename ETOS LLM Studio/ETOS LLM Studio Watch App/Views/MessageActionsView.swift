@@ -23,6 +23,7 @@ struct MessageActionsView: View {
     let onDeleteCurrentVersion: () -> Void
     let onSwitchVersion: (Int) -> Void
     let onBranch: (Bool) -> Void
+    let onShowFullError: ((String) -> Void)?
     
     let messageIndex: Int?
     let totalMessages: Int
@@ -57,6 +58,16 @@ struct MessageActionsView: View {
                         dismiss()
                     } label: {
                         Label("重试", systemImage: "arrow.clockwise")
+                    }
+                }
+                
+                // 如果错误消息有完整内容（被截断），显示查看完整响应按钮
+                if message.role == .error, let fullContent = message.fullErrorContent, let onShowFullError {
+                    Button {
+                        onShowFullError(fullContent)
+                        dismiss()
+                    } label: {
+                        Label("查看完整响应", systemImage: "doc.text.magnifyingglass")
                     }
                 }
                 

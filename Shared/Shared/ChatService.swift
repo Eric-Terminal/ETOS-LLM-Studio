@@ -533,12 +533,12 @@ public class ChatService {
     
     // MARK: - 公开方法 (消息处理)
     
-    public func addErrorMessage(_ content: String) {
+    public func addErrorMessage(_ content: String, httpStatusCode: Int? = nil) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
         
         // 格式化错误内容，使其更简洁易读
-        let formattedContent = formatErrorContent(content)
+        let (formattedContent, fullContent) = formatErrorContent(content, httpStatusCode: httpStatusCode)
         
         // 找到正在加载中的消息
         if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
@@ -550,18 +550,31 @@ public class ChatService {
                 var targetMessage = messages[loadingIndex]
                 // 直接更新当前版本（空的 loading 版本）为错误消息
                 targetMessage.content = "重试失败\n\n\(formattedContent)"
+                if fullContent != nil {
+                    targetMessage.fullErrorContent = "重试失败\n\n\(content)"
+                }
                 messages[loadingIndex] = targetMessage
                 
                 retryTargetMessageID = nil
                 logger.error("重试失败，已更新当前版本: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
-                messages[loadingIndex] = ChatMessage(id: messages[loadingIndex].id, role: .error, content: formattedContent)
+                messages[loadingIndex] = ChatMessage(
+                    id: messages[loadingIndex].id,
+                    role: .error,
+                    content: formattedContent,
+                    fullErrorContent: fullContent
+                )
                 logger.error("错误消息已添加: \(content)")
             }
         } else {
             // 没有 loading message，直接添加错误
-            messages.append(ChatMessage(id: UUID(), role: .error, content: formattedContent))
+            messages.append(ChatMessage(
+                id: UUID(),
+                role: .error,
+                content: formattedContent,
+                fullErrorContent: fullContent
+            ))
             logger.error("错误消息已添加: \(content)")
         }
         
@@ -569,35 +582,71 @@ public class ChatService {
         Persistence.saveMessages(messages, for: currentSession.id)
     }
     
+    /// 获取 HTTP 状态码的描述信息
+    private func httpStatusCodeDescription(_ code: Int) -> String {
+        switch code {
+        // 4xx 客户端错误
+        case 400: return "请求格式错误 (Bad Request)"
+        case 401: return "未授权，请检查 API Key (Unauthorized)"
+        case 403: return "访问被拒绝，权限不足 (Forbidden)"
+        case 404: return "请求的资源不存在 (Not Found)"
+        case 405: return "请求方法不被允许 (Method Not Allowed)"
+        case 408: return "请求超时 (Request Timeout)"
+        case 409: return "请求冲突 (Conflict)"
+        case 413: return "请求体过大 (Payload Too Large)"
+        case 415: return "不支持的媒体类型 (Unsupported Media Type)"
+        case 422: return "请求参数无法处理 (Unprocessable Entity)"
+        case 429: return "请求过于频繁，请稍后重试 (Too Many Requests)"
+        // 5xx 服务端错误
+        case 500: return "服务器内部错误 (Internal Server Error)"
+        case 501: return "功能未实现 (Not Implemented)"
+        case 502: return "网关错误，上游服务无响应 (Bad Gateway)"
+        case 503: return "服务暂时不可用 (Service Unavailable)"
+        case 504: return "网关超时 (Gateway Timeout)"
+        case 520: return "未知错误 (Cloudflare)"
+        case 521: return "服务器宕机 (Cloudflare)"
+        case 522: return "连接超时 (Cloudflare)"
+        case 523: return "源站不可达 (Cloudflare)"
+        case 524: return "响应超时 (Cloudflare)"
+        case 525: return "SSL 握手失败 (Cloudflare)"
+        case 526: return "无效的 SSL 证书 (Cloudflare)"
+        // 其他
+        default:
+            if code >= 400 && code < 500 {
+                return "客户端错误"
+            } else if code >= 500 && code < 600 {
+                return "服务器错误"
+            }
+            return "HTTP 错误"
+        }
+    }
+    
     /// 格式化错误内容，使其更简洁易读
-    private func formatErrorContent(_ content: String) -> String {
-        var message = content
+    /// - Returns: (显示内容, 完整内容（如果被截断则非空）)
+    private func formatErrorContent(_ content: String, httpStatusCode: Int? = nil) -> (String, String?) {
+        let maxLength = 500
+        var displayMessage: String
+        var fullContent: String? = nil
         
-        // 检测并简化 HTML 响应（如 Cloudflare 错误页面）
-        if content.contains("<html") || content.contains("<!DOCTYPE") {
-            // 尝试提取 <title> 标签内容
-            if let titleMatch = content.range(of: #"<title>(.*?)</title>"#, options: [.regularExpression, .caseInsensitive]) {
-                let titleText = content[titleMatch]
-                    .replacingOccurrences(of: #"</?title>"#, with: "", options: [.regularExpression, .caseInsensitive])
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !titleText.isEmpty {
-                    // 限制 title 长度
-                    let truncatedTitle = titleText.count > 80 ? String(titleText.prefix(80)) + "..." : titleText
-                    message = "🌐 服务器返回了网页响应\n\n📄 页面标题: \(truncatedTitle)\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
-                } else {
-                    message = "🌐 服务器返回了 HTML 网页响应\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
-                }
-            } else {
-                message = "🌐 服务器返回了 HTML 网页响应\n\n💡 这通常表示遇到了 CDN 或防火墙拦截。\n建议检查网络连接或 API 地址配置。"
-            }
-        } else {
-            // 限制普通错误消息长度，避免过长
-            if message.count > 500 {
-                message = String(message.prefix(500)) + "...\n\n（消息已截断）"
-            }
+        // 构建状态码描述前缀
+        var statusPrefix = ""
+        if let code = httpStatusCode {
+            let description = httpStatusCodeDescription(code)
+            statusPrefix = "HTTP \(code): \(description)\n\n"
         }
         
-        return message
+        // 检查内容是否需要截断
+        if content.count > maxLength {
+            // 内容过长，需要截断
+            let truncatedContent = String(content.prefix(maxLength))
+            displayMessage = statusPrefix + truncatedContent + "...\n\n(响应已截断，可在更多操作中查看完整内容)"
+            fullContent = statusPrefix + content
+        } else {
+            // 内容长度合适，直接显示
+            displayMessage = statusPrefix + content
+        }
+        
+        return (displayMessage, fullContent)
     }
         
     public func sendAndProcessMessage(
@@ -1537,7 +1586,7 @@ public class ChatService {
             } else {
                 bodyString = "响应体为空。"
             }
-            addErrorMessage("服务器响应错误 (状态码 \(code)):\n\(bodyString)")
+            addErrorMessage(bodyString, httpStatusCode: code)
             requestStatusSubject.send(.error)
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
@@ -1788,7 +1837,7 @@ public class ChatService {
             } else {
                 bodySnippet = "响应体为空。"
             }
-            addErrorMessage("流式请求失败 (状态码 \(code)):\n\(bodySnippet)")
+            addErrorMessage(bodySnippet, httpStatusCode: code)
             requestStatusSubject.send(.error)
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）

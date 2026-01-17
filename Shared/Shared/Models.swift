@@ -238,6 +238,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
     public var audioFileName: String? // 关联的音频文件名，存储在 AudioFiles 目录下
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
+    public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
 
     public init(
         id: UUID = UUID(),
@@ -247,7 +248,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         toolCalls: [InternalToolCall]? = nil,
         tokenUsage: MessageTokenUsage? = nil,
         audioFileName: String? = nil,
-        imageFileNames: [String]? = nil
+        imageFileNames: [String]? = nil,
+        fullErrorContent: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -258,6 +260,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.tokenUsage = tokenUsage
         self.audioFileName = audioFileName
         self.imageFileNames = imageFileNames
+        self.fullErrorContent = fullErrorContent
     }
     
     // MARK: - 版本管理方法
@@ -294,7 +297,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, role, content, currentVersionIndex
         case reasoningContent, toolCalls, tokenUsage
-        case audioFileName, imageFileNames
+        case audioFileName, imageFileNames, fullErrorContent
     }
     
     public init(from decoder: Decoder) throws {
@@ -324,6 +327,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.tokenUsage = try container.decodeIfPresent(MessageTokenUsage.self, forKey: .tokenUsage)
         self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
+        self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -344,6 +348,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(tokenUsage, forKey: .tokenUsage)
         try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
+        try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)
     }
 }
 
