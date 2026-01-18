@@ -10,6 +10,7 @@
 
 import SwiftUI
 import Shared
+import WatchKit
 
 /// 背景图片选择器视图
 struct BackgroundPickerView: View {
@@ -21,30 +22,47 @@ struct BackgroundPickerView: View {
     
     // MARK: - 私有属性
     
-    private let columns: [GridItem] = Array(repeating: .init(.flexible()), count: 2)
+    private let gridSpacing: CGFloat = 10
+    private let gridPadding: CGFloat = 10
+    private var previewAspectRatio: CGFloat {
+        let size = WKInterfaceDevice.current().screenBounds.size
+        guard size.height > 0 else { return 1 }
+        return size.width / size.height
+    }
     
     // MARK: - 视图主体
     
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(allBackgrounds, id: \.self) { bgName in
-                    Button(action: {
-                        selectedBackground = bgName
-                    }) {
-                        FileImage(filename: bgName)
-                            .aspectRatio(contentMode: .fill)
-                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 100)
-                            .cornerRadius(10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(selectedBackground == bgName ? Color.blue : Color.clear, lineWidth: 3)
-                            )
+        GeometryReader { proxy in
+            let availableWidth = proxy.size.width - gridPadding * 2
+            let itemWidth = max((availableWidth - gridSpacing) / 2, 0)
+            let itemHeight = itemWidth / previewAspectRatio
+            let columns = [
+                GridItem(.fixed(itemWidth), spacing: gridSpacing),
+                GridItem(.fixed(itemWidth), spacing: gridSpacing)
+            ]
+            
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: gridSpacing) {
+                    ForEach(allBackgrounds, id: \.self) { bgName in
+                        Button(action: {
+                            selectedBackground = bgName
+                        }) {
+                            FileImage(filename: bgName)
+                                .aspectRatio(previewAspectRatio, contentMode: .fill)
+                                .frame(width: itemWidth, height: itemHeight)
+                                .cornerRadius(10)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(selectedBackground == bgName ? Color.blue : Color.clear, lineWidth: 3)
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, gridPadding)
+                .padding(.vertical, gridPadding)
             }
-            .padding()
         }
         .navigationTitle("选择背景")
     }

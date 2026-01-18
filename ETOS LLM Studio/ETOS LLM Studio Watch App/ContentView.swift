@@ -1,7 +1,7 @@
 // ============================================================================
 // ContentView.swift
 // ============================================================================
-// ETOS LLM Studio Watch App 主视图文件 (已重构 v2)
+// ETOS LLM Studio Watch App 主视图文件 
 //
 // 功能特性:
 // - 应用的主界面，负责组合聊天列表和输入框
@@ -18,11 +18,15 @@ struct ContentView: View {
     
     // MARK: - 状态对象
     
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var announcementManager = AnnouncementManager.shared
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
+    private let inputControlHeight: CGFloat = 38
+    private let inputBubbleVerticalPadding: CGFloat = 8
+    private let emptyStateSpacerHeight: CGFloat = 120
     
     private var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
@@ -38,20 +42,25 @@ struct ContentView: View {
         ZStack {
             // 背景图
             if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageUIImage {
-                // 适应模式时先铺黑底，再居中显示图片
-                if viewModel.backgroundContentMode == "fit" {
-                    Color.black
-                        .edgesIgnoringSafeArea(.all)
+                GeometryReader { proxy in
+                    let size = proxy.size
+                    ZStack {
+                        if viewModel.backgroundContentMode == "fit" {
+                            Color.black
+                        }
+                        
+                        Image(uiImage: bgImage)
+                            .resizable()
+                            .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
+                            .frame(width: size.width, height: size.height)
+                            .position(x: size.width / 2, y: size.height / 2)
+                            .clipped()
+                            .blur(radius: viewModel.backgroundBlur)
+                            .opacity(viewModel.backgroundOpacity)
+                    }
+                    .frame(width: size.width, height: size.height)
                 }
-                
-                Image(uiImage: bgImage)
-                    .resizable()
-                    .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .edgesIgnoringSafeArea(.all)
-                    .blur(radius: viewModel.backgroundBlur)
-                    .opacity(viewModel.backgroundOpacity)
+                .ignoresSafeArea()
             }
             
             // 主导航
@@ -107,7 +116,7 @@ struct ContentView: View {
     private func chatList(proxy: ScrollViewProxy) -> some View {
         List {
             if viewModel.messages.isEmpty {
-                Spacer().frame(maxHeight: .infinity).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
             
             let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
@@ -248,6 +257,31 @@ struct ContentView: View {
         .padding(.bottom, 4)
         .transition(.scale.combined(with: .opacity))
     }
+
+    private var inputFillColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.22) : Color.white.opacity(0.75)
+    }
+
+    private var inputStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
+    }
+    
+    private var transparentInputField: some View {
+        ZStack(alignment: .leading) {
+            Text(viewModel.userInput.isEmpty ? "输入..." : viewModel.userInput)
+                .foregroundStyle(viewModel.userInput.isEmpty ? .secondary : .primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .allowsHitTesting(false)
+            TextField("", text: $viewModel.userInput)
+                .textFieldStyle(.plain)
+                .opacity(0.01)
+                .accessibilityLabel("输入...")
+        }
+        .font(.body)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
+    }
     
     private var inputBubble: some View {
         // 是否可以发送：有文字或有音频附件
@@ -286,52 +320,76 @@ struct ContentView: View {
                 
                 if isLiquidGlassEnabled {
                     HStack(spacing: 10) {
-                        let textField = TextField("输入...", text: $viewModel.userInput)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 0)
-                            .padding(.vertical, 0)
-                        
                         if #available(watchOS 26.0, *) {
-                            textField.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 16))
+                            transparentInputField
+                                .glassEffect(.clear, in: Capsule())
+
+                            Button(action: viewModel.sendMessage) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .frame(width: inputControlHeight, height: inputControlHeight)
+                            }
+                            .buttonStyle(.plain)
+                            .glassEffect(.clear, in: Circle())
+                            .disabled(!canSend || viewModel.isSendingMessage)
                         } else {
-                            textField
+                            ZStack {
+                                Capsule()
+                                    .fill(inputFillColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(inputStrokeColor, lineWidth: 0.6)
+                                    )
+                                transparentInputField
+                            }
+
+                            Button(action: viewModel.sendMessage) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 18, weight: .medium))
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .overlay(
+                                Circle()
+                                    .stroke(inputStrokeColor, lineWidth: 0.8)
+                            )
+                            .disabled(!canSend || viewModel.isSendingMessage)
+                        }
+                    }
+                    .frame(height: inputControlHeight)
+                } else {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Capsule()
+                                .fill(inputFillColor)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(inputStrokeColor, lineWidth: 0.6)
+                                )
+                            transparentInputField
                         }
 
-                        let sendButton = Button(action: viewModel.sendMessage) {
+                        Button(action: viewModel.sendMessage) {
                             Image(systemName: "arrow.up")
                                 .font(.system(size: 18, weight: .medium))
                         }
                         .buttonStyle(.plain)
-                        .frame(width: 38, height: 38)
-                        .disabled(!canSend || viewModel.isSendingMessage)
-                        
-                        if #available(watchOS 26.0, *) {
-                            sendButton.glassEffect(.clear, in: Circle())
-                        } else {
-                            sendButton
-                        }
-                    }
-                    .frame(height: 38)
-                } else {
-                    HStack(spacing: 12) {
-                        TextField("输入...", text: $viewModel.userInput)
-                            .textFieldStyle(.plain)
-
-                        Button(action: viewModel.sendMessage) {
-                            Image(systemName: "arrow.up")
-                        }
-                        .buttonStyle(.plain)
-                        .fixedSize()
+                        .frame(width: inputControlHeight, height: inputControlHeight)
+                        .overlay(
+                            Circle()
+                                .stroke(inputStrokeColor, lineWidth: 0.8)
+                        )
                         .disabled(!canSend || viewModel.isSendingMessage)
                     }
-                    .padding(10)
+                    .frame(height: inputControlHeight)
+                    .padding(.horizontal, 10)
                     .background(viewModel.enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial))
                     .cornerRadius(12)
                 }
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 4)
+        .padding(.vertical, inputBubbleVerticalPadding)
         
         let speechSheetBinding = Binding(
             get: { viewModel.isSpeechRecorderPresented },

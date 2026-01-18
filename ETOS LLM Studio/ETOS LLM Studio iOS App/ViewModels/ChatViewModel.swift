@@ -62,6 +62,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableBackground") var enableBackground: Bool = true
     @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0
     @AppStorage("backgroundOpacity") var backgroundOpacity: Double = 0.7
+    @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill"
     @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
     @AppStorage("aiTopP") var aiTopP: Double = 0.95
     @AppStorage("systemPrompt") var systemPrompt: String = ""
