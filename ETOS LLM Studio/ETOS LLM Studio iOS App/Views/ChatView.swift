@@ -62,6 +62,12 @@ struct ChatView: View {
     private var navBarIconSize: CGFloat {
         navBarPillHeight
     }
+    private var isLiquidGlassEnabled: Bool {
+        if #available(iOS 26.0, *) {
+            return viewModel.enableLiquidGlass
+        }
+        return false
+    }
     
     var body: some View {
         NavigationStack {
@@ -93,7 +99,8 @@ struct ChatView: View {
                                         set: { viewModel.toolCallsExpandedState[message.id] = $0 }
                                     ),
                                     enableMarkdown: viewModel.enableMarkdown,
-                                    enableBackground: viewModel.enableBackground
+                                    enableBackground: viewModel.enableBackground,
+                                    enableLiquidGlass: isLiquidGlassEnabled
                                 )
                                 .id(message.id)
                                 .contextMenu {
@@ -348,8 +355,7 @@ struct ChatView: View {
             .foregroundColor(TelegramColors.navBarText)
             .frame(width: navBarIconSize, height: navBarIconSize)
             .background(
-                Circle()
-                    .fill(.ultraThinMaterial)
+                navBarIconBackground
             )
             .overlay(
                 Circle()
@@ -382,14 +388,47 @@ struct ChatView: View {
         .padding(.vertical, navBarPillVerticalPadding)
         .frame(height: navBarPillHeight)
         .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
+            navBarPillBackground
         )
         .overlay(
             Capsule()
                 .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+    }
+
+    @ViewBuilder
+    private var navBarIconBackground: some View {
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
+                Circle()
+                    .fill(Color.clear)
+                    .glassEffect(.clear, in: Circle())
+            } else {
+                Circle()
+                    .fill(.ultraThinMaterial)
+            }
+        } else {
+            Circle()
+                .fill(.ultraThinMaterial)
+        }
+    }
+
+    @ViewBuilder
+    private var navBarPillBackground: some View {
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
+                Capsule()
+                    .fill(Color.clear)
+                    .glassEffect(.clear, in: Capsule())
+            } else {
+                Capsule()
+                    .fill(.ultraThinMaterial)
+            }
+        } else {
+            Capsule()
+                .fill(.ultraThinMaterial)
+        }
     }
 
     private var modelSubtitle: String {
@@ -700,6 +739,12 @@ private struct TelegramMessageComposer: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
     private let controlSize: CGFloat = 40
+    private var isLiquidGlassEnabled: Bool {
+        if #available(iOS 26.0, *) {
+            return viewModel.enableLiquidGlass
+        }
+        return false
+    }
     
     var body: some View {
         VStack(spacing: 8) {
@@ -859,17 +904,7 @@ private struct TelegramMessageComposer: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(glassOverlayColor)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(glassStrokeColor, lineWidth: 0.5)
-                )
-                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            glassRoundedBackground(cornerRadius: 18)
         )
     }
 
@@ -896,48 +931,171 @@ private struct TelegramMessageComposer: View {
     @ViewBuilder
     private var actionBackground: some View {
         if isSending {
-            Circle()
-                .fill(Color.red.opacity(0.85))
-                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            actionCircleBackground(fill: Color.red.opacity(0.85))
         } else if hasContent {
-            Circle()
-                .fill(
-                    viewModel.canSendMessage
-                        ? TelegramColors.sendButtonColor
-                        : Color.gray.opacity(0.3)
-                )
-                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            let fillColor = viewModel.canSendMessage
+                ? TelegramColors.sendButtonColor
+                : Color.gray.opacity(0.3)
+            actionCircleBackground(fill: fillColor)
         } else {
             glassCircleBackground
         }
     }
     
+    @ViewBuilder
+    private func actionCircleBackground(fill: Color) -> some View {
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
+                Circle()
+                    .fill(fill)
+                    .glassEffect(.clear, in: Circle())
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            } else {
+                Circle()
+                    .fill(fill)
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            }
+        } else {
+            Circle()
+                .fill(fill)
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        }
+    }
+
     private var glassCircleBackground: some View {
-        Circle()
-            .fill(.ultraThinMaterial)
-            .overlay(
+        Group {
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    Circle()
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: Circle())
+                        .overlay(
+                            Circle()
+                                .fill(glassOverlayColor)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(glassStrokeColor, lineWidth: 0.5)
+                        )
+                        .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                } else {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Circle()
+                                .fill(glassOverlayColor)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(glassStrokeColor, lineWidth: 0.5)
+                        )
+                        .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                }
+            } else {
                 Circle()
-                    .fill(glassOverlayColor)
-            )
-            .overlay(
-                Circle()
-                    .stroke(glassStrokeColor, lineWidth: 0.5)
-            )
-            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(glassOverlayColor)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(glassStrokeColor, lineWidth: 0.5)
+                    )
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            }
+        }
     }
     
     private var glassCapsuleBackground: some View {
-        Capsule()
-            .fill(.ultraThinMaterial)
-            .overlay(
+        Group {
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    Capsule()
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .fill(glassOverlayColor)
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(glassStrokeColor, lineWidth: 0.5)
+                        )
+                        .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                } else {
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Capsule()
+                                .fill(glassOverlayColor)
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(glassStrokeColor, lineWidth: 0.5)
+                        )
+                        .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                }
+            } else {
                 Capsule()
-                    .fill(glassOverlayColor)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(glassStrokeColor, lineWidth: 0.5)
-            )
-            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .fill(glassOverlayColor)
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(glassStrokeColor, lineWidth: 0.5)
+                    )
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            }
+        }
+    }
+
+    private func glassRoundedBackground(cornerRadius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return Group {
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    shape
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: shape)
+                        .overlay(
+                            shape
+                                .fill(glassOverlayColor)
+                        )
+                        .overlay(
+                            shape
+                                .stroke(glassStrokeColor, lineWidth: 0.5)
+                        )
+                        .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                } else {
+                    shape
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            shape
+                                .fill(glassOverlayColor)
+                        )
+                        .overlay(
+                            shape
+                                .stroke(glassStrokeColor, lineWidth: 0.5)
+                        )
+                        .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                }
+            } else {
+                shape
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        shape
+                            .fill(glassOverlayColor)
+                    )
+                    .overlay(
+                        shape
+                            .stroke(glassStrokeColor, lineWidth: 0.5)
+                    )
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            }
+        }
     }
     
     private var glassOverlayColor: Color {

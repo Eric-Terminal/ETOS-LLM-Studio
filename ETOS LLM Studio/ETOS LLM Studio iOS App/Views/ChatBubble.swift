@@ -41,6 +41,7 @@ struct ChatBubble: View {
     @Binding var isToolCallsExpanded: Bool
     let enableMarkdown: Bool
     let enableBackground: Bool
+    let enableLiquidGlass: Bool
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
@@ -56,6 +57,10 @@ struct ChatBubble: View {
     
     private var isError: Bool {
         message.role == .error || (message.role == .assistant && message.content.hasPrefix("重试失败"))
+    }
+
+    private var bubbleShape: TelegramBubbleShape {
+        TelegramBubbleShape(isOutgoing: isOutgoing)
     }
     
     var body: some View {
@@ -77,10 +82,7 @@ struct ChatBubble: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(
-                    TelegramBubbleShape(isOutgoing: isOutgoing)
-                        .fill(bubbleGradient)
-                )
+                .background(bubbleBackground)
                 .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.88, alignment: isOutgoing ? .trailing : .leading)
@@ -141,10 +143,14 @@ struct ChatBubble: View {
     // MARK: - 气泡渐变背景
     
     private var bubbleGradient: some ShapeStyle {
+        let userOpacity = enableBackground ? 0.85 : 1.0
+        let assistantOpacity = enableBackground ? 0.75 : 1.0
+        let errorOpacity = enableBackground ? 0.8 : 1.0
+
         if isError {
             return AnyShapeStyle(
                 LinearGradient(
-                    colors: [Color.red.opacity(0.85), Color.red.opacity(0.7)],
+                    colors: [Color.red.opacity(0.85 * errorOpacity), Color.red.opacity(0.7 * errorOpacity)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -156,22 +162,39 @@ struct ChatBubble: View {
             // Telegram 蓝色渐变
             return AnyShapeStyle(
                 LinearGradient(
-                    colors: [telegramBlue, telegramBlueDark],
+                    colors: [telegramBlue.opacity(userOpacity), telegramBlueDark.opacity(userOpacity)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
         case .assistant, .system, .tool:
             // 接收消息：浅灰/白色
-            if enableBackground {
-                return AnyShapeStyle(Color(UIColor.secondarySystemBackground))
-            } else {
-                return AnyShapeStyle(Color(uiColor: .systemBackground))
-            }
+            let baseColor = enableBackground
+                ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
+                : Color(uiColor: .systemBackground)
+            return AnyShapeStyle(baseColor)
         case .error:
-            return AnyShapeStyle(Color.red.opacity(0.15))
+            return AnyShapeStyle(Color.red.opacity(0.15 * errorOpacity))
         @unknown default:
             return AnyShapeStyle(Color(UIColor.secondarySystemBackground))
+        }
+    }
+
+    @ViewBuilder
+    private var bubbleBackground: some View {
+        if enableLiquidGlass {
+            if #available(iOS 26.0, *) {
+                bubbleShape
+                    .fill(bubbleGradient)
+                    .glassEffect(.clear, in: bubbleShape)
+                    .clipShape(bubbleShape)
+            } else {
+                bubbleShape
+                    .fill(bubbleGradient)
+            }
+        } else {
+            bubbleShape
+                .fill(bubbleGradient)
         }
     }
     
