@@ -480,6 +480,17 @@ public class ChatService {
         Persistence.saveMessages(messages, for: currentSession.id)
         logger.info("已更新消息内容: \(message.id.uuidString)")
     }
+
+    /// 更新单条消息（包括内容和思考过程）
+    public func updateMessage(_ updatedMessage: ChatMessage) {
+        guard let currentSession = currentSessionSubject.value else { return }
+        var messages = messagesForSessionSubject.value
+        guard let index = messages.firstIndex(where: { $0.id == updatedMessage.id }) else { return }
+        messages[index] = updatedMessage
+        messagesForSessionSubject.send(messages)
+        Persistence.saveMessages(messages, for: currentSession.id)
+        logger.info("已更新消息: \(updatedMessage.id.uuidString)")
+    }
     
     /// 更新整个消息列表（用于版本管理等批量操作）
     public func updateMessages(_ messages: [ChatMessage], for sessionID: UUID) {

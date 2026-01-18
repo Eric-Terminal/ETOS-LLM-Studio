@@ -775,7 +775,7 @@ class ChatViewModel: ObservableObject {
     }
     
     func commitEditedMessage(_ message: ChatMessage) {
-        chatService.updateMessageContent(message, with: message.content)
+        chatService.updateMessage(message)
         messageToEdit = nil
     }
     

@@ -38,7 +38,6 @@ struct ChatView: View {
     @State private var showScrollToBottom = false
     @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
-    @State private var editingContent: String = ""
     @State private var messageInfo: MessageInfoPayload?
     @State private var showBranchOptions = false
     @State private var messageToBranch: ChatMessage?
@@ -169,11 +168,8 @@ struct ChatView: View {
             }
             .sheet(item: $editingMessage) { message in
                 NavigationStack {
-                    EditMessageSheet(
-                        originalMessage: message,
-                        text: $editingContent
-                    ) { newContent in
-                        viewModel.commitEditedMessage(message, content: newContent)
+                    EditMessageView(message: message) { updatedMessage in
+                        viewModel.commitEditedMessage(updatedMessage)
                     }
                 }
                 .presentationDetents([.medium, .large])
@@ -524,7 +520,6 @@ struct ChatView: View {
         if !hasAttachments {
             Button {
                 editingMessage = message
-                editingContent = message.content
             } label: {
                 Label("编辑", systemImage: "pencil")
             }
@@ -1478,45 +1473,6 @@ private struct AudioRecorderSheet: View {
         let seconds = Int(duration) % 60
         let tenths = Int((duration.truncatingRemainder(dividingBy: 1)) * 10)
         return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
-    }
-}
-
-// MARK: - Edit Sheet
-
-private struct EditMessageSheet: View {
-    let originalMessage: ChatMessage
-    @Binding var text: String
-    let onSave: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        Form {
-            Section("原始内容") {
-                Text(originalMessage.content)
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .textSelection(.enabled)
-            }
-            
-            Section("编辑后") {
-                TextEditor(text: $text)
-                    .frame(minHeight: 160)
-            }
-        }
-        .navigationTitle("编辑消息")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
-                    onSave(text)
-                    dismiss()
-                }
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
     }
 }
 
