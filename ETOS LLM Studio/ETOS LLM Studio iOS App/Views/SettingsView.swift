@@ -87,6 +87,7 @@ struct SettingsView: View {
                         backgroundOpacity: $viewModel.backgroundOpacity,
                         enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
                         currentBackgroundImage: $viewModel.currentBackgroundImage,
+                        backgroundContentMode: $viewModel.backgroundContentMode,
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
                         allBackgrounds: viewModel.backgroundImages
                     )

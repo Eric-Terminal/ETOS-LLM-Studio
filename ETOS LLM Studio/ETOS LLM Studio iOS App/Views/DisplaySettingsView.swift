@@ -8,6 +8,7 @@ struct DisplaySettingsView: View {
     @Binding var backgroundOpacity: Double
     @Binding var enableAutoRotateBackground: Bool
     @Binding var currentBackgroundImage: String
+    @Binding var backgroundContentMode: String
     @Binding var enableLiquidGlass: Bool
     
     let allBackgrounds: [String]
@@ -25,6 +26,11 @@ struct DisplaySettingsView: View {
                 Toggle("显示背景", isOn: $enableBackground)
                 
                 if enableBackground {
+                    Picker("填充模式", selection: $backgroundContentMode) {
+                        Text("填充 (居中裁剪)").tag("fill")
+                        Text("适应 (完整显示)").tag("fit")
+                    }
+                    
                     VStack(alignment: .leading, spacing: 8) {
                         Text(String(format: NSLocalizedString("模糊 %.1f", comment: ""), backgroundBlur))
                         Slider(value: $backgroundBlur, in: 0...25, step: 0.5)

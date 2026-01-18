@@ -245,13 +245,22 @@ struct ChatView: View {
             Group {
                 if viewModel.enableBackground,
                    let image = viewModel.currentBackgroundImageUIImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                        .blur(radius: viewModel.backgroundBlur)
-                        .opacity(viewModel.backgroundOpacity)
+                    ZStack {
+                        if viewModel.backgroundContentMode == "fit" {
+                            Color.black
+                        }
+                        
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(
+                                contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit
+                            )
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                            .clipped()
+                            .blur(radius: viewModel.backgroundBlur)
+                            .opacity(viewModel.backgroundOpacity)
+                    }
                 } else {
                     // Telegram 默认背景 - 浅色图案背景
                     TelegramDefaultBackground()

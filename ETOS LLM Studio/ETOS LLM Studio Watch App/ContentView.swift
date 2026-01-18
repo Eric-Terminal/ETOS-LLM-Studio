@@ -38,20 +38,25 @@ struct ContentView: View {
         ZStack {
             // 背景图
             if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageUIImage {
-                // 适应模式时先铺黑底，再居中显示图片
-                if viewModel.backgroundContentMode == "fit" {
-                    Color.black
-                        .edgesIgnoringSafeArea(.all)
+                GeometryReader { proxy in
+                    let size = proxy.size
+                    ZStack {
+                        if viewModel.backgroundContentMode == "fit" {
+                            Color.black
+                        }
+                        
+                        Image(uiImage: bgImage)
+                            .resizable()
+                            .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
+                            .frame(width: size.width, height: size.height)
+                            .position(x: size.width / 2, y: size.height / 2)
+                            .clipped()
+                            .blur(radius: viewModel.backgroundBlur)
+                            .opacity(viewModel.backgroundOpacity)
+                    }
+                    .frame(width: size.width, height: size.height)
                 }
-                
-                Image(uiImage: bgImage)
-                    .resizable()
-                    .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .edgesIgnoringSafeArea(.all)
-                    .blur(radius: viewModel.backgroundBlur)
-                    .opacity(viewModel.backgroundOpacity)
+                .ignoresSafeArea()
             }
             
             // 主导航
