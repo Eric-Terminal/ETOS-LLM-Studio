@@ -281,11 +281,17 @@ struct ContentView: View {
         .font(.body)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
+        .layoutPriority(1)
     }
     
     private var inputBubble: some View {
         // 是否可以发送：有文字或有音频附件
-        let canSend = !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil
+        let hasInputOrAudio = !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil
+        let canSend = hasInputOrAudio
+        let showClearButton = hasInputOrAudio
+        let showSpeechButton = viewModel.enableSpeechInput
+        let speechButtonDisabled = viewModel.speechModels.isEmpty
+        let speechIconName = viewModel.isRecordingSpeech ? "waveform" : "mic.fill"
         
         let coreBubble = Group {
             VStack(spacing: 6) {
@@ -319,10 +325,36 @@ struct ContentView: View {
                 }
                 
                 if isLiquidGlassEnabled {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         if #available(watchOS 26.0, *) {
+                            if showClearButton {
+                                Button {
+                                    viewModel.clearUserInput()
+                                    viewModel.clearPendingAudioAttachment()
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .frame(width: inputControlHeight, height: inputControlHeight)
+                                }
+                                .buttonStyle(.plain)
+                                .glassEffect(.clear, in: Circle())
+                            }
+
                             transparentInputField
                                 .glassEffect(.clear, in: Capsule())
+
+                            if showSpeechButton {
+                                Button {
+                                    viewModel.beginSpeechInputFlow()
+                                } label: {
+                                    Image(systemName: speechIconName)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .frame(width: inputControlHeight, height: inputControlHeight)
+                                }
+                                .buttonStyle(.plain)
+                                .glassEffect(.clear, in: Circle())
+                                .disabled(speechButtonDisabled)
+                            }
 
                             Button(action: viewModel.sendMessage) {
                                 Image(systemName: "arrow.up")
@@ -333,6 +365,22 @@ struct ContentView: View {
                             .glassEffect(.clear, in: Circle())
                             .disabled(!canSend || viewModel.isSendingMessage)
                         } else {
+                            if showClearButton {
+                                Button {
+                                    viewModel.clearUserInput()
+                                    viewModel.clearPendingAudioAttachment()
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 16, weight: .semibold))
+                                }
+                                .buttonStyle(.plain)
+                                .frame(width: inputControlHeight, height: inputControlHeight)
+                                .overlay(
+                                    Circle()
+                                        .stroke(inputStrokeColor, lineWidth: 0.8)
+                                )
+                            }
+
                             ZStack {
                                 Capsule()
                                     .fill(inputFillColor)
@@ -341,6 +389,22 @@ struct ContentView: View {
                                             .stroke(inputStrokeColor, lineWidth: 0.6)
                                     )
                                 transparentInputField
+                            }
+
+                            if showSpeechButton {
+                                Button {
+                                    viewModel.beginSpeechInputFlow()
+                                } label: {
+                                    Image(systemName: speechIconName)
+                                        .font(.system(size: 16, weight: .semibold))
+                                }
+                                .buttonStyle(.plain)
+                                .frame(width: inputControlHeight, height: inputControlHeight)
+                                .overlay(
+                                    Circle()
+                                        .stroke(inputStrokeColor, lineWidth: 0.8)
+                                )
+                                .disabled(speechButtonDisabled)
                             }
 
                             Button(action: viewModel.sendMessage) {
@@ -358,7 +422,23 @@ struct ContentView: View {
                     }
                     .frame(height: inputControlHeight)
                 } else {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 8) {
+                        if showClearButton {
+                            Button {
+                                viewModel.clearUserInput()
+                                viewModel.clearPendingAudioAttachment()
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .overlay(
+                                Circle()
+                                    .stroke(inputStrokeColor, lineWidth: 0.8)
+                            )
+                        }
+
                         ZStack {
                             Capsule()
                                 .fill(inputFillColor)
@@ -367,6 +447,22 @@ struct ContentView: View {
                                         .stroke(inputStrokeColor, lineWidth: 0.6)
                                 )
                             transparentInputField
+                        }
+
+                        if showSpeechButton {
+                            Button {
+                                viewModel.beginSpeechInputFlow()
+                            } label: {
+                                Image(systemName: speechIconName)
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .overlay(
+                                Circle()
+                                    .stroke(inputStrokeColor, lineWidth: 0.8)
+                            )
+                            .disabled(speechButtonDisabled)
                         }
 
                         Button(action: viewModel.sendMessage) {
@@ -401,27 +497,6 @@ struct ContentView: View {
         )
         
         return coreBubble
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                if !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil {
-                    Button(role: .destructive) {
-                        viewModel.clearUserInput()
-                        viewModel.clearPendingAudioAttachment()
-                    } label: {
-                        Label("清空输入", systemImage: "trash")
-                    }
-                }
-            }
-            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                if viewModel.enableSpeechInput {
-                    Button {
-                        viewModel.beginSpeechInputFlow()
-                    } label: {
-                        Label("语言输入", systemImage: viewModel.isRecordingSpeech ? "waveform.circle.fill" : "mic.fill")
-                    }
-                    .tint(.blue)
-                    .disabled(viewModel.speechModels.isEmpty)
-                }
-            }
             .sheet(isPresented: speechSheetBinding) {
                 SpeechRecorderView(viewModel: viewModel)
             }
