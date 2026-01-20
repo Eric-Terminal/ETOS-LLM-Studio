@@ -245,7 +245,7 @@ struct ContentView: View {
             
             if isLiquidGlassEnabled {
                 if #available(watchOS 26.0, *) {
-                    icon.glassEffect(.clear, in: Circle())
+                    icon
                 } else {
                     icon
                 }
@@ -259,7 +259,7 @@ struct ContentView: View {
     }
 
     private var inputFillColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.22) : Color.white.opacity(0.75)
+        viewModel.enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
     }
 
     private var inputStrokeColor: Color {
@@ -376,6 +376,9 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                         .frame(width: inputControlHeight, height: inputControlHeight)
+                        .background(
+                            Circle().fill(inputFillColor)
+                        )
                         .overlay(
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
