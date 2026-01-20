@@ -35,6 +35,7 @@ private struct TelegramColors {
 
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showScrollToBottom = false
     @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
@@ -66,6 +67,9 @@ struct ChatView: View {
             return viewModel.enableLiquidGlass
         }
         return false
+    }
+    private var navBarGlassOverlayColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.2)
     }
     
     var body: some View {
@@ -278,12 +282,12 @@ struct ChatView: View {
     @ViewBuilder
     private var telegramNavBar: some View {
         HStack(spacing: 12) {
-            navBarModelMenu
+            navBarSessionButton
 
             Spacer(minLength: 12)
 
-            Button {
-                navigationDestination = .sessions
+            Menu {
+                navBarModelMenuContent
             } label: {
                 navBarCenterPill
             }
@@ -318,31 +322,36 @@ struct ChatView: View {
         .padding(.vertical, 8)
     }
 
-    private var navBarModelMenu: some View {
-        Menu {
-            if viewModel.activatedModels.isEmpty {
-                Button("暂无可用模型") {}
-                    .disabled(true)
-            } else {
-                ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                    Button {
-                        viewModel.setSelectedModel(runnable)
-                    } label: {
-                        if runnable.id == viewModel.selectedModel?.id {
-                            Label(
-                                "\(runnable.model.displayName) · \(runnable.provider.name)",
-                                systemImage: "checkmark"
-                            )
-                        } else {
-                            Text("\(runnable.model.displayName) · \(runnable.provider.name)")
-                        }
+    private var navBarSessionButton: some View {
+        Button {
+            navigationDestination = .sessions
+        } label: {
+            navBarIconLabel(systemName: "cpu", accessibilityLabel: "会话列表")
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var navBarModelMenuContent: some View {
+        if viewModel.activatedModels.isEmpty {
+            Button("暂无可用模型") {}
+                .disabled(true)
+        } else {
+            ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                Button {
+                    viewModel.setSelectedModel(runnable)
+                } label: {
+                    if runnable.id == viewModel.selectedModel?.id {
+                        Label(
+                            "\(runnable.model.displayName) · \(runnable.provider.name)",
+                            systemImage: "checkmark"
+                        )
+                    } else {
+                        Text("\(runnable.model.displayName) · \(runnable.provider.name)")
                     }
                 }
             }
-        } label: {
-            navBarIconLabel(systemName: "cpu", accessibilityLabel: "切换模型")
         }
-        .buttonStyle(.plain)
     }
 
     private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
@@ -400,9 +409,17 @@ struct ChatView: View {
                 Circle()
                     .fill(Color.clear)
                     .glassEffect(.clear, in: Circle())
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
             } else {
                 Circle()
                     .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
             }
         } else {
             Circle()
@@ -417,9 +434,17 @@ struct ChatView: View {
                 Capsule()
                     .fill(Color.clear)
                     .glassEffect(.clear, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
             } else {
                 Capsule()
                     .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
             }
         } else {
             Capsule()
