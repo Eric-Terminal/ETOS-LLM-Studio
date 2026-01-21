@@ -51,13 +51,20 @@ struct ChatView: View {
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
     private let navBarSubtitleFont = UIFont.systemFont(ofSize: 12)
+    private let navBarVerticalPadding: CGFloat = 8
     private let navBarPillVerticalPadding: CGFloat = 6
     private let navBarPillSpacing: CGFloat = 1
+    private let navBarBlurFadeMinHeight: CGFloat = 80
+    private let navBarBlurFadeMaxHeight: CGFloat = 160
+    private let navBarBlurFadeHeightRatio: CGFloat = 0.15
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
             + navBarPillSpacing
             + navBarPillVerticalPadding * 2
+    }
+    private var navBarHeight: CGFloat {
+        navBarPillHeight + navBarVerticalPadding * 2
     }
     private var navBarIconSize: CGFloat {
         navBarPillHeight
@@ -157,6 +164,9 @@ struct ChatView: View {
                     // Telegram 风格：底部输入栏
                     .safeAreaInset(edge: .bottom) {
                         telegramInputBar
+                    }
+                    .overlay(alignment: .top) {
+                        navBarFadeBlurOverlay
                     }
                 }
             }
@@ -319,14 +329,14 @@ struct ChatView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, navBarVerticalPadding)
     }
 
     private var navBarSessionButton: some View {
         Button {
             navigationDestination = .sessions
         } label: {
-            navBarIconLabel(systemName: "cpu", accessibilityLabel: "会话列表")
+            navBarIconLabel(systemName: "list.bullet", accessibilityLabel: "会话列表")
         }
         .buttonStyle(.plain)
     }
@@ -457,6 +467,31 @@ struct ChatView: View {
             return "\(selectedModel.model.displayName) · \(selectedModel.provider.name)"
         }
         return "选择模型"
+    }
+
+    private var navBarFadeBlurOverlay: some View {
+        GeometryReader { proxy in
+            let adaptiveHeight = min(
+                navBarBlurFadeMaxHeight,
+                max(navBarBlurFadeMinHeight, proxy.size.height * navBarBlurFadeHeightRatio)
+            )
+            BlurView(style: .regular)
+                .mask(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: Color.black, location: 0),
+                            .init(color: Color.black.opacity(0.7), location: 0.35),
+                            .init(color: Color.black.opacity(0), location: 1)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: navBarHeight + adaptiveHeight)
+                .ignoresSafeArea(.container, edges: .top)
+                .allowsHitTesting(false)
+        }
     }
 
     /// Telegram 风格输入栏
@@ -659,6 +694,20 @@ private extension ChatView {
 }
 
 // MARK: - Telegram Default Background
+
+private struct BlurView: UIViewRepresentable {
+    var style: UIBlurEffect.Style
+
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        let view = UIVisualEffectView(effect: UIBlurEffect(style: style))
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
+        uiView.effect = UIBlurEffect(style: style)
+    }
+}
 
 /// Telegram 风格默认背景（浅色图案）
 private struct TelegramDefaultBackground: View {
