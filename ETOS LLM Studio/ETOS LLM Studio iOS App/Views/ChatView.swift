@@ -54,9 +54,7 @@ struct ChatView: View {
     private let navBarVerticalPadding: CGFloat = 8
     private let navBarPillVerticalPadding: CGFloat = 6
     private let navBarPillSpacing: CGFloat = 1
-    private let navBarBlurFadeMinHeight: CGFloat = 80
-    private let navBarBlurFadeMaxHeight: CGFloat = 160
-    private let navBarBlurFadeHeightRatio: CGFloat = 0.15
+    private let navBarBlurFadeHeightRatio: CGFloat = 0.06
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -471,10 +469,7 @@ struct ChatView: View {
 
     private var navBarFadeBlurOverlay: some View {
         GeometryReader { proxy in
-            let adaptiveHeight = min(
-                navBarBlurFadeMaxHeight,
-                max(navBarBlurFadeMinHeight, proxy.size.height * navBarBlurFadeHeightRatio)
-            )
+            let adaptiveHeight = proxy.size.height * navBarBlurFadeHeightRatio
             BlurView(style: .regular)
                 .mask(
                     LinearGradient(

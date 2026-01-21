@@ -1492,8 +1492,29 @@ public class ChatService {
         let (bytes, response) = try await urlSession.bytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            logger.error("  - 流式网络请求失败，状态码: \(statusCode)")
-            throw NetworkError.badStatusCode(code: statusCode, responseBody: nil)
+            var capturedBody: Data?
+            var buffer = Data()
+            let limit = 64 * 1024
+            do {
+                for try await byte in bytes {
+                    if buffer.count < limit {
+                        buffer.append(byte)
+                    }
+                }
+                if !buffer.isEmpty {
+                    capturedBody = buffer
+                }
+            } catch {
+                logger.error("  - 读取流式错误响应体失败: \(error.localizedDescription)")
+            }
+            if let capturedBody, let prettyBody = String(data: capturedBody, encoding: .utf8) {
+                logger.error("  - 流式网络请求失败，状态码: \(statusCode)，响应体:\n---\n\(prettyBody)\n---")
+            } else if let capturedBody, !capturedBody.isEmpty {
+                logger.error("  - 流式网络请求失败，状态码: \(statusCode)，响应体包含 \(capturedBody.count) 字节的二进制数据。")
+            } else {
+                logger.error("  - 流式网络请求失败，状态码: \(statusCode)，响应体为空。")
+            }
+            throw NetworkError.badStatusCode(code: statusCode, responseBody: capturedBody)
         }
         return bytes
     }
