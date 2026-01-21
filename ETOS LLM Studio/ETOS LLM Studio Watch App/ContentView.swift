@@ -245,7 +245,7 @@ struct ContentView: View {
             
             if isLiquidGlassEnabled {
                 if #available(watchOS 26.0, *) {
-                    icon.glassEffect(.clear, in: Circle())
+                    icon
                 } else {
                     icon
                 }
@@ -259,7 +259,7 @@ struct ContentView: View {
     }
 
     private var inputFillColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.22) : Color.white.opacity(0.75)
+        viewModel.enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
     }
 
     private var inputStrokeColor: Color {
@@ -281,6 +281,7 @@ struct ContentView: View {
         .font(.body)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
+        .layoutPriority(1)
     }
     
     private var inputBubble: some View {
@@ -375,6 +376,9 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                         .frame(width: inputControlHeight, height: inputControlHeight)
+                        .background(
+                            Circle().fill(inputFillColor)
+                        )
                         .overlay(
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
@@ -407,8 +411,13 @@ struct ContentView: View {
                         viewModel.clearUserInput()
                         viewModel.clearPendingAudioAttachment()
                     } label: {
-                        Label("清空输入", systemImage: "trash")
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .contentShape(Circle())
                     }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("清空输入")
                 }
             }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -416,8 +425,13 @@ struct ContentView: View {
                     Button {
                         viewModel.beginSpeechInputFlow()
                     } label: {
-                        Label("语言输入", systemImage: viewModel.isRecordingSpeech ? "waveform.circle.fill" : "mic.fill")
+                        Image(systemName: viewModel.isRecordingSpeech ? "waveform.circle.fill" : "mic.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .contentShape(Circle())
                     }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("语言输入")
                     .tint(.blue)
                     .disabled(viewModel.speechModels.isEmpty)
                 }

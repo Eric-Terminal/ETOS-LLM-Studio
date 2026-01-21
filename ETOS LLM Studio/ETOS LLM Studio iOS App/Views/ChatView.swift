@@ -35,10 +35,10 @@ private struct TelegramColors {
 
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showScrollToBottom = false
     @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
-    @State private var editingContent: String = ""
     @State private var messageInfo: MessageInfoPayload?
     @State private var showBranchOptions = false
     @State private var messageToBranch: ChatMessage?
@@ -67,6 +67,9 @@ struct ChatView: View {
             return viewModel.enableLiquidGlass
         }
         return false
+    }
+    private var navBarGlassOverlayColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.2)
     }
     
     var body: some View {
@@ -169,11 +172,8 @@ struct ChatView: View {
             }
             .sheet(item: $editingMessage) { message in
                 NavigationStack {
-                    EditMessageSheet(
-                        originalMessage: message,
-                        text: $editingContent
-                    ) { newContent in
-                        viewModel.commitEditedMessage(message, content: newContent)
+                    EditMessageView(message: message) { updatedMessage in
+                        viewModel.commitEditedMessage(updatedMessage)
                     }
                 }
                 .presentationDetents([.medium, .large])
@@ -282,12 +282,12 @@ struct ChatView: View {
     @ViewBuilder
     private var telegramNavBar: some View {
         HStack(spacing: 12) {
-            navBarModelMenu
+            navBarSessionButton
 
             Spacer(minLength: 12)
 
-            Button {
-                navigationDestination = .sessions
+            Menu {
+                navBarModelMenuContent
             } label: {
                 navBarCenterPill
             }
@@ -322,31 +322,36 @@ struct ChatView: View {
         .padding(.vertical, 8)
     }
 
-    private var navBarModelMenu: some View {
-        Menu {
-            if viewModel.activatedModels.isEmpty {
-                Button("暂无可用模型") {}
-                    .disabled(true)
-            } else {
-                ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                    Button {
-                        viewModel.setSelectedModel(runnable)
-                    } label: {
-                        if runnable.id == viewModel.selectedModel?.id {
-                            Label(
-                                "\(runnable.model.displayName) · \(runnable.provider.name)",
-                                systemImage: "checkmark"
-                            )
-                        } else {
-                            Text("\(runnable.model.displayName) · \(runnable.provider.name)")
-                        }
+    private var navBarSessionButton: some View {
+        Button {
+            navigationDestination = .sessions
+        } label: {
+            navBarIconLabel(systemName: "cpu", accessibilityLabel: "会话列表")
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var navBarModelMenuContent: some View {
+        if viewModel.activatedModels.isEmpty {
+            Button("暂无可用模型") {}
+                .disabled(true)
+        } else {
+            ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                Button {
+                    viewModel.setSelectedModel(runnable)
+                } label: {
+                    if runnable.id == viewModel.selectedModel?.id {
+                        Label(
+                            "\(runnable.model.displayName) · \(runnable.provider.name)",
+                            systemImage: "checkmark"
+                        )
+                    } else {
+                        Text("\(runnable.model.displayName) · \(runnable.provider.name)")
                     }
                 }
             }
-        } label: {
-            navBarIconLabel(systemName: "cpu", accessibilityLabel: "切换模型")
         }
-        .buttonStyle(.plain)
     }
 
     private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
@@ -404,9 +409,17 @@ struct ChatView: View {
                 Circle()
                     .fill(Color.clear)
                     .glassEffect(.clear, in: Circle())
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
             } else {
                 Circle()
                     .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
             }
         } else {
             Circle()
@@ -421,9 +434,17 @@ struct ChatView: View {
                 Capsule()
                     .fill(Color.clear)
                     .glassEffect(.clear, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
             } else {
                 Capsule()
                     .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
             }
         } else {
             Capsule()
@@ -524,7 +545,6 @@ struct ChatView: View {
         if !hasAttachments {
             Button {
                 editingMessage = message
-                editingContent = message.content
             } label: {
                 Label("编辑", systemImage: "pencil")
             }
@@ -1478,45 +1498,6 @@ private struct AudioRecorderSheet: View {
         let seconds = Int(duration) % 60
         let tenths = Int((duration.truncatingRemainder(dividingBy: 1)) * 10)
         return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
-    }
-}
-
-// MARK: - Edit Sheet
-
-private struct EditMessageSheet: View {
-    let originalMessage: ChatMessage
-    @Binding var text: String
-    let onSave: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        Form {
-            Section("原始内容") {
-                Text(originalMessage.content)
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .textSelection(.enabled)
-            }
-            
-            Section("编辑后") {
-                TextEditor(text: $text)
-                    .frame(minHeight: 160)
-            }
-        }
-        .navigationTitle("编辑消息")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
-                    onSave(text)
-                    dismiss()
-                }
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
     }
 }
 
