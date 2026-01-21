@@ -240,7 +240,8 @@ struct ContentView: View {
         return Button(action: scrollAction) {
             let icon = Image(systemName: "arrow.down.circle")
                 .font(.system(size: 22, weight: .semibold))
-                .frame(width: 48, height: 48)
+                .frame(width: 60, height: 60)
+                .opacity(0.4)
                 .contentShape(Circle())
             
             if isLiquidGlassEnabled {
@@ -254,7 +255,7 @@ struct ContentView: View {
             }
         }
         .buttonStyle(.plain)
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
         .transition(.scale.combined(with: .opacity))
     }
 

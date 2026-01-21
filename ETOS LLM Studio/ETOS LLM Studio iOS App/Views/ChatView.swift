@@ -54,9 +54,7 @@ struct ChatView: View {
     private let navBarVerticalPadding: CGFloat = 8
     private let navBarPillVerticalPadding: CGFloat = 6
     private let navBarPillSpacing: CGFloat = 1
-    private let navBarBlurFadeMinHeight: CGFloat = 80
-    private let navBarBlurFadeMaxHeight: CGFloat = 160
-    private let navBarBlurFadeHeightRatio: CGFloat = 0.15
+    private let navBarBlurFadeHeightRatio: CGFloat = 0.05
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -471,26 +469,26 @@ struct ChatView: View {
 
     private var navBarFadeBlurOverlay: some View {
         GeometryReader { proxy in
-            let adaptiveHeight = min(
-                navBarBlurFadeMaxHeight,
-                max(navBarBlurFadeMinHeight, proxy.size.height * navBarBlurFadeHeightRatio)
-            )
-            BlurView(style: .regular)
-                .mask(
-                    LinearGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color.black, location: 0),
-                            .init(color: Color.black.opacity(0.7), location: 0.35),
-                            .init(color: Color.black.opacity(0), location: 1)
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
+            let adaptiveHeight = proxy.size.height * navBarBlurFadeHeightRatio
+            VStack(spacing: 0) {
+                Color.clear.frame(height: navBarHeight)
+                BlurView(style: .regular)
+                    .mask(
+                        LinearGradient(
+                            gradient: Gradient(stops: [
+                                .init(color: Color.black, location: 0),
+                                .init(color: Color.black.opacity(0.7), location: 0.35),
+                                .init(color: Color.black.opacity(0), location: 1)
+                            ]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: navBarHeight + adaptiveHeight)
-                .ignoresSafeArea(.container, edges: .top)
-                .allowsHitTesting(false)
+                    .frame(height: adaptiveHeight)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(.container, edges: .top)
+            .allowsHitTesting(false)
         }
     }
 
