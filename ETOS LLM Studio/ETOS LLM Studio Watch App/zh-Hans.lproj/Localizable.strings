@@ -315,7 +315,7 @@
 "尚未添加任何 MCP Server。点击右上角的“＋”来新建。" = "尚未添加任何 MCP Server。点击右上角的“＋”来新建。";
 "尚未添加服务器，点击下方入口新建。" = "尚未添加服务器，点击下方入口新建。";
 "尚未选择语音转文字模型。" = "尚未选择语音转文字模型。";
-"局域网调试" = "局域网调试";
+"远程文件访问" = "远程文件访问";
 "嵌入模型" = "嵌入模型";
 "嵌套用 { }，例如 chat_template_kwargs = {thinking = false}" = "嵌套用 { }，例如 chat_template_kwargs = {thinking = false}";
 "嵌套结构使用 {}，例如: chat_template_kwargs = {thinking = false}" = "嵌套结构使用 {}，例如: chat_template_kwargs = {thinking = false}";

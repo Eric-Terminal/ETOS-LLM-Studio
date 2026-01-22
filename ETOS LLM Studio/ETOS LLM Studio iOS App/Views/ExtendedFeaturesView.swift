@@ -34,7 +34,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     LocalDebugView()
                 } label: {
-                    Label("局域网调试", systemImage: "terminal")
+                    Label("远程文件访问", systemImage: "terminal")
                 }
             } footer: {
                 Text("通过局域网远程访问和管理 Documents 目录,方便命令行工具操作。")

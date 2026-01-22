@@ -470,25 +470,22 @@ struct ChatView: View {
     private var navBarFadeBlurOverlay: some View {
         GeometryReader { proxy in
             let adaptiveHeight = proxy.size.height * navBarBlurFadeHeightRatio
-            VStack(spacing: 0) {
-                Color.clear.frame(height: navBarHeight)
-                BlurView(style: .regular)
-                    .mask(
-                        LinearGradient(
-                            gradient: Gradient(stops: [
-                                .init(color: Color.black, location: 0),
-                                .init(color: Color.black.opacity(0.7), location: 0.35),
-                                .init(color: Color.black.opacity(0), location: 1)
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+            BlurView(style: .regular)
+                .mask(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: Color.black, location: 0),
+                            .init(color: Color.black.opacity(0.7), location: 0.35),
+                            .init(color: Color.black.opacity(0), location: 1)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
-                    .frame(height: adaptiveHeight)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea(.container, edges: .top)
-            .allowsHitTesting(false)
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: navBarHeight + adaptiveHeight)
+                .ignoresSafeArea(.container, edges: .top)
+                .allowsHitTesting(false)
         }
     }
 
