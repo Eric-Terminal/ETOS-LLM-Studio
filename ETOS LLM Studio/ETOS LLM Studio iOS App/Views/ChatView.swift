@@ -14,6 +14,7 @@ import Shared
 import UIKit
 import PhotosUI
 import AVFoundation
+import UniformTypeIdentifiers
 
 // MARK: - Telegram 主题颜色
 private struct TelegramColors {
@@ -1298,7 +1299,9 @@ private struct TelegramMessageComposer: View {
     let focus: FocusState<Bool>.Binding
     
     @State private var showImagePicker = false
+    @State private var showCamera = false
     @State private var showAudioRecorder = false
+    @State private var showAudioImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
     private let controlSize: CGFloat = 40
@@ -1307,6 +1310,9 @@ private struct TelegramMessageComposer: View {
             return viewModel.enableLiquidGlass
         }
         return false
+    }
+    private var isCameraAvailable: Bool {
+        UIImagePickerController.isSourceTypeAvailable(.camera)
     }
     
     var body: some View {
@@ -1328,9 +1334,22 @@ private struct TelegramMessageComposer: View {
                     }
 
                     Button {
+                        showCamera = true
+                    } label: {
+                        Label("拍照", systemImage: "camera")
+                    }
+                    .disabled(!isCameraAvailable)
+
+                    Button {
                         showAudioRecorder = true
                     } label: {
                         Label("录制语音", systemImage: "waveform")
+                    }
+
+                    Button {
+                        showAudioImporter = true
+                    } label: {
+                        Label("从录音备忘录上传", systemImage: "music.note.list")
                     }
                 } label: {
                     Image(systemName: "paperclip")
@@ -1392,9 +1411,29 @@ private struct TelegramMessageComposer: View {
                 selectedPhotos = []
             }
         }
+        .sheet(isPresented: $showCamera) {
+            CameraImagePicker(isPresented: $showCamera) { image in
+                if let image {
+                    viewModel.addImageAttachment(image)
+                }
+            }
+        }
         .sheet(isPresented: $showAudioRecorder) {
             AudioRecorderSheet(format: viewModel.audioRecordingFormat) { attachment in
                 viewModel.setAudioAttachment(attachment)
+            }
+        }
+        .fileImporter(
+            isPresented: $showAudioImporter,
+            allowedContentTypes: [.audio],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                importAudioAttachment(from: url)
+            case .failure(let error):
+                print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
             }
         }
     }
@@ -1476,6 +1515,46 @@ private struct TelegramMessageComposer: View {
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty
         return hasText || hasAttachments
+    }
+
+    private func importAudioAttachment(from url: URL) {
+        Task.detached {
+            let needsAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if needsAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let attachment = AudioAttachment(
+                    data: data,
+                    mimeType: audioMimeType(for: url),
+                    format: audioFormat(for: url),
+                    fileName: url.lastPathComponent
+                )
+                await MainActor.run {
+                    viewModel.setAudioAttachment(attachment)
+                }
+            } catch {
+                print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
+    }
+
+    private func audioMimeType(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        if let type = UTType(filenameExtension: ext),
+           let mimeType = type.preferredMIMEType {
+            return mimeType
+        }
+        return ext.isEmpty ? "audio/m4a" : "audio/\(ext)"
+    }
+
+    private func audioFormat(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        return ext.isEmpty ? AudioRecordingFormat.aac.fileExtension : ext
     }
     
     private var actionIconName: String {
@@ -1868,6 +1947,49 @@ private struct MessageComposerView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
+        }
+    }
+}
+
+// MARK: - Camera Image Picker
+
+private struct CameraImagePicker: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
+    let onImagePicked: (UIImage?) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
+        picker.allowsEditing = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let parent: CameraImagePicker
+
+        init(_ parent: CameraImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = info[.originalImage] as? UIImage
+            parent.onImagePicked(image)
+            parent.isPresented = false
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.isPresented = false
         }
     }
 }
