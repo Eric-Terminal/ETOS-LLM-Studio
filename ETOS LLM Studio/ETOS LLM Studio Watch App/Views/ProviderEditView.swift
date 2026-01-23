@@ -30,12 +30,14 @@ struct ProviderEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("基础信息"), footer: Text("API 地址应为基础地址，例如: https://api.openai.com/v1")) {
+                Section(header: Text("基础信息"), footer: Text(apiBaseURLHint)) {
                     TextField("提供商名称", text: $provider.name)
                     TextField("API 地址", text: $provider.baseURL)
                         .font(.caption)
                     Picker("API 格式", selection: $provider.apiFormat) {
                         Text("OpenAI 兼容").tag("openai-compatible")
+                        Text("Gemini").tag("gemini")
+                        Text("Anthropic").tag("anthropic")
                     }
                 }
                 
@@ -67,5 +69,16 @@ struct ProviderEditView: View {
         ChatService.shared.reloadProviders()
         
         dismiss()
+    }
+
+    private var apiBaseURLHint: String {
+        switch provider.apiFormat {
+        case "gemini":
+            return NSLocalizedString("API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta", comment: "")
+        case "anthropic":
+            return NSLocalizedString("API 地址应为基础地址，例如: https://api.anthropic.com/v1", comment: "")
+        default:
+            return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1", comment: "")
+        }
     }
 }

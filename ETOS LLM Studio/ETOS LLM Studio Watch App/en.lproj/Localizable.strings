@@ -699,3 +699,6 @@
 "...\n\n(响应已截断，可在更多操作中查看完整内容)" = "...\n\n(Response truncated. View full content in More actions.)";
 "HTTP %d: %@\n\n" = "HTTP %d: %@\n\n";
 "解析响应失败，请查看原始响应:\n%@" = "Failed to parse response. See raw response:\n%@";
+"API 地址应为基础地址，例如: https://api.openai.com/v1" = "API base URL example: https://api.openai.com/v1";
+"API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API base URL example: https://api.anthropic.com/v1";
+"API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API base URL example: https://generativelanguage.googleapis.com/v1beta";

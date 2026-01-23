@@ -699,3 +699,6 @@
 "...\n\n(响应已截断，可在更多操作中查看完整内容)" = "...\n\n（回應已截斷，可在更多操作中查看完整內容）";
 "HTTP %d: %@\n\n" = "HTTP %d: %@\n\n";
 "解析响应失败，请查看原始响应:\n%@" = "解析回應失敗，請查看原始回應:\n%@";
+"API 地址应为基础地址，例如: https://api.openai.com/v1" = "API 地址應為基礎地址，例如: https://api.openai.com/v1";
+"API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API 地址應為基礎地址，例如: https://api.anthropic.com/v1";
+"API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API 地址應為基礎地址，例如: https://generativelanguage.googleapis.com/v1beta";
