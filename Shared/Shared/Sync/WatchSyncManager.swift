@@ -2,13 +2,15 @@
 // WatchSyncManager.swift
 // ============================================================================
 // 利用 WatchConnectivity 在 iPhone 与 Apple Watch 之间同步应用数据
-// - 支持推送（Push）与请求（Pull）两种模式
+// - 支持双向同步：双方比较差异后合并
 // - 使用文件传输承载 JSON 同步包，避免消息大小限制
-// - 在接收端应用 SyncEngine 合并数据，并根据请求方决定是否回传
+// - 在接收端应用 SyncEngine 合并数据，并自动回传
+// - 支持启动时自动同步，静默处理失败，成功发送通知
 // ============================================================================
 
 import Foundation
 import Combine
+import UserNotifications
 #if canImport(WatchConnectivity)
 import WatchConnectivity
 #endif
@@ -16,11 +18,6 @@ import WatchConnectivity
 #if canImport(WatchConnectivity)
 @MainActor
 public final class WatchSyncManager: NSObject, ObservableObject {
-    
-    public enum Direction {
-        case push  // 当前设备打包数据后推送给对端
-        case pull  // 请求对端推送最新数据
-    }
     
     public enum SyncState: Equatable {
         case idle
@@ -35,57 +32,134 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
     @Published public private(set) var lastUpdatedAt: Date?
     
+    /// 自动同步开关的 UserDefaults key
+    public static let autoSyncEnabledKey = "sync.autoSyncEnabled"
+    
     private var session: WCSession? {
         guard WCSession.isSupported() else { return nil }
         return WCSession.default
     }
     
     private var pendingTransfers: [ObjectIdentifier: SyncOptions] = [:]
+    /// 标记是否为静默同步（启动时自动同步）
+    private var isSilentSync = false
     
     private override init() {
         super.init()
         activateSessionIfNeeded()
+        requestNotificationPermission()
     }
     
     // MARK: - Public API
     
-    public func performSync(direction: Direction, options: SyncOptions) {
+    /// 执行双向同步：发送本地数据并接收对端数据
+    public func performSync(options: SyncOptions, silent: Bool = false) {
+        isSilentSync = silent
+        
         guard let session else {
-            state = .failed("此设备不支持 WatchConnectivity。")
+            if !silent {
+                state = .failed("此设备不支持 WatchConnectivity。")
+            }
             return
         }
         
         guard !options.isEmpty else {
-            state = .failed("请至少勾选一项同步内容。")
+            if !silent {
+                state = .failed("请至少勾选一项同步内容。")
+            }
             return
         }
         
 #if os(iOS)
         guard session.isPaired else {
-            state = .failed("未检测到已配对的对端设备。")
+            if !silent {
+                state = .failed("未检测到已配对的对端设备。")
+            }
             return
         }
 #elseif os(watchOS)
         guard session.isCompanionAppInstalled else {
-            state = .failed("未检测到配套的 iPhone 应用。")
+            if !silent {
+                state = .failed("未检测到配套的 iPhone 应用。")
+            }
             return
         }
 #endif
         
-        guard session.isReachable || direction == .push else {
-            state = .failed("对端不在线，稍后重试。")
+        guard session.isReachable else {
+            if !silent {
+                state = .failed("对端不在线，稍后重试。")
+            }
             return
         }
         
-        state = .syncing(direction == .push ? "正在发送同步数据…" : "正在请求最新数据…")
+        if !silent {
+            state = .syncing("正在同步数据…")
+        }
         lastSummary = .empty
         
-        switch direction {
-        case .push:
-            sendPackage(options: options, isResponse: false)
-        case .pull:
-            requestPackage(options: options)
+        // 双向同步：发送本地数据，对端会自动回传
+        sendPackage(options: options, isResponse: false)
+    }
+    
+    /// 启动时自动同步（静默模式）
+    public func performAutoSyncIfEnabled() {
+        guard UserDefaults.standard.bool(forKey: Self.autoSyncEnabledKey) else { return }
+        
+        // 构建同步选项
+        let options = buildSyncOptionsFromSettings()
+        guard !options.isEmpty else { return }
+        
+        // 延迟一小段时间确保 WCSession 已激活
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2秒
+            performSync(options: options, silent: true)
         }
+    }
+    
+    /// 从用户设置构建同步选项
+    private func buildSyncOptionsFromSettings() -> SyncOptions {
+        var options: SyncOptions = []
+        if UserDefaults.standard.bool(forKey: "sync.options.providers") { options.insert(.providers) }
+        if UserDefaults.standard.bool(forKey: "sync.options.sessions") { options.insert(.sessions) }
+        if UserDefaults.standard.bool(forKey: "sync.options.backgrounds") { options.insert(.backgrounds) }
+        if UserDefaults.standard.bool(forKey: "sync.options.memories") { options.insert(.memories) }
+        if UserDefaults.standard.bool(forKey: "sync.options.mcpServers") { options.insert(.mcpServers) }
+        return options
+    }
+    
+    // MARK: - Notifications
+    
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+    
+    private func sendSyncSuccessNotification(summary: SyncMergeSummary) {
+        guard isSilentSync else { return }
+        guard summary != .empty else { return } // 没有变化不通知
+        
+        let content = UNMutableNotificationContent()
+        content.title = "同步完成"
+        content.body = buildNotificationBody(summary)
+        content.sound = .default
+        
+        let request = UNNotificationRequest(
+            identifier: "sync.success.\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        
+        UNUserNotificationCenter.current().add(request)
+    }
+    
+    private func buildNotificationBody(_ summary: SyncMergeSummary) -> String {
+        var parts: [String] = []
+        if summary.importedProviders > 0 { parts.append("提供商 +\(summary.importedProviders)") }
+        if summary.importedSessions > 0 { parts.append("会话 +\(summary.importedSessions)") }
+        if summary.importedBackgrounds > 0 { parts.append("背景 +\(summary.importedBackgrounds)") }
+        if summary.importedMemories > 0 { parts.append("记忆 +\(summary.importedMemories)") }
+        if summary.importedMCPServers > 0 { parts.append("MCP +\(summary.importedMCPServers)") }
+        return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
     }
     
     // MARK: - Session Handling
@@ -100,32 +174,13 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
-    private func requestPackage(options: SyncOptions) {
-        guard let session else { return }
-        let requestID = UUID()
-        
-        let message: [String: Any] = [
-            "type": "syncRequest",
-            "id": requestID.uuidString,
-            "options": options.rawValue
-        ]
-        
-        session.sendMessage(message, replyHandler: { [weak self] _ in
-            Task { @MainActor in
-                self?.state = .syncing("等待对端回传数据…")
-            }
-        }, errorHandler: { [weak self] error in
-            Task { @MainActor in
-                self?.state = .failed("请求失败: \(error.localizedDescription)")
-            }
-        })
-    }
-    
     private func sendPackage(options: SyncOptions, isResponse: Bool, requestID: String? = nil) {
         guard let session else { return }
         let package = SyncEngine.buildPackage(options: options)
         guard let data = try? JSONEncoder().encode(package) else {
-            state = .failed("无法编码同步数据。")
+            if !isSilentSync {
+                state = .failed("无法编码同步数据。")
+            }
             return
         }
         
@@ -134,7 +189,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         do {
             try data.write(to: tempURL, options: [.atomic])
         } catch {
-            state = .failed("写入同步文件失败: \(error.localizedDescription)")
+            if !isSilentSync {
+                state = .failed("写入同步文件失败: \(error.localizedDescription)")
+            }
             return
         }
         
@@ -164,25 +221,25 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             lastSummary = summary
             lastUpdatedAt = Date()
             
-            if summary == .empty {
-                state = .success(summary)
-            } else {
+            if !isSilentSync {
                 state = .success(summary)
             }
             
+            // 发送通知（仅静默模式下）
+            sendSyncSuccessNotification(summary: summary)
+            
             if !isResponse {
-                // 主动回传对端最新数据，避免单向更新
+                // 主动回传对端最新数据，实现双向同步
                 sendPackage(options: package.options, isResponse: true)
-            } else {
-                state = .success(summary)
             }
             
             if let idString = requestID, let uuid = UUID(uuidString: idString) {
-                // 清理已完成的请求（目前仅用于日志占位，后续可扩展）
                 _ = uuid
             }
         } catch {
-            state = .failed("解析同步包失败: \(error.localizedDescription)")
+            if !isSilentSync {
+                state = .failed("解析同步包失败: \(error.localizedDescription)")
+            }
         }
     }
 }
@@ -195,7 +252,7 @@ extension WatchSyncManager: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        if let error {
+        if let error, !isSilentSync {
             state = .failed("会话激活失败: \(error.localizedDescription)")
         }
     }
@@ -228,8 +285,10 @@ extension WatchSyncManager: WCSessionDelegate {
             defer { pendingTransfers.removeValue(forKey: identifier) }
             
             if let error {
-                state = .failed("发送失败: \(error.localizedDescription)")
-            } else {
+                if !isSilentSync {
+                    state = .failed("发送失败: \(error.localizedDescription)")
+                }
+            } else if !isSilentSync {
                 state = .syncing("等待对端处理…")
             }
         }
@@ -240,20 +299,8 @@ extension WatchSyncManager: WCSessionDelegate {
         didReceiveMessage message: [String : Any],
         replyHandler: @escaping ([String : Any]) -> Void
     ) {
-        guard let type = message["type"] as? String, type == "syncRequest" else {
-            replyHandler([:])
-            return
-        }
-        
-        let optionsValue = message["options"] as? Int ?? 0
-        let requestID = message["id"] as? String
-        let options = SyncOptions(rawValue: optionsValue)
-        
-        Task { @MainActor in
-            state = .syncing("收到同步请求，正在准备数据…")
-            sendPackage(options: options, isResponse: false, requestID: requestID)
-            replyHandler(["status": "processing"])
-        }
+        // 保留消息处理以兼容旧版本
+        replyHandler([:])
     }
 }
 #endif

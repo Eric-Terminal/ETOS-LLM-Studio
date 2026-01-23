@@ -9,34 +9,40 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
     @AppStorage("sync.options.memories") private var syncMemories = false
     @AppStorage("sync.options.mcpServers") private var syncMCPServers = true
+    @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     
     var body: some View {
         List {
+            Section {
+                Toggle("启动时自动同步", isOn: $autoSyncEnabled)
+            }
+            
             Section("同步内容") {
-                Toggle("同步提供商", isOn: $syncProviders)
-                Toggle("同步会话", isOn: $syncSessions)
-                Toggle("同步背景", isOn: $syncBackgrounds)
-                Toggle("同步记忆（仅文本）", isOn: $syncMemories)
-                Toggle("同步 MCP 服务器", isOn: $syncMCPServers)
+                Toggle("提供商", isOn: $syncProviders)
+                Toggle("会话", isOn: $syncSessions)
+                Toggle("背景", isOn: $syncBackgrounds)
+                Toggle("记忆", isOn: $syncMemories)
+                Toggle("MCP", isOn: $syncMCPServers)
             }
             
-            Section("同步操作") {
+            Section {
                 Button {
-                    syncManager.performSync(direction: .pull, options: selectedSyncOptions)
+                    syncManager.performSync(options: selectedSyncOptions)
                 } label: {
-                    Label("从手机同步", systemImage: "arrow.down.backward")
-                }
-                .disabled(selectedSyncOptions.isEmpty || isSyncing)
-                
-                Button {
-                    syncManager.performSync(direction: .push, options: selectedSyncOptions)
-                } label: {
-                    Label("推送到手机", systemImage: "arrow.up.forward")
+                    HStack {
+                        Spacer()
+                        if isSyncing {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label("同步", systemImage: "arrow.triangle.2.circlepath")
+                        Spacer()
+                    }
                 }
                 .disabled(selectedSyncOptions.isEmpty || isSyncing)
             }
             
-            Section("同步状态") {
+            Section("状态") {
                 syncStatusView
             }
         }
@@ -72,7 +78,7 @@ struct DeviceSyncSettingsView: View {
             }
         case .success(let summary):
             VStack(alignment: .leading, spacing: 2) {
-                Label("同步成功", systemImage: "checkmark.circle")
+                Label("成功", systemImage: "checkmark.circle")
                     .foregroundStyle(.green)
                 Text(summaryDescription(summary))
                     .font(.caption2)
@@ -80,7 +86,7 @@ struct DeviceSyncSettingsView: View {
             }
         case .failed(let reason):
             VStack(alignment: .leading, spacing: 2) {
-                Label("同步失败", systemImage: "xmark.circle")
+                Label("失败", systemImage: "xmark.circle")
                     .foregroundStyle(.red)
                 Text(reason)
                     .font(.caption2)

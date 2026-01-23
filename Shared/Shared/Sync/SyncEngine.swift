@@ -148,37 +148,32 @@ public enum SyncEngine {
         var imported = 0
         var skipped = 0
         
+        // 预先计算本地 Provider 的内容哈希
+        var localContentHashes = Set(local.map { computeProviderContentHash($0) })
+        
         for var provider in incoming {
-            let hasSameID = local.firstIndex { $0.id == provider.id }
-            let hasEquivalent = local.firstIndex { $0.isEquivalent(to: provider) }
+            // 优先比对内容哈希，完全相同则跳过
+            let incomingHash = computeProviderContentHash(provider)
+            if localContentHashes.contains(incomingHash) {
+                skipped += 1
+                continue
+            }
             
-            switch (hasSameID, hasEquivalent) {
-            case (.some(let index), _):
-                if local[index] == provider {
-                    skipped += 1
-                    continue
-                }
-                // ID 相同但内容不同，生成新副本避免覆盖
+            // 检查 UUID 是否冲突
+            if local.firstIndex(where: { $0.id == provider.id }) != nil {
+                // ID 冲突但内容不同，生成新 UUID（不添加后缀）
                 provider.id = UUID()
                 provider.models = provider.models.map {
                     var clone = $0
                     clone.id = UUID()
                     return clone
                 }
-                provider.name.append("（同步）")
-                ConfigLoader.saveProvider(provider)
-                local.append(provider)
-                imported += 1
-                
-            case (nil, .some(_)):
-                // 已存在等价配置，忽略
-                skipped += 1
-                
-            case (nil, nil):
-                ConfigLoader.saveProvider(provider)
-                local.append(provider)
-                imported += 1
             }
+            
+            ConfigLoader.saveProvider(provider)
+            local.append(provider)
+            localContentHashes.insert(incomingHash)
+            imported += 1
         }
         
         if imported > 0 {
@@ -200,31 +195,38 @@ public enum SyncEngine {
         var imported = 0
         var skipped = 0
         
+        // 预先计算所有本地会话的内容哈希，用于快速去重
+        var localContentHashes: [String: UUID] = [:]
+        for localSession in sessions {
+            let localMessages = Persistence.loadMessages(for: localSession.id)
+            let hash = computeSessionContentHash(session: localSession, messages: localMessages)
+            localContentHashes[hash] = localSession.id
+        }
+        
         for payload in incoming {
             var session = payload.session
             session.isTemporary = false
             
-            if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-                let localMessages = Persistence.loadMessages(for: session.id)
-                if sessions[index].isEquivalent(to: session) && localMessages.isContentEqual(to: payload.messages) {
-                    skipped += 1
-                    continue
-                }
-                
-                // UUID 冲突但内容不同，新建会话避免覆盖
-                session = makeSyncedCopy(from: session, nameSuffix: "（同步副本）")
-            } else if let duplicate = sessions.first(where: { $0.isEquivalent(to: session) }) {
-                let localMessages = Persistence.loadMessages(for: duplicate.id)
-                if localMessages.isContentEqual(to: payload.messages) {
-                    skipped += 1
-                    continue
-                }
-                session = makeSyncedCopy(from: session, nameSuffix: "（同步冲突）")
+            // 优先使用内容哈希比较：如果内容完全相同，直接跳过
+            let incomingHash = computeSessionContentHash(session: session, messages: payload.messages)
+            if localContentHashes[incomingHash] != nil {
+                skipped += 1
+                continue
+            }
+            
+            // 检查 UUID 是否冲突
+            if sessions.firstIndex(where: { $0.id == session.id }) != nil {
+                // UUID 冲突但内容不同（已经通过哈希检查），生成新 UUID
+                session = makeNewSession(from: session)
+            } else if sessions.first(where: { $0.isEquivalentIgnoringSyncSuffix(to: session) }) != nil {
+                // 名称等价但内容不同，也生成新 UUID（不再叠加后缀）
+                session = makeNewSession(from: session)
             }
             
             // 写入消息文件
             Persistence.saveMessages(payload.messages, for: session.id)
             sessions.insert(session, at: 0)
+            localContentHashes[incomingHash] = session.id
             imported += 1
         }
         
@@ -355,33 +357,27 @@ public enum SyncEngine {
         var imported = 0
         var skipped = 0
         
+        // 预先计算本地 MCP Server 的内容哈希
+        var localContentHashes = Set(local.map { computeMCPServerContentHash($0) })
+        
         for var server in incoming {
-            let hasSameID = local.firstIndex { $0.id == server.id }
-            let hasEquivalent = local.firstIndex { $0.isEquivalent(to: server) }
-            
-            switch (hasSameID, hasEquivalent) {
-            case (.some(let index), _):
-                if local[index] == server {
-                    // 完全相同，跳过
-                    skipped += 1
-                    continue
-                }
-                // ID 相同但内容不同，生成新副本避免覆盖
-                server.id = UUID()
-                server.displayName.append("（同步）")
-                MCPServerStore.save(server)
-                local.append(server)
-                imported += 1
-                
-            case (nil, .some(_)):
-                // 已存在等价配置，忽略
+            // 优先比对内容哈希，完全相同则跳过
+            let incomingHash = computeMCPServerContentHash(server)
+            if localContentHashes.contains(incomingHash) {
                 skipped += 1
-                
-            case (nil, nil):
-                MCPServerStore.save(server)
-                local.append(server)
-                imported += 1
+                continue
             }
+            
+            // 检查 UUID 是否冲突
+            if local.firstIndex(where: { $0.id == server.id }) != nil {
+                // ID 冲突但内容不同，生成新 UUID（不添加后缀）
+                server.id = UUID()
+            }
+            
+            MCPServerStore.save(server)
+            local.append(server)
+            localContentHashes.insert(incomingHash)
+            imported += 1
         }
         
         return (imported, skipped)
@@ -435,15 +431,82 @@ public enum SyncEngine {
 
     // MARK: - Helpers
 
-    /// 创建带有新 UUID 的会话副本，并附加命名后缀
-    private static func makeSyncedCopy(from session: ChatSession, nameSuffix: String) -> ChatSession {
-        let updatedName = session.name + nameSuffix
+    /// 创建带有新 UUID 的会话副本（保留原名称，不添加后缀）
+    private static func makeNewSession(from session: ChatSession) -> ChatSession {
         return ChatSession(
             id: UUID(),
-            name: updatedName,
+            name: session.name,
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt,
             isTemporary: false
         )
+    }
+    
+    /// 计算会话内容的哈希值，用于快速比较
+    /// 包含：会话基础名称（去除同步后缀）、系统提示、消息内容
+    private static func computeSessionContentHash(session: ChatSession, messages: [ChatMessage]) -> String {
+        var hasher = Hasher()
+        // 使用去除同步后缀的基础名称
+        hasher.combine(session.baseNameWithoutSyncSuffix)
+        hasher.combine(session.topicPrompt ?? "")
+        hasher.combine(session.enhancedPrompt ?? "")
+        // 对消息进行哈希
+        for message in messages {
+            hasher.combine(message.role.rawValue)
+            hasher.combine(message.content)
+            // 附件数量和类型也参与比较
+            hasher.combine(message.imageFileNames?.count ?? 0)
+            hasher.combine(message.audioFileName ?? "")
+        }
+        return String(hasher.finalize())
+    }
+    
+    /// 计算 Provider 内容的哈希值，用于快速比较
+    /// 包含：基础名称（去除同步后缀）、URL、API 格式、模型配置
+    private static func computeProviderContentHash(_ provider: Provider) -> String {
+        var hasher = Hasher()
+        hasher.combine(provider.baseNameWithoutSyncSuffix)
+        hasher.combine(provider.baseURL)
+        hasher.combine(provider.apiFormat)
+        // API Keys 不参与哈希（可能是敏感信息且易变）
+        for model in provider.models {
+            hasher.combine(model.modelName)
+            hasher.combine(model.displayName)
+            hasher.combine(model.isActivated)
+        }
+        return String(hasher.finalize())
+    }
+    
+    /// 计算 MCP Server 内容的哈希值，用于快速比较
+    private static func computeMCPServerContentHash(_ server: MCPServerConfiguration) -> String {
+        var hasher = Hasher()
+        hasher.combine(server.baseNameWithoutSyncSuffix)
+        hasher.combine(server.notes ?? "")
+        // Transport 配置
+        switch server.transport {
+        case .http(let endpoint, let apiKey, let headers):
+            hasher.combine("http")
+            hasher.combine(endpoint.absoluteString)
+            hasher.combine(apiKey ?? "")
+            for (key, value) in headers.sorted(by: { $0.key < $1.key }) {
+                hasher.combine(key)
+                hasher.combine(value)
+            }
+        case .httpSSE(let endpoint, let apiKey, let headers):
+            hasher.combine("httpSSE")
+            hasher.combine(endpoint.absoluteString)
+            hasher.combine(apiKey ?? "")
+            for (key, value) in headers.sorted(by: { $0.key < $1.key }) {
+                hasher.combine(key)
+                hasher.combine(value)
+            }
+        case .oauth(let endpoint, let tokenEndpoint, let clientID, _, let scope):
+            hasher.combine("oauth")
+            hasher.combine(endpoint.absoluteString)
+            hasher.combine(tokenEndpoint.absoluteString)
+            hasher.combine(clientID)
+            hasher.combine(scope ?? "")
+        }
+        return String(hasher.finalize())
     }
 }

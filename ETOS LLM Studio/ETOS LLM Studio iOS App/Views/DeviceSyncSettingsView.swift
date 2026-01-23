@@ -9,31 +9,42 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
     @AppStorage("sync.options.memories") private var syncMemories = false
     @AppStorage("sync.options.mcpServers") private var syncMCPServers = true
+    @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     
     var body: some View {
         List {
-            Section("同步内容") {
-                Toggle("同步提供商", isOn: $syncProviders)
-                Toggle("同步会话", isOn: $syncSessions)
-                Toggle("同步背景图片", isOn: $syncBackgrounds)
-                Toggle("同步记忆（仅合并文本）", isOn: $syncMemories)
-                Toggle("同步 MCP 服务器", isOn: $syncMCPServers)
+            Section {
+                Toggle("启动时自动同步", isOn: $autoSyncEnabled)
+            } footer: {
+                Text("启用后，App 启动时会自动与 Apple Watch 同步数据。同步在后台静默进行，成功后会发送通知。")
             }
             
-            Section("同步操作") {
+            Section("同步内容") {
+                Toggle("提供商配置", isOn: $syncProviders)
+                Toggle("会话记录", isOn: $syncSessions)
+                Toggle("背景图片", isOn: $syncBackgrounds)
+                Toggle("记忆（仅合并文本）", isOn: $syncMemories)
+                Toggle("MCP 服务器", isOn: $syncMCPServers)
+            }
+            
+            Section {
                 Button {
-                    syncManager.performSync(direction: .push, options: selectedSyncOptions)
+                    syncManager.performSync(options: selectedSyncOptions)
                 } label: {
-                    Label("推送到手表", systemImage: "arrow.up.right.square")
+                    HStack {
+                        Spacer()
+                        if isSyncing {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        Label("同步", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.headline)
+                        Spacer()
+                    }
                 }
                 .disabled(selectedSyncOptions.isEmpty || isSyncing)
-                
-                Button {
-                    syncManager.performSync(direction: .pull, options: selectedSyncOptions)
-                } label: {
-                    Label("请求手表数据", systemImage: "arrow.down.left.square")
-                }
-                .disabled(selectedSyncOptions.isEmpty || isSyncing)
+            } footer: {
+                Text("点击后将与 Apple Watch 双向同步数据：比较双方差异后，把对方有而本地没有的数据传过来。")
             }
             
             Section("同步状态") {
@@ -77,6 +88,11 @@ struct DeviceSyncSettingsView: View {
                 Text(summaryDescription(summary))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                if let lastUpdated = syncManager.lastUpdatedAt {
+                    Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         case .failed(let reason):
             VStack(alignment: .leading, spacing: 2) {

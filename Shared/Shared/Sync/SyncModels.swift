@@ -162,6 +162,19 @@ public extension Notification.Name {
 
 // MARK: - 模型等价辅助
 
+/// 同步后缀模式（用于识别和移除）
+private let syncSuffixPattern = /（同步副本）|（同步冲突）|（同步）/
+
+/// 去除字符串中所有同步后缀
+private func removeSyncSuffixes(from name: String) -> String {
+    var result = name
+    // 循环移除所有同步后缀（处理多层叠加情况）
+    while let match = result.firstMatch(of: syncSuffixPattern) {
+        result.removeSubrange(match.range)
+    }
+    return result
+}
+
 extension Provider {
     /// 判断两个提供商是否逻辑等价（忽略 ID）
     func isEquivalent(to other: Provider) -> Bool {
@@ -171,6 +184,11 @@ extension Provider {
         apiKeys == other.apiKeys &&
         models.count == other.models.count &&
         zip(models, other.models).allSatisfy { $0.isEquivalent(to: $1) }
+    }
+    
+    /// 去除所有同步后缀的基础名称
+    var baseNameWithoutSyncSuffix: String {
+        removeSyncSuffixes(from: name)
     }
 }
 
@@ -192,6 +210,19 @@ extension ChatSession {
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt
     }
+    
+    /// 去除所有同步后缀的基础名称
+    var baseNameWithoutSyncSuffix: String {
+        removeSyncSuffixes(from: name)
+    }
+    
+    /// 判断两个会话是否逻辑等价（忽略同步后缀、ID 与临时状态）
+    /// 用于同步时判断是否为"同一个"会话的不同版本
+    func isEquivalentIgnoringSyncSuffix(to other: ChatSession) -> Bool {
+        baseNameWithoutSyncSuffix == other.baseNameWithoutSyncSuffix &&
+        topicPrompt == other.topicPrompt &&
+        enhancedPrompt == other.enhancedPrompt
+    }
 }
 
 extension MCPServerConfiguration {
@@ -200,6 +231,11 @@ extension MCPServerConfiguration {
         displayName == other.displayName &&
         notes == other.notes &&
         transport == other.transport
+    }
+    
+    /// 去除所有同步后缀的基础名称
+    var baseNameWithoutSyncSuffix: String {
+        removeSyncSuffixes(from: displayName)
     }
 }
 

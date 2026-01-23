@@ -6,6 +6,7 @@
 // 定义内容:
 // - 定义 App 的主体 (@main)
 // - 设置应用的根视图为 ContentView
+// - 启动时自动同步（如果已启用）
 // ============================================================================
 
 import SwiftUI
@@ -31,6 +32,10 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(syncManager)
+                .onAppear {
+                    // 启动时自动同步（静默模式）
+                    syncManager.performAutoSyncIfEnabled()
+                }
         }
     }
     
