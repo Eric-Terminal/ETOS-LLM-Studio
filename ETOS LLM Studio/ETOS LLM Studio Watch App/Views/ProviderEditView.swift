@@ -16,14 +16,15 @@ struct ProviderEditView: View {
     
     // 正在编辑的提供商
     @State private var provider: Provider
-    // 将第一个 API Key 单独作为状态，以方便绑定
-    @State private var apiKey: String
+    // 保存 API Key 文本，多个 key 用英文逗号分隔
+    @State private var apiKeysText: String
+    @State private var showApiKeys: Bool = false
     
     var isNew: Bool
     
     init(provider: Provider, isNew: Bool = false) {
         self._provider = State(initialValue: provider)
-        self._apiKey = State(initialValue: provider.apiKeys.first ?? "")
+        self._apiKeysText = State(initialValue: provider.apiKeys.joined(separator: ","))
         self.isNew = isNew
     }
     
@@ -41,8 +42,16 @@ struct ProviderEditView: View {
                     }
                 }
                 
-                Section(header: Text("认证"), footer: Text("手表端仅支持编辑第一个 API Key。")) {
-                    TextField("API Key", text: $apiKey)
+                Section(header: Text("认证"), footer: Text(apiKeysHint)) {
+                    Group {
+                        if showApiKeys {
+                            TextField("API Key", text: $apiKeysText)
+                        } else {
+                            SecureField("API Key", text: $apiKeysText)
+                        }
+                    }
+                    
+                    Toggle("显示明文", isOn: $showApiKeys)
                 }
                 
                 Section {
@@ -60,7 +69,7 @@ struct ProviderEditView: View {
     
     private func saveProvider() {
         // 保存前更新 apiKeys 数组
-        provider.apiKeys = [apiKey]
+        provider.apiKeys = parsedApiKeys
         
         // 持久化更改
         ConfigLoader.saveProvider(provider)
@@ -80,5 +89,16 @@ struct ProviderEditView: View {
         default:
             return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1", comment: "")
         }
+    }
+
+    private var apiKeysHint: String {
+        NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
+    }
+
+    private var parsedApiKeys: [String] {
+        apiKeysText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }

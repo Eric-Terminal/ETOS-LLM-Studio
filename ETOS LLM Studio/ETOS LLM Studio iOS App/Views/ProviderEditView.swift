@@ -5,12 +5,13 @@ struct ProviderEditView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var provider: Provider
-    @State private var apiKey: String
+    @State private var apiKeysText: String
+    @State private var showApiKeys: Bool = false
     let isNew: Bool
     
     init(provider: Provider, isNew: Bool = false) {
         _provider = State(initialValue: provider)
-        _apiKey = State(initialValue: provider.apiKeys.first ?? "")
+        _apiKeysText = State(initialValue: provider.apiKeys.joined(separator: ","))
         self.isNew = isNew
     }
     
@@ -29,8 +30,18 @@ struct ProviderEditView: View {
                 }
             }
             
-            Section("认证") {
-                SecureField("API Key", text: $apiKey)
+            Section(header: Text("认证"), footer: Text(apiKeysHint)) {
+                Group {
+                    if showApiKeys {
+                        TextField("API Key", text: $apiKeysText)
+                    } else {
+                        SecureField("API Key", text: $apiKeysText)
+                    }
+                }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                
+                Toggle("显示明文", isOn: $showApiKeys)
             }
         }
         .navigationTitle(isNew ? "添加提供商" : "编辑提供商")
@@ -42,14 +53,14 @@ struct ProviderEditView: View {
                 Button("保存") {
                     saveProvider()
                 }
-                .disabled(provider.name.isEmpty || provider.baseURL.isEmpty || apiKey.isEmpty)
+                .disabled(provider.name.isEmpty || provider.baseURL.isEmpty || parsedApiKeys.isEmpty)
             }
         }
     }
     
     private func saveProvider() {
         var updated = provider
-        updated.apiKeys = [apiKey]
+        updated.apiKeys = parsedApiKeys
         ConfigLoader.saveProvider(updated)
         ChatService.shared.reloadProviders()
         dismiss()
@@ -64,5 +75,16 @@ struct ProviderEditView: View {
         default:
             return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1", comment: "")
         }
+    }
+
+    private var apiKeysHint: String {
+        NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
+    }
+
+    private var parsedApiKeys: [String] {
+        apiKeysText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }

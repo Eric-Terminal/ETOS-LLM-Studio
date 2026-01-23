@@ -351,7 +351,8 @@
 "性能设置" = "Performance settings";
 "懒加载消息数" = "Lazy-load message count";
 "成功响应" = "Successful response";
-"手表端仅支持编辑第一个 API Key。" = "On watch, only the first API key can be edited.";
+"多个 API Key 用英文逗号分隔。" = "Use commas (,) to separate multiple API keys.";
+"显示明文" = "Show API keys";
 "privacy_storage_details_markdown" = "Your device stores the following data:\n• **Chat history** - Your conversations with AI\n• **API configs** - Providers and keys you added\n• **Memory data** - Vectorized RAG memories\n• **App settings** - Your preferences";
 "privacy_storage_details_plain" = "Your device stores the following data:\n• Chat history - Your conversations with AI\n• API configs - Providers and keys you added\n• Memory data - Vectorized RAG memories\n• App settings - Your preferences";
 "ViewModel 应该订阅并接收提供商的更新" = "ViewModel should subscribe to provider updates";
