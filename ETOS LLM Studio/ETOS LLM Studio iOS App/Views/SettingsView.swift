@@ -31,6 +31,12 @@ struct SettingsView: View {
                 } label: {
                     Label("历史会话管理", systemImage: "list.bullet.rectangle")
                 }
+
+                NavigationLink {
+                    ProviderListView().environmentObject(viewModel)
+                } label: {
+                    Label("提供商与模型管理", systemImage: "list.bullet.rectangle.portrait")
+                }
                 
                 let speechModelBinding = Binding<RunnableModel?>(
                     get: { viewModel.selectedSpeechModel },
@@ -58,12 +64,6 @@ struct SettingsView: View {
                     )
                 } label: {
                     Label("高级模型设置", systemImage: "slider.vertical.3")
-                }
-                
-                NavigationLink {
-                    SettingsHubView().environmentObject(viewModel)
-                } label: {
-                    Label("数据与模型设置", systemImage: "square.stack.3d.up")
                 }
                 
                 NavigationLink {

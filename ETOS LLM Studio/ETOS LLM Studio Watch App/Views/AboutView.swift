@@ -215,37 +215,48 @@ private struct PolicySection: View {
 // MARK: - Project Links View
 
 private struct ProjectLinksView: View {
+    
+    private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
+    private let issuesURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues")!
+    
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+        List {
+            // 项目主页链接
+            Link(destination: githubURL) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("项目主页")
-                        .font(.caption.weight(.semibold))
-                    Text("https://github.com/Eric-Terminal/ETOS-LLM-Studio")
-                        .font(.caption2)
+                    HStack {
+                        Label("项目主页", systemImage: "house")
+                        Spacer()
+                        Image(systemName: "safari")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(githubURL.absoluteString)
+                        .font(.system(size: 9))
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
-                
-                Divider()
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("问题反馈")
-                        .font(.caption.weight(.semibold))
-                    Text("请在 GitHub Issues 提交问题或功能建议")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Divider()
-                
-                Text("请在 iPhone 上访问以上链接")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 8)
             }
-            .padding(.horizontal)
+            
+            // 问题反馈链接
+            Link(destination: issuesURL) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Label("问题反馈", systemImage: "exclamationmark.bubble")
+                        Spacer()
+                        Image(systemName: "safari")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(issuesURL.absoluteString)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            
         }
+        .listStyle(.plain)
         .navigationTitle("项目链接")
     }
 }

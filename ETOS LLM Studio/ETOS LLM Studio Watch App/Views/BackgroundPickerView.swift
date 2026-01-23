@@ -20,6 +20,13 @@ struct BackgroundPickerView: View {
     let allBackgrounds: [String]
     @Binding var selectedBackground: String
     
+    // MARK: - 私有状态
+    
+    @State private var backgrounds: [String] = []
+    @State private var deleteCandidate: String?
+    @State private var isShowingDeleteConfirmation = false
+    @State private var deleteErrorMessage: String?
+    
     // MARK: - 私有属性
     
     private let gridSpacing: CGFloat = 10
@@ -44,18 +51,19 @@ struct BackgroundPickerView: View {
             
             ScrollView {
                 LazyVGrid(columns: columns, spacing: gridSpacing) {
-                    ForEach(allBackgrounds, id: \.self) { bgName in
+                    ForEach(backgrounds, id: \.self) { bgName in
                         Button(action: {
                             selectedBackground = bgName
                         }) {
                             FileImage(filename: bgName)
                                 .aspectRatio(previewAspectRatio, contentMode: .fill)
                                 .frame(width: itemWidth, height: itemHeight)
-                                .cornerRadius(10)
-                                .overlay(
+                                .clipped()
+                                .overlay {
                                     RoundedRectangle(cornerRadius: 10)
-                                        .stroke(selectedBackground == bgName ? Color.blue : Color.clear, lineWidth: 3)
-                                )
+                                        .stroke(selectedBackground == bgName ? Color.accentColor : .clear, lineWidth: 3)
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                         .buttonStyle(.plain)
                     }
@@ -65,6 +73,68 @@ struct BackgroundPickerView: View {
             }
         }
         .navigationTitle("选择背景")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    deleteCandidate = selectedBackground
+                    isShowingDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .disabled(selectedBackground.isEmpty)
+            }
+        }
+        .alert("删除背景", isPresented: $isShowingDeleteConfirmation, presenting: deleteCandidate) { name in
+            Button("删除", role: .destructive) {
+                deleteCandidate = nil
+                Task {
+                    await deleteBackground(named: name)
+                }
+            }
+            Button("取消", role: .cancel) {
+                deleteCandidate = nil
+            }
+        } message: { _ in
+            Text("确定删除这张背景吗？")
+        }
+        .alert("无法删除背景", isPresented: Binding(get: {
+            deleteErrorMessage != nil
+        }, set: { newValue in
+            if !newValue {
+                deleteErrorMessage = nil
+            }
+        })) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "")
+        }
+        .task {
+            let loaded = ConfigLoader.loadBackgroundImages()
+            backgrounds = loaded.isEmpty ? allBackgrounds : loaded
+        }
+    }
+    
+    // MARK: - 私有方法
+    
+    private func deleteBackground(named name: String) async {
+        let url = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(name)
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            await MainActor.run {
+                deleteErrorMessage = "删除失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
+        await MainActor.run {
+            let updated = ConfigLoader.loadBackgroundImages()
+            backgrounds = updated
+            if !updated.contains(selectedBackground) {
+                selectedBackground = updated.first ?? ""
+            }
+            NotificationCenter.default.post(name: .syncBackgroundsUpdated, object: nil)
+        }
     }
 }
 
@@ -81,24 +151,25 @@ private struct FileImage: View {
             if let image = uiImage {
                 Image(uiImage: image)
                     .resizable()
+                    .scaledToFill()
             } else {
                 // 加载失败或加载中时显示的占位符
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(Image(systemName: "photo"))
+                ZStack {
+                    Rectangle().fill(Color.gray.opacity(0.3))
+                    ProgressView()
+                }
             }
         }
-        .onAppear(perform: loadImage)
+        .task {
+            await loadImage()
+        }
     }
     
-    private func loadImage() {
-        // 在后台线程加载图片以避免卡顿 UI
-        DispatchQueue.global().async {
-            let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(filename)
-            if let image = UIImage(contentsOfFile: fileURL.path) {
-                DispatchQueue.main.async {
-                    self.uiImage = image
-                }
+    private func loadImage() async {
+        let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(filename)
+        if let image = UIImage(contentsOfFile: fileURL.path) {
+            await MainActor.run {
+                self.uiImage = image
             }
         }
     }

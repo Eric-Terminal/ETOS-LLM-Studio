@@ -86,6 +86,16 @@
 		079679BF2F1279CC006562BC /* Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0733CA502F23B450007931E8 /* Exceptions for "ETOS LLM Studio Watch App" folder in "ETOS LLM Studio Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0796794E2F1278F2006562BC /* ETOS LLM Studio Watch App */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		073CA6DD2E8CFD65004516A0 /* ETOS LLM Studio iOS App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -94,6 +104,9 @@
 		};
 		079679502F1278F3006562BC /* ETOS LLM Studio Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0733CA502F23B450007931E8 /* Exceptions for "ETOS LLM Studio Watch App" folder in "ETOS LLM Studio Watch App" target */,
+			);
 			path = "ETOS LLM Studio Watch App";
 			sourceTree = "<group>";
 		};
@@ -604,6 +617,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				"INFOPLIST_KEY_NSBonjourServices[sdk=*]" = "_http._tcp _ws._tcp";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以连接到调试服务器,用于配置管理和文件传输";
+				INFOPLIST_KEY_NSCameraUsageDescription = "需要访问相机以拍照发送给AI模型";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以发送图片给AI模型";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -647,6 +661,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				"INFOPLIST_KEY_NSBonjourServices[sdk=*]" = "_http._tcp _ws._tcp";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以连接到调试服务器,用于配置管理和文件传输";
+				INFOPLIST_KEY_NSCameraUsageDescription = "需要访问相机以拍照发送给AI模型";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以发送图片给AI模型";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -727,6 +742,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -766,6 +782,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";

@@ -52,12 +52,12 @@
     </div>
 
     <h1>プライバシーポリシー</h1>
-    <p class="last-updated">発効日：2026年1月9日</p>
+    <p class="last-updated">発効日：2026年1月23日</p>
 
     <section>
         <h2>1. はじめに</h2>
-        <p>ETOS LLM Studio は、お客様のプライバシーを非常に重視しています。本アプリは<strong>「ローカルファースト (Local-first)」</strong>の設計理念を採用しています。中央サーバーは運用しておらず、チャットログ、音声録音、個人情報を保存することはありません。</p>
-        <p><strong>基本原則：データは完全にあなたのコントロール下にあります。</strong></p>
+        <p>ETOS LLM Studio は、お客様のプライバシーを非常に重視しています。本アプリは<strong>「ローカルファースト (Local-first)」</strong>の設計理念を採用しています。チャットログ、音声録音、個人識別情報を保存することは決してありません。</p>
+        <p><strong>基本原則：機密データは完全にあなたのコントロール下にあります。</strong></p>
     </section>
 
     <section>
@@ -67,22 +67,31 @@
             <li><strong>AI 処理：</strong> 送信したデータ（テキスト、音声、画像）は、お客様自身が設定した<strong>サードパーティ AI サービスプロバイダー</strong>（例：OpenAI, Anthropic, Cloudflare または自作モデル）へ<strong>直接</strong>送信されます。私たちはこれらのトラフィックを傍受、処理、保存することはありません。</li>
             <li><strong>音声とオーディオ：</strong> マイクへのアクセス権限は、お客様が能動的に録音を開始したときのみ有効になります。録音ファイルは、書き起こしや分析のために設定された API へ送信する目的でのみ使用されます。</li>
             <li><strong>マルチデバイス同期：</strong> iPhone と Apple Watch 間のデータ同期は、<strong>WatchConnectivity</strong> フレームワークを通じて行われます。これは直接的な暗号化されたピアツーピア通信であり、同期プロセス中にデータが個人のデバイスエコシステムの外に出ることはありません。</li>
-            <li><strong>ローカルネットワーク：</strong> 任意の「ローカルデバッグ」機能でのみ使用され、ローカルネットワーク内のブラウザ経由でアプリ内のファイルを管理するために使用されます。</li>
+            <li><strong>ローカルネットワーク：</strong> 任意の「リモートファイルアクセス」機能でのみ使用され、ローカルネットワーク内の専用ツール経由でアプリ内のファイルや設定を管理するために使用されます。</li>
         </ul>
     </section>
 
     <section>
         <h2>3. 透明性へのコミットメント</h2>
-        <p>ETOS LLM Studio には行動追跡コードは<strong>含まれておらず</strong>、分析データも収集しません。ギーク向けのツールとして、私たちは完全な透明性と、LLM ワークフローに対するユーザーの絶対的な所有権を追求しています。</p>
+        <p>ETOS LLM Studio は、<strong>具体的な行動パスを追跡しない</strong>ことを約束し、チャット内容を決して読み取りません。プロジェクトの健全性を評価するために、最小限の匿名アクティビティステータスデータ（例：デイリーアクティブユーザー、バージョン分布）のみを収集します。</p>
+    </section>
+
+    <section>
+        <h2>4. 免責事項</h2>
+        <ul>
+            <li><strong>中立的なツール属性：</strong> 本アプリは汎用的な LLM クライアントツールとしてのみ機能します。アプリは利便性のために一部の商用 API サービスのエンドポイントをプリセットすることがありますが、デフォルトでは有効な API キーやアクセス資格情報は**含まれていません**。</li>
+            <li><strong>コンテンツの責任：</strong> すべての AI 生成コンテンツ（テキスト、画像、音声を含む）は、お客様自身が設定したサードパーティのサービスプロバイダーによって生成されます。私たちはそのコンテンツを管理、介入、または審査することはできないため、生成されたコンテンツの正確性、合法性、またはコンプライアンスについて一切の責任を負いません。</li>
+            <li><strong>サービスの選択：</strong> お客様が使用することを選択したすべての API サービス（ドキュメントで推奨しているものを含む）は、お客様個人の選択によるものです。これらのサービスの利用に伴う費用およびリスクは、お客様自身の負担となります。</li>
+        </ul>
     </section>
 
     <section>
         <div class="contact-info">
-            <h2>4. お問い合わせ</h2>
+            <h2>5. お問い合わせ</h2>
             <p>本プライバシーポリシーに関するご質問は、以下までご連絡ください：</p>
             <p><strong>Eric Terminal</strong><br>
-            Email: <a href="mailto:ericterminal@gmail.com">ericterminal@gmail.com</a><br>
-            GitHub: <a href="https://github.com/Eric-Terminal">Eric-Terminal</a></p>
+            Email: <a href="mailto:contact@ericterminal.com">contact@ericterminal.com</a><br>
+            Project Homepage: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio">https://github.com/Eric-Terminal/ETOS-LLM-Studio</a></p>
         </div>
     </section>
 

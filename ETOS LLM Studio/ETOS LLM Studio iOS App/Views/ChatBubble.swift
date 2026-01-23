@@ -63,31 +63,57 @@ struct ChatBubble: View {
         TelegramBubbleShape(isOutgoing: isOutgoing)
     }
     
+    /// 图片占位符文本（各语言版本）
+    private static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+    
+    /// 判断消息是否只有图片（没有实际文字内容）
+    private var hasOnlyImages: Bool {
+        guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else {
+            return false
+        }
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isPlaceholderOnly = trimmedContent.isEmpty || Self.imagePlaceholders.contains(trimmedContent)
+        return isPlaceholderOnly && message.reasoningContent == nil && message.toolCalls == nil && message.audioFileName == nil
+    }
+    
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
-            Spacer(minLength: 20)
+            // 用户消息靠右：左边放 Spacer
+            if isOutgoing {
+                Spacer(minLength: 20)
+            }
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
-                // 气泡内容
-                VStack(alignment: .leading, spacing: 6) {
-                    contentStack
-                    
-                    // 版本指示器（Telegram 风格：右下角）
-                    if message.hasMultipleVersions {
-                        HStack(spacing: 6) {
-                            compactVersionIndicator
-                        }
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
+                // 图片附件 - 作为气泡显示
+                if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+                    imageAttachmentsView(fileNames: imageFileNames)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(bubbleBackground)
-                .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+                
+                // 气泡内容（仅当有非图片内容时显示）
+                if !hasOnlyImages {
+                    VStack(alignment: .leading, spacing: 6) {
+                        textContentStack
+                        
+                        // 版本指示器（Telegram 风格：右下角）
+                        if message.hasMultipleVersions {
+                            HStack(spacing: 6) {
+                                compactVersionIndicator
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(bubbleBackground)
+                    .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+                }
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.88, alignment: isOutgoing ? .trailing : .leading)
             
-            Spacer(minLength: 20)
+            // AI 消息靠左：右边放 Spacer
+            if !isOutgoing {
+                Spacer(minLength: 20)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -201,11 +227,7 @@ struct ChatBubble: View {
     // MARK: - Content
     
     @ViewBuilder
-    private var contentStack: some View {
-        if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
-            imageAttachmentsView(fileNames: imageFileNames)
-        }
-        
+    private var textContentStack: some View {
         // 思考过程 (Telegram 风格折叠)
         if let reasoning = message.reasoningContent,
            !reasoning.isEmpty {
@@ -283,38 +305,59 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func imageAttachmentsView(fileNames: [String]) -> some View {
-        let columns = [GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 4)]
-        LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(fileNames, id: \.self) { fileName in
-                if let image = loadImage(fileName: fileName) {
-                    Button {
-                        imagePreview = ImagePreviewPayload(image: image)
-                    } label: {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(minWidth: 80, maxWidth: 140)
-                            .frame(height: 100)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        HStack(spacing: 0) {
+            if isOutgoing {
+                Spacer(minLength: 0)
+            }
+            
+            // 根据图片数量决定布局
+            let columns: [GridItem] = fileNames.count == 1
+                ? [GridItem(.flexible(minimum: 150, maximum: 220))]
+                : [GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 4)]
+            
+            LazyVGrid(columns: columns, alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+                ForEach(fileNames, id: \.self) { fileName in
+                    if let image = loadImage(fileName: fileName) {
+                        Button {
+                            imagePreview = ImagePreviewPayload(image: image)
+                        } label: {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(
+                                    minWidth: fileNames.count == 1 ? 150 : 80,
+                                    maxWidth: fileNames.count == 1 ? 220 : 140
+                                )
+                                .frame(height: fileNames.count == 1 ? 180 : 100)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .shadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(height: fileNames.count == 1 ? 180 : 100)
+                            .overlay(
+                                VStack(spacing: 4) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(.secondary)
+                                    Text("图片丢失")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            )
+                            .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.secondary.opacity(0.15))
-                        .frame(height: 100)
-                        .overlay(
-                            VStack(spacing: 4) {
-                                Image(systemName: "photo")
-                                    .font(.system(size: 18))
-                                    .foregroundStyle(.secondary)
-                                Text("图片丢失")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        )
                 }
             }
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.65, alignment: isOutgoing ? .trailing : .leading)
+            
+            if !isOutgoing {
+                Spacer(minLength: 0)
+            }
         }
+        .frame(maxWidth: .infinity)
     }
     
     private func loadImage(fileName: String) -> UIImage? {

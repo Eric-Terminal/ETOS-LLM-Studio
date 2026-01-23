@@ -30,7 +30,7 @@ struct MemorySettingsView: View {
             Section {
                 let options = viewModel.embeddingModelOptions
                 if options.isEmpty {
-                    Text("暂无可用模型，请先在“数据与模型设置”中启用。")
+                    Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {

@@ -43,9 +43,11 @@ struct SettingsView: View {
                         dismiss()
                     }
                     
-                    Button("开启新对话") {
+                    Button {
                         viewModel.createNewSession()
                         dismiss()
+                    } label: {
+                        Label("开启新对话", systemImage: "plus.message")
                     }
                 }
 
@@ -73,6 +75,10 @@ struct SettingsView: View {
                     )) {
                         Label("历史会话管理", systemImage: "list.bullet.rectangle")
                     }
+
+                    NavigationLink(destination: ProviderListView().environmentObject(viewModel)) {
+                        Label("提供商与模型管理", systemImage: "list.bullet.rectangle.portrait")
+                    }
                     
                     let speechModelBinding = Binding<RunnableModel?>(
                         get: { viewModel.selectedSpeechModel },
@@ -95,10 +101,6 @@ struct SettingsView: View {
                         speechModels: viewModel.speechModels
                     )) {
                         Label("模型高级设置", systemImage: "brain.head.profile")
-                    }
-                    
-                    NavigationLink(destination: SettingsHubView().environmentObject(viewModel)) {
-                        Label("数据与模型设置", systemImage: "key.icloud.fill")
                     }
                     
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {

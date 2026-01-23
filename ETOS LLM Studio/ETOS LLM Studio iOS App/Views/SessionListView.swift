@@ -122,6 +122,12 @@ struct SessionListView: View {
     
     /// 选择会话时检测是否为 Ghost Session
     private func selectSession(_ session: ChatSession) {
+        if session.isTemporary {
+            viewModel.setCurrentSession(session)
+            dismiss()
+            return
+        }
+
         let messageFile = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
         
         // 检查消息文件是否存在

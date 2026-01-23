@@ -49,7 +49,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     LocalDebugView()
                 } label: {
-                    Label("局域网调试", systemImage: "terminal")
+                    Label("远程文件访问", systemImage: "terminal")
                         .font(.headline)
                         .padding(.vertical, 4)
                 }
@@ -57,7 +57,22 @@ public struct ExtendedFeaturesView: View {
                 Text("通过局域网远程访问和管理 Documents 目录。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
-            }        }
+            }
+
+            Section {
+                NavigationLink {
+                    StorageManagementView()
+                } label: {
+                    Label("存储管理", systemImage: "internaldrive")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("查看并清理本地模型、文件与缓存。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+        }
         .navigationTitle("拓展功能")
     }
 }

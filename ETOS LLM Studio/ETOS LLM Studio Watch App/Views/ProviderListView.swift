@@ -25,10 +25,17 @@ struct ProviderListView: View {
                     Text(provider.name)
                 }
                 .swipeActions(edge: .leading) {
-                    NavigationLink(destination: ProviderActionsView(provider: provider).environmentObject(viewModel)) {
-                        Label("更多", systemImage: "ellipsis")
+                    NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
+                        Label("编辑", systemImage: "pencil")
                     }
-                    .tint(.gray)
+                    .tint(.blue)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        deleteProvider(provider)
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
                 }
             }
         }
@@ -42,8 +49,15 @@ struct ProviderListView: View {
         }
         .sheet(isPresented: $isAddingProvider) {
             // 传递一个全新的、空的提供商对象给编辑视图
-            ProviderEditView(provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"), isNew: true)
-                .environmentObject(viewModel)
+            NavigationStack {
+                ProviderEditView(provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"), isNew: true)
+                    .environmentObject(viewModel)
+            }
         }
+    }
+
+    private func deleteProvider(_ provider: Provider) {
+        ConfigLoader.deleteProvider(provider)
+        ChatService.shared.reloadProviders()
     }
 }

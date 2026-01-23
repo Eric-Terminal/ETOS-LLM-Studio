@@ -57,6 +57,11 @@ class DebugServer:
         self.download_file_count = 0  # 下载文件计数
         self.download_expected_total = 0  # 期望下载总数
         
+        # 兼容模式下载相关
+        self.compatible_download_in_progress = False  # 兼容模式下载进行中
+        self.compatible_file_list = None  # 待下载的文件路径列表
+        self.compatible_download_event = None  # 用于等待响应的事件
+        
     async def handle_websocket(self, websocket):
         """处理来自设备的 WebSocket 连接"""
         self.device_connection = websocket
@@ -146,6 +151,13 @@ class DebugServer:
                 self.download_file_count = data.get('index', 0)
                 self.download_expected_total = data.get('total', 0)
                 self.save_stream_file(data)
+            # 兼容模式：收到文件路径列表（list_all 响应）
+            elif 'paths' in data and 'total' in data:
+                self.compatible_file_list = data.get('paths', [])
+                total = data.get('total', 0)
+                print(f"\n📋 收到文件列表: {total} 个文件")
+                if self.compatible_download_event:
+                    self.compatible_download_event.set()
             # 批量下载：所有文件（WebSocket模式）
             elif 'items' in data:
                 if DEBUG_MODE:
@@ -153,9 +165,15 @@ class DebugServer:
                 self.print_directory_list(data['items'])
             elif 'files' in data:
                 self.save_all_files(data['files'])
-            # 单文件下载
+            # 单文件下载（兼容模式或普通下载）
             elif 'data' in data and 'path' in data:
-                self.save_downloaded_file(data)
+                if self.compatible_download_in_progress:
+                    # 兼容模式：保存到指定目录，然后触发事件
+                    self.save_compatible_file(data)
+                    if self.compatible_download_event:
+                        self.compatible_download_event.set()
+                else:
+                    self.save_downloaded_file(data)
             elif message:
                 print(f"\n✅ 成功: {message}")
         else:
@@ -269,6 +287,112 @@ class DebugServer:
             if DEBUG_MODE:
                 import traceback
                 print(f"[DEBUG] 错误堆栈: {traceback.format_exc()}")
+    
+    def save_compatible_file(self, data):
+        """保存兼容模式下载的单个文件"""
+        path = data.get('path', '')
+        b64_data = data.get('data', '')
+        size = data.get('size', 0)
+        
+        if not path or not b64_data:
+            print(f"  ⚠️  跳过空文件数据: path={path}")
+            return False
+        
+        try:
+            file_data = base64.b64decode(b64_data)
+            
+            local_path = self.stream_backup_dir / path
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(local_path, 'wb') as f:
+                f.write(file_data)
+            
+            self.download_file_count += 1
+            progress = f"[{self.download_file_count}/{self.download_expected_total}]"
+            print(f"  {progress} ✅ {path} ({self.format_size(size)})")
+            return True
+                
+        except Exception as e:
+            print(f"  ❌ {path}: {e}")
+            return False
+    
+    async def download_all_compatible(self):
+        """兼容模式下载：先获取文件列表，再逐个下载"""
+        import aiohttp
+        
+        # 重置状态
+        self.compatible_download_in_progress = True
+        self.compatible_file_list = None
+        self.compatible_download_event = asyncio.Event()
+        self.download_file_count = 0
+        
+        # 创建下载目录
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.stream_backup_dir = Path('downloads') / f'Documents_compatible_{timestamp}'
+        self.stream_backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            # 步骤1：发送 list_all 命令获取文件列表
+            print("📋 步骤1: 获取设备文件列表...")
+            await self.send_command({"command": "list_all"})
+            
+            # 等待响应（最多30秒）
+            try:
+                await asyncio.wait_for(self.compatible_download_event.wait(), timeout=30.0)
+            except asyncio.TimeoutError:
+                print("❌ 获取文件列表超时！")
+                return
+            
+            if not self.compatible_file_list:
+                print("❌ 未收到文件列表")
+                return
+            
+            file_list = self.compatible_file_list
+            total = len(file_list)
+            self.download_expected_total = total
+            
+            if total == 0:
+                print("📁 Documents 目录为空")
+                return
+            
+            print(f"\n📦 步骤2: 开始逐个下载 {total} 个文件到: {self.stream_backup_dir}")
+            
+            success_count = 0
+            fail_count = 0
+            
+            # 步骤2：逐个下载每个文件
+            for i, file_path in enumerate(file_list):
+                # 重置事件用于等待下一个响应
+                self.compatible_download_event.clear()
+                
+                # 发送下载命令
+                await self.send_command({"command": "download", "path": file_path})
+                
+                # 等待文件响应（最多60秒每个文件）
+                try:
+                    await asyncio.wait_for(self.compatible_download_event.wait(), timeout=60.0)
+                    success_count += 1
+                except asyncio.TimeoutError:
+                    print(f"  ❌ [{i+1}/{total}] 下载超时: {file_path}")
+                    fail_count += 1
+                
+                # 小延迟避免过快请求
+                await asyncio.sleep(0.1)
+            
+            print(f"\n✅ 兼容模式下载完成！")
+            print(f"   📊 总计: {total}, 成功: {success_count}, 失败: {fail_count}")
+            print(f"💾 保存目录: {self.stream_backup_dir}")
+            
+        except Exception as e:
+            print(f"❌ 兼容模式下载出错: {e}")
+            if DEBUG_MODE:
+                import traceback
+                print(f"[DEBUG] 错误堆栈: {traceback.format_exc()}")
+        finally:
+            self.compatible_download_in_progress = False
+            self.compatible_file_list = None
+            self.compatible_download_event = None
+            self.stream_backup_dir = None
             
     async def send_command(self, command):
         """发送命令到设备（支持 WebSocket 和 HTTP 模式）"""
@@ -347,13 +471,14 @@ class DebugServer:
             print("4. 🗑️  删除设备文件/目录")
             print("5. 📁 在设备创建目录")
             print("6. 📦 一键下载 Documents 目录")
-            print("7. 🚀 一键上传覆盖 Documents")
-            print("8. 🔄 刷新连接")
+            print("7. 📦 一键下载（兼容模式）")
+            print("8. 🚀 一键上传覆盖 Documents")
+            print("9. 🔄 刷新连接")
             print("0. 🚪 退出")
             print(f"{'='*60}")
             
             try:
-                choice = await asyncio.to_thread(input, "请选择操作 [0-8]: ")
+                choice = await asyncio.to_thread(input, "请选择操作 [0-9]: ")
             except EOFError:
                 await asyncio.sleep(1)
                 continue
@@ -420,6 +545,12 @@ class DebugServer:
                     print("💡 提示：如果长时间没有进度，可能是设备端发送格式有问题")
             
             elif choice == '7':
+                # 兼容模式：先获取文件列表，再逐个下载
+                print("📦 兼容模式：准备下载整个 Documents 目录...")
+                print("💡 此模式会先获取文件列表，然后逐个请求下载")
+                await self.download_all_compatible()
+            
+            elif choice == '8':
                 local_dir = await asyncio.to_thread(input, "本地目录路径 (将覆盖设备 Documents): ")
                 if os.path.isdir(local_dir):
                     confirm = await asyncio.to_thread(input, f"⚠️  确认覆盖设备 Documents 目录? 所有数据将被删除! (yes/no): ")
@@ -470,7 +601,7 @@ class DebugServer:
                 else:
                     print("❌ 目录不存在")
                     
-            elif choice == '8':
+            elif choice == '9':
                 if self.device_connection:
                     await self.send_command({"command": "ping"})
                     await asyncio.sleep(0.5)

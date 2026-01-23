@@ -165,6 +165,7 @@ public class OpenAIAdapter: APIAdapter {
             return nil
         }
         request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: randomApiKey, to: &request)
         
         let apiMessages: [[String: Any]] = messages.map { msg in
             var dict: [String: Any] = ["role": msg.role.rawValue]
@@ -324,6 +325,7 @@ public class OpenAIAdapter: APIAdapter {
             return nil
         }
         request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
+        applyHeaderOverrides(provider.headerOverrides, apiKey: randomApiKey, to: &request)
         
         return request
     }
@@ -429,6 +431,7 @@ public class OpenAIAdapter: APIAdapter {
         
         let boundary = "Boundary-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         var body = Data()
         body.appendMultipartField(name: "model", value: model.model.modelName, boundary: boundary)
@@ -471,6 +474,7 @@ public class OpenAIAdapter: APIAdapter {
         request.timeoutInterval = 300  // 5分钟，支持大批量文本嵌入
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         var payload: [String: Any] = [
             "model": model.model.modelName,
@@ -532,6 +536,17 @@ private extension Data {
         appendString("Content-Type: \(mimeType)\r\n\r\n")
         append(data)
         appendString("\r\n")
+    }
+}
+
+private let apiKeyPlaceholder = "{api_key}"
+
+private func applyHeaderOverrides(_ overrides: [String: String], apiKey: String?, to request: inout URLRequest) {
+    guard !overrides.isEmpty else { return }
+    let resolvedKey = apiKey ?? ""
+    for (key, value) in overrides {
+        let resolvedValue = apiKey == nil ? value : value.replacingOccurrences(of: apiKeyPlaceholder, with: resolvedKey)
+        request.setValue(resolvedValue, forHTTPHeaderField: key)
     }
 }
 
@@ -645,6 +660,7 @@ public class GeminiAdapter: APIAdapter {
         request.timeoutInterval = 600
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         // 分离系统消息和普通消息
         var systemInstruction: [String: Any]? = nil
@@ -827,6 +843,7 @@ public class GeminiAdapter: APIAdapter {
         
         var request = URLRequest(url: modelsURL)
         request.httpMethod = "GET"
+        applyHeaderOverrides(provider.headerOverrides, apiKey: apiKey, to: &request)
         return request
     }
     
@@ -974,6 +991,7 @@ public class GeminiAdapter: APIAdapter {
         request.httpMethod = "POST"
         request.timeoutInterval = 300
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         var payload: [String: Any]
         if texts.count == 1 {
@@ -1155,6 +1173,7 @@ public class AnthropicAdapter: APIAdapter {
         // Anthropic 使用 x-api-key header
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         // 分离系统消息和普通消息
         var systemPrompt: String? = nil

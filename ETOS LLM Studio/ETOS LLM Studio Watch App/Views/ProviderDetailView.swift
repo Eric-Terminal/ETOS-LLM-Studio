@@ -18,32 +18,39 @@ struct ProviderDetailView: View {
     @State private var isFetchingModels = false
     @State private var fetchError: String?
     @State private var showErrorAlert = false
-    @State private var isInEditMode = false
-    @State private var pendingDeleteOffsets: IndexSet?
-    @State private var showDeleteModelConfirm = false
+    @State private var hasAutoFetchedModels = false
     
     var body: some View {
+        let activeIndices = activeModelIndices()
+        let inactiveIndices = inactiveModelIndices()
+
         ZStack {
             List {
-                if isInEditMode {
-                    ForEach($provider.models) { $model in
-                        NavigationLink(destination: ModelSettingsView(model: $model)) {
-                            Text(model.displayName)
+                Section("已添加") {
+                    if activeIndices.isEmpty {
+                        Text("暂无已添加模型")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(activeIndices, id: \.self) { index in
+                            modelRow(for: index, isActive: true)
+                        }
+                        .onDelete { offsets in
+                            deleteModels(at: offsets, in: activeIndices)
                         }
                     }
-                    .onDelete(perform: prepareDeleteModel)
-                } else {
-                    ForEach($provider.models) { $model in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(model.displayName)
-                                Spacer()
-                                Toggle("激活", isOn: $model.isActivated)
-                                    .labelsHidden()
-                            }
+                }
+
+                Section("未添加") {
+                    if inactiveIndices.isEmpty {
+                        Text("暂无未添加模型")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(inactiveIndices, id: \.self) { index in
+                            modelRow(for: index, isActive: false)
                         }
                     }
-                    .onDelete(perform: prepareDeleteModel)
                 }
             }
             
@@ -55,6 +62,11 @@ struct ProviderDetailView: View {
             }
         }
         .navigationTitle(provider.name)
+        .task {
+            guard !hasAutoFetchedModels, !isFetchingModels else { return }
+            hasAutoFetchedModels = true
+            await fetchAndMergeModels()
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { isAddingModel = true }) {
@@ -64,16 +76,11 @@ struct ProviderDetailView: View {
             
             ToolbarItem(placement: .bottomBar) {
                 HStack {
-                    Button(action: { isInEditMode.toggle() }) {
-                        Image(systemName: isInEditMode ? "checkmark.circle.fill" : "pencil")
-                    }
-                    
-                    Spacer()
-                    
                     Button(action: { Task { await fetchAndMergeModels() } }) {
                         Image(systemName: "icloud.and.arrow.down")
                     }
                     .disabled(isFetchingModels)
+                    Spacer()
                 }
             }
         }
@@ -87,16 +94,6 @@ struct ProviderDetailView: View {
             Button("好的") { }
         } message: {
             Text(fetchError ?? "发生未知错误。")
-        }
-        .alert("确认删除模型", isPresented: $showDeleteModelConfirm) {
-            Button("删除", role: .destructive) {
-                performDeleteModel()
-            }
-            Button("取消", role: .cancel) {
-                pendingDeleteOffsets = nil
-            }
-        } message: {
-            Text(deleteModelWarningMessage())
         }
     }
     
@@ -121,33 +118,11 @@ struct ProviderDetailView: View {
         }
     }
     
-    private func prepareDeleteModel(at offsets: IndexSet) {
-        pendingDeleteOffsets = offsets
-        showDeleteModelConfirm = true
-    }
-    
-    private func performDeleteModel() {
-        guard let offsets = pendingDeleteOffsets else { return }
-        provider.models.remove(atOffsets: offsets)
-        pendingDeleteOffsets = nil
-    }
-    
-    private func deleteModelWarningMessage() -> String {
-        guard let offsets = pendingDeleteOffsets else {
-            return "删除后无法恢复这些模型。"
-        }
-        let names = offsets.compactMap { index -> String? in
-            guard provider.models.indices.contains(index) else { return nil }
-            return provider.models[index].displayName
-        }
-        if names.isEmpty {
-            return "删除后无法恢复这些模型。"
-        } else {
-            return String(
-                format: NSLocalizedString("您将删除以下模型：%@。此操作无法撤销。", comment: ""),
-                names.joined(separator: NSLocalizedString("、", comment: ""))
-            )
-        }
+    private func deleteModels(at offsets: IndexSet, in indices: [Int]) {
+        let mappedOffsets = IndexSet(offsets.compactMap { offset in
+            indices.indices.contains(offset) ? indices[offset] : nil
+        })
+        provider.models.remove(atOffsets: mappedOffsets)
     }
     
     private func saveChanges() {
@@ -156,6 +131,39 @@ struct ProviderDetailView: View {
         
         ConfigLoader.saveProvider(providerToSave)
         ChatService.shared.reloadProviders()
+    }
+
+    private func activeModelIndices() -> [Int] {
+        provider.models.indices.filter { provider.models[$0].isActivated }
+    }
+
+    private func inactiveModelIndices() -> [Int] {
+        provider.models.indices.filter { !provider.models[$0].isActivated }
+    }
+
+    @ViewBuilder
+    private func modelRow(for index: Int, isActive: Bool) -> some View {
+        if isActive {
+            NavigationLink(destination: ModelSettingsView(model: $provider.models[index], provider: provider)) {
+                Text(provider.models[index].displayName)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(provider.models[index].displayName)
+                    Spacer()
+                    if !isActive {
+                        Button {
+                            provider.models[index].isActivated = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("激活模型")
+                    }
+                }
+            }
+        }
     }
 }
 
