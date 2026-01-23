@@ -67,12 +67,6 @@ struct SettingsView: View {
                 }
                 
                 NavigationLink {
-                    SettingsHubView().environmentObject(viewModel)
-                } label: {
-                    Label("数据与模型设置", systemImage: "square.stack.3d.up")
-                }
-                
-                NavigationLink {
                     ExtendedFeaturesView().environmentObject(viewModel)
                 } label: {
                     Label("拓展功能", systemImage: "puzzlepiece.extension")

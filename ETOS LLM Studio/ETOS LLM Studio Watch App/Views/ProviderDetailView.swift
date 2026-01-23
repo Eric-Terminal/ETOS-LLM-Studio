@@ -26,9 +26,9 @@ struct ProviderDetailView: View {
 
         ZStack {
             List {
-                Section("已激活") {
+                Section("已添加") {
                     if activeIndices.isEmpty {
-                        Text("暂无已激活模型")
+                        Text("暂无已添加模型")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     } else {
@@ -41,9 +41,9 @@ struct ProviderDetailView: View {
                     }
                 }
 
-                Section("未激活") {
+                Section("未添加") {
                     if inactiveIndices.isEmpty {
-                        Text("暂无未激活模型")
+                        Text("暂无未添加模型")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     } else {
