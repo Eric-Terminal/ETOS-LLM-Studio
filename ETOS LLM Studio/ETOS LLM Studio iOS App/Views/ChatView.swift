@@ -48,6 +48,7 @@ struct ChatView: View {
     @State private var showModelPickerPanel = false
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
+    @Namespace private var modelPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
@@ -58,6 +59,8 @@ struct ChatView: View {
     private let navBarBlurFadeHeightRatio: CGFloat = 0.05
     private let modelPickerHeightRatio: CGFloat = 0.4
     private let modelPickerCornerRadius: CGFloat = 24
+    private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
+    private let modelPickerMorphID = "modelPickerMorph"
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -430,27 +433,7 @@ struct ChatView: View {
 
     @ViewBuilder
     private var navBarPillBackground: some View {
-        if isLiquidGlassEnabled {
-            if #available(iOS 26.0, *) {
-                Capsule()
-                    .fill(Color.clear)
-                    .glassEffect(.clear, in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .fill(navBarGlassOverlayColor)
-                    )
-            } else {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Capsule()
-                            .fill(navBarGlassOverlayColor)
-                    )
-            }
-        } else {
-            Capsule()
-                .fill(.ultraThinMaterial)
-        }
+        modelPickerMorphBackground(isExpanded: false, isSource: !showModelPickerPanel)
     }
 
     private var modelSubtitle: String {
@@ -483,13 +466,13 @@ struct ChatView: View {
     }
 
     private func toggleModelPickerPanel() {
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+        withAnimation(modelPickerAnimation) {
             showModelPickerPanel.toggle()
         }
     }
 
     private func dismissModelPickerPanel() {
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+        withAnimation(modelPickerAnimation) {
             showModelPickerPanel = false
         }
     }
@@ -523,7 +506,11 @@ struct ChatView: View {
                 )
                 .shadow(color: .black.opacity(0.18), radius: 20, x: 0, y: 10)
                 .offset(y: navBarHeight + 6)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(
+                    .move(edge: .top)
+                    .combined(with: .opacity)
+                    .combined(with: .scale(scale: 0.96, anchor: .top))
+                )
             }
         }
     }
@@ -627,31 +614,42 @@ struct ChatView: View {
 
     @ViewBuilder
     private var modelPickerPanelBackground: some View {
+        modelPickerMorphBackground(isExpanded: true, isSource: showModelPickerPanel)
+    }
+
+    @ViewBuilder
+    private func modelPickerMorphBackground(isExpanded: Bool, isSource: Bool) -> some View {
+        let cornerRadius = isExpanded ? modelPickerCornerRadius : navBarPillHeight / 2
+
         ZStack {
-            RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
-                .fill(modelPickerPanelBaseTint)
+            if isExpanded {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(modelPickerPanelBaseTint)
+            }
+
             if isLiquidGlassEnabled {
                 if #available(iOS 26.0, *) {
-                    RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(Color.clear)
-                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous))
+                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                                 .fill(navBarGlassOverlayColor)
                         )
                 } else {
-                    RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(.ultraThinMaterial)
                         .overlay(
-                            RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                                 .fill(navBarGlassOverlayColor)
                         )
                 }
             } else {
-                RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(.ultraThinMaterial)
             }
         }
+        .matchedGeometryEffect(id: modelPickerMorphID, in: modelPickerNamespace, isSource: isSource)
     }
 
     /// Telegram 风格输入栏

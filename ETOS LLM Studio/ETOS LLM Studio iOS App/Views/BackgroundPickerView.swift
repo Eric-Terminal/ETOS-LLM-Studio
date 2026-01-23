@@ -135,15 +135,15 @@ struct BackgroundPickerView: View {
         }
         
         guard let data = try? await item.loadTransferable(type: Data.self) else {
-            await showSaveError("无法读取图片数据。")
+            showSaveError("无法读取图片数据。")
             return
         }
         guard let image = UIImage(data: data) else {
-            await showSaveError("无法解析图片。")
+            showSaveError("无法解析图片。")
             return
         }
         guard let jpegData = image.jpegData(compressionQuality: 0.9) else {
-            await showSaveError("无法处理图片格式。")
+            showSaveError("无法处理图片格式。")
             return
         }
         
@@ -154,7 +154,7 @@ struct BackgroundPickerView: View {
         do {
             try jpegData.write(to: url, options: [.atomic])
         } catch {
-            await showSaveError("保存失败：\(error.localizedDescription)")
+            showSaveError("保存失败：\(error.localizedDescription)")
             return
         }
         
