@@ -45,6 +45,7 @@ struct ChatView: View {
     @State private var messageToDelete: ChatMessage?
     @State private var messageVersionToDelete: ChatMessage?
     @State private var fullErrorContent: FullErrorContentPayload?
+    @State private var showModelPickerPanel = false
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     
@@ -55,6 +56,8 @@ struct ChatView: View {
     private let navBarPillVerticalPadding: CGFloat = 6
     private let navBarPillSpacing: CGFloat = 1
     private let navBarBlurFadeHeightRatio: CGFloat = 0.05
+    private let modelPickerHeightRatio: CGFloat = 0.4
+    private let modelPickerCornerRadius: CGFloat = 24
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -75,6 +78,9 @@ struct ChatView: View {
     }
     private var navBarGlassOverlayColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.2)
+    }
+    private var modelPickerPanelBaseTint: Color {
+        colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
     
     var body: some View {
@@ -166,6 +172,10 @@ struct ChatView: View {
                     .overlay(alignment: .top) {
                         navBarFadeBlurOverlay
                     }
+                }
+
+                if showModelPickerPanel {
+                    modelPickerOverlay
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -294,8 +304,8 @@ struct ChatView: View {
 
             Spacer(minLength: 12)
 
-            Menu {
-                navBarModelMenuContent
+            Button {
+                toggleModelPickerPanel()
             } label: {
                 navBarCenterPill
             }
@@ -339,29 +349,6 @@ struct ChatView: View {
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    private var navBarModelMenuContent: some View {
-        if viewModel.activatedModels.isEmpty {
-            Button("暂无可用模型") {}
-                .disabled(true)
-        } else {
-            ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                Button {
-                    viewModel.setSelectedModel(runnable)
-                } label: {
-                    if runnable.id == viewModel.selectedModel?.id {
-                        Label(
-                            "\(runnable.model.displayName) · \(runnable.provider.name)",
-                            systemImage: "checkmark"
-                        )
-                    } else {
-                        Text("\(runnable.model.displayName) · \(runnable.provider.name)")
-                    }
-                }
-            }
-        }
-    }
-
     private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 17, weight: .semibold))
@@ -397,7 +384,7 @@ struct ChatView: View {
                     .allowsHitTesting(false)
             }
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 22)
         .padding(.vertical, navBarPillVerticalPadding)
         .frame(height: navBarPillHeight)
         .background(
@@ -405,8 +392,14 @@ struct ChatView: View {
         )
         .overlay(
             Capsule()
-                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+                .stroke(showModelPickerPanel ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
         )
+        .overlay(alignment: .trailing) {
+            Image(systemName: showModelPickerPanel ? "chevron.up" : "chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarSubtitle)
+                .padding(.trailing, 10)
+        }
         .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
     }
 
@@ -486,6 +479,178 @@ struct ChatView: View {
                 .frame(height: navBarHeight + adaptiveHeight)
                 .ignoresSafeArea(.container, edges: .top)
                 .allowsHitTesting(false)
+        }
+    }
+
+    private func toggleModelPickerPanel() {
+        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+            showModelPickerPanel.toggle()
+        }
+    }
+
+    private func dismissModelPickerPanel() {
+        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+            showModelPickerPanel = false
+        }
+    }
+
+    private var modelPickerOverlay: some View {
+        GeometryReader { proxy in
+            let panelHeight = proxy.size.height * modelPickerHeightRatio
+            ZStack(alignment: .top) {
+                Color.black.opacity(colorScheme == .dark ? 0.35 : 0.2)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        dismissModelPickerPanel()
+                    }
+                    .transition(.opacity)
+
+                VStack(spacing: 12) {
+                    modelPickerHeader
+
+                    if viewModel.activatedModels.isEmpty {
+                        modelPickerEmptyState
+                    } else {
+                        modelPickerList
+                    }
+                }
+                .frame(width: proxy.size.width, height: panelHeight, alignment: .top)
+                .background(modelPickerPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 0.6)
+                )
+                .shadow(color: .black.opacity(0.18), radius: 20, x: 0, y: 10)
+                .offset(y: navBarHeight + 6)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var modelPickerHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("选择模型")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(TelegramColors.navBarText)
+                Text("切换当前对话的模型")
+                    .font(.system(size: 12))
+                    .foregroundColor(TelegramColors.navBarSubtitle)
+            }
+
+            Spacer()
+
+            Button {
+                dismissModelPickerPanel()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(TelegramColors.navBarText)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("关闭")
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 14)
+    }
+
+    private var modelPickerEmptyState: some View {
+        VStack(spacing: 8) {
+            Text("暂无可用模型")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+            Text("请先在设置中启用模型")
+                .font(.system(size: 12))
+                .foregroundColor(TelegramColors.navBarSubtitle)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 16)
+    }
+
+    private var modelPickerList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                    modelPickerRow(runnable)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+    }
+
+    private func modelPickerRow(_ runnable: RunnableModel) -> some View {
+        let isSelected = runnable.id == viewModel.selectedModel?.id
+        let baseFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+        let selectedFill = colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
+
+        return Button {
+            viewModel.setSelectedModel(runnable)
+            dismissModelPickerPanel()
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(runnable.model.displayName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(TelegramColors.navBarText)
+                    Text(runnable.provider.name)
+                        .font(.system(size: 12))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+                }
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(isSelected ? TelegramColors.sendButtonColor : TelegramColors.navBarSubtitle.opacity(0.5))
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? selectedFill : baseFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(isSelected ? 0.35 : 0.15), lineWidth: isSelected ? 0.8 : 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var modelPickerPanelBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                .fill(modelPickerPanelBaseTint)
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
+                } else {
+                    RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
+                }
+            } else {
+                RoundedRectangle(cornerRadius: modelPickerCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
         }
     }
 
