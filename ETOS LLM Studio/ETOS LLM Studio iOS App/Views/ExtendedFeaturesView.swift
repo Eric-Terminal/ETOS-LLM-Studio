@@ -40,7 +40,20 @@ struct ExtendedFeaturesView: View {
                 Text("通过局域网远程访问和管理 Documents 目录,方便命令行工具操作。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            }        }
+            }
+
+            Section {
+                NavigationLink {
+                    StorageManagementView()
+                } label: {
+                    Label("存储管理", systemImage: "internaldrive")
+                }
+            } footer: {
+                Text("管理本地模型、文件与缓存占用。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
         .navigationTitle("拓展功能")
         .listStyle(.insetGrouped)
     }

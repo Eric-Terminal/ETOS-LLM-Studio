@@ -73,6 +73,10 @@ struct SettingsView: View {
                     )) {
                         Label("历史会话管理", systemImage: "list.bullet.rectangle")
                     }
+
+                    NavigationLink(destination: ProviderListView().environmentObject(viewModel)) {
+                        Label("提供商与模型管理", systemImage: "list.bullet.rectangle.portrait")
+                    }
                     
                     let speechModelBinding = Binding<RunnableModel?>(
                         get: { viewModel.selectedSpeechModel },

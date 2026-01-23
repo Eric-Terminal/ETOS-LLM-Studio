@@ -1451,7 +1451,23 @@ public class ChatService {
 
         var errorDescription: String? {
             switch self {
-            case .badStatusCode(let code, _): return "服务器响应错误，状态码: \(code)"
+            case .badStatusCode(let code, let responseBody):
+                let bodyDescription: String
+                if let responseBody, let text = String(data: responseBody, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+                    bodyDescription = text
+                } else if let responseBody, !responseBody.isEmpty {
+                    bodyDescription = String(
+                        format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                        responseBody.count
+                    )
+                } else {
+                    bodyDescription = NSLocalizedString("响应体为空。", comment: "Empty response body")
+                }
+                return String(
+                    format: NSLocalizedString("服务器响应错误，状态码: %d\n\n响应体:\n%@", comment: "Bad status code with response body"),
+                    code,
+                    bodyDescription
+                )
             case .adapterNotFound(let format): return "找不到适用于 '\(format)' 格式的 API 适配器。"
             case .requestBuildFailed(let provider): return "无法为 '\(provider)' 构建请求。"
             case .featureUnavailable(let provider): return "当前提供商 \(provider) 暂未实现语音转文字能力。"
