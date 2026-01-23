@@ -371,20 +371,10 @@ struct ChatView: View {
 
             Spacer(minLength: 12)
 
-            Menu {
-                Button {
-                    viewModel.createNewSession()
-                } label: {
-                    Label("新建会话", systemImage: "square.and.pencil")
-                }
-
-                Button {
-                    navigationDestination = .settings
-                } label: {
-                    Label("设置", systemImage: "gearshape")
-                }
+            Button {
+                navigationDestination = .settings
             } label: {
-                navBarIconLabel(systemName: "ellipsis", accessibilityLabel: "更多")
+                navBarIconLabel(systemName: "gearshape", accessibilityLabel: "设置")
             }
             .buttonStyle(.plain)
         }
@@ -1307,7 +1297,6 @@ private struct TelegramMessageComposer: View {
     let stopAction: () -> Void
     let focus: FocusState<Bool>.Binding
     
-    @State private var showAttachmentMenu = false
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
@@ -1331,8 +1320,18 @@ private struct TelegramMessageComposer: View {
             // 主输入栏
             HStack(alignment: .bottom, spacing: 12) {
                 // 附件按钮
-                Button {
-                    showAttachmentMenu = true
+                Menu {
+                    Button {
+                        showImagePicker = true
+                    } label: {
+                        Label("选择图片", systemImage: "photo")
+                    }
+
+                    Button {
+                        showAudioRecorder = true
+                    } label: {
+                        Label("录制语音", systemImage: "waveform")
+                    }
                 } label: {
                     Image(systemName: "paperclip")
                         .font(.system(size: 18, weight: .semibold))
@@ -1341,15 +1340,6 @@ private struct TelegramMessageComposer: View {
                         .background(glassCircleBackground)
                 }
                 .buttonStyle(.plain)
-                .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
-                    Button("选择图片") {
-                        showImagePicker = true
-                    }
-                    Button("录制语音") {
-                        showAudioRecorder = true
-                    }
-                    Button("取消", role: .cancel) {}
-                }
                 
                 // 输入框容器
                 HStack(alignment: .bottom, spacing: 8) {
