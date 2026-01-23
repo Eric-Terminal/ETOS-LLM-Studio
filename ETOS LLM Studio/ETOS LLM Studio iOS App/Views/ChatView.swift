@@ -46,9 +46,17 @@ struct ChatView: View {
     @State private var messageVersionToDelete: ChatMessage?
     @State private var fullErrorContent: FullErrorContentPayload?
     @State private var showModelPickerPanel = false
+    @State private var showSessionPickerPanel = false
+    @State private var editingSessionID: UUID?
+    @State private var sessionDraftName: String = ""
+    @State private var sessionToDelete: ChatSession?
+    @State private var sessionInfo: SessionPickerInfoPayload?
+    @State private var showGhostSessionAlert = false
+    @State private var ghostSession: ChatSession?
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
+    @Namespace private var sessionPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
@@ -61,6 +69,9 @@ struct ChatView: View {
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     private let modelPickerMorphID = "modelPickerMorph"
+    private let sessionPickerHeightRatio: CGFloat = 0.6
+    private let sessionPickerCornerRadius: CGFloat = 26
+    private let sessionPickerMorphID = "sessionPickerMorph"
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -180,6 +191,10 @@ struct ChatView: View {
                 if showModelPickerPanel {
                     modelPickerOverlay
                 }
+
+                if showSessionPickerPanel {
+                    sessionPickerOverlay
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
@@ -204,6 +219,9 @@ struct ChatView: View {
             }
             .sheet(item: $fullErrorContent) { payload in
                 FullErrorContentSheet(payload: payload)
+            }
+            .sheet(item: $sessionInfo) { info in
+                SessionPickerInfoSheet(payload: info)
             }
             .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
                 Button("仅复制消息历史") {
@@ -261,6 +279,39 @@ struct ChatView: View {
                 }
             } message: {
                 Text("删除后将无法恢复此版本的内容。")
+            }
+            .alert("确认删除会话", isPresented: Binding(
+                get: { sessionToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        sessionToDelete = nil
+                    }
+                }
+            )) {
+                Button("删除", role: .destructive) {
+                    if let session = sessionToDelete {
+                        viewModel.deleteSessions([session])
+                    }
+                    sessionToDelete = nil
+                }
+                Button("取消", role: .cancel) {
+                    sessionToDelete = nil
+                }
+            } message: {
+                Text("删除后所有消息也将被移除，操作不可恢复。")
+            }
+            .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
+                Button("删除幽灵", role: .destructive) {
+                    if let session = ghostSession {
+                        viewModel.deleteSessions([session])
+                    }
+                    ghostSession = nil
+                }
+                Button("稍后处理", role: .cancel) {
+                    ghostSession = nil
+                }
+            } message: {
+                Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
             }
         }
     }
@@ -324,12 +375,6 @@ struct ChatView: View {
                 }
 
                 Button {
-                    navigationDestination = .sessions
-                } label: {
-                    Label("会话列表", systemImage: "list.bullet")
-                }
-
-                Button {
                     navigationDestination = .settings
                 } label: {
                     Label("设置", systemImage: "gearshape")
@@ -345,11 +390,27 @@ struct ChatView: View {
 
     private var navBarSessionButton: some View {
         Button {
-            navigationDestination = .sessions
+            toggleSessionPickerPanel()
         } label: {
-            navBarIconLabel(systemName: "list.bullet", accessibilityLabel: "会话列表")
+            navBarSessionLabel
         }
         .buttonStyle(.plain)
+    }
+
+    private var navBarSessionLabel: some View {
+        Image(systemName: "list.bullet")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(TelegramColors.navBarText)
+            .frame(width: navBarIconSize, height: navBarIconSize)
+            .background(
+                sessionPickerButtonBackground
+            )
+            .overlay(
+                Circle()
+                    .stroke(showSessionPickerPanel ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
+            )
+            .contentShape(Circle())
+            .accessibilityLabel("会话列表")
     }
 
     private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
@@ -436,6 +497,72 @@ struct ChatView: View {
         modelPickerMorphBackground(isExpanded: false, isSource: !showModelPickerPanel)
     }
 
+    private var sessionPickerButtonBackground: some View {
+        sessionPickerMorphBackground(isExpanded: false, isSource: !showSessionPickerPanel)
+    }
+
+    private var sessionPickerPanelBackground: some View {
+        sessionPickerMorphBackground(isExpanded: true, isSource: showSessionPickerPanel)
+    }
+
+    @ViewBuilder
+    private func sessionPickerMorphBackground(isExpanded: Bool, isSource: Bool) -> some View {
+        if isExpanded {
+            ZStack {
+                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                    .fill(modelPickerPanelBaseTint)
+
+                if isLiquidGlassEnabled {
+                    if #available(iOS 26.0, *) {
+                        RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                            .fill(Color.clear)
+                            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                                    .fill(navBarGlassOverlayColor)
+                            )
+                    } else {
+                        RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                                    .fill(navBarGlassOverlayColor)
+                            )
+                    }
+                } else {
+                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            }
+            .matchedGeometryEffect(id: sessionPickerMorphID, in: sessionPickerNamespace, isSource: isSource)
+        } else {
+            ZStack {
+                if isLiquidGlassEnabled {
+                    if #available(iOS 26.0, *) {
+                        Circle()
+                            .fill(Color.clear)
+                            .glassEffect(.clear, in: Circle())
+                            .overlay(
+                                Circle()
+                                    .fill(navBarGlassOverlayColor)
+                            )
+                    } else {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                Circle()
+                                    .fill(navBarGlassOverlayColor)
+                            )
+                    }
+                } else {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                }
+            }
+            .matchedGeometryEffect(id: sessionPickerMorphID, in: sessionPickerNamespace, isSource: isSource)
+        }
+    }
+
     private var modelSubtitle: String {
         if let selectedModel = viewModel.selectedModel {
             return "\(selectedModel.model.displayName) · \(selectedModel.provider.name)"
@@ -467,6 +594,9 @@ struct ChatView: View {
 
     private func toggleModelPickerPanel() {
         withAnimation(modelPickerAnimation) {
+            if showSessionPickerPanel {
+                showSessionPickerPanel = false
+            }
             showModelPickerPanel.toggle()
         }
     }
@@ -474,6 +604,21 @@ struct ChatView: View {
     private func dismissModelPickerPanel() {
         withAnimation(modelPickerAnimation) {
             showModelPickerPanel = false
+        }
+    }
+
+    private func toggleSessionPickerPanel() {
+        withAnimation(modelPickerAnimation) {
+            if showModelPickerPanel {
+                showModelPickerPanel = false
+            }
+            showSessionPickerPanel.toggle()
+        }
+    }
+
+    private func dismissSessionPickerPanel() {
+        withAnimation(modelPickerAnimation) {
+            showSessionPickerPanel = false
         }
     }
 
@@ -528,20 +673,12 @@ struct ChatView: View {
 
             Spacer()
 
-            Button {
+            pickerHeaderActionButton(
+                systemName: "xmark",
+                accessibilityLabel: "关闭"
+            ) {
                 dismissModelPickerPanel()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(TelegramColors.navBarText)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
-                    )
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("关闭")
         }
         .padding(.horizontal, 18)
         .padding(.top, 14)
@@ -650,6 +787,212 @@ struct ChatView: View {
             }
         }
         .matchedGeometryEffect(id: modelPickerMorphID, in: modelPickerNamespace, isSource: isSource)
+    }
+
+    private var sessionPickerOverlay: some View {
+        GeometryReader { proxy in
+            let panelHeight = proxy.size.height * sessionPickerHeightRatio
+            ZStack(alignment: .top) {
+                Color.black.opacity(colorScheme == .dark ? 0.35 : 0.2)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        dismissSessionPickerPanel()
+                    }
+                    .transition(.opacity)
+
+                VStack(spacing: 12) {
+                    sessionPickerHeader
+
+                    if viewModel.chatSessions.isEmpty {
+                        sessionPickerEmptyState
+                    } else {
+                        sessionPickerList
+                    }
+
+                    sessionPickerFooter
+                }
+                .frame(width: proxy.size.width, height: panelHeight, alignment: .top)
+                .background(sessionPickerPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 0.6)
+                )
+                .shadow(color: .black.opacity(0.2), radius: 22, x: 0, y: 12)
+                .offset(y: navBarHeight + 6)
+                .transition(
+                    .move(edge: .top)
+                    .combined(with: .opacity)
+                    .combined(with: .scale(scale: 0.96, anchor: .top))
+                )
+            }
+        }
+    }
+
+    private var sessionPickerHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("会话")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(TelegramColors.navBarText)
+                Text("快速切换与管理")
+                    .font(.system(size: 12))
+                    .foregroundColor(TelegramColors.navBarSubtitle)
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                pickerHeaderActionButton(
+                    systemName: "plus",
+                    accessibilityLabel: "开启新对话"
+                ) {
+                    viewModel.createNewSession()
+                    editingSessionID = nil
+                    sessionDraftName = ""
+                    dismissSessionPickerPanel()
+                }
+
+                pickerHeaderActionButton(
+                    systemName: "xmark",
+                    accessibilityLabel: "关闭"
+                ) {
+                    dismissSessionPickerPanel()
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 14)
+    }
+
+    private var sessionPickerEmptyState: some View {
+        VStack(spacing: 8) {
+            Text("暂无会话")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+            Text("创建一个新对话开始吧")
+                .font(.system(size: 12))
+                .foregroundColor(TelegramColors.navBarSubtitle)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 16)
+    }
+
+    private var sessionPickerList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(viewModel.chatSessions) { session in
+                    sessionPickerRow(session)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var sessionPickerFooter: some View {
+        Text(String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count))
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(TelegramColors.navBarSubtitle)
+            .padding(.bottom, 14)
+    }
+
+    private func pickerHeaderActionButton(
+        systemName: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle()
+                        .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func sessionPickerRow(_ session: ChatSession) -> some View {
+        let isCurrent = session.id == viewModel.currentSession?.id
+        let isEditing = editingSessionID == session.id
+        let baseFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+        let selectedFill = colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
+
+        return SessionPickerRow(
+            session: session,
+            isCurrent: isCurrent,
+            isEditing: isEditing,
+            draftName: isEditing ? $sessionDraftName : .constant(session.name),
+            onCommit: { newName in
+                viewModel.updateSessionName(session, newName: newName)
+                editingSessionID = nil
+            },
+            onSelect: {
+                selectSessionFromPicker(session)
+            },
+            onRename: {
+                editingSessionID = session.id
+                sessionDraftName = session.name
+            },
+            onBranch: { copyHistory in
+                let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
+                viewModel.setCurrentSession(newSession)
+                dismissSessionPickerPanel()
+            },
+            onDeleteLastMessage: {
+                viewModel.deleteLastMessage(for: session)
+            },
+            onDelete: {
+                sessionToDelete = session
+            },
+            onCancelRename: {
+                editingSessionID = nil
+                sessionDraftName = session.name
+            },
+            onInfo: {
+                sessionInfo = SessionPickerInfoPayload(
+                    session: session,
+                    messageCount: viewModel.messageCount(for: session),
+                    isCurrent: isCurrent
+                )
+            }
+        )
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isCurrent ? selectedFill : baseFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(isCurrent ? 0.3 : 0.15), lineWidth: isCurrent ? 0.8 : 0.5)
+        )
+    }
+
+    private func selectSessionFromPicker(_ session: ChatSession) {
+        if session.isTemporary {
+            editingSessionID = nil
+            viewModel.setCurrentSession(session)
+            dismissSessionPickerPanel()
+            return
+        }
+
+        let messageFile = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
+
+        if !FileManager.default.fileExists(atPath: messageFile.path) {
+            ghostSession = session
+            showGhostSessionAlert = true
+        } else {
+            editingSessionID = nil
+            viewModel.setCurrentSession(session)
+            dismissSessionPickerPanel()
+        }
     }
 
     /// Telegram 风格输入栏
@@ -1705,6 +2048,188 @@ private struct AudioRecorderSheet: View {
         let seconds = Int(duration) % 60
         let tenths = Int((duration.truncatingRemainder(dividingBy: 1)) * 10)
         return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
+    }
+}
+
+// MARK: - Session Picker
+
+/// 会话信息弹窗的数据载体，用于隔离 UI 与业务模型
+private struct SessionPickerInfoPayload: Identifiable {
+    let id = UUID()
+    let session: ChatSession
+    let messageCount: Int
+    let isCurrent: Bool
+}
+
+/// 会话信息弹窗，展示基础状态与唯一标识
+private struct SessionPickerInfoSheet: View {
+    let payload: SessionPickerInfoPayload
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("会话概览") {
+                    LabeledContent("名称") {
+                        Text(payload.session.name)
+                    }
+                    LabeledContent("状态") {
+                        Text(payload.isCurrent ? "当前会话" : "历史会话")
+                            .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
+                    }
+                    LabeledContent("消息数量") {
+                        Text(String(format: NSLocalizedString("%d 条", comment: ""), payload.messageCount))
+                    }
+                }
+
+                if let topic = payload.session.topicPrompt, !topic.isEmpty {
+                    Section("主题提示") {
+                        Text(topic)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
+                    Section("增强提示词") {
+                        Text(enhanced)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("唯一标识") {
+                    Text(payload.session.id.uuidString)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+                }
+            }
+            .navigationTitle("会话信息")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+private struct SessionPickerRow: View {
+    let session: ChatSession
+    let isCurrent: Bool
+    let isEditing: Bool
+    @Binding var draftName: String
+
+    let onCommit: (String) -> Void
+    let onSelect: () -> Void
+    let onRename: () -> Void
+    let onBranch: (Bool) -> Void
+    let onDeleteLastMessage: () -> Void
+    let onDelete: () -> Void
+    let onCancelRename: () -> Void
+    let onInfo: () -> Void
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if isEditing {
+                TextField("会话名称", text: $draftName)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focused)
+                    .onSubmit {
+                        commit()
+                    }
+                    .onAppear { focused = true }
+
+                HStack {
+                    Button("保存") {
+                        commit()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("取消") {
+                        onCancelRename()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.top, 4)
+            } else {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(session.name)
+                            .font(.headline)
+                        if let topic = session.topicPrompt, !topic.isEmpty {
+                            Text(topic)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer()
+
+                    if isCurrent {
+                        Image(systemName: "checkmark")
+                            .font(.footnote.bold())
+                            .foregroundColor(.accentColor)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelect()
+                }
+            }
+        }
+        .contextMenu {
+            Button {
+                onSelect()
+            } label: {
+                Label("切换到此会话", systemImage: "checkmark.circle")
+            }
+
+            Button {
+                onRename()
+            } label: {
+                Label("重命名", systemImage: "pencil")
+            }
+
+            Button {
+                onBranch(false)
+            } label: {
+                Label("创建提示词分支", systemImage: "arrow.branch")
+            }
+
+            Button {
+                onBranch(true)
+            } label: {
+                Label("复制历史创建分支", systemImage: "arrow.triangle.branch")
+            }
+
+            Button {
+                onDeleteLastMessage()
+            } label: {
+                Label("删除最后一条消息", systemImage: "delete.backward")
+            }
+
+            Button {
+                onInfo()
+            } label: {
+                Label("查看会话信息", systemImage: "info.circle")
+            }
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("删除会话", systemImage: "trash")
+            }
+        }
+    }
+
+    private func commit() {
+        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onCommit(trimmed)
     }
 }
 
