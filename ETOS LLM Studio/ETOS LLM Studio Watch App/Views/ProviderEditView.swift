@@ -36,61 +36,59 @@ struct ProviderEditView: View {
     var body: some View {
         let preview = headerOverridesPreview
 
-        NavigationStack {
-            Form {
-                Section(header: Text("基础信息"), footer: Text(apiBaseURLHint)) {
-                    TextField("提供商名称", text: $provider.name)
-                    TextField("API 地址", text: $provider.baseURL)
-                        .font(.caption)
-                    Picker("API 格式", selection: $provider.apiFormat) {
-                        Text("OpenAI 兼容").tag("openai-compatible")
-                        Text("Gemini").tag("gemini")
-                        Text("Anthropic").tag("anthropic")
-                    }
-                }
-                
-                Section(header: Text("认证"), footer: Text(apiKeysHint)) {
-                    Group {
-                        if showApiKeys {
-                            TextField("API Key", text: $apiKeysText)
-                        } else {
-                            SecureField("API Key", text: $apiKeysText)
-                        }
-                    }
-                    
-                    Toggle("显示明文", isOn: $showApiKeys)
-                }
-
-                Section(header: Text("请求头覆盖"), footer: Text(headerOverridesHint)) {
-                    ForEach($headerOverrideEntries) { $entry in
-                        HeaderOverrideRow(entry: $entry)
-                            .onChange(of: entry.text) { _, _ in
-                                validateHeaderOverrideEntry(withId: entry.id)
-                            }
-                    }
-                    .onDelete(perform: deleteHeaderOverrideEntries)
-
-                    Button("添加表达式") {
-                        addHeaderOverrideEntry()
-                    }
-                }
-
-                Section(header: Text("请求头预览")) {
-                    Text(preview.text)
-                        .font(.footnote.monospaced())
-                        .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
-                }
-                
-                Section {
-                    Button("保存", action: saveProvider)
-                        .disabled(isSaveDisabled)
+        Form {
+            Section(header: Text("基础信息"), footer: Text(apiBaseURLHint)) {
+                TextField("提供商名称", text: $provider.name)
+                TextField("API 地址", text: $provider.baseURL)
+                    .font(.caption)
+                Picker("API 格式", selection: $provider.apiFormat) {
+                    Text("OpenAI 兼容").tag("openai-compatible")
+                    Text("Gemini").tag("gemini")
+                    Text("Anthropic").tag("anthropic")
                 }
             }
-            .navigationTitle(isNew ? "添加提供商" : "编辑提供商")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+            
+            Section(header: Text("认证"), footer: Text(apiKeysHint)) {
+                Group {
+                    if showApiKeys {
+                        TextField("API Key", text: $apiKeysText)
+                    } else {
+                        SecureField("API Key", text: $apiKeysText)
+                    }
                 }
+                
+                Toggle("显示明文", isOn: $showApiKeys)
+            }
+
+            Section(header: Text("请求头覆盖"), footer: Text(headerOverridesHint)) {
+                ForEach($headerOverrideEntries) { $entry in
+                    HeaderOverrideRow(entry: $entry)
+                        .onChange(of: entry.text) { _, _ in
+                            validateHeaderOverrideEntry(withId: entry.id)
+                        }
+                }
+                .onDelete(perform: deleteHeaderOverrideEntries)
+
+                Button("添加表达式") {
+                    addHeaderOverrideEntry()
+                }
+            }
+
+            Section(header: Text("请求头预览")) {
+                Text(preview.text)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+            }
+            
+            Section {
+                Button("保存", action: saveProvider)
+                    .disabled(isSaveDisabled)
+            }
+        }
+        .navigationTitle(isNew ? "添加提供商" : "编辑提供商")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { dismiss() }
             }
         }
     }
