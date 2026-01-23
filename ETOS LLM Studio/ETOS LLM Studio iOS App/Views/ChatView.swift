@@ -107,7 +107,7 @@ struct ChatView: View {
                 // Z-Index 1: 消息列表
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 2, pinnedViews: []) {
+                        LazyVStack(spacing: 2, pinnedViews: []) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear.frame(height: 8)
                             
