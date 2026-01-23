@@ -84,6 +84,9 @@ struct ChatView: View {
     private var navBarIconSize: CGFloat {
         navBarPillHeight
     }
+    private var isOverlayPanelPresented: Bool {
+        showModelPickerPanel || showSessionPickerPanel
+    }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -186,6 +189,7 @@ struct ChatView: View {
                     .overlay(alignment: .top) {
                         navBarFadeBlurOverlay
                     }
+                    .allowsHitTesting(!isOverlayPanelPresented)
                 }
 
                 if showModelPickerPanel {
