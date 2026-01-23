@@ -347,6 +347,13 @@
 "懒加载消息数" = "Lazy-load message count";
 "成功响应" = "Successful response";
 "多个 API Key 用英文逗号分隔。" = "Use commas (,) to separate multiple API keys.";
+"使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}" = "Use key=value to add or override request headers, e.g. User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64).\n{api_key} is replaced with the current API key, e.g. Authorization=Bearer {api_key}";
+"请求头表达式，例如 User-Agent=Mozilla/5.0" = "Header expression, e.g. User-Agent=Mozilla/5.0";
+"请求头覆盖" = "Header overrides";
+"请求头预览" = "Header preview";
+"请求体预览" = "Request body preview";
+"表达式有误，无法预览" = "Invalid expression. Preview unavailable.";
+"暂无请求头表达式" = "No header expressions.";
 "显示明文" = "Show API keys";
 "privacy_storage_details_markdown" = "Your device stores the following data:\n• **Chat history** - Your conversations with AI\n• **API configs** - Providers and keys you added\n• **Memory data** - Vectorized RAG memories\n• **App settings** - Your preferences";
 "privacy_storage_details_plain" = "Your device stores the following data:\n• Chat history - Your conversations with AI\n• API configs - Providers and keys you added\n• Memory data - Vectorized RAG memories\n• App settings - Your preferences";

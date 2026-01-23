@@ -144,7 +144,7 @@ struct ProviderDetailView: View {
     @ViewBuilder
     private func modelRow(for index: Int, isActive: Bool) -> some View {
         if isActive {
-            NavigationLink(destination: ModelSettingsView(model: $provider.models[index])) {
+            NavigationLink(destination: ModelSettingsView(model: $provider.models[index], provider: provider)) {
                 Text(provider.models[index].displayName)
             }
         } else {

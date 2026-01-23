@@ -469,6 +469,10 @@ public enum SyncEngine {
         hasher.combine(provider.baseURL)
         hasher.combine(provider.apiFormat)
         // API Keys 不参与哈希（可能是敏感信息且易变）
+        for (key, value) in provider.headerOverrides.sorted(by: { $0.key < $1.key }) {
+            hasher.combine(key)
+            hasher.combine(value)
+        }
         for model in provider.models {
             hasher.combine(model.modelName)
             hasher.combine(model.displayName)

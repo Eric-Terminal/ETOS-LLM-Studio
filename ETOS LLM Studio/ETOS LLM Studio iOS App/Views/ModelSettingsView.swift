@@ -1,17 +1,22 @@
 import SwiftUI
+import Foundation
 import Shared
 
 struct ModelSettingsView: View {
     @Binding var model: Model
+    let provider: Provider
     let onSave: () -> Void
     @State private var expressionEntries: [ExpressionEntry] = []
 
-    init(model: Binding<Model>, onSave: @escaping () -> Void = {}) {
+    init(model: Binding<Model>, provider: Provider, onSave: @escaping () -> Void = {}) {
         _model = model
+        self.provider = provider
         self.onSave = onSave
     }
     
     var body: some View {
+        let preview = requestBodyPreview
+
         Form {
             Section(
                 header: Text("基础信息"),
@@ -44,6 +49,13 @@ struct ModelSettingsView: View {
                 Label("用 = 指定参数，比如: thinking_budget = 128", systemImage: "character.cursor.ibeam")
                 Label("嵌套结构使用 {}，例如: chat_template_kwargs = {thinking = false}", systemImage: "curlybraces")
                 Label("重复 key 会自动合并字典，方便拆分输入", systemImage: "square.stack.3d.up")
+            }
+
+            Section("请求体预览") {
+                Text(preview.text)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+                    .textSelection(.enabled)
             }
         }
         .navigationTitle("模型信息")
@@ -136,9 +148,159 @@ extension ModelSettingsView {
         }
         onSave()
     }
+
+    private var requestBodyPreview: RequestBodyPreview {
+        let result = previewOverrideParameters()
+        if result.hasError {
+            return RequestBodyPreview(
+                text: NSLocalizedString("表达式有误，无法预览", comment: ""),
+                isPlaceholder: true
+            )
+        }
+
+        let payload = buildRequestPreviewPayload(
+            apiFormat: provider.apiFormat,
+            model: model,
+            overrides: result.parameters
+        )
+        let sanitized = sanitizePreviewPayload(payload)
+        return RequestBodyPreview(
+            text: prettyPrintedJSON(sanitized),
+            isPlaceholder: false
+        )
+    }
+
+    private func previewOverrideParameters() -> (parameters: [String: JSONValue], hasError: Bool) {
+        var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
+        var hasError = false
+
+        for entry in expressionEntries {
+            let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            do {
+                let parsed = try ParameterExpressionParser.parse(trimmed)
+                parsedExpressions.append(parsed)
+            } catch {
+                hasError = true
+            }
+        }
+
+        let parameters = ParameterExpressionParser.buildParameters(from: parsedExpressions)
+        return (parameters: parameters, hasError: hasError)
+    }
+
+    private func buildRequestPreviewPayload(
+        apiFormat: String,
+        model: Model,
+        overrides: [String: JSONValue]
+    ) -> [String: Any] {
+        let overridesAny = overrides.mapValues { $0.toAny() }
+
+        switch apiFormat {
+        case "gemini":
+            var payload: [String: Any] = [:]
+            payload["contents"] = [
+                [
+                    "role": "user",
+                    "parts": [
+                        ["text": "<message>"]
+                    ]
+                ]
+            ]
+
+            var generationConfig: [String: Any] = [:]
+            if let temperature = overridesAny["temperature"] { generationConfig["temperature"] = temperature }
+            if let topP = overridesAny["top_p"] { generationConfig["topP"] = topP }
+            if let topK = overridesAny["top_k"] { generationConfig["topK"] = topK }
+            if let maxTokens = overridesAny["max_tokens"] { generationConfig["maxOutputTokens"] = maxTokens }
+            if let thinkingBudget = overridesAny["thinking_budget"] {
+                generationConfig["thinkingConfig"] = ["thinkingBudget": thinkingBudget]
+            }
+            if !generationConfig.isEmpty {
+                payload["generationConfig"] = generationConfig
+            }
+            return payload
+
+        case "anthropic":
+            var payload: [String: Any] = [:]
+            payload["model"] = model.modelName
+            payload["messages"] = [
+                [
+                    "role": "user",
+                    "content": "<message>"
+                ]
+            ]
+
+            payload["max_tokens"] = overridesAny["max_tokens"] ?? 8192
+            if let temperature = overridesAny["temperature"] { payload["temperature"] = temperature }
+            if let topP = overridesAny["top_p"] { payload["top_p"] = topP }
+            if let topK = overridesAny["top_k"] { payload["top_k"] = topK }
+            if let stream = overridesAny["stream"] { payload["stream"] = stream }
+            if let thinkingBudget = overridesAny["thinking_budget"] {
+                payload["thinking"] = [
+                    "type": "enabled",
+                    "budget_tokens": thinkingBudget
+                ]
+            }
+            return payload
+
+        default:
+            var payload = overridesAny
+            payload["model"] = model.modelName
+            payload["messages"] = [
+                [
+                    "role": "user",
+                    "content": "<message>"
+                ]
+            ]
+
+            if let stream = payload["stream"] as? Bool, stream {
+                var streamOptions = payload["stream_options"] as? [String: Any] ?? [:]
+                if streamOptions["include_usage"] == nil {
+                    streamOptions["include_usage"] = true
+                }
+                payload["stream_options"] = streamOptions
+            }
+            return payload
+        }
+    }
+
+    private func sanitizePreviewPayload(_ value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            var result: [String: Any] = [:]
+            for (key, item) in dict {
+                if key == "data" {
+                    result[key] = "[data omitted]"
+                } else if key == "url", let url = item as? String, url.hasPrefix("data:") {
+                    result[key] = "[base64 image omitted]"
+                } else {
+                    result[key] = sanitizePreviewPayload(item)
+                }
+            }
+            return result
+        }
+        if let array = value as? [Any] {
+            return array.map { sanitizePreviewPayload($0) }
+        }
+        return value
+    }
+
+    private func prettyPrintedJSON(_ value: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else {
+            return "\(value)"
+        }
+        return string
+    }
 }
 
 // MARK: - 子视图
+
+private struct RequestBodyPreview {
+    let text: String
+    let isPlaceholder: Bool
+}
 
 private struct ExpressionRow: View {
     @Binding var entry: ModelSettingsView.ExpressionEntry

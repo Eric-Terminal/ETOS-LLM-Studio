@@ -92,14 +92,52 @@ public struct Provider: Codable, Identifiable, Hashable {
     public var apiKeys: [String]
     public var apiFormat: String // 例如: "openai-compatible"
     public var models: [Model]
+    public var headerOverrides: [String: String]
 
-    public init(id: UUID = UUID(), name: String, baseURL: String, apiKeys: [String], apiFormat: String, models: [Model] = []) {
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        baseURL: String,
+        apiKeys: [String],
+        apiFormat: String,
+        models: [Model] = [],
+        headerOverrides: [String: String] = [:]
+    ) {
         self.id = id
         self.name = name
         self.baseURL = baseURL
         self.apiKeys = apiKeys
         self.apiFormat = apiFormat
         self.models = models
+        self.headerOverrides = headerOverrides
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, baseURL, apiKeys, apiFormat, models, headerOverrides
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.baseURL = try container.decode(String.self, forKey: .baseURL)
+        self.apiKeys = try container.decodeIfPresent([String].self, forKey: .apiKeys) ?? []
+        self.apiFormat = try container.decode(String.self, forKey: .apiFormat)
+        self.models = try container.decodeIfPresent([Model].self, forKey: .models) ?? []
+        self.headerOverrides = try container.decodeIfPresent([String: String].self, forKey: .headerOverrides) ?? [:]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(baseURL, forKey: .baseURL)
+        try container.encode(apiKeys, forKey: .apiKeys)
+        try container.encode(apiFormat, forKey: .apiFormat)
+        try container.encode(models, forKey: .models)
+        if !headerOverrides.isEmpty {
+            try container.encode(headerOverrides, forKey: .headerOverrides)
+        }
     }
 }
 
