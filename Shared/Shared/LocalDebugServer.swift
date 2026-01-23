@@ -699,6 +699,10 @@ public class LocalDebugServer: ObservableObject {
                     let response = await handleDownloadAll()
                     sendResponse(response)
                 }
+            case "list_all":
+                // 兼容模式：只返回文件路径列表（不含数据）
+                let response = await handleListAll()
+                sendResponse(response)
             case "upload":
                 let response = await handleUpload(json)
                 sendResponse(response)
@@ -882,6 +886,31 @@ public class LocalDebugServer: ObservableObject {
         do {
             try FileManager.default.removeItem(at: targetURL)
             return ["status": "ok", "path": path]
+        } catch {
+            return ["status": "error", "message": error.localizedDescription]
+        }
+    }
+    
+    /// 兼容模式：只返回文件路径列表（不含文件数据）
+    /// 用于让 Python 端逐个请求下载
+    private func handleListAll() async -> [String: Any] {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        
+        do {
+            logger.info("开始扫描 Documents 目录（仅路径）...")
+            var filePaths: [String] = []
+            
+            // 递归收集所有文件路径
+            try collectFilePaths(documentsURL, baseURL: documentsURL, filePaths: &filePaths)
+            
+            logger.info("扫描完成: \(filePaths.count) 个文件")
+            
+            return [
+                "status": "ok",
+                "paths": filePaths,
+                "total": filePaths.count,
+                "message": "文件列表已返回"
+            ]
         } catch {
             return ["status": "error", "message": error.localizedDescription]
         }
