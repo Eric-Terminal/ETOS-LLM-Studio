@@ -926,6 +926,17 @@ public class ChatService {
             let toolLabel = await MainActor.run {
                 MCPManager.shared.displayLabel(for: toolCall.toolName)
             } ?? toolCall.toolName
+            let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
+                toolName: toolCall.toolName,
+                displayName: toolLabel,
+                arguments: toolCall.arguments
+            )
+            if permissionDecision == .deny {
+                content = "\(toolLabel) 调用已被用户拒绝。"
+                displayResult = content
+                logger.info("  - MCP 工具调用被用户拒绝: \(toolCall.toolName)")
+                break
+            }
             do {
                 let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
                 content = result
