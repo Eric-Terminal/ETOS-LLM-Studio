@@ -155,6 +155,7 @@ struct ChatBubble: View {
         if message.role == .tool {
             let content = VStack(alignment: .leading, spacing: 6) {
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+                    toolCallsInlineView(toolCalls)
                     toolResultsDisclosureView(toolCalls, resultText: message.content)
                 } else if hasNonPlaceholderText {
                     renderContent(message.content)
@@ -176,7 +177,6 @@ struct ChatBubble: View {
             .contentShape(Rectangle())
         } else {
             let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
-            let hasToolCalls = message.toolCalls != nil && !message.toolCalls!.isEmpty
             let isErrorVersion = message.content.hasPrefix("重试失败")
 
             let content = VStack(alignment: .leading, spacing: 8) {
@@ -184,14 +184,7 @@ struct ChatBubble: View {
                     reasoningView(reasoning)
                 }
 
-                if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-                    if hasReasoning {
-                        Divider().background(Color.gray.opacity(0.5))
-                    }
-                    toolCallsInlineView(toolCalls)
-                }
-
-                if (hasReasoning || hasToolCalls) && hasNonPlaceholderText {
+                if hasReasoning && hasNonPlaceholderText {
                     Divider().background(Color.gray)
                 }
 
@@ -234,7 +227,10 @@ struct ChatBubble: View {
     private var shouldShowAssistantBubble: Bool {
         let hasReasoning = message.reasoningContent != nil && !(message.reasoningContent ?? "").isEmpty
         let hasToolCalls = message.toolCalls != nil && !(message.toolCalls ?? []).isEmpty
-        return hasReasoning || hasToolCalls || hasNonPlaceholderText || shouldShowThinkingIndicator
+        if message.role == .tool {
+            return hasToolCalls || hasNonPlaceholderText
+        }
+        return hasReasoning || hasNonPlaceholderText || shouldShowThinkingIndicator
     }
     
     // MARK: - 辅助视图
@@ -350,8 +346,9 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(toolCalls, id: \.id) { toolCall in
                 let trimmedArgs = toolCall.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = MCPManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("调用：\(toolCall.toolName)")
+                    Text("调用：\(label)")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -369,6 +366,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func toolResultsDisclosureView(_ toolCalls: [InternalToolCall], resultText: String) -> some View {
+        let toolNames = toolCalls.map { MCPManager.shared.displayLabel(for: $0.toolName) ?? $0.toolName }
         VStack(alignment: .leading, spacing: 5) {
             Button(action: {
                 withAnimation {
@@ -376,7 +374,7 @@ struct ChatBubble: View {
                 }
             }) {
                 HStack {
-                    Text("结果：\(toolCalls.map(\.toolName).joined(separator: ", "))")
+                    Text("结果：\(toolNames.joined(separator: ", "))")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -391,8 +389,9 @@ struct ChatBubble: View {
             if isToolCallsExpanded {
                 ForEach(toolCalls, id: \.id) { toolCall in
                     let result = (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let label = MCPManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(toolCall.toolName)
+                        Text(label)
                             .font(.caption2.weight(.semibold))
                             .foregroundColor(.secondary)
                         if !result.isEmpty {

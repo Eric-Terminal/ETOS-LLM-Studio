@@ -75,6 +75,30 @@ struct ChatBubble: View {
         let isPlaceholderOnly = trimmedContent.isEmpty || Self.imagePlaceholders.contains(trimmedContent)
         return isPlaceholderOnly && message.reasoningContent == nil && message.toolCalls == nil && message.audioFileName == nil
     }
+
+    private var shouldShowTextBubble: Bool {
+        if hasOnlyImages {
+            return false
+        }
+        let hasReasoning = !(message.reasoningContent ?? "").isEmpty
+        let hasContent = !message.content.isEmpty
+        let hasToolCalls = !(message.toolCalls ?? []).isEmpty
+        let shouldShowThinking = message.role == .assistant
+            && !hasContent
+            && !hasReasoning
+            && !hasToolCalls
+
+        switch message.role {
+        case .tool:
+            return hasToolCalls || hasContent
+        case .assistant, .system:
+            return hasReasoning || hasContent || shouldShowThinking
+        case .user, .error:
+            return hasContent || hasReasoning || hasToolCalls
+        @unknown default:
+            return hasReasoning || hasContent || hasToolCalls
+        }
+    }
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
@@ -90,7 +114,7 @@ struct ChatBubble: View {
                 }
                 
                 // 气泡内容（仅当有非图片内容时显示）
-                if !hasOnlyImages {
+                if shouldShowTextBubble {
                     VStack(alignment: .leading, spacing: 6) {
                         textContentStack
                         
@@ -240,20 +264,18 @@ struct ChatBubble: View {
         
         // 工具调用/结果（折叠展示）
         if let toolCalls = message.toolCalls,
-           !toolCalls.isEmpty {
-            if message.role == .tool {
-                ToolResultsDisclosureView(
-                    toolCalls: toolCalls,
-                    resultText: message.content,
-                    isExpanded: $isToolCallsExpanded,
-                    isOutgoing: isOutgoing
-                )
-            } else if message.role == .assistant {
-                ToolCallsInlineView(
-                    toolCalls: toolCalls,
-                    isOutgoing: isOutgoing
-                )
-            }
+           !toolCalls.isEmpty,
+           message.role == .tool {
+            ToolCallsInlineView(
+                toolCalls: toolCalls,
+                isOutgoing: isOutgoing
+            )
+            ToolResultsDisclosureView(
+                toolCalls: toolCalls,
+                resultText: message.content,
+                isExpanded: $isToolCallsExpanded,
+                isOutgoing: isOutgoing
+            )
         }
         
         // 消息正文
@@ -622,16 +644,21 @@ struct ToolCallsInlineView: View, Equatable {
     static func == (lhs: ToolCallsInlineView, rhs: ToolCallsInlineView) -> Bool {
         lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isOutgoing == rhs.isOutgoing
     }
+
+    private func displayName(for toolName: String) -> String {
+        MCPManager.shared.displayLabel(for: toolName) ?? toolName
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(toolCalls, id: \.id) { call in
                 let trimmedArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = displayName(for: call.toolName)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Image(systemName: "wrench.and.screwdriver")
                             .font(.system(size: 12))
-                        Text("调用：\(call.toolName)")
+                        Text("调用：\(label)")
                             .font(.subheadline.weight(.medium))
                             .lineLimit(1)
                     }
@@ -661,8 +688,13 @@ struct ToolResultsDisclosureView: View, Equatable {
     static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
         lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing && lhs.resultText == rhs.resultText
     }
+
+    private func displayName(for toolName: String) -> String {
+        MCPManager.shared.displayLabel(for: toolName) ?? toolName
+    }
     
     var body: some View {
+        let toolNames = toolCalls.map { displayName(for: $0.toolName) }
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 isExpanded.toggle()
@@ -670,7 +702,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                 HStack(spacing: 6) {
                     Image(systemName: "wrench.and.screwdriver")
                         .font(.system(size: 12))
-                    Text("结果：\(toolCalls.map(\.toolName).joined(separator: ", "))")
+                    Text("结果：\(toolNames.joined(separator: ", "))")
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
                     Spacer()
@@ -687,8 +719,9 @@ struct ToolResultsDisclosureView: View, Equatable {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(toolCalls, id: \.id) { call in
                         let result = (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let label = displayName(for: call.toolName)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(call.toolName)
+                            Text(label)
                                 .font(.caption.weight(.semibold))
                             if !result.isEmpty {
                                 Text(result)

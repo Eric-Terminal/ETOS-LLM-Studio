@@ -946,7 +946,7 @@ public class ChatService {
         let message = ChatMessage(
             role: .tool,
             content: content,
-            toolCalls: [InternalToolCall(id: toolCall.id, toolName: toolCall.toolName, arguments: "", result: displayResult)]
+            toolCalls: [InternalToolCall(id: toolCall.id, toolName: toolCall.toolName, arguments: toolCall.arguments, result: displayResult)]
         )
         
         return (message, displayResult)
