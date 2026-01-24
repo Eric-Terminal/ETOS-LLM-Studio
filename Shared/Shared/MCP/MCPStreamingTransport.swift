@@ -119,9 +119,10 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
     public func disconnect() {
         sseTask?.cancel()
         sseTask = nil
-        
+
+        let pendingActor = pendingRequestsActor
         Task {
-            let pending = await pendingRequestsActor.removeAll()
+            let pending = await pendingActor.removeAll()
             for continuation in pending {
                 continuation.resume(throwing: CancellationError())
             }
