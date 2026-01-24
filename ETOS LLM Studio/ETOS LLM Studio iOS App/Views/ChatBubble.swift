@@ -231,55 +231,21 @@ struct ChatBubble: View {
         // 思考过程 (Telegram 风格折叠)
         if let reasoning = message.reasoningContent,
            !reasoning.isEmpty {
-            DisclosureGroup(isExpanded: $isReasoningExpanded) {
-                Text(reasoning)
-                    .font(.subheadline)
-                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
-                    .textSelection(.enabled)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 12))
-                    Text("思考过程")
-                        .font(.subheadline.weight(.medium))
-                }
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
-            }
-            .tint(isOutgoing ? .white : .secondary)
+            ReasoningDisclosureView(
+                reasoning: reasoning,
+                isExpanded: $isReasoningExpanded,
+                isOutgoing: isOutgoing
+            )
         }
         
         // 工具调用
         if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
-            DisclosureGroup(isExpanded: $isToolCallsExpanded) {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(toolCalls, id: \.id) { call in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(call.toolName)
-                                .font(.footnote.weight(.semibold))
-                            if let result = call.result, !result.isEmpty {
-                                Text(result)
-                                    .font(.caption)
-                                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
-                            }
-                        }
-                        .padding(6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
-                        )
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "wrench.and.screwdriver")
-                        .font(.system(size: 12))
-                    Text("使用工具")
-                        .font(.subheadline.weight(.medium))
-                }
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
-            }
-            .tint(isOutgoing ? .white : .secondary)
+            ToolCallsDisclosureView(
+                toolCalls: toolCalls,
+                isExpanded: $isToolCallsExpanded,
+                isOutgoing: isOutgoing
+            )
         }
         
         // 消息正文
@@ -574,5 +540,122 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     deinit {
         stop()
+    }
+}
+
+// MARK: - 思考过程折叠视图（性能优化）
+
+/// 独立的思考过程视图，避免长文本导致父视图重复布局
+/// 使用 Equatable 优化：只有在 reasoning 或 isExpanded 变化时才重新渲染
+struct ReasoningDisclosureView: View, Equatable {
+    let reasoning: String
+    @Binding var isExpanded: Bool
+    let isOutgoing: Bool
+    
+    // 限制显示的最大字符数，超过时截断并提示
+    private static let maxDisplayLength = 8000
+    
+    static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
+        lhs.reasoning == rhs.reasoning && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing
+    }
+    
+    private var displayText: String {
+        if reasoning.count > Self.maxDisplayLength {
+            return String(reasoning.prefix(Self.maxDisplayLength)) + "\n\n... (内容过长，已截断)"
+        }
+        return reasoning
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 点击区域：标题行
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 12))
+                    Text("思考过程")
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            // 内容区域：只在展开时渲染
+            if isExpanded {
+                Text(displayText)
+                    .font(.subheadline)
+                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}
+
+// MARK: - 工具调用折叠视图（性能优化）
+
+struct ToolCallsDisclosureView: View, Equatable {
+    let toolCalls: [InternalToolCall]
+    @Binding var isExpanded: Bool
+    let isOutgoing: Bool
+    
+    static func == (lhs: ToolCallsDisclosureView, rhs: ToolCallsDisclosureView) -> Bool {
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "wrench.and.screwdriver")
+                        .font(.system(size: 12))
+                    Text("使用工具")
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(toolCalls, id: \.id) { call in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(call.toolName)
+                                .font(.footnote.weight(.semibold))
+                            if let result = call.result, !result.isEmpty {
+                                Text(result)
+                                    .font(.caption)
+                                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+                            }
+                        }
+                        .padding(6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                        )
+                    }
+                }
+                .padding(.top, 8)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
 }
