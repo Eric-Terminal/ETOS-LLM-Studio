@@ -6,6 +6,9 @@
 
 import Foundation
 import Combine
+import os.log
+
+private let mcpManagerLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPManager")
 
 public struct MCPAvailableTool: Identifiable, Hashable {
     public let id: String
@@ -149,6 +152,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false) {
+        mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
         updateStatus(for: server.id) {
             $0.connectionState = .connecting
             $0.isBusy = true
@@ -174,6 +178,7 @@ public final class MCPManager: ObservableObject {
         Task {
             do {
                 let info = try await client.initialize()
+                mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
                 await MainActor.run {
                     self.updateStatus(for: server.id) {
                         $0.connectionState = .ready
@@ -186,6 +191,7 @@ public final class MCPManager: ObservableObject {
                 }
                 await refreshMetadata(for: server.id, client: client)
             } catch {
+                mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
                 await MainActor.run {
                     self.updateStatus(for: server.id) {
                         $0.connectionState = .failed(reason: error.localizedDescription)
@@ -202,6 +208,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func disconnect(server: MCPServerConfiguration) {
+        mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
         clients[server.id] = nil
         streamingTransports[server.id]?.disconnect()
         streamingTransports[server.id] = nil
@@ -238,6 +245,7 @@ public final class MCPManager: ObservableObject {
         guard let client = clients[server.id], case .ready = status(for: server).connectionState else {
             return
         }
+        mcpManagerLogger.info("刷新 MCP 元数据：\(server.displayName, privacy: .public)")
         updateStatus(for: server.id) { $0.isBusy = true }
         Task {
             await refreshMetadata(for: server.id, client: client)
@@ -255,6 +263,11 @@ public final class MCPManager: ObservableObject {
             let resources = try await resourcesTask
             let prompts = (try? await promptsTask) ?? []
             let roots = (try? await rootsTask) ?? []
+            if let server = servers.first(where: { $0.id == serverID }) {
+                mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+            } else {
+                mcpManagerLogger.info("MCP 元数据加载完成：server=\(serverID.uuidString, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+            }
             
             await MainActor.run {
                 self.updateStatus(for: serverID) {
@@ -266,6 +279,11 @@ public final class MCPManager: ObservableObject {
                 }
             }
         } catch {
+            if let server = servers.first(where: { $0.id == serverID }) {
+                mcpManagerLogger.error("MCP 元数据刷新失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            } else {
+                mcpManagerLogger.error("MCP 元数据刷新失败：server=\(serverID.uuidString, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            }
             await MainActor.run {
                 self.updateStatus(for: serverID) {
                     $0.isBusy = false
@@ -558,6 +576,17 @@ public final class MCPManager: ObservableObject {
         guard !trimmed.isEmpty else { return [:] }
         let data = Data(trimmed.utf8)
         return try JSONDecoder().decode([String: JSONValue].self, from: data)
+    }
+
+    private func transportLabel(for server: MCPServerConfiguration) -> String {
+        switch server.transport {
+        case .http:
+            return "http"
+        case .httpSSE:
+            return "http+sse"
+        case .oauth:
+            return "oauth"
+        }
     }
 }
 

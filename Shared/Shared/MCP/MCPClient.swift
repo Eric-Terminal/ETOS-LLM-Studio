@@ -5,6 +5,9 @@
 // ============================================================================
 
 import Foundation
+import os.log
+
+private let mcpClientLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPClient")
 
 public final class MCPClient {
     
@@ -82,28 +85,35 @@ public final class MCPClient {
         do {
             payload = try encoder.encode(request)
         } catch {
+            mcpClientLogger.error("MCP 请求编码失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             throw MCPClientError.encodingError(error)
         }
+        logJSON(data: payload, prefix: "发送 MCP 请求 \(method)")
         
         let rawResponse: Data
         do {
             rawResponse = try await transport.sendMessage(payload)
         } catch {
+            mcpClientLogger.error("MCP 请求失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             throw error
         }
+        logJSON(data: rawResponse, prefix: "收到 MCP 响应 \(method)")
         
         do {
             let response = try decoder.decode(JSONRPCResponse<Result>.self, from: rawResponse)
             if let error = response.error {
+                mcpClientLogger.error("MCP RPC 错误：\(method, privacy: .public)，code=\(error.code), message=\(error.message, privacy: .public)")
                 throw MCPClientError.rpcError(error)
             }
             guard let result = response.result else {
+                mcpClientLogger.error("MCP 响应缺少 result：\(method, privacy: .public)")
                 throw MCPClientError.missingResult
             }
             return result
         } catch let decodingError as MCPClientError {
             throw decodingError
         } catch {
+            mcpClientLogger.error("MCP 响应解析失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             throw MCPClientError.decodingError(error)
         }
     }
@@ -136,3 +146,19 @@ private struct SetLogLevelParams: Codable {
 }
 
 private struct EmptyResult: Codable {}
+
+private extension MCPClient {
+    func logJSON(data: Data, prefix: String) {
+        if let text = String(data: data, encoding: .utf8) {
+            mcpClientLogger.info("\(prefix, privacy: .public)：\(self.truncate(text), privacy: .public)")
+        } else {
+            mcpClientLogger.info("\(prefix, privacy: .public)：(二进制数据，长度=\(data.count))")
+        }
+    }
+
+    func truncate(_ text: String, limit: Int = 4000) -> String {
+        guard text.count > limit else { return text }
+        let index = text.index(text.startIndex, offsetBy: limit)
+        return String(text[..<index]) + "…(截断)"
+    }
+}
