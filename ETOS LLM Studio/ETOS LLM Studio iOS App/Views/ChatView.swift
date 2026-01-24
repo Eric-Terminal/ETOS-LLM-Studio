@@ -1528,7 +1528,7 @@ private struct TelegramMessageComposer: View {
 
             do {
                 let data = try Data(contentsOf: url)
-                let attachment = AudioAttachment(
+                let attachment = await AudioAttachment(
                     data: data,
                     mimeType: audioMimeType(for: url),
                     format: audioFormat(for: url),
