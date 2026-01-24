@@ -1303,8 +1303,16 @@ private struct TelegramMessageComposer: View {
     @State private var showAudioRecorder = false
     @State private var showAudioImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var isExpandedComposer = false
+    @State private var inputAvailableWidth: CGFloat = 0
     
     private let controlSize: CGFloat = 40
+    private let expandedInputHeight: CGFloat = 140
+    private let inputFont = UIFont.systemFont(ofSize: 16)
+    private let textContainerInset: CGFloat = 8
+    private let textHorizontalPadding: CGFloat = 10
+    private let compactTextVerticalPadding: CGFloat = 2
+    private let expandedTextVerticalPadding: CGFloat = 6
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -1362,17 +1370,28 @@ private struct TelegramMessageComposer: View {
                 
                 // 输入框容器
                 HStack(alignment: .bottom, spacing: 8) {
-                    // 文本输入框
-                    TextField("Message", text: $text, axis: .vertical)
-                        .lineLimit(1...8)
-                        .textFieldStyle(.plain)
-                        .focused(focus)
-                        .font(.system(size: 16))
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 14)
+                    inputEditor
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(minHeight: controlSize)
-                .background(glassCapsuleBackground)
+                .background {
+                    if isExpandedComposer {
+                        glassRoundedBackground(cornerRadius: 18)
+                    } else {
+                        glassCapsuleBackground
+                    }
+                }
+                .overlay {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .preference(key: InputWidthKey.self, value: proxy.size.width)
+                    }
+                }
+                .onPreferenceChange(InputWidthKey.self) { width in
+                    if abs(width - inputAvailableWidth) > 0.5 {
+                        inputAvailableWidth = width
+                    }
+                }
                 
                 // 麦克风 / 发送 / 停止按钮
                 Button {
@@ -1411,6 +1430,21 @@ private struct TelegramMessageComposer: View {
                 selectedPhotos = []
             }
         }
+        .onChange(of: text) { _, newValue in
+            handleAutoExpand(for: newValue)
+        }
+        .onChange(of: inputAvailableWidth) { _, _ in
+            handleAutoExpand(for: text)
+        }
+        .onChange(of: focus.wrappedValue) { _, isFocused in
+            if isFocused {
+                handleAutoExpand(for: text)
+            } else if isExpandedComposer {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isExpandedComposer = false
+                }
+            }
+        }
         .sheet(isPresented: $showCamera) {
             CameraImagePicker(isPresented: $showCamera) { image in
                 if let image {
@@ -1435,6 +1469,83 @@ private struct TelegramMessageComposer: View {
             case .failure(let error):
                 print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
             }
+        }
+    }
+
+    @ViewBuilder
+    private var inputEditor: some View {
+        let targetHeight = isExpandedComposer ? expandedInputHeight : controlSize
+        let verticalPadding = isExpandedComposer ? expandedTextVerticalPadding : compactTextVerticalPadding
+
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $text)
+                .font(.system(size: inputFont.pointSize))
+                .focused(focus)
+                .scrollContentBackground(.hidden)
+                .scrollDisabled(!isExpandedComposer)
+                .padding(.vertical, verticalPadding)
+                .padding(.horizontal, textHorizontalPadding)
+
+            if text.isEmpty {
+                Text("Message")
+                    .font(.system(size: inputFont.pointSize))
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, verticalPadding)
+                    .padding(.horizontal, textHorizontalPadding)
+            }
+        }
+        .frame(minHeight: targetHeight, maxHeight: targetHeight)
+    }
+
+    private func handleAutoExpand(for newValue: String) {
+        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            if isExpandedComposer {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isExpandedComposer = false
+                }
+            }
+            return
+        }
+
+        let hasExplicitNewline = newValue.contains("\n")
+        var shouldExpand = hasExplicitNewline
+
+        if !shouldExpand {
+            let availableWidth = inputAvailableWidth
+                - textHorizontalPadding * 2
+                - textContainerInset * 2
+            if availableWidth > 0 {
+                let boundingRect = (newValue as NSString).boundingRect(
+                    with: CGSize(width: availableWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    attributes: [.font: inputFont],
+                    context: nil
+                )
+                let lineCount = max(1, Int(ceil(boundingRect.height / inputFont.lineHeight)))
+                shouldExpand = lineCount > 1
+            }
+        }
+
+        if shouldExpand {
+            guard focus.wrappedValue else { return }
+            guard !isExpandedComposer else { return }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                isExpandedComposer = true
+            }
+            focus.wrappedValue = true
+        } else if isExpandedComposer {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                isExpandedComposer = false
+            }
+        }
+    }
+
+    private struct InputWidthKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
         }
     }
     
