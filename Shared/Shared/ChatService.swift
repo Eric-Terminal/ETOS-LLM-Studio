@@ -1690,9 +1690,10 @@ public class ChatService {
         }
 
         // --- 有工具调用，进入 Agent 逻辑 ---
-        
-        // 1. 无论工具是哪种类型，都先将 AI 的文本回复更新到 UI
+
+        // 1. 将当前 assistant 消息更新为“工具调用”气泡
         updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+        let toolCallMessageID = loadingMessageID
 
         // 2. 根据 isBlocking 标志将工具调用分类
         let toolDefs = availableTools ?? []
@@ -1719,7 +1720,7 @@ public class ChatService {
             for toolCall in blockingCalls {
                 let (resultMessage, toolResult) = await handleToolCall(toolCall)
                 if let toolResult {
-                    await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: loadingMessageID, sessionID: currentSessionID)
+                    await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                 }
                 blockingResultMessages.append(resultMessage)
             }
@@ -1734,11 +1735,12 @@ public class ChatService {
                     for toolCall in nonBlockingCalls {
                         let (resultMessage, toolResult) = await handleToolCall(toolCall)
                         if let toolResult {
-                            await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: loadingMessageID, sessionID: currentSessionID)
+                            await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                         }
-                        // 只保存工具执行结果，不将其发回给 AI
-                        var messages = Persistence.loadMessages(for: currentSessionID)
+                        // 非阻塞工具也写入消息列表，便于 UI 直接展示结果
+                        var messages = self.messagesForSessionSubject.value
                         messages.append(resultMessage)
+                        self.messagesForSessionSubject.send(messages)
                         Persistence.saveMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
@@ -1749,7 +1751,7 @@ public class ChatService {
                 for toolCall in nonBlockingCalls {
                     let (resultMessage, toolResult) = await handleToolCall(toolCall)
                     if let toolResult {
-                        await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: loadingMessageID, sessionID: currentSessionID)
+                        await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                     }
                     nonBlockingResultsForFollowUp.append(resultMessage)
                 }
@@ -1761,12 +1763,17 @@ public class ChatService {
         if shouldTriggerFollowUp {
             var updatedMessages = self.messagesForSessionSubject.value
             updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
+
+            // 新增一个独立的 loading assistant 气泡，用于最终回复
+            let followUpLoadingMessage = ChatMessage(role: .assistant, content: "")
+            updatedMessages.append(followUpLoadingMessage)
             self.messagesForSessionSubject.send(updatedMessages)
             Persistence.saveMessages(updatedMessages, for: currentSessionID)
-            
+            currentLoadingMessageID = followUpLoadingMessage.id
+
             logger.info("正在将工具结果发回 AI 以生成最终回复...")
             await executeMessageRequest(
-                messages: updatedMessages, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID,
+                messages: updatedMessages, loadingMessageID: followUpLoadingMessage.id, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
                 enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,

@@ -152,55 +152,79 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private var assistantTextBubble: some View {
-        let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
-        let hasToolCalls = message.toolCalls != nil && !message.toolCalls!.isEmpty
-        let isErrorVersion = message.content.hasPrefix("重试失败")
-
-        let content = VStack(alignment: .leading, spacing: 8) {
-            if let reasoning = message.reasoningContent, !reasoning.isEmpty {
-                reasoningView(reasoning)
-            }
-
-            if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-                if hasReasoning {
-                    Divider().background(Color.gray.opacity(0.5))
-                }
-                toolCallsView(toolCalls)
-            }
-
-            if (hasReasoning || hasToolCalls) && hasNonPlaceholderText {
-                Divider().background(Color.gray)
-            }
-
-            if hasNonPlaceholderText {
-                renderContent(message.content)
-                    .foregroundColor(isErrorVersion ? .white : nil)
-            }
-
-            if shouldShowThinkingIndicator {
-                HStack(spacing: 4) {
-                    ProgressView().controlSize(.small)
-                    Text(currentThinkingText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        if message.role == .tool {
+            let content = VStack(alignment: .leading, spacing: 6) {
+                if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+                    toolResultsDisclosureView(toolCalls, resultText: message.content)
+                } else if hasNonPlaceholderText {
+                    renderContent(message.content)
                 }
             }
-        }
-        .padding(10)
+            .padding(10)
+            
+            Group {
+                if enableLiquidGlass {
+                    if #available(watchOS 26.0, *) {
+                        content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                    } else {
+                        assistantBubbleFallback(content, isError: false)
+                    }
+                } else {
+                    assistantBubbleFallback(content, isError: false)
+                }
+            }
+            .contentShape(Rectangle())
+        } else {
+            let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
+            let hasToolCalls = message.toolCalls != nil && !message.toolCalls!.isEmpty
+            let isErrorVersion = message.content.hasPrefix("重试失败")
 
-        Group {
-            if enableLiquidGlass {
-                if #available(watchOS 26.0, *) {
-                    content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                        .background(isErrorVersion ? Color.red.opacity(0.5) : nil)
+            let content = VStack(alignment: .leading, spacing: 8) {
+                if let reasoning = message.reasoningContent, !reasoning.isEmpty {
+                    reasoningView(reasoning)
+                }
+
+                if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+                    if hasReasoning {
+                        Divider().background(Color.gray.opacity(0.5))
+                    }
+                    toolCallsInlineView(toolCalls)
+                }
+
+                if (hasReasoning || hasToolCalls) && hasNonPlaceholderText {
+                    Divider().background(Color.gray)
+                }
+
+                if hasNonPlaceholderText {
+                    renderContent(message.content)
+                        .foregroundColor(isErrorVersion ? .white : nil)
+                }
+
+                if shouldShowThinkingIndicator {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.small)
+                        Text(currentThinkingText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(10)
+
+            Group {
+                if enableLiquidGlass {
+                    if #available(watchOS 26.0, *) {
+                        content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                            .background(isErrorVersion ? Color.red.opacity(0.5) : nil)
+                    } else {
+                        assistantBubbleFallback(content, isError: isErrorVersion)
+                    }
                 } else {
                     assistantBubbleFallback(content, isError: isErrorVersion)
                 }
-            } else {
-                assistantBubbleFallback(content, isError: isErrorVersion)
             }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
     }
 
     private var shouldShowUserBubble: Bool {
@@ -322,7 +346,29 @@ struct ChatBubble: View {
     }
     
     @ViewBuilder
-    private func toolCallsView(_ toolCalls: [InternalToolCall]) -> some View {
+    private func toolCallsInlineView(_ toolCalls: [InternalToolCall]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(toolCalls, id: \.id) { toolCall in
+                let trimmedArgs = toolCall.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("调用：\(toolCall.toolName)")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    if !trimmedArgs.isEmpty {
+                        Text(trimmedArgs)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.leading, 4)
+            }
+        }
+        .padding(.bottom, 5)
+    }
+
+    @ViewBuilder
+    private func toolResultsDisclosureView(_ toolCalls: [InternalToolCall], resultText: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Button(action: {
                 withAnimation {
@@ -330,9 +376,10 @@ struct ChatBubble: View {
                 }
             }) {
                 HStack {
-                    Text("使用工具")
+                    Text("结果：\(toolCalls.map(\.toolName).joined(separator: ", "))")
                         .font(.footnote)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                     Spacer()
                     Image(systemName: isToolCallsExpanded ? "chevron.down" : "chevron.right")
                         .font(.caption)
@@ -343,14 +390,12 @@ struct ChatBubble: View {
 
             if isToolCallsExpanded {
                 ForEach(toolCalls, id: \.id) { toolCall in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Image(systemName: "wrench.and.screwdriver.fill")
-                            Text(toolCall.toolName)
-                        }
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        if let result = toolCall.result, !result.isEmpty {
+                    let result = (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(toolCall.toolName)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(.secondary)
+                        if !result.isEmpty {
                             Text(result)
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
@@ -360,7 +405,7 @@ struct ChatBubble: View {
                 }
             }
         }
-        .padding(.bottom, isToolCallsExpanded ? 5 : 0)
+        .padding(.bottom, 5)
     }
     
     // MARK: - 回退样式
@@ -392,7 +437,10 @@ struct ChatBubble: View {
 private extension ChatBubble {
     
     var shouldShowThinkingIndicator: Bool {
-        message.role == .assistant && message.content.isEmpty && (message.reasoningContent ?? "").isEmpty
+        message.role == .assistant
+            && message.content.isEmpty
+            && (message.reasoningContent ?? "").isEmpty
+            && (message.toolCalls ?? []).isEmpty
     }
     
     var currentThinkingText: String {

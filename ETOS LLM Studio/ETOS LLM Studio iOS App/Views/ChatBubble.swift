@@ -238,18 +238,26 @@ struct ChatBubble: View {
             )
         }
         
-        // 工具调用
+        // 工具调用/结果（折叠展示）
         if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
-            ToolCallsDisclosureView(
-                toolCalls: toolCalls,
-                isExpanded: $isToolCallsExpanded,
-                isOutgoing: isOutgoing
-            )
+            if message.role == .tool {
+                ToolResultsDisclosureView(
+                    toolCalls: toolCalls,
+                    resultText: message.content,
+                    isExpanded: $isToolCallsExpanded,
+                    isOutgoing: isOutgoing
+                )
+            } else if message.role == .assistant {
+                ToolCallsInlineView(
+                    toolCalls: toolCalls,
+                    isOutgoing: isOutgoing
+                )
+            }
         }
         
         // 消息正文
-        if !message.content.isEmpty {
+        if !message.content.isEmpty, message.role != .tool || (message.toolCalls?.isEmpty ?? true) {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName)
             } else {
@@ -258,7 +266,9 @@ struct ChatBubble: View {
                     .foregroundStyle(isOutgoing ? Color.white : Color.primary)
                     .textSelection(.enabled)
             }
-        } else if message.role == .assistant {
+        } else if message.role == .assistant,
+                  (message.reasoningContent ?? "").isEmpty,
+                  (message.toolCalls ?? []).isEmpty {
             // 加载指示器
             HStack(spacing: 8) {
                 TelegramTypingIndicator()
@@ -391,6 +401,7 @@ struct ChatBubble: View {
         }
         .frame(minWidth: 180)
     }
+    
 }
 
 // MARK: - Telegram 输入指示器动画
@@ -603,15 +614,52 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 }
 
-// MARK: - 工具调用折叠视图（性能优化）
-
-struct ToolCallsDisclosureView: View, Equatable {
+// MARK: - 工具调用视图（内联展示）
+struct ToolCallsInlineView: View, Equatable {
     let toolCalls: [InternalToolCall]
+    let isOutgoing: Bool
+    
+    static func == (lhs: ToolCallsInlineView, rhs: ToolCallsInlineView) -> Bool {
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isOutgoing == rhs.isOutgoing
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(toolCalls, id: \.id) { call in
+                let trimmedArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.system(size: 12))
+                        Text("调用：\(call.toolName)")
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                    }
+                    if !trimmedArgs.isEmpty {
+                        Text(trimmedArgs)
+                            .font(.caption)
+                            .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                )
+            }
+        }
+    }
+}
+
+struct ToolResultsDisclosureView: View, Equatable {
+    let toolCalls: [InternalToolCall]
+    let resultText: String
     @Binding var isExpanded: Bool
     let isOutgoing: Bool
     
-    static func == (lhs: ToolCallsDisclosureView, rhs: ToolCallsDisclosureView) -> Bool {
-        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing
+    static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing && lhs.resultText == rhs.resultText
     }
     
     var body: some View {
@@ -622,8 +670,9 @@ struct ToolCallsDisclosureView: View, Equatable {
                 HStack(spacing: 6) {
                     Image(systemName: "wrench.and.screwdriver")
                         .font(.system(size: 12))
-                    Text("使用工具")
+                    Text("结果：\(toolCalls.map(\.toolName).joined(separator: ", "))")
                         .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -637,15 +686,17 @@ struct ToolCallsDisclosureView: View, Equatable {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(toolCalls, id: \.id) { call in
-                        VStack(alignment: .leading, spacing: 2) {
+                        let result = (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(call.toolName)
-                                .font(.footnote.weight(.semibold))
-                            if let result = call.result, !result.isEmpty {
+                                .font(.caption.weight(.semibold))
+                            if !result.isEmpty {
                                 Text(result)
                                     .font(.caption)
-                                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+                                    .textSelection(.enabled)
                             }
                         }
+                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
                         .padding(6)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
