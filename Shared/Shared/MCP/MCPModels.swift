@@ -26,6 +26,10 @@ public struct MCPClientCapabilities: Codable, Hashable {
     }
 }
 
+public enum MCPProtocolVersion {
+    public static let current = "2024-11-05"
+}
+
 public struct MCPServerInfo: Codable, Hashable {
     public var name: String
     public var version: String?

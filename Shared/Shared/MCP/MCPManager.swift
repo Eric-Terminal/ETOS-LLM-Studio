@@ -255,14 +255,14 @@ public final class MCPManager: ObservableObject {
     private func refreshMetadata(for serverID: UUID, client: MCPClient) async {
         do {
             async let toolsTask = client.listTools()
-            async let resourcesTask = client.listResources()
-            async let promptsTask = client.listPrompts()
-            async let rootsTask = client.listRoots()
+            async let resourcesTask = listResourcesIfSupported(client: client)
+            async let promptsTask = listPromptsIfSupported(client: client)
+            async let rootsTask = listRootsIfSupported(client: client)
             
             let tools = try await toolsTask
             let resources = try await resourcesTask
-            let prompts = (try? await promptsTask) ?? []
-            let roots = (try? await rootsTask) ?? []
+            let prompts = try await promptsTask
+            let roots = try await rootsTask
             if let server = servers.first(where: { $0.id == serverID }) {
                 mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             } else {
@@ -292,6 +292,30 @@ public final class MCPManager: ObservableObject {
                 self.lastOperationError = error.localizedDescription
                 self.lastOperationOutput = nil
             }
+        }
+    }
+
+    private func listResourcesIfSupported(client: MCPClient) async throws -> [MCPResourceDescription] {
+        do {
+            return try await client.listResources()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
+        }
+    }
+
+    private func listPromptsIfSupported(client: MCPClient) async throws -> [MCPPromptDescription] {
+        do {
+            return try await client.listPrompts()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
+        }
+    }
+
+    private func listRootsIfSupported(client: MCPClient) async throws -> [MCPRoot] {
+        do {
+            return try await client.listRoots()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
         }
     }
 

@@ -33,11 +33,13 @@ struct MCPClientTests {
         #expect(info == expectedInfo)
         guard let recorded = transport.request(named: "initialize"),
               let params = recorded.params,
+              let protocolVersion = params["protocolVersion"] as? String,
               let clientInfo = params["clientInfo"] as? [String: Any],
               let capabilities = params["capabilities"] as? [String: Any] else {
             Issue.record("未捕获到包含参数的初始化请求。")
             return
         }
+        #expect(protocolVersion == MCPProtocolVersion.current)
         #expect(clientInfo["name"] as? String == "Harness")
         #expect(clientInfo["version"] as? String == "0.1")
         #expect(capabilities["supportsStreamingResponses"] as? Bool == false)

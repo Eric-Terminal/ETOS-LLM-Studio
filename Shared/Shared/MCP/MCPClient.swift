@@ -24,10 +24,15 @@ public final class MCPClient {
     // MARK: - 公共方法
     
     public func initialize(
+        protocolVersion: String = MCPProtocolVersion.current,
         clientInfo: MCPClientInfo = .appDefault,
         capabilities: MCPClientCapabilities = .httpOnly
     ) async throws -> MCPServerInfo {
-        let params = InitializeParams(clientInfo: clientInfo, capabilities: capabilities)
+        let params = InitializeParams(
+            protocolVersion: protocolVersion,
+            clientInfo: clientInfo,
+            capabilities: capabilities
+        )
         let result: InitializeResult = try await send(method: "initialize", params: AnyEncodable(params))
         return result.info
     }
@@ -123,6 +128,7 @@ public final class MCPClient {
 // MARK: - 参数模型
 
 private struct InitializeParams: Codable {
+    let protocolVersion: String
     let clientInfo: MCPClientInfo
     let capabilities: MCPClientCapabilities
 }
