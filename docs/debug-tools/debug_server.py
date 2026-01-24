@@ -13,13 +13,12 @@ import socket
 from datetime import datetime
 from pathlib import Path
 import websockets
-from websockets.server import serve
 from aiohttp import web
 
 # ============================================================================
 # 调试配置 - 用户可修改
 # ============================================================================
-DEBUG_MODE = False  # 设置为 True 查看详细请求体，False 只显示摘要
+DEBUG_MODE = True  # 设置为 True 查看详细请求体，False 只显示摘要
 # ============================================================================
 
 def get_local_ip():
@@ -202,6 +201,49 @@ class DebugServer:
                 return f"{bytes_:.1f} {unit}"
             bytes_ /= 1024
         return f"{bytes_:.1f} TB"
+    
+    def clean_device_path(self, path):
+        """清理设备返回的路径，确保是相对于 Documents 的路径
+        
+        iOS/watchOS 设备上存在路径不一致问题：
+        - item.path 返回 /private/var/.../Documents/xxx
+        - baseURL.path 返回 /var/.../Documents（/var 是 /private/var 的符号链接）
+        
+        Swift 的 replacingOccurrences 只替换了 /var/.../Documents/ 部分，
+        导致返回 /private + 文件名，如 /private.DS_Store 或 /privateBackgrounds/xxx
+        
+        此函数移除错误的 /private 前缀。
+        """
+        if not path:
+            return path
+        
+        # 如果路径包含 /Documents/，提取其后的相对路径
+        if '/Documents/' in path:
+            relative = path.split('/Documents/', 1)[1]
+            if DEBUG_MODE:
+                print(f"[DEBUG] 路径清理: '{path}' -> '{relative}'")
+            return relative
+        
+        # 如果路径以 /Documents 结尾（Documents 根目录）
+        if path.endswith('/Documents'):
+            return ''
+        
+        # 🔥 关键修复：移除错误的 /private 前缀
+        # Swift 替换后留下的 /private + 文件路径，如 /private.DS_Store -> .DS_Store
+        if path.startswith('/private'):
+            clean_path = path[8:]  # 移除 '/private' (8个字符)
+            if DEBUG_MODE:
+                print(f"[DEBUG] 路径清理（移除/private前缀）: '{path}' -> '{clean_path}'")
+            return clean_path
+        
+        # 如果已经是相对路径，直接返回
+        if not path.startswith('/'):
+            return path
+        
+        # 其他绝对路径情况，移除开头的斜杠
+        if DEBUG_MODE:
+            print(f"[DEBUG] 路径清理（移除前导斜杠）: '{path}'")
+        return path.lstrip('/')
         
     def save_downloaded_file(self, data):
         """保存下载的文件"""
@@ -365,8 +407,11 @@ class DebugServer:
                 # 重置事件用于等待下一个响应
                 self.compatible_download_event.clear()
                 
+                # 清理路径（处理设备返回的绝对路径问题）
+                clean_path = self.clean_device_path(file_path)
+                
                 # 发送下载命令
-                await self.send_command({"command": "download", "path": file_path})
+                await self.send_command({"command": "download", "path": clean_path})
                 
                 # 等待文件响应（最多60秒每个文件）
                 try:
@@ -830,7 +875,7 @@ class DebugServer:
         await self.start_http_server()
         
         # 启动 WebSocket 服务器
-        async with serve(self.handle_websocket, self.host, self.ws_port):
+        async with websockets.serve(self.handle_websocket, self.host, self.ws_port):
             # 启动交互菜单
             await self.interactive_menu()
 
