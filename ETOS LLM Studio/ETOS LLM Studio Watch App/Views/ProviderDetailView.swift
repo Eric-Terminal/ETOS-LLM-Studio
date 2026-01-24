@@ -200,7 +200,8 @@ private struct ModelAddView: View {
     private func addModel() {
         let newModel = Model(
             modelName: modelName,
-            displayName: displayName.isEmpty ? modelName : displayName
+            displayName: displayName.isEmpty ? modelName : displayName,
+            isActivated: true
         )
         provider.models.append(newModel)
         dismiss()
