@@ -260,7 +260,7 @@ public struct AddMemorySheet: View {
                 .font(.headline)
                 .padding()
 
-            TextField("输入记忆内容...", text: $memoryContent)
+            TextField("输入记忆内容...", text: $memoryContent.watchKeyboardNewlineBinding())
                 .padding()
 
             Button("保存") {

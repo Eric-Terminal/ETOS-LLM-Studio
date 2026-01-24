@@ -45,7 +45,7 @@ struct EditMessageView: View {
         NavigationStack {
             Form {
                 Section(header: Text("回复内容")) {
-                    TextField("编辑消息", text: $newContent, axis: .vertical)
+                    TextField("编辑消息", text: $newContent.watchKeyboardNewlineBinding(), axis: .vertical)
                         .lineLimit(5...15)
                         .listRowBackground(Color.clear)
                 }
@@ -53,7 +53,7 @@ struct EditMessageView: View {
                 // 重构: 使用 MessageRole 枚举进行判断
                 if message.role == .assistant {
                     Section(header: Text("思考过程 (可选)")) {
-                        TextField("编辑思考过程", text: $newReasoning, axis: .vertical)
+                        TextField("编辑思考过程", text: $newReasoning.watchKeyboardNewlineBinding(), axis: .vertical)
                             .lineLimit(5...10)
                             .listRowBackground(Color.clear)
                     }

@@ -40,7 +40,7 @@ struct EditSessionNameView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                TextField("输入新名称", text: $newName)
+                TextField("输入新名称", text: $newName.watchKeyboardNewlineBinding())
                     .textFieldStyle(.plain)
                     .padding()
 

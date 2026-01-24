@@ -54,7 +54,7 @@ public struct LocalDebugView: View {
                 }
                 
                 Section(header: Text("服务器地址")) {
-                    TextField(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765", text: $serverURL)
+                    TextField(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765", text: $serverURL.watchKeyboardNewlineBinding())
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 

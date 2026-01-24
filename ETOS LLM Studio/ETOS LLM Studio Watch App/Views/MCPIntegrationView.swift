@@ -359,11 +359,11 @@ private struct MCPToolDebuggerView: View {
                         Text(server.displayName).tag(Optional(server.id))
                     }
                 }
-                TextField("例如 filesystem/readFile", text: $toolIdInput)
+                TextField("例如 filesystem/readFile", text: $toolIdInput.watchKeyboardNewlineBinding())
             }
             
             Section("JSON 输入") {
-                TextField("JSON 参数", text: $payloadInput)
+                TextField("JSON 参数", text: $payloadInput.watchKeyboardNewlineBinding())
             }
             
             if let localError {
@@ -424,11 +424,11 @@ private struct MCPResourceDebuggerView: View {
                         Text(server.displayName).tag(Optional(server.id))
                     }
                 }
-                TextField("例如 documents/summary", text: $resourceIdInput)
+                TextField("例如 documents/summary", text: $resourceIdInput.watchKeyboardNewlineBinding())
             }
             
             Section("查询 JSON (可选)") {
-                TextField("JSON 查询", text: $queryInput)
+                TextField("JSON 查询", text: $queryInput.watchKeyboardNewlineBinding())
             }
             
             if let localError {
@@ -574,23 +574,23 @@ private struct MCPServerEditor: View {
     var body: some View {
         Form {
             Section("基本信息") {
-                TextField("显示名称", text: $displayName)
+                TextField("显示名称", text: $displayName.watchKeyboardNewlineBinding())
                 Picker("传输类型", selection: $transportOption) {
                     ForEach(TransportOption.allCases) { option in
                         Text(option.label).tag(option)
                     }
                 }
-                TextField("HTTP(S) Endpoint", text: $endpoint)
+                TextField("HTTP(S) Endpoint", text: $endpoint.watchKeyboardNewlineBinding())
                 if transportOption.requiresAPIKey {
-                    TextField("Bearer API Key (可选)", text: $apiKey)
+                    TextField("Bearer API Key (可选)", text: $apiKey.watchKeyboardNewlineBinding())
                 }
                 if transportOption == .oauth {
-                    TextField("OAuth Token Endpoint", text: $tokenEndpoint)
-                    TextField("Client ID", text: $clientID)
-                    SecureField("Client Secret", text: $clientSecret)
-                    TextField("Scope (可选)", text: $oauthScope)
+                    TextField("OAuth Token Endpoint", text: $tokenEndpoint.watchKeyboardNewlineBinding())
+                    TextField("Client ID", text: $clientID.watchKeyboardNewlineBinding())
+                    SecureField("Client Secret", text: $clientSecret.watchKeyboardNewlineBinding())
+                    TextField("Scope (可选)", text: $oauthScope.watchKeyboardNewlineBinding())
                 }
-                TextField("备注 (可选)", text: $notes)
+                TextField("备注 (可选)", text: $notes.watchKeyboardNewlineBinding())
             }
             
             if let validationMessage {

@@ -274,7 +274,7 @@ struct ContentView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .allowsHitTesting(false)
-            TextField("", text: $viewModel.userInput)
+            TextField("", text: $viewModel.userInput.watchKeyboardNewlineBinding())
                 .textFieldStyle(.plain)
                 .opacity(0.01)
                 .accessibilityLabel("输入...")

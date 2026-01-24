@@ -38,8 +38,8 @@ struct ProviderEditView: View {
 
         Form {
             Section(header: Text("基础信息"), footer: Text(apiBaseURLHint)) {
-                TextField("提供商名称", text: $provider.name)
-                TextField("API 地址", text: $provider.baseURL)
+                TextField("提供商名称", text: $provider.name.watchKeyboardNewlineBinding())
+                TextField("API 地址", text: $provider.baseURL.watchKeyboardNewlineBinding())
                     .font(.caption)
                 Picker("API 格式", selection: $provider.apiFormat) {
                     Text("OpenAI 兼容").tag("openai-compatible")
@@ -51,9 +51,9 @@ struct ProviderEditView: View {
             Section(header: Text("认证"), footer: Text(apiKeysHint)) {
                 Group {
                     if showApiKeys {
-                        TextField("API Key", text: $apiKeysText)
+                        TextField("API Key", text: $apiKeysText.watchKeyboardNewlineBinding())
                     } else {
-                        SecureField("API Key", text: $apiKeysText)
+                        SecureField("API Key", text: $apiKeysText.watchKeyboardNewlineBinding())
                     }
                 }
                 
@@ -270,7 +270,7 @@ private struct HeaderOverrideRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text)
+            TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.footnote.monospaced())
