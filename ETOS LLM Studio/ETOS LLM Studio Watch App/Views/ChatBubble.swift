@@ -171,6 +171,7 @@ struct ChatBubble: View {
     private func renderContent(_ content: String) -> some View {
         if enableMarkdown {
             Markdown(content)
+                .markdownSoftBreakMode(.lineBreak)
         } else {
             Text(content)
         }

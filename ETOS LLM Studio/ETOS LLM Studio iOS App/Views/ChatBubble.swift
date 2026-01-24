@@ -335,6 +335,7 @@ struct ChatBubble: View {
     private func renderContent(_ content: String) -> some View {
         if enableMarkdown {
             Markdown(content)
+                .markdownSoftBreakMode(.lineBreak)
                 .markdownTextStyle {
                     ForegroundColor(isOutgoing ? .white : .primary)
                 }
