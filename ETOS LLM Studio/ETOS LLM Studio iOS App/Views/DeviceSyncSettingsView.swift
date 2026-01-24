@@ -9,6 +9,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
     @AppStorage("sync.options.memories") private var syncMemories = false
     @AppStorage("sync.options.mcpServers") private var syncMCPServers = true
+    @AppStorage("sync.options.imageFiles") private var syncImageFiles = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     
     var body: some View {
@@ -25,6 +26,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("背景图片", isOn: $syncBackgrounds)
                 Toggle("记忆（仅合并文本）", isOn: $syncMemories)
                 Toggle("MCP 服务器", isOn: $syncMCPServers)
+                Toggle("图片文件", isOn: $syncImageFiles)
             }
             
             Section {
@@ -61,6 +63,7 @@ struct DeviceSyncSettingsView: View {
         if syncBackgrounds { option.insert(.backgrounds) }
         if syncMemories { option.insert(.memories) }
         if syncMCPServers { option.insert(.mcpServers) }
+        if syncImageFiles { option.insert(.imageFiles) }
         return option
     }
     
@@ -125,6 +128,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedMCPServers > 0 {
             parts.append(String(format: NSLocalizedString("MCP +%d", comment: ""), summary.importedMCPServers))
+        }
+        if summary.importedImageFiles > 0 {
+            parts.append(String(format: NSLocalizedString("图片 +%d", comment: ""), summary.importedImageFiles))
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)

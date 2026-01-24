@@ -31,6 +31,17 @@ struct ChatBubble: View {
     let enableLiquidGlass: Bool
     
     @StateObject private var audioPlayer = WatchAudioPlayerManager()
+    @State private var imagePreview: ImagePreviewPayload?
+
+    /// 图片占位符文本（各语言版本）
+    private static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+
+    private var hasNonPlaceholderText: Bool {
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else { return false }
+        return !Self.imagePlaceholders.contains(trimmedContent)
+    }
+
 
     // MARK: - 视图主体
     
@@ -54,34 +65,29 @@ struct ChatBubble: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
+        .sheet(item: $imagePreview) { payload in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                Image(uiImage: payload.image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(12)
+            }
+        }
     }
     
     // MARK: - 气泡视图
     
     @ViewBuilder
     private var userBubble: some View {
-        let content = Group {
-            // 如果是语音消息，显示播放控件
-            if let audioFileName = message.audioFileName {
-                audioPlayerView(fileName: audioFileName, isUser: true)
-            } else {
-                renderContent(message.content)
+        VStack(alignment: .trailing, spacing: 4) {
+            if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+                imageAttachmentsView(fileNames: imageFileNames, isOutgoing: true)
             }
-        }
-            .padding(10)
-            .foregroundColor(.white)
 
-        if enableLiquidGlass {
-            if #available(watchOS 26.0, *) {
-                content
-                    .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                    .background(Color.blue.opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                userBubbleFallback(content)
+            if shouldShowUserBubble {
+                userTextBubble
             }
-        } else {
-            userBubbleFallback(content)
         }
     }
     
@@ -107,38 +113,70 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private var assistantBubble: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+                imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
+            }
+
+            if shouldShowAssistantBubble {
+                assistantTextBubble
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var userTextBubble: some View {
+        let content = Group {
+            if let audioFileName = message.audioFileName {
+                audioPlayerView(fileName: audioFileName, isUser: true)
+            } else if hasNonPlaceholderText {
+                renderContent(message.content)
+            }
+        }
+        .padding(10)
+        .foregroundColor(.white)
+
+        if enableLiquidGlass {
+            if #available(watchOS 26.0, *) {
+                content
+                    .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color.blue.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                userBubbleFallback(content)
+            }
+        } else {
+            userBubbleFallback(content)
+        }
+    }
+
+    @ViewBuilder
+    private var assistantTextBubble: some View {
+        let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
+        let hasToolCalls = message.toolCalls != nil && !message.toolCalls!.isEmpty
+        let isErrorVersion = message.content.hasPrefix("重试失败")
+
         let content = VStack(alignment: .leading, spacing: 8) {
-            
-            let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
-            let hasToolCalls = message.toolCalls != nil && !message.toolCalls!.isEmpty
-            let isErrorVersion = message.content.hasPrefix("重试失败")
-            
-            // 思考过程区域
             if let reasoning = message.reasoningContent, !reasoning.isEmpty {
                 reasoningView(reasoning)
             }
-            
-            // 工具调用区域
+
             if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-                // 如果思考过程和工具调用同时存在，添加一个分隔线
                 if hasReasoning {
                     Divider().background(Color.gray.opacity(0.5))
                 }
                 toolCallsView(toolCalls)
             }
-            
-            // 如果有附加信息（思考或工具），且有实际内容，则添加主分隔线
-            if (hasReasoning || hasToolCalls) && !message.content.isEmpty {
+
+            if (hasReasoning || hasToolCalls) && hasNonPlaceholderText {
                 Divider().background(Color.gray)
             }
-            
-            // 消息内容区域
-            if !message.content.isEmpty {
+
+            if hasNonPlaceholderText {
                 renderContent(message.content)
                     .foregroundColor(isErrorVersion ? .white : nil)
             }
-            
-            // 加载指示器
+
             if shouldShowThinkingIndicator {
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.small)
@@ -154,15 +192,25 @@ struct ChatBubble: View {
             if enableLiquidGlass {
                 if #available(watchOS 26.0, *) {
                     content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                        .background(message.content.hasPrefix("重试失败") ? Color.red.opacity(0.5) : nil)
+                        .background(isErrorVersion ? Color.red.opacity(0.5) : nil)
                 } else {
-                    assistantBubbleFallback(content, isError: message.content.hasPrefix("重试失败"))
+                    assistantBubbleFallback(content, isError: isErrorVersion)
                 }
             } else {
-                assistantBubbleFallback(content, isError: message.content.hasPrefix("重试失败"))
+                assistantBubbleFallback(content, isError: isErrorVersion)
             }
         }
         .contentShape(Rectangle())
+    }
+
+    private var shouldShowUserBubble: Bool {
+        message.audioFileName != nil || hasNonPlaceholderText
+    }
+
+    private var shouldShowAssistantBubble: Bool {
+        let hasReasoning = message.reasoningContent != nil && !(message.reasoningContent ?? "").isEmpty
+        let hasToolCalls = message.toolCalls != nil && !(message.toolCalls ?? []).isEmpty
+        return hasReasoning || hasToolCalls || hasNonPlaceholderText || shouldShowThinkingIndicator
     }
     
     // MARK: - 辅助视图
@@ -222,6 +270,26 @@ struct ChatBubble: View {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    @ViewBuilder
+    private func imageAttachmentsView(fileNames: [String], isOutgoing: Bool) -> some View {
+        let columns: [GridItem] = fileNames.count == 1
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+        let itemHeight: CGFloat = fileNames.count == 1 ? 120 : 70
+
+        LazyVGrid(columns: columns, alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+            ForEach(fileNames, id: \.self) { fileName in
+                AttachmentImageView(
+                    fileName: fileName,
+                    height: itemHeight
+                ) { image in
+                    imagePreview = ImagePreviewPayload(image: image)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
     }
     
     @ViewBuilder
@@ -331,6 +399,65 @@ private extension ChatBubble {
         guard shouldShowThinkingIndicator else { return "" }
         return "正在思考..."
     }
+}
+
+private struct AttachmentImageView: View {
+    let fileName: String
+    let height: CGFloat
+    let onPreview: (UIImage) -> Void
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Button {
+                    onPreview(image)
+                } label: {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: height)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            } else {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.secondary.opacity(0.15))
+                    .frame(height: height)
+                    .overlay(
+                        VStack(spacing: 4) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                            Text(NSLocalizedString("图片丢失", comment: ""))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    )
+            }
+        }
+        .task {
+            if image == nil {
+                await loadImage()
+            }
+        }
+    }
+
+    private func loadImage() async {
+        guard let data = Persistence.loadImage(fileName: fileName),
+              let uiImage = UIImage(data: data) else {
+            return
+        }
+        await MainActor.run {
+            image = uiImage
+        }
+    }
+}
+
+private struct ImagePreviewPayload: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
 
 // MARK: - Watch Audio Player Manager

@@ -24,6 +24,9 @@ public enum SyncEngine {
         var memories: [MemoryItem] = []
         var mcpServers: [MCPServerConfiguration] = []
         var audioFiles: [SyncedAudio] = []
+        var imageFiles: [SyncedImage] = []
+        var referencedAudioFileNames = Set<String>()
+        var referencedImageFileNames = Set<String>()
         
         if options.contains(.providers) {
             providers = ConfigLoader.loadProviders()
@@ -31,9 +34,17 @@ public enum SyncEngine {
         
         if options.contains(.sessions) {
             let allSessions = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
-            sessions = allSessions.map { session in
+            for session in allSessions {
                 let messages = Persistence.loadMessages(for: session.id)
-                return SyncedSession(session: session, messages: messages)
+                sessions.append(SyncedSession(session: session, messages: messages))
+                for message in messages {
+                    if let audioFileName = message.audioFileName {
+                        referencedAudioFileNames.insert(audioFileName)
+                    }
+                    if let imageFileNames = message.imageFileNames {
+                        referencedImageFileNames.formUnion(imageFileNames)
+                    }
+                }
             }
         }
         
@@ -58,15 +69,39 @@ public enum SyncEngine {
             mcpServers = MCPServerStore.loadServers()
         }
         
-        // 音频文件同步：收集所有音频文件
+        // 音频文件同步：会话引用的音频 + 可选全量音频文件
+        var audioFileNamesToInclude = referencedAudioFileNames
         if options.contains(.audioFiles) {
             let directory = Persistence.getAudioDirectory()
             let fileManager = FileManager.default
             if let fileURLs = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-                audioFiles = fileURLs.compactMap { url in
-                    guard let data = try? Data(contentsOf: url) else { return nil }
-                    return SyncedAudio(filename: url.lastPathComponent, data: data)
+                for url in fileURLs {
+                    audioFileNamesToInclude.insert(url.lastPathComponent)
                 }
+            }
+        }
+        if !audioFileNamesToInclude.isEmpty {
+            audioFiles = audioFileNamesToInclude.compactMap { fileName in
+                guard let data = Persistence.loadAudio(fileName: fileName) else { return nil }
+                return SyncedAudio(filename: fileName, data: data)
+            }
+        }
+
+        // 图片文件同步：会话引用的图片 + 可选全量图片文件
+        var imageFileNamesToInclude = referencedImageFileNames
+        if options.contains(.imageFiles) {
+            let directory = Persistence.getImageDirectory()
+            let fileManager = FileManager.default
+            if let fileURLs = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+                for url in fileURLs {
+                    imageFileNamesToInclude.insert(url.lastPathComponent)
+                }
+            }
+        }
+        if !imageFileNamesToInclude.isEmpty {
+            imageFiles = imageFileNamesToInclude.compactMap { fileName in
+                guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
+                return SyncedImage(filename: fileName, data: data)
             }
         }
         
@@ -77,7 +112,8 @@ public enum SyncEngine {
             backgrounds: backgrounds,
             memories: memories,
             mcpServers: mcpServers,
-            audioFiles: audioFiles
+            audioFiles: audioFiles,
+            imageFiles: imageFiles
         )
     }
     
@@ -131,6 +167,12 @@ public enum SyncEngine {
             let result = mergeAudioFiles(package.audioFiles)
             summary.importedAudioFiles = result.imported
             summary.skippedAudioFiles = result.skipped
+        }
+
+        if package.options.contains(.imageFiles) {
+            let result = mergeImageFiles(package.imageFiles)
+            summary.importedImageFiles = result.imported
+            summary.skippedImageFiles = result.skipped
         }
         
         return summary
@@ -426,6 +468,49 @@ public enum SyncEngine {
             }
         }
         
+        return (imported, skipped)
+    }
+
+    // MARK: - Image Files
+
+    private static func mergeImageFiles(
+        _ incoming: [SyncedImage]
+    ) -> (imported: Int, skipped: Int) {
+        guard !incoming.isEmpty else { return (0, 0) }
+
+        var imported = 0
+        var skipped = 0
+
+        // 获取现有图片文件的校验和用于快速去重
+        let existingFileNames = Set(Persistence.getAllImageFileNames())
+        var existingChecksums = Set<String>()
+        for fileName in existingFileNames {
+            if let data = Persistence.loadImage(fileName: fileName) {
+                existingChecksums.insert(data.sha256Hex)
+            }
+        }
+
+        for image in incoming {
+            if existingChecksums.contains(image.checksum) {
+                skipped += 1
+                continue
+            }
+
+            var targetFileName = image.filename
+            if existingFileNames.contains(image.filename) {
+                let ext = (image.filename as NSString).pathExtension
+                let name = (image.filename as NSString).deletingPathExtension
+                targetFileName = "\(name)_\(UUID().uuidString.prefix(8)).\(ext)"
+            }
+
+            if Persistence.saveImage(image.data, fileName: targetFileName) != nil {
+                imported += 1
+                existingChecksums.insert(image.checksum)
+            } else {
+                skipped += 1
+            }
+        }
+
         return (imported, skipped)
     }
 

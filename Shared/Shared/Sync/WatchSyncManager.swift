@@ -125,6 +125,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if UserDefaults.standard.bool(forKey: "sync.options.backgrounds") { options.insert(.backgrounds) }
         if UserDefaults.standard.bool(forKey: "sync.options.memories") { options.insert(.memories) }
         if UserDefaults.standard.bool(forKey: "sync.options.mcpServers") { options.insert(.mcpServers) }
+        if UserDefaults.standard.bool(forKey: "sync.options.imageFiles") { options.insert(.imageFiles) }
         return options
     }
     
@@ -159,6 +160,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedBackgrounds > 0 { parts.append("背景 +\(summary.importedBackgrounds)") }
         if summary.importedMemories > 0 { parts.append("记忆 +\(summary.importedMemories)") }
         if summary.importedMCPServers > 0 { parts.append("MCP +\(summary.importedMCPServers)") }
+        if summary.importedImageFiles > 0 { parts.append("图片 +\(summary.importedImageFiles)") }
         return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
     }
     

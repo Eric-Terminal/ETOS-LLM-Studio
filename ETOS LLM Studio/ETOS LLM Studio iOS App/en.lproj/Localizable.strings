@@ -155,6 +155,7 @@
 "错误" = "Error";
 "高级模型设置" = "Advanced model settings";
 "MCP +%d" = "MCP +%d";
+"图片 +%d" = "Images +%d";
 "，" = ", ";
 "共处理 %d 条记忆，生成 %d 个分块。" = "Processed %d memories and generated %d chunks.";
 "已处理 %d 条记忆，生成 %d 个分块。" = "Processed %d memories and generated %d chunks.";
