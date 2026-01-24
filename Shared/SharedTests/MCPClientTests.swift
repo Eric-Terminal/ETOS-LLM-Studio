@@ -31,7 +31,7 @@ struct MCPClientTests {
         )
 
         #expect(info == expectedInfo)
-        guard let recorded = transport.request(named: "mcp/initialize"),
+        guard let recorded = transport.request(named: "initialize"),
               let params = recorded.params,
               let clientInfo = params["clientInfo"] as? [String: Any],
               let capabilities = params["capabilities"] as? [String: Any] else {
@@ -58,7 +58,7 @@ struct MCPClientTests {
 
         #expect(fetched.count == 2)
         #expect(fetched.map(\.toolId) == ["tool.one", "tool.two"])
-        guard let recorded = transport.request(named: "mcp/listTools") else {
+        guard let recorded = transport.request(named: "tools/list") else {
             Issue.record("缺少 listTools 请求记录。")
             return
         }
@@ -81,10 +81,10 @@ struct MCPClientTests {
         )
 
         #expect(result == responseValue)
-        guard let recorded = transport.request(named: "mcp/tool/execute"),
+        guard let recorded = transport.request(named: "tools/call"),
               let params = recorded.params,
-              let toolId = params["toolId"] as? String,
-              let inputs = params["inputs"] as? [String: Any] else {
+              let toolId = params["name"] as? String,
+              let inputs = params["arguments"] as? [String: Any] else {
             Issue.record("执行工具的请求参数缺失。")
             return
         }

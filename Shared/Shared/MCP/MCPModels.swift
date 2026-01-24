@@ -40,6 +40,44 @@ public struct MCPToolDescription: Codable, Identifiable, Hashable {
     public let description: String?
     public let inputSchema: JSONValue?
     public let examples: [JSONValue]?
+
+    public init(toolId: String, description: String?, inputSchema: JSONValue?, examples: [JSONValue]?) {
+        self.toolId = toolId
+        self.description = description
+        self.inputSchema = inputSchema
+        self.examples = examples
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case toolId
+        case name
+        case id
+        case description
+        case inputSchema
+        case examples
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let resolvedId = try container.decodeIfPresent(String.self, forKey: .toolId)
+            ?? container.decodeIfPresent(String.self, forKey: .name)
+            ?? container.decodeIfPresent(String.self, forKey: .id)
+        guard let resolvedId else {
+            throw DecodingError.keyNotFound(CodingKeys.toolId, DecodingError.Context(codingPath: container.codingPath, debugDescription: "Missing tool identifier"))
+        }
+        self.toolId = resolvedId
+        self.description = try container.decodeIfPresent(String.self, forKey: .description)
+        self.inputSchema = try container.decodeIfPresent(JSONValue.self, forKey: .inputSchema)
+        self.examples = try container.decodeIfPresent([JSONValue].self, forKey: .examples)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(toolId, forKey: .name)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(inputSchema, forKey: .inputSchema)
+        try container.encodeIfPresent(examples, forKey: .examples)
+    }
 }
 
 public struct MCPResourceDescription: Codable, Identifiable, Hashable {
@@ -49,6 +87,44 @@ public struct MCPResourceDescription: Codable, Identifiable, Hashable {
     public let description: String?
     public let outputSchema: JSONValue?
     public let querySchema: JSONValue?
+
+    public init(resourceId: String, description: String?, outputSchema: JSONValue?, querySchema: JSONValue?) {
+        self.resourceId = resourceId
+        self.description = description
+        self.outputSchema = outputSchema
+        self.querySchema = querySchema
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case resourceId
+        case uri
+        case name
+        case description
+        case outputSchema
+        case querySchema
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let resolvedId = try container.decodeIfPresent(String.self, forKey: .uri)
+            ?? container.decodeIfPresent(String.self, forKey: .resourceId)
+            ?? container.decodeIfPresent(String.self, forKey: .name)
+        guard let resolvedId else {
+            throw DecodingError.keyNotFound(CodingKeys.resourceId, DecodingError.Context(codingPath: container.codingPath, debugDescription: "Missing resource identifier"))
+        }
+        self.resourceId = resolvedId
+        self.description = try container.decodeIfPresent(String.self, forKey: .description)
+        self.outputSchema = try container.decodeIfPresent(JSONValue.self, forKey: .outputSchema)
+        self.querySchema = try container.decodeIfPresent(JSONValue.self, forKey: .querySchema)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(resourceId, forKey: .uri)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(outputSchema, forKey: .outputSchema)
+        try container.encodeIfPresent(querySchema, forKey: .querySchema)
+    }
 }
 
 // MARK: - Prompts

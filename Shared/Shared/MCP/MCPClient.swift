@@ -28,53 +28,54 @@ public final class MCPClient {
         capabilities: MCPClientCapabilities = .httpOnly
     ) async throws -> MCPServerInfo {
         let params = InitializeParams(clientInfo: clientInfo, capabilities: capabilities)
-        return try await send(method: "mcp/initialize", params: AnyEncodable(params))
+        let result: InitializeResult = try await send(method: "initialize", params: AnyEncodable(params))
+        return result.info
     }
     
     public func listTools() async throws -> [MCPToolDescription] {
-        let tools: [MCPToolDescription] = try await send(method: "mcp/listTools")
-        return tools
+        let result: ToolsListResult = try await send(method: "tools/list")
+        return result.tools
     }
     
     public func listResources() async throws -> [MCPResourceDescription] {
-        let resources: [MCPResourceDescription] = try await send(method: "mcp/listResources")
-        return resources
+        let result: ResourcesListResult = try await send(method: "resources/list")
+        return result.resources
     }
     
     public func executeTool(toolId: String, inputs: [String: JSONValue]) async throws -> JSONValue {
         let params = ToolExecuteParams(toolId: toolId, inputs: inputs)
-        return try await send(method: "mcp/tool/execute", params: AnyEncodable(params))
+        return try await send(method: "tools/call", params: AnyEncodable(params))
     }
     
     public func readResource(resourceId: String, query: [String: JSONValue]?) async throws -> JSONValue {
         let params = ResourceReadParams(resourceId: resourceId, query: query)
-        return try await send(method: "mcp/resource/read", params: AnyEncodable(params))
+        return try await send(method: "resources/read", params: AnyEncodable(params))
     }
 
     // MARK: - Prompts
 
     public func listPrompts() async throws -> [MCPPromptDescription] {
-        let prompts: [MCPPromptDescription] = try await send(method: "mcp/listPrompts")
-        return prompts
+        let result: PromptsListResult = try await send(method: "prompts/list")
+        return result.prompts
     }
 
     public func getPrompt(name: String, arguments: [String: String]?) async throws -> MCPGetPromptResult {
         let params = GetPromptParams(name: name, arguments: arguments)
-        return try await send(method: "mcp/prompt/get", params: AnyEncodable(params))
+        return try await send(method: "prompts/get", params: AnyEncodable(params))
     }
 
     // MARK: - Roots
 
     public func listRoots() async throws -> [MCPRoot] {
-        let roots: [MCPRoot] = try await send(method: "mcp/roots/list")
-        return roots
+        let result: RootsListResult = try await send(method: "roots/list")
+        return result.roots
     }
 
     // MARK: - Logging
 
     public func setLogLevel(_ level: MCPLogLevel) async throws {
         let params = SetLogLevelParams(level: level)
-        let _: EmptyResult = try await send(method: "mcp/logging/setLevel", params: AnyEncodable(params))
+        let _: EmptyResult = try await send(method: "logging/setLevel", params: AnyEncodable(params))
     }
 
     // MARK: - 内部发送逻辑
@@ -126,14 +127,38 @@ private struct InitializeParams: Codable {
     let capabilities: MCPClientCapabilities
 }
 
-private struct ToolExecuteParams: Codable {
+private struct ToolExecuteParams: Encodable {
     let toolId: String
     let inputs: [String: JSONValue]
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case arguments
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(toolId, forKey: .name)
+        try container.encode(inputs, forKey: .arguments)
+    }
 }
 
-private struct ResourceReadParams: Codable {
+private struct ResourceReadParams: Encodable {
     let resourceId: String
     let query: [String: JSONValue]?
+
+    enum CodingKeys: String, CodingKey {
+        case uri
+        case arguments
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(resourceId, forKey: .uri)
+        if let query {
+            try container.encode(query, forKey: .arguments)
+        }
+    }
 }
 
 private struct GetPromptParams: Codable {
@@ -146,6 +171,119 @@ private struct SetLogLevelParams: Codable {
 }
 
 private struct EmptyResult: Codable {}
+
+private struct InitializeResult: Decodable {
+    let info: MCPServerInfo
+
+    private enum CodingKeys: String, CodingKey {
+        case serverInfo
+        case capabilities
+        case metadata
+    }
+
+    init(from decoder: Decoder) throws {
+        if let info = try? MCPServerInfo(from: decoder) {
+            self.info = info
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var serverInfo = try container.decode(MCPServerInfo.self, forKey: .serverInfo)
+        let capabilities = try container.decodeIfPresent([String: JSONValue].self, forKey: .capabilities)
+        let metadata = try container.decodeIfPresent([String: JSONValue].self, forKey: .metadata)
+        if let capabilities {
+            serverInfo.capabilities = capabilities
+        }
+        if let metadata {
+            serverInfo.metadata = metadata
+        }
+        self.info = serverInfo
+    }
+}
+
+private struct ToolsListResult: Decodable {
+    let tools: [MCPToolDescription]
+    let nextCursor: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case tools
+        case nextCursor
+    }
+
+    init(from decoder: Decoder) throws {
+        if let tools = try? [MCPToolDescription](from: decoder) {
+            self.tools = tools
+            self.nextCursor = nil
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.tools = try container.decode([MCPToolDescription].self, forKey: .tools)
+        self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+}
+
+private struct ResourcesListResult: Decodable {
+    let resources: [MCPResourceDescription]
+    let nextCursor: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case resources
+        case nextCursor
+    }
+
+    init(from decoder: Decoder) throws {
+        if let resources = try? [MCPResourceDescription](from: decoder) {
+            self.resources = resources
+            self.nextCursor = nil
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.resources = try container.decode([MCPResourceDescription].self, forKey: .resources)
+        self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+}
+
+private struct PromptsListResult: Decodable {
+    let prompts: [MCPPromptDescription]
+    let nextCursor: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case prompts
+        case nextCursor
+    }
+
+    init(from decoder: Decoder) throws {
+        if let prompts = try? [MCPPromptDescription](from: decoder) {
+            self.prompts = prompts
+            self.nextCursor = nil
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.prompts = try container.decode([MCPPromptDescription].self, forKey: .prompts)
+        self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+}
+
+private struct RootsListResult: Decodable {
+    let roots: [MCPRoot]
+    let nextCursor: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case roots
+        case nextCursor
+    }
+
+    init(from decoder: Decoder) throws {
+        if let roots = try? [MCPRoot](from: decoder) {
+            self.roots = roots
+            self.nextCursor = nil
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.roots = try container.decode([MCPRoot].self, forKey: .roots)
+        self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+}
 
 private extension MCPClient {
     func logJSON(data: Data, prefix: String) {

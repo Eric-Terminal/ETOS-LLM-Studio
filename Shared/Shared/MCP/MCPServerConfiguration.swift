@@ -9,7 +9,7 @@ import Foundation
 public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public enum Transport: Codable, Hashable {
         case http(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
-        case httpSSE(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
+        case httpSSE(messageEndpoint: URL, sseEndpoint: URL, apiKey: String?, additionalHeaders: [String: String])
         case oauth(endpoint: URL, tokenEndpoint: URL, clientID: String, clientSecret: String, scope: String?)
     }
 
@@ -36,8 +36,11 @@ public extension MCPServerConfiguration {
         switch transport {
         case .http(let endpoint, _, _):
             return endpoint.absoluteString
-        case .httpSSE(let endpoint, _, _):
-            return endpoint.absoluteString
+        case .httpSSE(let messageEndpoint, let sseEndpoint, _, _):
+            if messageEndpoint == MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint) {
+                return sseEndpoint.absoluteString
+            }
+            return "\(sseEndpoint.absoluteString) (message override)"
         case .oauth(let endpoint, _, _, _, _):
             return endpoint.absoluteString
         }
@@ -51,12 +54,12 @@ public extension MCPServerConfiguration {
                 headers["Authorization"] = "Bearer \(apiKey)"
             }
             return MCPHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
-        case .httpSSE(let endpoint, let apiKey, let additionalHeaders):
+        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
             var headers = additionalHeaders
             if let apiKey, !apiKey.isEmpty {
                 headers["Authorization"] = "Bearer \(apiKey)"
             }
-            return MCPSSETransport(endpoint: endpoint, session: urlSession, headers: headers)
+            return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
             return MCPOAuthHTTPTransport(
                 endpoint: endpoint,
@@ -70,10 +73,34 @@ public extension MCPServerConfiguration {
     }
 }
 
+public extension MCPServerConfiguration {
+    static func inferMessageEndpoint(fromSSE sseEndpoint: URL) -> URL {
+        replacePathComponent(in: sseEndpoint, from: "sse", to: "message") ?? sseEndpoint
+    }
+
+    static func inferSSEEndpoint(fromMessage messageEndpoint: URL) -> URL {
+        replacePathComponent(in: messageEndpoint, from: "message", to: "sse") ?? messageEndpoint
+    }
+
+    private static func replacePathComponent(in url: URL, from: String, to: String) -> URL? {
+        var components = url.pathComponents
+        guard let index = components.lastIndex(of: from) else { return nil }
+        components[index] = to
+        let path = "/" + components.dropFirst().joined(separator: "/")
+        guard var urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        urlComponents.path = path
+        return urlComponents.url
+    }
+}
+
 extension MCPServerConfiguration.Transport {
     private enum CodingKeys: String, CodingKey {
         case kind
         case endpoint
+        case messageEndpoint
+        case sseEndpoint
         case apiKey
         case additionalHeaders
         case tokenEndpoint
@@ -98,10 +125,17 @@ extension MCPServerConfiguration.Transport {
             let headers = try container.decodeIfPresent([String: String].self, forKey: .additionalHeaders) ?? [:]
             self = .http(endpoint: endpoint, apiKey: apiKey, additionalHeaders: headers)
         case .httpSSE:
-            let endpoint = try container.decode(URL.self, forKey: .endpoint)
+            let legacyEndpoint = try container.decodeIfPresent(URL.self, forKey: .endpoint)
+            let explicitMessageEndpoint = try container.decodeIfPresent(URL.self, forKey: .messageEndpoint)
+            let explicitSSEEndpoint = try container.decodeIfPresent(URL.self, forKey: .sseEndpoint)
+            let inferredMessageEndpoint = explicitMessageEndpoint ?? legacyEndpoint.map { MCPServerConfiguration.inferMessageEndpoint(fromSSE: $0) }
+            guard let messageEndpoint = inferredMessageEndpoint else {
+                throw DecodingError.keyNotFound(CodingKeys.messageEndpoint, DecodingError.Context(codingPath: container.codingPath, debugDescription: "Missing messageEndpoint for httpSSE"))
+            }
+            let sseEndpoint = explicitSSEEndpoint ?? MCPServerConfiguration.inferSSEEndpoint(fromMessage: legacyEndpoint ?? messageEndpoint)
             let apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
             let headers = try container.decodeIfPresent([String: String].self, forKey: .additionalHeaders) ?? [:]
-            self = .httpSSE(endpoint: endpoint, apiKey: apiKey, additionalHeaders: headers)
+            self = .httpSSE(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, apiKey: apiKey, additionalHeaders: headers)
         case .oauth:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let tokenEndpoint = try container.decode(URL.self, forKey: .tokenEndpoint)
@@ -122,9 +156,11 @@ extension MCPServerConfiguration.Transport {
             if !headers.isEmpty {
                 try container.encode(headers, forKey: .additionalHeaders)
             }
-        case .httpSSE(let endpoint, let apiKey, let headers):
+        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let headers):
             try container.encode(Kind.httpSSE, forKey: .kind)
-            try container.encode(endpoint, forKey: .endpoint)
+            try container.encode(messageEndpoint, forKey: .endpoint)
+            try container.encode(messageEndpoint, forKey: .messageEndpoint)
+            try container.encode(sseEndpoint, forKey: .sseEndpoint)
             try container.encodeIfPresent(apiKey, forKey: .apiKey)
             if !headers.isEmpty {
                 try container.encode(headers, forKey: .additionalHeaders)
@@ -138,4 +174,5 @@ extension MCPServerConfiguration.Transport {
             try container.encodeIfPresent(scope, forKey: .scope)
         }
     }
+
 }

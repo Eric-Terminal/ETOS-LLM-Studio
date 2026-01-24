@@ -581,9 +581,10 @@ public enum SyncEngine {
                 hasher.combine(key)
                 hasher.combine(value)
             }
-        case .httpSSE(let endpoint, let apiKey, let headers):
+        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let headers):
             hasher.combine("httpSSE")
-            hasher.combine(endpoint.absoluteString)
+            hasher.combine(messageEndpoint.absoluteString)
+            hasher.combine(sseEndpoint.absoluteString)
             hasher.combine(apiKey ?? "")
             for (key, value) in headers.sorted(by: { $0.key < $1.key }) {
                 hasher.combine(key)
