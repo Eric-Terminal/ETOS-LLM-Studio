@@ -217,7 +217,7 @@ private struct MCPServerDetailView: View {
                             }
                         }
                     ))
-                    .disabled(status.connectionState != .ready)
+                    .disabled(status.connectionState == .connecting)
                     
                     Button("刷新工具/资源") {
                         manager.refreshMetadata(for: server)

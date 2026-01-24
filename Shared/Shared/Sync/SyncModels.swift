@@ -253,7 +253,8 @@ extension MCPServerConfiguration {
     func isEquivalent(to other: MCPServerConfiguration) -> Bool {
         displayName == other.displayName &&
         notes == other.notes &&
-        transport == other.transport
+        transport == other.transport &&
+        isSelectedForChat == other.isSelectedForChat
     }
     
     /// 去除所有同步后缀的基础名称

@@ -129,8 +129,10 @@ public final class MCPManager: ObservableObject {
         let serverIDs = Set(servers.map { $0.id })
 
         var newStatuses: [UUID: MCPServerStatus] = serverStatuses.filter { serverIDs.contains($0.key) }
-        for server in servers where newStatuses[server.id] == nil {
-            newStatuses[server.id] = MCPServerStatus()
+        for server in servers {
+            var status = newStatuses[server.id] ?? MCPServerStatus()
+            status.isSelectedForChat = server.isSelectedForChat
+            newStatuses[server.id] = status
         }
         serverStatuses = newStatuses
         clients = clients.filter { serverIDs.contains($0.key) }
@@ -149,6 +151,20 @@ public final class MCPManager: ObservableObject {
         clients[server.id] = nil
         serverStatuses[server.id] = nil
         reloadServers()
+    }
+
+    public func connectSelectedServersIfNeeded() {
+        for server in servers where server.isSelectedForChat {
+            let status = status(for: server)
+            switch status.connectionState {
+            case .ready, .connecting:
+                continue
+            case .idle, .failed:
+                connect(to: server, preserveSelection: true)
+            @unknown default:
+                continue
+            }
+        }
     }
 
     public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false) {
@@ -180,13 +196,17 @@ public final class MCPManager: ObservableObject {
                 let info = try await client.initialize()
                 mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
                 await MainActor.run {
+                    let shouldSelectForChat = !preserveSelection && !self.status(for: server).isSelectedForChat
                     self.updateStatus(for: server.id) {
                         $0.connectionState = .ready
                         $0.info = info
                         $0.isBusy = true // 直到元数据刷新完成
-                        if !preserveSelection && !$0.isSelectedForChat {
+                        if shouldSelectForChat {
                             $0.isSelectedForChat = true
                         }
+                    }
+                    if shouldSelectForChat {
+                        self.persistSelection(for: server.id, isSelected: true)
                     }
                 }
                 await refreshMetadata(for: server.id, client: client)
@@ -220,15 +240,15 @@ public final class MCPManager: ObservableObject {
             $0.prompts = []
             $0.roots = []
             $0.isBusy = false
-            $0.isSelectedForChat = false
         }
     }
 
     public func toggleSelection(for server: MCPServerConfiguration) {
-        guard case .ready = status(for: server).connectionState else { return }
+        let nextValue = !status(for: server).isSelectedForChat
         updateStatus(for: server.id) { status in
-            status.isSelectedForChat.toggle()
+            status.isSelectedForChat = nextValue
         }
+        persistSelection(for: server.id, isSelected: nextValue)
     }
 
     public func status(for server: MCPServerConfiguration) -> MCPServerStatus {
@@ -511,7 +531,11 @@ public final class MCPManager: ObservableObject {
     }
 
     public func selectedServers() -> [MCPServerConfiguration] {
-        servers.filter { serverStatuses[$0.id]?.isSelectedForChat == true }
+        servers.filter {
+            guard let status = serverStatuses[$0.id], status.isSelectedForChat else { return false }
+            if case .ready = status.connectionState { return true }
+            return false
+        }
     }
 
     // MARK: - Private helpers
@@ -579,6 +603,17 @@ public final class MCPManager: ObservableObject {
     private func updateBusyFlag() {
         let serverBusy = serverStatuses.values.contains(where: { $0.isBusy })
         isBusy = serverBusy || debugBusyCount > 0
+    }
+
+    private func persistSelection(for serverID: UUID, isSelected: Bool) {
+        guard let index = servers.firstIndex(where: { $0.id == serverID }) else { return }
+        guard servers[index].isSelectedForChat != isSelected else { return }
+        var updatedServer = servers[index]
+        updatedServer.isSelectedForChat = isSelected
+        var updatedServers = servers
+        updatedServers[index] = updatedServer
+        servers = updatedServers
+        MCPServerStore.save(updatedServer)
     }
 
     private func internalToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {

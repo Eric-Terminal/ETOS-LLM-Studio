@@ -17,17 +17,50 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public var displayName: String
     public var notes: String?
     public var transport: Transport
+    public var isSelectedForChat: Bool
 
     public init(
         id: UUID = UUID(),
         displayName: String,
         notes: String? = nil,
-        transport: Transport
+        transport: Transport,
+        isSelectedForChat: Bool = false
     ) {
         self.id = id
         self.displayName = displayName
         self.notes = notes
         self.transport = transport
+        self.isSelectedForChat = isSelectedForChat
+    }
+}
+
+extension MCPServerConfiguration {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case notes
+        case transport
+        case isSelectedForChat
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        transport = try container.decode(Transport.self, forKey: .transport)
+        isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encodeIfPresent(notes, forKey: .notes)
+        try container.encode(transport, forKey: .transport)
+        if isSelectedForChat {
+            try container.encode(isSelectedForChat, forKey: .isSelectedForChat)
+        }
     }
 }
 

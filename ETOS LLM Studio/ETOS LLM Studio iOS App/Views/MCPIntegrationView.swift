@@ -483,7 +483,7 @@ private struct MCPServerDetailView: View {
                 .disabled(status.connectionState == .idle)
                 
                 Toggle("用于聊天", isOn: bindingForSelection())
-                    .disabled(status.connectionState != .ready)
+                    .disabled(status.connectionState == .connecting)
                 
                 Button("刷新元数据") {
                     manager.refreshMetadata(for: server)
