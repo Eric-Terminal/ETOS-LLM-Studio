@@ -1303,8 +1303,22 @@ private struct TelegramMessageComposer: View {
     @State private var showAudioRecorder = false
     @State private var showAudioImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var isExpandedComposer = false
+    @State private var inputAvailableWidth: CGFloat = 0
+    @State private var compactInputWidth: CGFloat = 0
     
     private let controlSize: CGFloat = 40
+    private let expandedControlSize: CGFloat = 34
+    private let compactInputHeight: CGFloat = 44
+    private var expandedInputHeight: CGFloat {
+        let rawHeight = UIScreen.main.bounds.height * 0.3
+        return max(160, min(rawHeight, 360))
+    }
+    private let inputFont = UIFont.systemFont(ofSize: 16)
+    private let textContainerInset: CGFloat = 8
+    private let textHorizontalPadding: CGFloat = 10
+    private let compactTextVerticalPadding: CGFloat = 4
+    private let expandedTextVerticalPadding: CGFloat = 6
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -1313,6 +1327,9 @@ private struct TelegramMessageComposer: View {
     }
     private var isCameraAvailable: Bool {
         UIImagePickerController.isSourceTypeAvailable(.camera)
+    }
+    private var composerCornerRadius: CGFloat {
+        isExpandedComposer ? 18 : compactInputHeight / 2
     }
     
     var body: some View {
@@ -1325,76 +1342,41 @@ private struct TelegramMessageComposer: View {
             
             // 主输入栏
             HStack(alignment: .bottom, spacing: 12) {
-                // 附件按钮
-                Menu {
-                    Button {
-                        showImagePicker = true
-                    } label: {
-                        Label("选择图片", systemImage: "photo")
-                    }
-
-                    Button {
-                        showCamera = true
-                    } label: {
-                        Label("拍照", systemImage: "camera")
-                    }
-                    .disabled(!isCameraAvailable)
-
-                    Button {
-                        showAudioRecorder = true
-                    } label: {
-                        Label("录制语音", systemImage: "waveform")
-                    }
-
-                    Button {
-                        showAudioImporter = true
-                    } label: {
-                        Label("从录音备忘录上传", systemImage: "music.note.list")
-                    }
-                } label: {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(TelegramColors.attachButtonColor)
-                        .frame(width: controlSize, height: controlSize)
-                        .background(glassCircleBackground)
+                if !isExpandedComposer {
+                    attachmentMenuButton(size: controlSize)
                 }
-                .buttonStyle(.plain)
                 
                 // 输入框容器
                 HStack(alignment: .bottom, spacing: 8) {
-                    // 文本输入框
-                    TextField("Message", text: $text, axis: .vertical)
-                        .lineLimit(1...8)
-                        .textFieldStyle(.plain)
-                        .focused(focus)
-                        .font(.system(size: 16))
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 14)
+                    inputEditor
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(minHeight: controlSize)
-                .background(glassCapsuleBackground)
+                .background(glassRoundedBackground(cornerRadius: composerCornerRadius))
+                .overlay {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .preference(key: InputWidthKey.self, value: proxy.size.width)
+                    }
+                }
+                .onPreferenceChange(InputWidthKey.self) { width in
+                    if abs(width - inputAvailableWidth) > 0.5 {
+                        inputAvailableWidth = width
+                    }
+                    if !isExpandedComposer, abs(width - compactInputWidth) > 0.5 {
+                        compactInputWidth = width
+                    }
+                }
                 
                 // 麦克风 / 发送 / 停止按钮
-                Button {
-                    if isSending {
-                        stopAction()
-                    } else if hasContent {
-                        sendAction()
-                    } else {
-                        showAudioRecorder = true
-                    }
-                } label: {
-                    Image(systemName: actionIconName)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(actionForegroundColor)
-                        .frame(width: controlSize, height: controlSize)
-                        .background(actionBackground)
+                if !isExpandedComposer {
+                    actionControlButton(size: controlSize)
                 }
-                .buttonStyle(.plain)
-                .disabled(!isSending && hasContent && !viewModel.canSendMessage)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
+
         }
         .padding(.bottom, 6)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
@@ -1409,6 +1391,21 @@ private struct TelegramMessageComposer: View {
                     }
                 }
                 selectedPhotos = []
+            }
+        }
+        .onChange(of: text) { _, newValue in
+            handleAutoExpand(for: newValue)
+        }
+        .onChange(of: inputAvailableWidth) { _, _ in
+            handleAutoExpand(for: text)
+        }
+        .onChange(of: focus.wrappedValue) { _, isFocused in
+            if isFocused {
+                handleAutoExpand(for: text)
+            } else if isExpandedComposer {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isExpandedComposer = false
+                }
             }
         }
         .sheet(isPresented: $showCamera) {
@@ -1435,6 +1432,141 @@ private struct TelegramMessageComposer: View {
             case .failure(let error):
                 print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
             }
+        }
+    }
+
+    private func attachmentMenuButton(size: CGFloat) -> some View {
+        Menu {
+            Button {
+                showImagePicker = true
+            } label: {
+                Label("选择图片", systemImage: "photo")
+            }
+
+            Button {
+                showCamera = true
+            } label: {
+                Label("拍照", systemImage: "camera")
+            }
+            .disabled(!isCameraAvailable)
+
+            Button {
+                showAudioRecorder = true
+            } label: {
+                Label("录制语音", systemImage: "waveform")
+            }
+
+            Button {
+                showAudioImporter = true
+            } label: {
+                Label("从录音备忘录上传", systemImage: "music.note.list")
+            }
+        } label: {
+            Image(systemName: "paperclip")
+                .font(.system(size: max(14, size * 0.45), weight: .semibold))
+                .foregroundColor(TelegramColors.attachButtonColor)
+                .frame(width: size, height: size)
+                .background(glassCircleBackground)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func actionControlButton(size: CGFloat) -> some View {
+        Button {
+            if isSending {
+                stopAction()
+            } else if hasContent {
+                sendAction()
+            } else {
+                showAudioRecorder = true
+            }
+        } label: {
+            Image(systemName: actionIconName)
+                .font(.system(size: max(14, size * 0.45), weight: .semibold))
+                .foregroundColor(actionForegroundColor)
+                .frame(width: size, height: size)
+                .background(actionBackground)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isSending && hasContent && !viewModel.canSendMessage)
+    }
+
+    @ViewBuilder
+    private var inputEditor: some View {
+        let targetHeight = isExpandedComposer ? expandedInputHeight : compactInputHeight
+        let verticalPadding = isExpandedComposer ? expandedTextVerticalPadding : compactTextVerticalPadding
+
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $text)
+                .font(.system(size: inputFont.pointSize))
+                .focused(focus)
+                .scrollContentBackground(.hidden)
+                .scrollDisabled(!isExpandedComposer)
+                .padding(.vertical, verticalPadding)
+                .padding(.horizontal, textHorizontalPadding)
+
+            if text.isEmpty {
+                Text("Message")
+                    .font(.system(size: inputFont.pointSize))
+                    .foregroundColor(.secondary)
+                    .padding(.top, verticalPadding + textContainerInset)
+                    .padding(.leading, textHorizontalPadding + textContainerInset)
+            }
+        }
+        .frame(minHeight: targetHeight, maxHeight: targetHeight)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
+    }
+
+    private func handleAutoExpand(for newValue: String) {
+        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            if isExpandedComposer {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isExpandedComposer = false
+                }
+            }
+            return
+        }
+
+        let hasExplicitNewline = newValue.contains("\n")
+        var shouldExpand = hasExplicitNewline
+
+        if !shouldExpand {
+            let baseWidth = compactInputWidth > 0 ? compactInputWidth : inputAvailableWidth
+            let availableWidth = baseWidth
+                - textHorizontalPadding * 2
+                - textContainerInset * 2
+            if availableWidth > 0 {
+                let boundingRect = (newValue as NSString).boundingRect(
+                    with: CGSize(width: availableWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    attributes: [.font: inputFont],
+                    context: nil
+                )
+                let lineCount = max(1, Int(ceil(boundingRect.height / inputFont.lineHeight)))
+                shouldExpand = lineCount > 1
+            }
+        }
+
+        if shouldExpand {
+            guard focus.wrappedValue else { return }
+            guard !isExpandedComposer else { return }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                isExpandedComposer = true
+            }
+            focus.wrappedValue = true
+        } else if isExpandedComposer {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                isExpandedComposer = false
+            }
+        }
+    }
+
+    private struct InputWidthKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
         }
     }
     
@@ -1528,7 +1660,7 @@ private struct TelegramMessageComposer: View {
 
             do {
                 let data = try Data(contentsOf: url)
-                let attachment = AudioAttachment(
+                let attachment = await AudioAttachment(
                     data: data,
                     mimeType: audioMimeType(for: url),
                     format: audioFormat(for: url),

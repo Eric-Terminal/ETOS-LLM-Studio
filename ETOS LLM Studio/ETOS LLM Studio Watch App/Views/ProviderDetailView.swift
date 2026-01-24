@@ -178,8 +178,8 @@ private struct ModelAddView: View {
         NavigationStack {
             Form {
                 Section(header: Text("新模型信息")) {
-                    TextField("模型ID (e.g., gpt-4o)", text: $modelName)
-                    TextField("模型名称 (可选)", text: $displayName)
+                    TextField("模型ID (e.g., gpt-4o)", text: $modelName.watchKeyboardNewlineBinding())
+                    TextField("模型名称 (可选)", text: $displayName.watchKeyboardNewlineBinding())
                 }
                 Section {
                     Button("添加模型") {
@@ -200,7 +200,8 @@ private struct ModelAddView: View {
     private func addModel() {
         let newModel = Model(
             modelName: modelName,
-            displayName: displayName.isEmpty ? modelName : displayName
+            displayName: displayName.isEmpty ? modelName : displayName,
+            isActivated: true
         )
         provider.models.append(newModel)
         dismiss()

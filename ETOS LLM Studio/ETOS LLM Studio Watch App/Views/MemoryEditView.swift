@@ -24,7 +24,7 @@ public struct MemoryEditView: View {
     public var body: some View {
         Form {
             Section(header: Text("记忆内容")) {
-                TextField("在此输入多行记忆内容...", text: $memory.content, axis: .vertical)
+                TextField("在此输入多行记忆内容...", text: $memory.content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(5...20)
                     .onChange(of: memory.content) { _, _ in
                         hasChanges = true

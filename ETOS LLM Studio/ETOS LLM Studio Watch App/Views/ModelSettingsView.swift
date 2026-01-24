@@ -31,8 +31,8 @@ struct ModelSettingsView: View {
                 header: Text("基础信息"),
                 footer: Text("模型ID是 API 调用时使用的真实标识，模型名称是 App 内展示给用户的别名。")
             ) {
-                TextField("模型名称", text: $model.displayName)
-                TextField("模型ID", text: $model.modelName)
+                TextField("模型名称", text: $model.displayName.watchKeyboardNewlineBinding())
+                TextField("模型ID", text: $model.modelName.watchKeyboardNewlineBinding())
                     .font(.caption)
             }
 
@@ -312,7 +312,7 @@ private struct ExpressionRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            TextField("比如 temperature = 0.8", text: $entry.text)
+            TextField("比如 temperature = 0.8", text: $entry.text.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             

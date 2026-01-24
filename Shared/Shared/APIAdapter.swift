@@ -219,7 +219,19 @@ public class OpenAIAdapter: APIAdapter {
                 dict["content"] = msg.content
             }
             
-            if msg.role == .tool, let toolCallId = msg.toolCalls?.first?.id {
+            if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
+                let apiToolCalls: [[String: Any]] = toolCalls.map { call in
+                    [
+                        "id": call.id,
+                        "type": "function",
+                        "function": [
+                            "name": call.toolName,
+                            "arguments": call.arguments
+                        ]
+                    ]
+                }
+                dict["tool_calls"] = apiToolCalls
+            } else if msg.role == .tool, let toolCallId = msg.toolCalls?.first?.id {
                 dict["tool_call_id"] = toolCallId
             }
             return dict

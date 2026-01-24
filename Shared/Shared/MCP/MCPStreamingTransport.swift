@@ -27,13 +27,13 @@ public protocol MCPNotificationDelegate: AnyObject {
 // MARK: - Streaming Transport
 
 public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
-    private let endpoint: URL
-    private let sseEndpoint: URL?
+    private let sseEndpoint: URL
     private let session: URLSession
     private let headers: [String: String]
     
     private var sseTask: Task<Void, Never>?
     private let pendingRequestsActor = PendingRequestsActor()
+    private let state: StreamingState
     
     public weak var notificationDelegate: MCPNotificationDelegate?
     public weak var samplingHandler: MCPSamplingHandler?
@@ -42,15 +42,15 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
     private let decoder = JSONDecoder()
     
     public init(
-        endpoint: URL,
-        sseEndpoint: URL? = nil,
+        messageEndpoint: URL,
+        sseEndpoint: URL,
         session: URLSession = .shared,
         headers: [String: String] = [:]
     ) {
-        self.endpoint = endpoint
         self.sseEndpoint = sseEndpoint
         self.session = session
         self.headers = headers
+        self.state = StreamingState(messageEndpoint: messageEndpoint)
     }
     
     deinit {
@@ -60,50 +60,69 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
     // MARK: - MCPTransport
     
     public func sendMessage(_ payload: Data) async throws -> Data {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.httpBody = payload
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
+        let requestId = try extractRequestId(from: payload)
+        if sseTask == nil {
+            connectSSE()
         }
-        
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MCPClientError.invalidResponse
+
+        return try await withCheckedThrowingContinuation { continuation in
+            Task {
+                await pendingRequestsActor.add(id: requestId, continuation: continuation)
+                do {
+                    let (endpoint, sessionId) = await state.snapshot()
+                    var request = URLRequest(url: endpoint)
+                    request.httpMethod = "POST"
+                    request.httpBody = payload
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+                    for (key, value) in headers {
+                        request.setValue(value, forHTTPHeaderField: key)
+                    }
+                    if let sessionId, !sessionId.isEmpty, !hasHeader("MCP-Session-Id", in: headers) {
+                        request.setValue(sessionId, forHTTPHeaderField: "MCP-Session-Id")
+                    }
+
+                    let (data, response) = try await session.data(for: request)
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        throw MCPClientError.invalidResponse
+                    }
+
+                    guard (200..<300).contains(httpResponse.statusCode) else {
+                        let message = String(data: data, encoding: .utf8)
+                        throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
+                    }
+
+                    if let resolved = try resolveImmediateResponse(data: data, response: httpResponse) {
+                        let pending = await pendingRequestsActor.remove(id: requestId)
+                        pending?.resume(returning: resolved)
+                    }
+                } catch {
+                    let pending = await pendingRequestsActor.remove(id: requestId)
+                    pending?.resume(throwing: error)
+                }
+            }
         }
-        
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = String(data: data, encoding: .utf8)
-            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
-        }
-        
-        return data
     }
     
     // MARK: - SSE Connection
     
     public func connectSSE() {
-        guard let sseURL = sseEndpoint else {
-            streamingLogger.warning("未配置 SSE endpoint，无法建立长连接")
-            return
-        }
-        
         disconnect()
         
         sseTask = Task { [weak self] in
             guard let self = self else { return }
-            await self.runSSELoop(url: sseURL)
+            await self.runSSELoop(url: sseEndpoint)
         }
     }
     
     public func disconnect() {
         sseTask?.cancel()
         sseTask = nil
-        
+
+        let pendingActor = pendingRequestsActor
         Task {
-            let pending = await pendingRequestsActor.removeAll()
+            let pending = await pendingActor.removeAll()
             for continuation in pending {
                 continuation.resume(throwing: CancellationError())
             }
@@ -126,23 +145,34 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
                 streamingLogger.error("SSE 连接失败")
                 return
             }
-            
+
             streamingLogger.info("SSE 连接已建立")
-            
-            var buffer = ""
+            if let sessionId = httpResponse.value(forHTTPHeaderField: "MCP-Session-Id"),
+               !sessionId.isEmpty {
+                await state.updateSessionId(sessionId)
+            }
+
+            var eventName = "message"
+            var dataLines: [String] = []
             for try await line in bytes.lines {
                 if Task.isCancelled { break }
                 
                 if line.isEmpty {
                     // 空行表示事件结束
-                    if !buffer.isEmpty {
-                        await processSSEEvent(buffer)
-                        buffer = ""
+                    if !dataLines.isEmpty {
+                        let payload = dataLines.joined(separator: "\n")
+                        await handleSSEEvent(name: eventName, data: payload)
                     }
+                    eventName = "message"
+                    dataLines = []
+                } else if line.hasPrefix(":") {
+                    continue
+                } else if line.hasPrefix("event:") {
+                    eventName = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
                 } else if line.hasPrefix("data:") {
                     let data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
                     if data != "[DONE]" {
-                        buffer += data
+                        dataLines.append(data)
                     }
                 }
             }
@@ -153,7 +183,27 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         }
     }
     
-    private func processSSEEvent(_ data: String) async {
+    private func handleSSEEvent(name: String, data: String) async {
+        let trimmed = data.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if name == "endpoint" {
+            let parsed = parseEndpointEventData(trimmed)
+            if let endpoint = parsed.endpoint {
+                await state.updateMessageEndpoint(endpoint)
+            }
+            if let sessionId = parsed.sessionId {
+                await state.updateSessionId(sessionId)
+            }
+            return
+        }
+        if name == "session" || name == "sessionId" {
+            await state.updateSessionId(trimmed)
+            return
+        }
+        await processSSEPayload(trimmed)
+    }
+
+    private func processSSEPayload(_ data: String) async {
         guard let jsonData = data.data(using: .utf8) else { return }
         
         // 尝试解析为通知
@@ -254,9 +304,105 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         let data = try encoder.encode(value)
         return try decoder.decode(MCPProgressParams.self, from: data)
     }
+
+    private func extractRequestId(from payload: Data) throws -> String {
+        if let request = try? decoder.decode(JSONRPCRequestEnvelope.self, from: payload) {
+            return request.id
+        }
+        throw MCPClientError.invalidResponse
+    }
+
+    private func resolveImmediateResponse(data: Data, response: HTTPURLResponse) throws -> Data? {
+        guard !data.isEmpty else { return nil }
+        let contentType = response.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+        if contentType.contains("text/event-stream") {
+            return try extractLastEvent(from: data)
+        }
+        if let text = String(data: data, encoding: .utf8),
+           text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return nil
+        }
+        return data
+    }
+
+    private func extractLastEvent(from data: Data) throws -> Data {
+        guard let raw = String(data: data, encoding: .utf8) else {
+            throw MCPClientError.invalidResponse
+        }
+        let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+        let events = normalized.components(separatedBy: "\n\n")
+        var payloads: [String] = []
+        for event in events {
+            var buffer = ""
+            event.split(separator: "\n").forEach { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard trimmed.hasPrefix("data:") else { return }
+                let content = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                guard content != "[DONE]" else { return }
+                buffer.append(content)
+            }
+            if !buffer.isEmpty {
+                payloads.append(buffer)
+            }
+        }
+        if let last = payloads.last,
+           let data = last.data(using: .utf8) {
+            return data
+        }
+        throw MCPClientError.invalidResponse
+    }
+
+    private func parseEndpointEventData(_ data: String) -> (endpoint: URL?, sessionId: String?) {
+        if let direct = urlFromEventData(data) {
+            return (direct, extractSessionId(from: direct))
+        }
+        if let jsonData = data.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            let endpointString = object["endpoint"] as? String
+                ?? object["messageEndpoint"] as? String
+                ?? object["message"] as? String
+                ?? object["url"] as? String
+            let sessionId = object["sessionId"] as? String
+                ?? object["session_id"] as? String
+                ?? object["mcpSessionId"] as? String
+            if let endpointString, let resolved = urlFromEventData(endpointString) {
+                return (resolved, sessionId ?? extractSessionId(from: resolved))
+            }
+            return (nil, sessionId)
+        }
+        return (nil, nil)
+    }
+
+    private func urlFromEventData(_ data: String) -> URL? {
+        let trimmed = data.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return URL(string: trimmed, relativeTo: sseEndpoint)?.absoluteURL
+    }
+
+    private func extractSessionId(from url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+              let items = components.queryItems else {
+            return nil
+        }
+        for item in items {
+            let name = item.name.lowercased()
+            if name == "sessionid" || name == "session_id" || name == "mcp_session_id" {
+                return item.value
+            }
+        }
+        return nil
+    }
+
+    private func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
+        headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
 }
 
 // MARK: - Internal Models
+
+private struct JSONRPCRequestEnvelope: Decodable {
+    let id: String
+}
 
 private struct MCPServerSamplingRequest: Codable {
     let jsonrpc: String
@@ -316,5 +462,26 @@ private actor PendingRequestsActor {
         let all = Array(requests.values)
         requests.removeAll()
         return all
+    }
+}
+
+private actor StreamingState {
+    private var messageEndpoint: URL
+    private var sessionId: String?
+
+    init(messageEndpoint: URL) {
+        self.messageEndpoint = messageEndpoint
+    }
+
+    func snapshot() -> (URL, String?) {
+        (messageEndpoint, sessionId)
+    }
+
+    func updateMessageEndpoint(_ endpoint: URL) {
+        messageEndpoint = endpoint
+    }
+
+    func updateSessionId(_ id: String?) {
+        sessionId = id
     }
 }

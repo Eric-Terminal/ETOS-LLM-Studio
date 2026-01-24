@@ -46,7 +46,7 @@ struct ModelAdvancedSettingsView: View {
     var body: some View {
         Form {
             Section(header: Text("全局系统提示词")) {
-                TextField("自定义全局系统提示词", text: $systemPrompt, axis: .vertical)
+                TextField("自定义全局系统提示词", text: $systemPrompt.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(5...10)
             }
             
@@ -60,7 +60,7 @@ struct ModelAdvancedSettingsView: View {
                             ChatService.shared.updateSession(session)
                         }
                     }
-                ), axis: .vertical)
+                ).watchKeyboardNewlineBinding(), axis: .vertical)
                 .lineLimit(5...10)
             }
             
@@ -75,7 +75,7 @@ struct ModelAdvancedSettingsView: View {
                             ChatService.shared.updateSession(session)
                         }
                     }
-                ), axis: .vertical)
+                ).watchKeyboardNewlineBinding(), axis: .vertical)
                 .lineLimit(5...10)
             }
             

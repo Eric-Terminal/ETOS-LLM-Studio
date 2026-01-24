@@ -75,6 +75,30 @@ struct ChatBubble: View {
         let isPlaceholderOnly = trimmedContent.isEmpty || Self.imagePlaceholders.contains(trimmedContent)
         return isPlaceholderOnly && message.reasoningContent == nil && message.toolCalls == nil && message.audioFileName == nil
     }
+
+    private var shouldShowTextBubble: Bool {
+        if hasOnlyImages {
+            return false
+        }
+        let hasReasoning = !(message.reasoningContent ?? "").isEmpty
+        let hasContent = !message.content.isEmpty
+        let hasToolCalls = !(message.toolCalls ?? []).isEmpty
+        let shouldShowThinking = message.role == .assistant
+            && !hasContent
+            && !hasReasoning
+            && !hasToolCalls
+
+        switch message.role {
+        case .tool:
+            return hasToolCalls || hasContent
+        case .assistant, .system:
+            return hasReasoning || hasContent || shouldShowThinking
+        case .user, .error:
+            return hasContent || hasReasoning || hasToolCalls
+        @unknown default:
+            return hasReasoning || hasContent || hasToolCalls
+        }
+    }
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
@@ -90,7 +114,7 @@ struct ChatBubble: View {
                 }
                 
                 // 气泡内容（仅当有非图片内容时显示）
-                if !hasOnlyImages {
+                if shouldShowTextBubble {
                     VStack(alignment: .leading, spacing: 6) {
                         textContentStack
                         
@@ -231,59 +255,31 @@ struct ChatBubble: View {
         // 思考过程 (Telegram 风格折叠)
         if let reasoning = message.reasoningContent,
            !reasoning.isEmpty {
-            DisclosureGroup(isExpanded: $isReasoningExpanded) {
-                Text(reasoning)
-                    .font(.subheadline)
-                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
-                    .textSelection(.enabled)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 12))
-                    Text("思考过程")
-                        .font(.subheadline.weight(.medium))
-                }
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
-            }
-            .tint(isOutgoing ? .white : .secondary)
+            ReasoningDisclosureView(
+                reasoning: reasoning,
+                isExpanded: $isReasoningExpanded,
+                isOutgoing: isOutgoing
+            )
         }
         
-        // 工具调用
+        // 工具调用/结果（折叠展示）
         if let toolCalls = message.toolCalls,
-           !toolCalls.isEmpty {
-            DisclosureGroup(isExpanded: $isToolCallsExpanded) {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(toolCalls, id: \.id) { call in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(call.toolName)
-                                .font(.footnote.weight(.semibold))
-                            if let result = call.result, !result.isEmpty {
-                                Text(result)
-                                    .font(.caption)
-                                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
-                            }
-                        }
-                        .padding(6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
-                        )
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "wrench.and.screwdriver")
-                        .font(.system(size: 12))
-                    Text("使用工具")
-                        .font(.subheadline.weight(.medium))
-                }
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
-            }
-            .tint(isOutgoing ? .white : .secondary)
+           !toolCalls.isEmpty,
+           message.role == .tool {
+            ToolCallsInlineView(
+                toolCalls: toolCalls,
+                isOutgoing: isOutgoing
+            )
+            ToolResultsDisclosureView(
+                toolCalls: toolCalls,
+                resultText: message.content,
+                isExpanded: $isToolCallsExpanded,
+                isOutgoing: isOutgoing
+            )
         }
         
         // 消息正文
-        if !message.content.isEmpty {
+        if !message.content.isEmpty, message.role != .tool || (message.toolCalls?.isEmpty ?? true) {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName)
             } else {
@@ -292,7 +288,9 @@ struct ChatBubble: View {
                     .foregroundStyle(isOutgoing ? Color.white : Color.primary)
                     .textSelection(.enabled)
             }
-        } else if message.role == .assistant {
+        } else if message.role == .assistant,
+                  (message.reasoningContent ?? "").isEmpty,
+                  (message.toolCalls ?? []).isEmpty {
             // 加载指示器
             HStack(spacing: 8) {
                 TelegramTypingIndicator()
@@ -369,6 +367,7 @@ struct ChatBubble: View {
     private func renderContent(_ content: String) -> some View {
         if enableMarkdown {
             Markdown(content)
+                .markdownSoftBreakMode(.lineBreak)
                 .markdownTextStyle {
                     ForegroundColor(isOutgoing ? .white : .primary)
                 }
@@ -424,6 +423,7 @@ struct ChatBubble: View {
         }
         .frame(minWidth: 180)
     }
+    
 }
 
 // MARK: - Telegram 输入指示器动画
@@ -574,5 +574,173 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     deinit {
         stop()
+    }
+}
+
+// MARK: - 思考过程折叠视图（性能优化）
+
+/// 独立的思考过程视图，避免长文本导致父视图重复布局
+/// 使用 Equatable 优化：只有在 reasoning 或 isExpanded 变化时才重新渲染
+struct ReasoningDisclosureView: View, Equatable {
+    let reasoning: String
+    @Binding var isExpanded: Bool
+    let isOutgoing: Bool
+    
+    // 限制显示的最大字符数，超过时截断并提示
+    private static let maxDisplayLength = 8000
+    
+    static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
+        lhs.reasoning == rhs.reasoning && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing
+    }
+    
+    private var displayText: String {
+        if reasoning.count > Self.maxDisplayLength {
+            return String(reasoning.prefix(Self.maxDisplayLength)) + "\n\n... (内容过长，已截断)"
+        }
+        return reasoning
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 点击区域：标题行
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 12))
+                    Text("思考过程")
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            // 内容区域：只在展开时渲染
+            if isExpanded {
+                Text(displayText)
+                    .font(.subheadline)
+                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}
+
+// MARK: - 工具调用视图（内联展示）
+struct ToolCallsInlineView: View, Equatable {
+    let toolCalls: [InternalToolCall]
+    let isOutgoing: Bool
+    
+    static func == (lhs: ToolCallsInlineView, rhs: ToolCallsInlineView) -> Bool {
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isOutgoing == rhs.isOutgoing
+    }
+
+    private func displayName(for toolName: String) -> String {
+        MCPManager.shared.displayLabel(for: toolName) ?? toolName
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(toolCalls, id: \.id) { call in
+                let trimmedArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = displayName(for: call.toolName)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.system(size: 12))
+                        Text("调用：\(label)")
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                    }
+                    if !trimmedArgs.isEmpty {
+                        Text(trimmedArgs)
+                            .font(.caption)
+                            .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                )
+            }
+        }
+    }
+}
+
+struct ToolResultsDisclosureView: View, Equatable {
+    let toolCalls: [InternalToolCall]
+    let resultText: String
+    @Binding var isExpanded: Bool
+    let isOutgoing: Bool
+    
+    static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing && lhs.resultText == rhs.resultText
+    }
+
+    private func displayName(for toolName: String) -> String {
+        MCPManager.shared.displayLabel(for: toolName) ?? toolName
+    }
+    
+    var body: some View {
+        let toolNames = toolCalls.map { displayName(for: $0.toolName) }
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "wrench.and.screwdriver")
+                        .font(.system(size: 12))
+                    Text("结果：\(toolNames.joined(separator: ", "))")
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(toolCalls, id: \.id) { call in
+                        let result = (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let label = displayName(for: call.toolName)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(label)
+                                .font(.caption.weight(.semibold))
+                            if !result.isEmpty {
+                                Text(result)
+                                    .font(.caption)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+                        .padding(6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                        )
+                    }
+                }
+                .padding(.top, 8)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
 }

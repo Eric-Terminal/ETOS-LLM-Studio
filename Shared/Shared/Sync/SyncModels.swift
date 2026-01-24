@@ -27,6 +27,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let memories = SyncOptions(rawValue: 1 << 3)
     public static let mcpServers = SyncOptions(rawValue: 1 << 4)
     public static let audioFiles = SyncOptions(rawValue: 1 << 5)  // 音频文件同步选项
+    public static let imageFiles = SyncOptions(rawValue: 1 << 6)  // 图片文件同步选项
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -78,6 +79,19 @@ public struct SyncedAudio: Codable {
     }
 }
 
+/// 图片文件同步载荷
+public struct SyncedImage: Codable {
+    public var filename: String
+    public var data: Data
+    public var checksum: String
+
+    public init(filename: String, data: Data) {
+        self.filename = filename
+        self.data = data
+        self.checksum = data.sha256Hex
+    }
+}
+
 /// 同步包，依据选项包含不同的数据集合
 public struct SyncPackage: Codable {
     public var options: SyncOptions
@@ -87,9 +101,10 @@ public struct SyncPackage: Codable {
     public var memories: [MemoryItem]
     public var mcpServers: [MCPServerConfiguration]
     public var audioFiles: [SyncedAudio]
+    public var imageFiles: [SyncedImage]
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles
     }
     
     public init(
@@ -99,7 +114,8 @@ public struct SyncPackage: Codable {
         backgrounds: [SyncedBackground] = [],
         memories: [MemoryItem] = [],
         mcpServers: [MCPServerConfiguration] = [],
-        audioFiles: [SyncedAudio] = []
+        audioFiles: [SyncedAudio] = [],
+        imageFiles: [SyncedImage] = []
     ) {
         self.options = options
         self.providers = providers
@@ -108,6 +124,7 @@ public struct SyncPackage: Codable {
         self.memories = memories
         self.mcpServers = mcpServers
         self.audioFiles = audioFiles
+        self.imageFiles = imageFiles
     }
     
     public init(from decoder: Decoder) throws {
@@ -119,6 +136,7 @@ public struct SyncPackage: Codable {
         memories = try container.decodeIfPresent([MemoryItem].self, forKey: .memories) ?? []
         mcpServers = try container.decodeIfPresent([MCPServerConfiguration].self, forKey: .mcpServers) ?? []
         audioFiles = try container.decodeIfPresent([SyncedAudio].self, forKey: .audioFiles) ?? []
+        imageFiles = try container.decodeIfPresent([SyncedImage].self, forKey: .imageFiles) ?? []
     }
 }
 
@@ -136,6 +154,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedMCPServers: Int
     public var importedAudioFiles: Int
     public var skippedAudioFiles: Int
+    public var importedImageFiles: Int
+    public var skippedImageFiles: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -149,7 +169,9 @@ public struct SyncMergeSummary: Equatable {
         importedMCPServers: 0,
         skippedMCPServers: 0,
         importedAudioFiles: 0,
-        skippedAudioFiles: 0
+        skippedAudioFiles: 0,
+        importedImageFiles: 0,
+        skippedImageFiles: 0
     )
 }
 
@@ -231,7 +253,8 @@ extension MCPServerConfiguration {
     func isEquivalent(to other: MCPServerConfiguration) -> Bool {
         displayName == other.displayName &&
         notes == other.notes &&
-        transport == other.transport
+        transport == other.transport &&
+        isSelectedForChat == other.isSelectedForChat
     }
     
     /// 去除所有同步后缀的基础名称

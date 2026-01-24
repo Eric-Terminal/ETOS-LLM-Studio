@@ -6,6 +6,9 @@
 
 import Foundation
 import Combine
+import os.log
+
+private let mcpManagerLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPManager")
 
 public struct MCPAvailableTool: Identifiable, Hashable {
     public let id: String
@@ -126,8 +129,10 @@ public final class MCPManager: ObservableObject {
         let serverIDs = Set(servers.map { $0.id })
 
         var newStatuses: [UUID: MCPServerStatus] = serverStatuses.filter { serverIDs.contains($0.key) }
-        for server in servers where newStatuses[server.id] == nil {
-            newStatuses[server.id] = MCPServerStatus()
+        for server in servers {
+            var status = newStatuses[server.id] ?? MCPServerStatus()
+            status.isSelectedForChat = server.isSelectedForChat
+            newStatuses[server.id] = status
         }
         serverStatuses = newStatuses
         clients = clients.filter { serverIDs.contains($0.key) }
@@ -148,7 +153,22 @@ public final class MCPManager: ObservableObject {
         reloadServers()
     }
 
+    public func connectSelectedServersIfNeeded() {
+        for server in servers where server.isSelectedForChat {
+            let status = status(for: server)
+            switch status.connectionState {
+            case .ready, .connecting:
+                continue
+            case .idle, .failed:
+                connect(to: server, preserveSelection: true)
+            @unknown default:
+                continue
+            }
+        }
+    }
+
     public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false) {
+        mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
         updateStatus(for: server.id) {
             $0.connectionState = .connecting
             $0.isBusy = true
@@ -174,18 +194,24 @@ public final class MCPManager: ObservableObject {
         Task {
             do {
                 let info = try await client.initialize()
+                mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
                 await MainActor.run {
+                    let shouldSelectForChat = !preserveSelection && !self.status(for: server).isSelectedForChat
                     self.updateStatus(for: server.id) {
                         $0.connectionState = .ready
                         $0.info = info
                         $0.isBusy = true // 直到元数据刷新完成
-                        if !preserveSelection && !$0.isSelectedForChat {
+                        if shouldSelectForChat {
                             $0.isSelectedForChat = true
                         }
+                    }
+                    if shouldSelectForChat {
+                        self.persistSelection(for: server.id, isSelected: true)
                     }
                 }
                 await refreshMetadata(for: server.id, client: client)
             } catch {
+                mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
                 await MainActor.run {
                     self.updateStatus(for: server.id) {
                         $0.connectionState = .failed(reason: error.localizedDescription)
@@ -202,6 +228,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func disconnect(server: MCPServerConfiguration) {
+        mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
         clients[server.id] = nil
         streamingTransports[server.id]?.disconnect()
         streamingTransports[server.id] = nil
@@ -213,15 +240,15 @@ public final class MCPManager: ObservableObject {
             $0.prompts = []
             $0.roots = []
             $0.isBusy = false
-            $0.isSelectedForChat = false
         }
     }
 
     public func toggleSelection(for server: MCPServerConfiguration) {
-        guard case .ready = status(for: server).connectionState else { return }
+        let nextValue = !status(for: server).isSelectedForChat
         updateStatus(for: server.id) { status in
-            status.isSelectedForChat.toggle()
+            status.isSelectedForChat = nextValue
         }
+        persistSelection(for: server.id, isSelected: nextValue)
     }
 
     public func status(for server: MCPServerConfiguration) -> MCPServerStatus {
@@ -238,6 +265,7 @@ public final class MCPManager: ObservableObject {
         guard let client = clients[server.id], case .ready = status(for: server).connectionState else {
             return
         }
+        mcpManagerLogger.info("刷新 MCP 元数据：\(server.displayName, privacy: .public)")
         updateStatus(for: server.id) { $0.isBusy = true }
         Task {
             await refreshMetadata(for: server.id, client: client)
@@ -247,14 +275,19 @@ public final class MCPManager: ObservableObject {
     private func refreshMetadata(for serverID: UUID, client: MCPClient) async {
         do {
             async let toolsTask = client.listTools()
-            async let resourcesTask = client.listResources()
-            async let promptsTask = client.listPrompts()
-            async let rootsTask = client.listRoots()
+            async let resourcesTask = listResourcesIfSupported(client: client)
+            async let promptsTask = listPromptsIfSupported(client: client)
+            async let rootsTask = listRootsIfSupported(client: client)
             
             let tools = try await toolsTask
             let resources = try await resourcesTask
-            let prompts = (try? await promptsTask) ?? []
-            let roots = (try? await rootsTask) ?? []
+            let prompts = try await promptsTask
+            let roots = try await rootsTask
+            if let server = servers.first(where: { $0.id == serverID }) {
+                mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+            } else {
+                mcpManagerLogger.info("MCP 元数据加载完成：server=\(serverID.uuidString, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+            }
             
             await MainActor.run {
                 self.updateStatus(for: serverID) {
@@ -266,6 +299,11 @@ public final class MCPManager: ObservableObject {
                 }
             }
         } catch {
+            if let server = servers.first(where: { $0.id == serverID }) {
+                mcpManagerLogger.error("MCP 元数据刷新失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            } else {
+                mcpManagerLogger.error("MCP 元数据刷新失败：server=\(serverID.uuidString, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            }
             await MainActor.run {
                 self.updateStatus(for: serverID) {
                     $0.isBusy = false
@@ -274,6 +312,30 @@ public final class MCPManager: ObservableObject {
                 self.lastOperationError = error.localizedDescription
                 self.lastOperationOutput = nil
             }
+        }
+    }
+
+    private func listResourcesIfSupported(client: MCPClient) async throws -> [MCPResourceDescription] {
+        do {
+            return try await client.listResources()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
+        }
+    }
+
+    private func listPromptsIfSupported(client: MCPClient) async throws -> [MCPPromptDescription] {
+        do {
+            return try await client.listPrompts()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
+        }
+    }
+
+    private func listRootsIfSupported(client: MCPClient) async throws -> [MCPRoot] {
+        do {
+            return try await client.listRoots()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
         }
     }
 
@@ -469,7 +531,11 @@ public final class MCPManager: ObservableObject {
     }
 
     public func selectedServers() -> [MCPServerConfiguration] {
-        servers.filter { serverStatuses[$0.id]?.isSelectedForChat == true }
+        servers.filter {
+            guard let status = serverStatuses[$0.id], status.isSelectedForChat else { return false }
+            if case .ready = status.connectionState { return true }
+            return false
+        }
     }
 
     // MARK: - Private helpers
@@ -539,6 +605,17 @@ public final class MCPManager: ObservableObject {
         isBusy = serverBusy || debugBusyCount > 0
     }
 
+    private func persistSelection(for serverID: UUID, isSelected: Bool) {
+        guard let index = servers.firstIndex(where: { $0.id == serverID }) else { return }
+        guard servers[index].isSelectedForChat != isSelected else { return }
+        var updatedServer = servers[index]
+        updatedServer.isSelectedForChat = isSelected
+        var updatedServers = servers
+        updatedServers[index] = updatedServer
+        servers = updatedServers
+        MCPServerStore.save(updatedServer)
+    }
+
     private func internalToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {
         "\(Self.toolNamePrefix)\(server.id.uuidString)/\(tool.toolId)"
     }
@@ -558,6 +635,17 @@ public final class MCPManager: ObservableObject {
         guard !trimmed.isEmpty else { return [:] }
         let data = Data(trimmed.utf8)
         return try JSONDecoder().decode([String: JSONValue].self, from: data)
+    }
+
+    private func transportLabel(for server: MCPServerConfiguration) -> String {
+        switch server.transport {
+        case .http:
+            return "http"
+        case .httpSSE:
+            return "http+sse"
+        case .oauth:
+            return "oauth"
+        }
     }
 }
 
