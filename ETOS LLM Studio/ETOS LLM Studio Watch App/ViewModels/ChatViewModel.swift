@@ -71,7 +71,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("systemPrompt") var systemPrompt: String = ""
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = false
-    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 2
+    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 3
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = ""
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
@@ -117,7 +117,7 @@ class ChatViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var additionalHistoryLoaded: Int = 0
     private var lastSessionID: UUID?
-    private let incrementalHistoryBatchSize = 2
+    private let incrementalHistoryBatchSize = 5
     private var audioRecorder: AVAudioRecorder?
     private var speechRecordingURL: URL?
     private var recordingStartDate: Date?
@@ -730,17 +730,16 @@ class ChatViewModel: ObservableObject {
             additionalHistoryLoaded = 0
         }
         
-        let lazyRounds = lazyLoadMessageCount
-        let totalRounds = userRoundCount(in: filtered)
-        if lazyRounds > 0 && totalRounds > lazyRounds {
-            let limit = lazyRounds + additionalHistoryLoaded
-            if totalRounds > limit {
-                messages = messagesForRecentRounds(filtered, rounds: limit)
+        let lazyCount = lazyLoadMessageCount
+        if lazyCount > 0 && filtered.count > lazyCount {
+            let limit = lazyCount + additionalHistoryLoaded
+            if filtered.count > limit {
+                messages = Array(filtered.suffix(limit))
                 isHistoryFullyLoaded = false
             } else {
                 messages = filtered
                 isHistoryFullyLoaded = true
-                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, totalRounds - lazyRounds))
+                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, filtered.count - lazyCount))
             }
         } else {
             messages = filtered
@@ -751,8 +750,7 @@ class ChatViewModel: ObservableObject {
     
     func loadEntireHistory() {
         let filtered = visibleMessages(from: allMessagesForSession)
-        let totalRounds = userRoundCount(in: filtered)
-        additionalHistoryLoaded = max(0, totalRounds - lazyLoadMessageCount)
+        additionalHistoryLoaded = max(0, filtered.count - lazyLoadMessageCount)
         messages = filtered
         isHistoryFullyLoaded = true
     }
@@ -883,28 +881,4 @@ class ChatViewModel: ObservableObject {
         source
     }
     
-    private func userRoundCount(in messages: [ChatMessage]) -> Int {
-        messages.reduce(0) { count, message in
-            count + (message.role == .user ? 1 : 0)
-        }
-    }
-    
-    private func messagesForRecentRounds(_ messages: [ChatMessage], rounds: Int) -> [ChatMessage] {
-        guard rounds > 0 else { return messages }
-        var userCount = 0
-        var startIndex: Int?
-        
-        for index in messages.indices.reversed() {
-            if messages[index].role == .user {
-                userCount += 1
-                if userCount == rounds {
-                    startIndex = index
-                    break
-                }
-            }
-        }
-        
-        guard let startIndex else { return messages }
-        return Array(messages[startIndex...])
-    }
 }
