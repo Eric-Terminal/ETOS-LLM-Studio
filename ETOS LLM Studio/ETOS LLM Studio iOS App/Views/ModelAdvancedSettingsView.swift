@@ -116,13 +116,15 @@ struct ModelAdvancedSettingsView: View {
                 if enableSpeechInput {
                     Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
                     
-                    // 当开启直接发送音频时，语音模型是可选的（用于后台转文字）
-                    // 当未开启时，必须选择语音模型来进行语音转文字
-                    if !sendSpeechAsAudio && speechModels.isEmpty {
+                    if sendSpeechAsAudio {
+                        Text("语音会直接附带音频给当前模型。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if speechModels.isEmpty {
                         Text("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    } else if !speechModels.isEmpty {
+                    } else {
                         NavigationLink {
                             SpeechModelSelectionView(
                                 speechModels: speechModels,
@@ -130,17 +132,14 @@ struct ModelAdvancedSettingsView: View {
                             )
                         } label: {
                             HStack {
-                                Text(sendSpeechAsAudio ? "语音识别模型 (可选)" : "语音识别模型")
+                                Text("语音识别模型")
                                 Spacer()
                                 Text(selectedSpeechModelLabel)
                                     .foregroundStyle(.secondary)
                             }
                         }
                         
-                        let description = sendSpeechAsAudio
-                        ? "语音会直接附带音频给当前模型。下方模型为可选项，用于后台转写文本显示。"
-                        : "语音内容会先发送到该模型转写，识别结果会自动补到输入框。"
-                        Text(description)
+                        Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
