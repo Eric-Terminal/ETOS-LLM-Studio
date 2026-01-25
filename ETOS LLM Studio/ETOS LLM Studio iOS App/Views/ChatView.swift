@@ -1038,15 +1038,9 @@ struct ChatView: View {
     /// Telegram 风格历史加载提示
     @ViewBuilder
     private var historyBanner: some View {
-        let totalRounds = viewModel.allMessagesForSession.reduce(0) { count, message in
-            count + (message.role == .user ? 1 : 0)
-        }
-        let visibleRounds = viewModel.messages.reduce(0) { count, message in
-            count + (message.role == .user ? 1 : 0)
-        }
-        let remainingRounds = max(0, totalRounds - visibleRounds)
-        if remainingRounds > 0 && !viewModel.isHistoryFullyLoaded {
-            let chunk = min(remainingRounds, viewModel.historyLoadChunkSize)
+        let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
+        if remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
+            let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
             Button {
                 withAnimation {
                     viewModel.loadMoreHistoryChunk()
@@ -1055,7 +1049,7 @@ struct ChatView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.circle")
                         .font(.system(size: 14))
-                    Text(String(format: NSLocalizedString("加载更早的 %d 轮对话", comment: ""), chunk))
+                    Text(String(format: NSLocalizedString("加载更早的 %d 条消息", comment: ""), chunk))
                         .font(.system(size: 13, weight: .medium))
                 }
                 .foregroundColor(TelegramColors.attachButtonColor)
