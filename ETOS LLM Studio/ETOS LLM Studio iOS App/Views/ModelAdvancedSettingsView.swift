@@ -100,13 +100,13 @@ struct ModelAdvancedSettingsView: View {
                         .frame(width: 80)
                 }
                 
-                LabeledContent("懒加载消息数") {
+                LabeledContent("懒加载轮次") {
                     TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
                 }
                 
-                Text("设置进入历史会话时默认加载的最近消息数量。数值越小，长对话加载越快；设置为 0 表示加载全部历史。")
+                Text("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -118,6 +118,16 @@ struct ModelAdvancedSettingsView: View {
                     
                     if sendSpeechAsAudio {
                         Text("语音会直接附带音频给当前模型。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        
+                        Picker("音频录制格式", selection: $audioRecordingFormat) {
+                            ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
+                                Text(format.displayName).tag(format)
+                            }
+                        }
+                        
+                        Text(audioRecordingFormat.formatDescription)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else if speechModels.isEmpty {
@@ -138,26 +148,12 @@ struct ModelAdvancedSettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        
-                        Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    
+                    Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
                 }
-            }
-            
-            Section {
-                Picker("音频录制格式", selection: $audioRecordingFormat) {
-                    ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
-                        Text(format.displayName).tag(format)
-                    }
-                }
-            } header: {
-                Text("音频发送格式")
-            } footer: {
-                Text(audioRecordingFormat.formatDescription)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("高级模型设置")

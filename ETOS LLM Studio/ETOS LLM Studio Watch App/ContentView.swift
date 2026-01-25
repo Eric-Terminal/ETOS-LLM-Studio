@@ -161,16 +161,22 @@ struct ContentView: View {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
             
-            let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
-            if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
-                let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
+            let totalRounds = viewModel.allMessagesForSession.reduce(0) { count, message in
+                count + (message.role == .user ? 1 : 0)
+            }
+            let visibleRounds = viewModel.messages.reduce(0) { count, message in
+                count + (message.role == .user ? 1 : 0)
+            }
+            let remainingRounds = max(0, totalRounds - visibleRounds)
+            if !viewModel.isHistoryFullyLoaded && remainingRounds > 0 {
+                let chunk = min(remainingRounds, viewModel.historyLoadChunkSize)
                 Button(action: {
                     withAnimation {
                         viewModel.loadMoreHistoryChunk()
                     }
                 }) {
                     Label(
-                        String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk),
+                        String(format: NSLocalizedString("向上加载 %d 轮对话", comment: ""), chunk),
                         systemImage: "arrow.up.circle"
                     )
                 }

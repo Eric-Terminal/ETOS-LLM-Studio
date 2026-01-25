@@ -138,12 +138,12 @@ struct ModelAdvancedSettingsView: View {
             
             Section(
                 header: Text("性能设置"),
-                footer: Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
+                footer: Text("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 HStack {
-                    Text("懒加载消息数")
+                    Text("懒加载轮次")
                     Spacer()
                     TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
@@ -177,19 +177,16 @@ struct ModelAdvancedSettingsView: View {
                                     .foregroundColor(.secondary)
                             }
                         }
-                    }
-                }
-            }
-            
-            Section(
-                header: Text("音频发送格式"),
-                footer: Text(audioRecordingFormat.formatDescription)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            ) {
-                Picker("录制格式", selection: $audioRecordingFormat) {
-                    ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
-                        Text(format.displayName).tag(format)
+                    } else if sendSpeechAsAudio {
+                        Picker("录制格式", selection: $audioRecordingFormat) {
+                            ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
+                                Text(format.displayName).tag(format)
+                            }
+                        }
+                        
+                        Text(audioRecordingFormat.formatDescription)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
                     }
                 }
             }
