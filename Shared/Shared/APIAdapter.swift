@@ -99,6 +99,12 @@ public extension APIAdapter {
 public class OpenAIAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+
+    private func sanitizedToolName(_ name: String) -> String {
+        let range = NSRange(name.startIndex..., in: name)
+        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+    }
 
     // MARK: - 内部解码模型 (实现细节)
     
@@ -222,10 +228,10 @@ public class OpenAIAdapter: APIAdapter {
             if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 let apiToolCalls: [[String: Any]] = toolCalls.map { call in
                     [
-                        "id": call.id,
-                        "type": "function",
-                        "function": [
-                            "name": call.toolName,
+                            "id": call.id,
+                            "type": "function",
+                            "function": [
+                            "name": sanitizedToolName(call.toolName),
                             "arguments": call.arguments
                         ]
                     ]
@@ -254,7 +260,7 @@ public class OpenAIAdapter: APIAdapter {
         if let tools = tools, !tools.isEmpty {
             let apiTools = tools.map { tool -> [String: Any] in
                 let functionParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
-                let function: [String: Any] = ["name": tool.name, "description": tool.description, "parameters": functionParams]
+                let function: [String: Any] = ["name": sanitizedToolName(tool.name), "description": tool.description, "parameters": functionParams]
                 return ["type": "function", "function": function]
             }
             finalPayload["tools"] = apiTools
@@ -570,7 +576,13 @@ private func applyHeaderOverrides(_ overrides: [String: String], apiKey: String?
 public class GeminiAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "GeminiAdapter")
-    
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+
+    private func sanitizedToolName(_ name: String) -> String {
+        let range = NSRange(name.startIndex..., in: name)
+        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+    }
+
     // MARK: - 内部解码模型
     
     private struct GeminiResponse: Decodable {
@@ -698,7 +710,7 @@ public class GeminiAdapter: APIAdapter {
                 // 工具结果需要特殊处理
                 if let toolCall = msg.toolCalls?.first {
                     let functionResponse: [String: Any] = [
-                        "name": toolCall.toolName,
+                        "name": sanitizedToolName(toolCall.toolName),
                         "response": ["result": msg.content]
                     ]
                     geminiContents.append([
@@ -758,7 +770,7 @@ public class GeminiAdapter: APIAdapter {
                     }
                     parts.append([
                         "functionCall": [
-                            "name": toolCall.toolName,
+                            "name": sanitizedToolName(toolCall.toolName),
                             "args": argsDict
                         ]
                     ])
@@ -813,7 +825,7 @@ public class GeminiAdapter: APIAdapter {
         if let tools = tools, !tools.isEmpty {
             let functionDeclarations = tools.map { tool -> [String: Any] in
                 var funcDef: [String: Any] = [
-                    "name": tool.name,
+                    "name": sanitizedToolName(tool.name),
                     "description": tool.description
                 ]
                 if let params = tool.parameters.toAny() as? [String: Any] {
@@ -1083,6 +1095,12 @@ public class GeminiAdapter: APIAdapter {
 public class AnthropicAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AnthropicAdapter")
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+
+    private func sanitizedToolName(_ name: String) -> String {
+        let range = NSRange(name.startIndex..., in: name)
+        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+    }
     
     // MARK: - 内部解码模型
     
@@ -1282,7 +1300,7 @@ public class AnthropicAdapter: APIAdapter {
                     contentBlocks.append([
                         "type": "tool_use",
                         "id": toolCall.id,
-                        "name": toolCall.toolName,
+                        "name": sanitizedToolName(toolCall.toolName),
                         "input": inputDict
                     ])
                 }
@@ -1349,7 +1367,7 @@ public class AnthropicAdapter: APIAdapter {
         if let tools = tools, !tools.isEmpty {
             let anthropicTools = tools.map { tool -> [String: Any] in
                 var toolDef: [String: Any] = [
-                    "name": tool.name,
+                    "name": sanitizedToolName(tool.name),
                     "description": tool.description
                 ]
                 if let params = tool.parameters.toAny() as? [String: Any] {

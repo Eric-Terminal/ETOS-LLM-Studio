@@ -35,6 +35,7 @@ public struct RunnableModel: Identifiable, Hashable {
 public class ChatService {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
 
     // MARK: - 单例
     public static let shared = ChatService()
@@ -74,6 +75,34 @@ public class ChatService {
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
     private let urlSession: URLSession
+
+    private func sanitizedToolName(_ name: String) -> String {
+        let range = NSRange(name.startIndex..., in: name)
+        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+    }
+
+    private func resolveToolName(_ name: String, availableTools: [InternalToolDefinition]) -> String {
+        if availableTools.contains(where: { $0.name == name }) {
+            return name
+        }
+        let matches = availableTools.filter { sanitizedToolName($0.name) == name }
+        if matches.count == 1 {
+            return matches[0].name
+        }
+        if matches.count > 1 {
+            let names = matches.map(\.name).joined(separator: ", ")
+            logger.warning("工具名在清洗后发生冲突: '\(names)'")
+        }
+        return name
+    }
+
+    private func resolveToolCalls(_ toolCalls: [InternalToolCall], availableTools: [InternalToolDefinition]) -> [InternalToolCall] {
+        toolCalls.map { call in
+            let resolvedName = resolveToolName(call.toolName, availableTools: availableTools)
+            guard resolvedName != call.toolName else { return call }
+            return InternalToolCall(id: call.id, toolName: resolvedName, arguments: call.arguments, result: call.result)
+        }
+    }
 
     // MARK: - 计算属性
     
@@ -1690,6 +1719,9 @@ public class ChatService {
         if !extractedReasoning.isEmpty {
             responseMessage.reasoningContent = (responseMessage.reasoningContent ?? "") + "\n" + extractedReasoning
         }
+        if let toolCalls = responseMessage.toolCalls {
+            responseMessage.toolCalls = resolveToolCalls(toolCalls, availableTools: availableTools ?? [])
+        }
 
         // --- 检查是否存在工具调用 ---
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
@@ -1854,7 +1886,8 @@ public class ChatService {
                         let partialToolCalls: [InternalToolCall] = toolCallOrder.compactMap { orderIdx in
                             guard let builder = toolCallBuilders[orderIdx], let name = builder.name else { return nil }
                             let id = builder.id ?? "tool-\(orderIdx)"
-                            return InternalToolCall(id: id, toolName: name, arguments: builder.arguments)
+                            let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
+                            return InternalToolCall(id: id, toolName: resolvedName, arguments: builder.arguments)
                         }
                         if !partialToolCalls.isEmpty {
                             messages[index].toolCalls = partialToolCalls
@@ -1880,7 +1913,8 @@ public class ChatService {
                             return nil
                         }
                         let id = builder.id ?? "tool-\(orderIdx)"
-                        return InternalToolCall(id: id, toolName: name, arguments: builder.arguments)
+                        let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
+                        return InternalToolCall(id: id, toolName: resolvedName, arguments: builder.arguments)
                     }
                     if !finalToolCalls.isEmpty {
                         messages[index].toolCalls = finalToolCalls
