@@ -55,7 +55,7 @@
 "同步记忆（仅文本）" = "Sync memory (text only)";
 "名称" = "Name";
 "向上加载 %d 条记录" = "Load %d earlier";
-"向上加载 %d 轮对话" = "Load %d earlier rounds (2 at a time)";
+"向上加载 %d 轮对话" = "Load %d earlier rounds";
 "启用液态玻璃" = "Enable Liquid Glass";
 "唯一标识" = "Identifier";
 "基础信息" = "Basic info";
