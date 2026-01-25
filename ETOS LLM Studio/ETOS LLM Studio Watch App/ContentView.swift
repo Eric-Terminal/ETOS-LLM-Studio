@@ -25,9 +25,11 @@ struct ContentView: View {
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
+    @State private var shouldForceScrollToBottom = false
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
+    private let bottomAnchorID = "bottomAnchor"
     
     private var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
@@ -194,8 +196,13 @@ struct ContentView: View {
                 .id("inputBubble")
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
+
+            Color.clear
+                .frame(height: 1)
+                .id(bottomAnchorID)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
                 .onAppear { isAtBottom = true; showScrollToBottomButton = false }
-                // 修复: 修正拼写错误
                 .onDisappear { isAtBottom = false; showScrollToBottomButton = true }
         }
         .listStyle(.plain)
@@ -208,11 +215,10 @@ struct ContentView: View {
             }
         }
         .onChange(of: viewModel.messages.count) {
-            if isAtBottom {
-                withAnimation {
-                    proxy.scrollTo("inputBubble", anchor: .bottom)
-                }
-            }
+            let shouldScroll = isAtBottom || shouldForceScrollToBottom
+            shouldForceScrollToBottom = false
+            guard shouldScroll else { return }
+            scrollToBottom(proxy: proxy, animated: false)
         }
     }
     
@@ -280,9 +286,7 @@ struct ContentView: View {
         let scrollAction = {
             // 点击回底按钮时，重置懒加载状态到初始数量
             viewModel.resetLazyLoadState()
-            withAnimation {
-                proxy.scrollTo("inputBubble", anchor: .bottom)
-            }
+            scrollToBottom(proxy: proxy, animated: true)
         }
         
         return Button(action: scrollAction) {
@@ -305,6 +309,24 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .padding(.bottom, 6)
         .transition(.scale.combined(with: .opacity))
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        let action = {
+            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
+        if animated {
+            withAnimation {
+                action()
+            }
+        } else {
+            action()
+        }
+    }
+
+    private func sendMessage() {
+        shouldForceScrollToBottom = true
+        viewModel.sendMessage()
     }
 
     private var inputFillColor: Color {
@@ -374,7 +396,7 @@ struct ContentView: View {
                             transparentInputField
                                 .glassEffect(.clear, in: Capsule())
 
-                            Button(action: viewModel.sendMessage) {
+                            Button(action: sendMessage) {
                                 Image(systemName: "arrow.up")
                                     .font(.system(size: 18, weight: .medium))
                                     .frame(width: inputControlHeight, height: inputControlHeight)
@@ -393,7 +415,7 @@ struct ContentView: View {
                                 transparentInputField
                             }
 
-                            Button(action: viewModel.sendMessage) {
+                            Button(action: sendMessage) {
                                 Image(systemName: "arrow.up")
                                     .font(.system(size: 18, weight: .medium))
                             }
@@ -419,7 +441,7 @@ struct ContentView: View {
                             transparentInputField
                         }
 
-                        Button(action: viewModel.sendMessage) {
+                        Button(action: sendMessage) {
                             Image(systemName: "arrow.up")
                                 .font(.system(size: 18, weight: .medium))
                         }
