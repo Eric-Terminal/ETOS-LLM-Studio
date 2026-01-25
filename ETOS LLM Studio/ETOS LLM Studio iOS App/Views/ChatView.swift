@@ -1038,9 +1038,15 @@ struct ChatView: View {
     /// Telegram 风格历史加载提示
     @ViewBuilder
     private var historyBanner: some View {
-        let remaining = viewModel.allMessagesForSession.count - viewModel.messages.count
-        if remaining > 0 && !viewModel.isHistoryFullyLoaded {
-            let chunk = min(remaining, viewModel.historyLoadChunkSize)
+        let totalRounds = viewModel.allMessagesForSession.reduce(0) { count, message in
+            count + (message.role == .user ? 1 : 0)
+        }
+        let visibleRounds = viewModel.messages.reduce(0) { count, message in
+            count + (message.role == .user ? 1 : 0)
+        }
+        let remainingRounds = max(0, totalRounds - visibleRounds)
+        if remainingRounds > 0 && !viewModel.isHistoryFullyLoaded {
+            let chunk = min(remainingRounds, viewModel.historyLoadChunkSize)
             Button {
                 withAnimation {
                     viewModel.loadMoreHistoryChunk()
@@ -1049,7 +1055,7 @@ struct ChatView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.circle")
                         .font(.system(size: 14))
-                    Text(String(format: NSLocalizedString("加载更早的 %d 条消息", comment: ""), chunk))
+                    Text(String(format: NSLocalizedString("加载更早的 %d 轮对话", comment: ""), chunk))
                         .font(.system(size: 13, weight: .medium))
                 }
                 .foregroundColor(TelegramColors.attachButtonColor)
@@ -1477,8 +1483,10 @@ private struct TelegramMessageComposer: View {
                 stopAction()
             } else if hasContent {
                 sendAction()
-            } else {
+            } else if viewModel.enableSpeechInput {
                 showAudioRecorder = true
+            } else {
+                focus.wrappedValue = true
             }
         } label: {
             Image(systemName: actionIconName)
@@ -1693,7 +1701,10 @@ private struct TelegramMessageComposer: View {
         if isSending {
             return "stop.fill"
         }
-        return hasContent ? "arrow.up" : "mic.fill"
+        if hasContent {
+            return "arrow.up"
+        }
+        return viewModel.enableSpeechInput ? "mic.fill" : "arrow.up"
     }
     
     private var actionForegroundColor: Color {

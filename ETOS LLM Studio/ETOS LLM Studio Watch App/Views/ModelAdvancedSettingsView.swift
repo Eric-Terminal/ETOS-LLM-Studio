@@ -138,12 +138,12 @@ struct ModelAdvancedSettingsView: View {
             
             Section(
                 header: Text("性能设置"),
-                footer: Text("设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
+                footer: Text("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 HStack {
-                    Text("懒加载消息数")
+                    Text("懒加载轮次")
                     Spacer()
                     TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
@@ -153,19 +153,17 @@ struct ModelAdvancedSettingsView: View {
             
             Section(
                 header: Text("语音输入"),
-                footer: Text(sendSpeechAsAudio ? "录音将直接附带音频给当前模型。下方语音模型为可选项，用于后台转写文字显示。" : "识别结果会自动追加到输入框，便于确认和补充。")
+                footer: Text(sendSpeechAsAudio ? "录音将直接附带音频给当前模型。" : "识别结果会自动追加到输入框，便于确认和补充。")
             ) {
                 Toggle("启用语言输入", isOn: $enableSpeechInput)
                 if enableSpeechInput {
                     Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
                     
-                    // 当开启直接发送音频时，语音模型是可选的（用于后台转文字）
-                    // 当未开启时，必须选择语音模型来进行语音转文字
                     if !sendSpeechAsAudio && speechModels.isEmpty {
                         Text("暂无可用的模型，请先在模型设置中启用。")
                             .font(.footnote)
                             .foregroundColor(.secondary)
-                    } else if !speechModels.isEmpty {
+                    } else if !sendSpeechAsAudio && !speechModels.isEmpty {
                         NavigationLink {
                             SpeechModelSelectionView(
                                 speechModels: speechModels,
@@ -173,25 +171,22 @@ struct ModelAdvancedSettingsView: View {
                             )
                         } label: {
                             HStack {
-                                Text(sendSpeechAsAudio ? "语音模型 (可选)" : "语音模型")
+                                Text("语音模型")
                                 Spacer()
                                 Text(selectedSpeechModelLabel)
                                     .foregroundColor(.secondary)
                             }
                         }
-                    }
-                }
-            }
-            
-            Section(
-                header: Text("音频发送格式"),
-                footer: Text(audioRecordingFormat.formatDescription)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            ) {
-                Picker("录制格式", selection: $audioRecordingFormat) {
-                    ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
-                        Text(format.displayName).tag(format)
+                    } else if sendSpeechAsAudio {
+                        Picker("录制格式", selection: $audioRecordingFormat) {
+                            ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
+                                Text(format.displayName).tag(format)
+                            }
+                        }
+                        
+                        Text(audioRecordingFormat.formatDescription)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
                     }
                 }
             }

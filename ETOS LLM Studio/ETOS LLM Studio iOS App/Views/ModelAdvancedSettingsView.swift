@@ -100,13 +100,13 @@ struct ModelAdvancedSettingsView: View {
                         .frame(width: 80)
                 }
                 
-                LabeledContent("懒加载消息数") {
+                LabeledContent("懒加载轮次") {
                     TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
                 }
                 
-                Text("设置进入历史会话时默认加载的最近消息数量。数值越小，长对话加载越快；设置为 0 表示加载全部历史。")
+                Text("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -116,13 +116,25 @@ struct ModelAdvancedSettingsView: View {
                 if enableSpeechInput {
                     Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
                     
-                    // 当开启直接发送音频时，语音模型是可选的（用于后台转文字）
-                    // 当未开启时，必须选择语音模型来进行语音转文字
-                    if !sendSpeechAsAudio && speechModels.isEmpty {
+                    if sendSpeechAsAudio {
+                        Text("语音会直接附带音频给当前模型。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        
+                        Picker("音频录制格式", selection: $audioRecordingFormat) {
+                            ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
+                                Text(format.displayName).tag(format)
+                            }
+                        }
+                        
+                        Text(audioRecordingFormat.formatDescription)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if speechModels.isEmpty {
                         Text("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    } else if !speechModels.isEmpty {
+                    } else {
                         NavigationLink {
                             SpeechModelSelectionView(
                                 speechModels: speechModels,
@@ -130,35 +142,18 @@ struct ModelAdvancedSettingsView: View {
                             )
                         } label: {
                             HStack {
-                                Text(sendSpeechAsAudio ? "语音识别模型 (可选)" : "语音识别模型")
+                                Text("语音识别模型")
                                 Spacer()
                                 Text(selectedSpeechModelLabel)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        
-                        let description = sendSpeechAsAudio
-                        ? "语音会直接附带音频给当前模型。下方模型为可选项，用于后台转写文本显示。"
-                        : "语音内容会先发送到该模型转写，识别结果会自动补到输入框。"
-                        Text(description)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    
+                    Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
                 }
-            }
-            
-            Section {
-                Picker("音频录制格式", selection: $audioRecordingFormat) {
-                    ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
-                        Text(format.displayName).tag(format)
-                    }
-                }
-            } header: {
-                Text("音频发送格式")
-            } footer: {
-                Text(audioRecordingFormat.formatDescription)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("高级模型设置")
