@@ -657,14 +657,6 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
-        source.filter { message in
-            if message.role == .tool,
-               let calls = message.toolCalls,
-               !calls.isEmpty,
-               calls.allSatisfy({ $0.toolName == "save_memory" }) {
-                return false
-            }
-            return true
-        }
+        source
     }
 }

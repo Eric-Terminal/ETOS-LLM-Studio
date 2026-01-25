@@ -340,13 +340,20 @@ struct ChatBubble: View {
         }
         .padding(.bottom, isReasoningExpanded ? 5 : 0)
     }
+
+    private func toolDisplayLabel(for toolName: String) -> String {
+        if toolName == "save_memory" {
+            return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
+        }
+        return MCPManager.shared.displayLabel(for: toolName) ?? toolName
+    }
     
     @ViewBuilder
     private func toolCallsInlineView(_ toolCalls: [InternalToolCall]) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(toolCalls, id: \.id) { toolCall in
                 let trimmedArgs = toolCall.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-                let label = MCPManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
+                let label = toolDisplayLabel(for: toolCall.toolName)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("调用：\(label)")
                         .font(.footnote)
@@ -366,7 +373,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func toolResultsDisclosureView(_ toolCalls: [InternalToolCall], resultText: String) -> some View {
-        let toolNames = toolCalls.map { MCPManager.shared.displayLabel(for: $0.toolName) ?? $0.toolName }
+        let toolNames = toolCalls.map { toolDisplayLabel(for: $0.toolName) }
         VStack(alignment: .leading, spacing: 5) {
             Button(action: {
                 withAnimation {
@@ -389,7 +396,7 @@ struct ChatBubble: View {
             if isToolCallsExpanded {
                 ForEach(toolCalls, id: \.id) { toolCall in
                     let result = (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let label = MCPManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
+                    let label = toolDisplayLabel(for: toolCall.toolName)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(label)
                             .font(.caption2.weight(.semibold))

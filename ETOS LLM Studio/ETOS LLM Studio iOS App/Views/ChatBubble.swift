@@ -646,7 +646,10 @@ struct ToolCallsInlineView: View, Equatable {
     }
 
     private func displayName(for toolName: String) -> String {
-        MCPManager.shared.displayLabel(for: toolName) ?? toolName
+        if toolName == "save_memory" {
+            return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
+        }
+        return MCPManager.shared.displayLabel(for: toolName) ?? toolName
     }
     
     var body: some View {
@@ -690,7 +693,10 @@ struct ToolResultsDisclosureView: View, Equatable {
     }
 
     private func displayName(for toolName: String) -> String {
-        MCPManager.shared.displayLabel(for: toolName) ?? toolName
+        if toolName == "save_memory" {
+            return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
+        }
+        return MCPManager.shared.displayLabel(for: toolName) ?? toolName
     }
     
     var body: some View {
