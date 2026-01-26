@@ -100,8 +100,30 @@ struct ChatView: View {
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
+    private var displayMessages: [ChatMessage] {
+        var representedToolCallIDs = Set<String>()
+        for message in viewModel.messages {
+            guard message.role == .tool else { continue }
+            let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmedContent.isEmpty,
+                  let toolCalls = message.toolCalls,
+                  !toolCalls.isEmpty else { continue }
+            for call in toolCalls {
+                representedToolCallIDs.insert(call.id)
+            }
+        }
+
+        return viewModel.messages.filter { message in
+            guard message.role == .tool else { return true }
+            let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedContent.isEmpty else { return true }
+            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
+            return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
+        }
+    }
     
     var body: some View {
+        let displayedMessages = displayMessages
         NavigationStack {
             ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
@@ -119,7 +141,7 @@ struct ChatView: View {
                             historyBanner
                             
                             // 消息列表
-                            ForEach(viewModel.messages) { message in
+                            ForEach(displayedMessages) { message in
                                 ChatBubble(
                                     message: message,
                                     isReasoningExpanded: Binding(
@@ -139,12 +161,12 @@ struct ChatView: View {
                                     contextMenu(for: message)
                                 }
                                 .onAppear {
-                                    if message.id == viewModel.messages.last?.id {
+                                    if message.id == displayedMessages.last?.id {
                                         showScrollToBottom = false
                                     }
                                 }
                                 .onDisappear {
-                                    if message.id == viewModel.messages.last?.id {
+                                    if message.id == displayedMessages.last?.id {
                                         showScrollToBottom = true
                                     }
                                 }

@@ -41,6 +41,21 @@ struct ChatBubble: View {
         guard !trimmedContent.isEmpty else { return false }
         return !Self.imagePlaceholders.contains(trimmedContent)
     }
+    
+    private var hasToolCalls: Bool {
+        !(message.toolCalls ?? []).isEmpty
+    }
+    
+    private var hasToolResults: Bool {
+        let hasCallResults = message.toolCalls?.contains { call in
+            !(call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } ?? false
+        if message.role == .tool {
+            let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return hasCallResults || hasContent
+        }
+        return hasCallResults
+    }
 
 
     // MARK: - 视图主体
@@ -156,7 +171,9 @@ struct ChatBubble: View {
             let content = VStack(alignment: .leading, spacing: 6) {
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
                     toolCallsInlineView(toolCalls)
-                    toolResultsDisclosureView(toolCalls, resultText: message.content)
+                    if hasToolResults {
+                        toolResultsDisclosureView(toolCalls, resultText: message.content)
+                    }
                 } else if hasNonPlaceholderText {
                     renderContent(message.content)
                 }
@@ -226,7 +243,6 @@ struct ChatBubble: View {
 
     private var shouldShowAssistantBubble: Bool {
         let hasReasoning = message.reasoningContent != nil && !(message.reasoningContent ?? "").isEmpty
-        let hasToolCalls = message.toolCalls != nil && !(message.toolCalls ?? []).isEmpty
         if message.role == .tool {
             return hasToolCalls || hasNonPlaceholderText
         }

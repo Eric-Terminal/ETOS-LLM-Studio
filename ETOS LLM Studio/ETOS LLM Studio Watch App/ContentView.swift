@@ -39,6 +39,28 @@ struct ContentView: View {
         }
     }
     
+    private var displayMessages: [ChatMessage] {
+        var representedToolCallIDs = Set<String>()
+        for message in viewModel.messages {
+            guard message.role == .tool else { continue }
+            let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmedContent.isEmpty,
+                  let toolCalls = message.toolCalls,
+                  !toolCalls.isEmpty else { continue }
+            for call in toolCalls {
+                representedToolCallIDs.insert(call.id)
+            }
+        }
+        
+        return viewModel.messages.filter { message in
+            guard message.role == .tool else { return true }
+            let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedContent.isEmpty else { return true }
+            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
+            return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
+        }
+    }
+    
     // MARK: - 视图主体
     
     var body: some View {
@@ -181,7 +203,7 @@ struct ContentView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
             }
 
-            ForEach(viewModel.messages) { message in
+            ForEach(displayMessages) { message in
                 // 修复: 将复杂内容提取到辅助函数中，避免编译器超时
                 messageRow(for: message, proxy: proxy)
             }

@@ -1722,6 +1722,13 @@ public class ChatService {
         if let toolCalls = responseMessage.toolCalls {
             responseMessage.toolCalls = resolveToolCalls(toolCalls, availableTools: availableTools ?? [])
         }
+        if let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty {
+            let trimmedContent = responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedReasoning = (responseMessage.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedContent.isEmpty && trimmedReasoning.isEmpty {
+                responseMessage.role = .tool
+            }
+        }
 
         // --- 检查是否存在工具调用 ---
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
@@ -1851,10 +1858,22 @@ public class ChatService {
                     }
                     if let contentPart = part.content {
                         messages[index].content += contentPart
+                        if messages[index].role == .tool {
+                            let trimmedContent = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmedContent.isEmpty {
+                                messages[index].role = .assistant
+                            }
+                        }
                     }
                     if let reasoningPart = part.reasoningContent {
                         if messages[index].reasoningContent == nil { messages[index].reasoningContent = "" }
                         messages[index].reasoningContent! += reasoningPart
+                        if messages[index].role == .tool {
+                            let trimmedReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            if !trimmedReasoning.isEmpty {
+                                messages[index].role = .assistant
+                            }
+                        }
                     }
                     if let toolDeltas = part.toolCallDeltas, !toolDeltas.isEmpty {
                         // 记录工具调用的增量信息
@@ -1891,6 +1910,13 @@ public class ChatService {
                         }
                         if !partialToolCalls.isEmpty {
                             messages[index].toolCalls = partialToolCalls
+                            if messages[index].role == .assistant {
+                                let trimmedContent = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
+                                let trimmedReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                if trimmedContent.isEmpty && trimmedReasoning.isEmpty {
+                                    messages[index].role = .tool
+                                }
+                            }
                         }
                     }
                     messagesForSessionSubject.send(messages)

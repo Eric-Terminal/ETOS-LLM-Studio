@@ -75,6 +75,21 @@ struct ChatBubble: View {
         let isPlaceholderOnly = trimmedContent.isEmpty || Self.imagePlaceholders.contains(trimmedContent)
         return isPlaceholderOnly && message.reasoningContent == nil && message.toolCalls == nil && message.audioFileName == nil
     }
+    
+    private var hasToolCalls: Bool {
+        !(message.toolCalls ?? []).isEmpty
+    }
+    
+    private var hasToolResults: Bool {
+        let hasCallResults = message.toolCalls?.contains { call in
+            !(call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } ?? false
+        if message.role == .tool {
+            let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return hasCallResults || hasContent
+        }
+        return hasCallResults
+    }
 
     private var shouldShowTextBubble: Bool {
         if hasOnlyImages {
@@ -82,7 +97,6 @@ struct ChatBubble: View {
         }
         let hasReasoning = !(message.reasoningContent ?? "").isEmpty
         let hasContent = !message.content.isEmpty
-        let hasToolCalls = !(message.toolCalls ?? []).isEmpty
         let shouldShowThinking = message.role == .assistant
             && !hasContent
             && !hasReasoning
@@ -96,7 +110,7 @@ struct ChatBubble: View {
         case .user, .error:
             return hasContent || hasReasoning || hasToolCalls
         @unknown default:
-            return hasReasoning || hasContent || hasToolCalls
+            return hasReasoning || hasContent
         }
     }
     
@@ -263,19 +277,21 @@ struct ChatBubble: View {
         }
         
         // 工具调用/结果（折叠展示）
-        if let toolCalls = message.toolCalls,
-           !toolCalls.isEmpty,
-           message.role == .tool {
+        if message.role == .tool,
+           let toolCalls = message.toolCalls,
+           !toolCalls.isEmpty {
             ToolCallsInlineView(
                 toolCalls: toolCalls,
                 isOutgoing: isOutgoing
             )
-            ToolResultsDisclosureView(
-                toolCalls: toolCalls,
-                resultText: message.content,
-                isExpanded: $isToolCallsExpanded,
-                isOutgoing: isOutgoing
-            )
+            if hasToolResults {
+                ToolResultsDisclosureView(
+                    toolCalls: toolCalls,
+                    resultText: message.role == .tool ? message.content : "",
+                    isExpanded: $isToolCallsExpanded,
+                    isOutgoing: isOutgoing
+                )
+            }
         }
         
         // 消息正文
