@@ -9,6 +9,7 @@
 // ============================================================================
 
 import Foundation
+import CryptoKit
 import os.log
 
 // MARK: - 流式响应的数据片段
@@ -102,8 +103,20 @@ public class OpenAIAdapter: APIAdapter {
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
-        let range = NSRange(name.startIndex..., in: name)
-        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        let sanitized = Self.toolNameRegex.stringByReplacingMatches(in: trimmed, options: [], range: range, withTemplate: "_")
+        return enforceGeminiToolNameLimit(sanitized, source: trimmed)
+    }
+
+    private func enforceGeminiToolNameLimit(_ name: String, source: String) -> String {
+        let maxLength = 64
+        guard name.count > maxLength else { return name }
+        let digest = SHA256.hash(data: Data(source.utf8))
+        let hash = digest.compactMap { String(format: "%02x", $0) }.joined().prefix(8)
+        let prefixLength = maxLength - 1 - hash.count
+        let prefix = name.prefix(prefixLength)
+        return "\(prefix)_\(hash)"
     }
 
     // MARK: - 内部解码模型 (实现细节)
