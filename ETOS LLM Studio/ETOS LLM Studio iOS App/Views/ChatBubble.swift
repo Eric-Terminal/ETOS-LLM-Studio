@@ -106,7 +106,7 @@ struct ChatBubble: View {
         case .tool:
             return hasToolCalls || hasContent
         case .assistant, .system:
-            return hasReasoning || hasContent || shouldShowThinking
+            return hasToolCalls || hasReasoning || hasContent || shouldShowThinking
         case .user, .error:
             return hasContent || hasReasoning || hasToolCalls
         @unknown default:
@@ -277,8 +277,7 @@ struct ChatBubble: View {
         }
         
         // 工具调用/结果（折叠展示）
-        if message.role == .tool,
-           let toolCalls = message.toolCalls,
+        if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
             ToolCallsInlineView(
                 toolCalls: toolCalls,

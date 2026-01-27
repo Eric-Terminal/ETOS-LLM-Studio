@@ -104,20 +104,19 @@ struct ChatView: View {
     private var displayMessages: [ChatMessage] {
         var representedToolCallIDs = Set<String>()
         for message in viewModel.messages {
-            guard message.role == .tool else { continue }
-            let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmedContent.isEmpty,
+            guard message.role != .tool,
                   let toolCalls = message.toolCalls,
                   !toolCalls.isEmpty else { continue }
             for call in toolCalls {
-                representedToolCallIDs.insert(call.id)
+                let trimmedResult = (call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedResult.isEmpty {
+                    representedToolCallIDs.insert(call.id)
+                }
             }
         }
 
         return viewModel.messages.filter { message in
             guard message.role == .tool else { return true }
-            let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedContent.isEmpty else { return true }
             guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
             return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
         }

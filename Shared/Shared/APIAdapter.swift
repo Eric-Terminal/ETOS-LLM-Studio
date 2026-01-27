@@ -709,8 +709,14 @@ public class GeminiAdapter: APIAdapter {
             case .tool:
                 // 工具结果需要特殊处理
                 if let toolCall = msg.toolCalls?.first {
+                    let rawName = toolCall.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let sanitizedName = sanitizedToolName(rawName)
+                    if sanitizedName.isEmpty {
+                        logger.error("Gemini 工具结果缺少有效名称，已忽略该条工具响应。")
+                        continue
+                    }
                     let functionResponse: [String: Any] = [
-                        "name": sanitizedToolName(toolCall.toolName),
+                        "name": sanitizedName,
                         "response": ["result": msg.content]
                     ]
                     geminiContents.append([
@@ -763,6 +769,12 @@ public class GeminiAdapter: APIAdapter {
             // 处理 assistant 消息中的工具调用
             if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 for toolCall in toolCalls {
+                    let rawName = toolCall.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let sanitizedName = sanitizedToolName(rawName)
+                    if sanitizedName.isEmpty {
+                        logger.error("Gemini 工具调用缺少有效名称，已忽略该条工具调用。")
+                        continue
+                    }
                     var argsDict: [String: Any] = [:]
                     if let argsData = toolCall.arguments.data(using: .utf8),
                        let parsed = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] {
@@ -770,7 +782,7 @@ public class GeminiAdapter: APIAdapter {
                     }
                     parts.append([
                         "functionCall": [
-                            "name": sanitizedToolName(toolCall.toolName),
+                            "name": sanitizedName,
                             "args": argsDict
                         ]
                     ])
@@ -824,8 +836,9 @@ public class GeminiAdapter: APIAdapter {
         // 工具定义
         if let tools = tools, !tools.isEmpty {
             let functionDeclarations = tools.map { tool -> [String: Any] in
+                let sanitizedName = sanitizedToolName(tool.name)
                 var funcDef: [String: Any] = [
-                    "name": sanitizedToolName(tool.name),
+                    "name": sanitizedName,
                     "description": tool.description
                 ]
                 if let params = tool.parameters.toAny() as? [String: Any] {
@@ -833,7 +846,12 @@ public class GeminiAdapter: APIAdapter {
                 }
                 return funcDef
             }
-            payload["tools"] = [["function_declarations": functionDeclarations]]
+            let validDeclarations = functionDeclarations.filter { !($0["name"] as? String ?? "").isEmpty }
+            if validDeclarations.isEmpty {
+                logger.error("Gemini 工具定义缺少有效名称，已跳过 tools 字段。")
+            } else {
+                payload["tools"] = [["function_declarations": validDeclarations]]
+            }
         }
         
         do {

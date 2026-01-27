@@ -482,6 +482,32 @@ public class ChatService {
     public func deleteMessage(_ message: ChatMessage) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
+        let toolCallIDs = Set(message.toolCalls?.map(\.id) ?? [])
+        let relatedToolMessageIDs: Set<UUID>
+        if toolCallIDs.isEmpty {
+            relatedToolMessageIDs = []
+        } else {
+            relatedToolMessageIDs = Set(messages.compactMap { candidate in
+                guard candidate.role == .tool, candidate.id != message.id,
+                      let toolCalls = candidate.toolCalls,
+                      toolCalls.contains(where: { toolCallIDs.contains($0.id) }) else {
+                    return nil
+                }
+                return candidate.id
+            })
+        }
+        if !relatedToolMessageIDs.isEmpty {
+            for candidate in messages where relatedToolMessageIDs.contains(candidate.id) {
+                if let audioFileName = candidate.audioFileName {
+                    Persistence.deleteAudio(fileName: audioFileName)
+                }
+                if let imageFileNames = candidate.imageFileNames {
+                    for fileName in imageFileNames {
+                        Persistence.deleteImage(fileName: fileName)
+                    }
+                }
+            }
+        }
         
         // 清理被删除消息关联的音频文件
         if let audioFileName = message.audioFileName {
@@ -495,7 +521,7 @@ public class ChatService {
             }
         }
         
-        messages.removeAll { $0.id == message.id }
+        messages.removeAll { $0.id == message.id || relatedToolMessageIDs.contains($0.id) }
         
         messagesForSessionSubject.send(messages)
         Persistence.saveMessages(messages, for: currentSession.id)
@@ -1008,13 +1034,21 @@ public class ChatService {
     }
 
     @MainActor
-    private func attachToolResult(_ result: String, to toolCallID: String, loadingMessageID: UUID, sessionID: UUID) {
+    private func attachToolResult(_ result: String, to toolCallID: String, toolName: String, loadingMessageID: UUID, sessionID: UUID) {
         var messages = messagesForSessionSubject.value
         guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
         var message = messages[messageIndex]
-        guard var toolCalls = message.toolCalls,
-              let callIndex = toolCalls.firstIndex(where: { $0.id == toolCallID }) else { return }
-        toolCalls[callIndex].result = result
+        guard var toolCalls = message.toolCalls else { return }
+        var callIndex = toolCalls.firstIndex(where: { $0.id == toolCallID })
+        if callIndex == nil {
+            let matchedByName = toolCalls.enumerated().filter { $0.element.toolName == toolName }
+            if matchedByName.count == 1 {
+                callIndex = matchedByName.first?.offset
+                logger.warning("未找到匹配的工具调用 ID，已按名称 '\(toolName)' 回退匹配结果。")
+            }
+        }
+        guard let resolvedIndex = callIndex else { return }
+        toolCalls[resolvedIndex].result = result
         message.toolCalls = toolCalls
         messages[messageIndex] = message
         messagesForSessionSubject.send(messages)
@@ -1735,15 +1769,14 @@ public class ChatService {
             responseMessage.reasoningContent = (responseMessage.reasoningContent ?? "") + "\n" + extractedReasoning
         }
         if let toolCalls = responseMessage.toolCalls {
-            responseMessage.toolCalls = resolveToolCalls(toolCalls, availableTools: availableTools ?? [])
-        }
-        if let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty {
-            let trimmedContent = responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedReasoning = (responseMessage.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmedContent.isEmpty && trimmedReasoning.isEmpty {
-                responseMessage.role = .tool
+            let resolvedCalls = resolveToolCalls(toolCalls, availableTools: availableTools ?? [])
+            let filteredCalls = resolvedCalls.filter { !sanitizedToolName($0.toolName).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if filteredCalls.count != resolvedCalls.count {
+                logger.warning("检测到工具调用缺少有效名称，已忽略无效项。")
             }
+            responseMessage.toolCalls = filteredCalls.isEmpty ? nil : filteredCalls
         }
+        // 保持 assistant 角色不变：工具调用消息仍应作为 assistant 消息发送给模型。
 
         // --- 检查是否存在工具调用 ---
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
@@ -1786,7 +1819,7 @@ public class ChatService {
             for toolCall in blockingCalls {
                 let outcome = await handleToolCall(toolCall)
                 if let toolResult = outcome.toolResult {
-                    await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                    await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                 }
                 blockingResultMessages.append(outcome.message)
                 if outcome.shouldAwaitUserSupplement {
@@ -1814,7 +1847,7 @@ public class ChatService {
                     for toolCall in nonBlockingCalls {
                         let outcome = await handleToolCall(toolCall)
                         if let toolResult = outcome.toolResult {
-                            await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                            await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                         }
                         // 非阻塞工具也写入消息列表，便于 UI 直接展示结果
                         var messages = self.messagesForSessionSubject.value
@@ -1830,7 +1863,7 @@ public class ChatService {
                 for toolCall in nonBlockingCalls {
                     let outcome = await handleToolCall(toolCall)
                     if let toolResult = outcome.toolResult {
-                        await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                        await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                     }
                     nonBlockingResultsForFollowUp.append(outcome.message)
                     if outcome.shouldAwaitUserSupplement {
@@ -1952,13 +1985,6 @@ public class ChatService {
                         }
                         if !partialToolCalls.isEmpty {
                             messages[index].toolCalls = partialToolCalls
-                            if messages[index].role == .assistant {
-                                let trimmedContent = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
-                                let trimmedReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                                if trimmedContent.isEmpty && trimmedReasoning.isEmpty {
-                                    messages[index].role = .tool
-                                }
-                            }
                         }
                     }
                     messagesForSessionSubject.send(messages)
