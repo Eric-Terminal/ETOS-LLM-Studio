@@ -109,29 +109,6 @@ struct ContentView: View {
                 )) { wrapper in
                     FullErrorContentView(content: wrapper.content)
                 }
-                .confirmationDialog("允许执行工具？", isPresented: Binding(
-                    get: { toolPermissionCenter.activeRequest != nil },
-                    set: { isPresented in
-                        if !isPresented, toolPermissionCenter.activeRequest != nil {
-                            toolPermissionCenter.resolveActiveRequest(with: .deny)
-                        }
-                    }
-                )) {
-                    Button("拒绝", role: .destructive) {
-                        toolPermissionCenter.resolveActiveRequest(with: .deny)
-                    }
-                    Button("允许本次") {
-                        toolPermissionCenter.resolveActiveRequest(with: .allowOnce)
-                    }
-                    Button("保持允许") {
-                        toolPermissionCenter.resolveActiveRequest(with: .allowForTool)
-                    }
-                    Button("完全权限") {
-                        toolPermissionCenter.resolveActiveRequest(with: .allowAll)
-                    }
-                } message: {
-                    Text(toolPermissionPrompt(for: toolPermissionCenter.activeRequest))
-                }
             }
             .onChange(of: viewModel.activeSheet) {
                 if viewModel.activeSheet == nil {
@@ -139,24 +116,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    private func toolPermissionPrompt(for request: ToolPermissionRequest?) -> String {
-        guard let request else { return "" }
-        let toolName = request.displayName ?? request.toolName
-        let trimmedArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cappedArguments: String
-        if trimmedArguments.count > 400 {
-            cappedArguments = String(trimmedArguments.prefix(400)) + "..."
-        } else {
-            cappedArguments = trimmedArguments
-        }
-        var message = "工具：\(toolName)"
-        if !cappedArguments.isEmpty {
-            message += "\n参数：\(cappedArguments)"
-        }
-        message += "\n\n拒绝：本次调用不执行\n允许本次：仅执行这一次\n保持允许：本次运行内同工具自动允许\n完全权限：本次运行内允许所有工具"
-        return message
     }
     
     // MARK: - 视图组件
@@ -207,6 +166,20 @@ struct ContentView: View {
                 // 修复: 将复杂内容提取到辅助函数中，避免编译器超时
                 messageRow(for: message, proxy: proxy)
             }
+
+            if let activeRequest = toolPermissionCenter.activeRequest {
+                ToolPermissionBubble(
+                    request: activeRequest,
+                    enableBackground: viewModel.enableBackground,
+                    enableLiquidGlass: isLiquidGlassEnabled,
+                    onDecision: { decision in
+                        toolPermissionCenter.resolveActiveRequest(with: decision)
+                    }
+                )
+                .id(activeRequest.id)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
             
             inputBubble
                 .id("inputBubble")
@@ -234,6 +207,10 @@ struct ContentView: View {
             let shouldScroll = isAtBottom || shouldForceScrollToBottom
             shouldForceScrollToBottom = false
             guard shouldScroll else { return }
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+        .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
+            guard newValue != nil, isAtBottom else { return }
             scrollToBottom(proxy: proxy, animated: false)
         }
     }

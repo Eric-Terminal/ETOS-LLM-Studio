@@ -37,6 +37,7 @@ private struct TelegramColors {
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var showScrollToBottom = false
     @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
@@ -171,6 +172,18 @@ struct ChatView: View {
                                     }
                                 }
                             }
+
+                            if let activeRequest = toolPermissionCenter.activeRequest {
+                                ToolPermissionBubble(
+                                    request: activeRequest,
+                                    enableBackground: viewModel.enableBackground,
+                                    enableLiquidGlass: isLiquidGlassEnabled,
+                                    onDecision: { decision in
+                                        toolPermissionCenter.resolveActiveRequest(with: decision)
+                                    }
+                                )
+                                .id(activeRequest.id)
+                            }
                             
                             Color.clear
                                 .frame(height: 8)
@@ -187,6 +200,10 @@ struct ChatView: View {
                     )
                     .onChange(of: viewModel.messages.count) { _, _ in
                         guard !viewModel.messages.isEmpty else { return }
+                        scrollToBottom(proxy: proxy)
+                    }
+                    .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
+                        guard newValue != nil, !showScrollToBottom else { return }
                         scrollToBottom(proxy: proxy)
                     }
                     .overlay(alignment: .bottomTrailing) {

@@ -926,13 +926,20 @@ public class ChatService {
         // 将此工具标记为非阻塞式
         return InternalToolDefinition(name: "save_memory", description: toolDescription, parameters: parameters, isBlocking: false)
     }
+
+    private struct ToolCallOutcome {
+        let message: ChatMessage
+        let toolResult: String?
+        let shouldAwaitUserSupplement: Bool
+    }
     
     /// 处理单个工具调用
-    private func handleToolCall(_ toolCall: InternalToolCall) async -> (ChatMessage, String?) {
+    private func handleToolCall(_ toolCall: InternalToolCall) async -> ToolCallOutcome {
         logger.info("正在处理工具调用: \(toolCall.toolName)")
         
         var content = ""
         var displayResult: String?
+        var shouldAwaitUserSupplement = false
         
         switch toolCall.toolName {
         case "save_memory":
@@ -960,21 +967,27 @@ public class ChatService {
                 displayName: toolLabel,
                 arguments: toolCall.arguments
             )
-            if permissionDecision == .deny {
+            switch permissionDecision {
+            case .deny:
                 content = "\(toolLabel) 调用已被用户拒绝。"
                 displayResult = content
                 logger.info("  - MCP 工具调用被用户拒绝: \(toolCall.toolName)")
-                break
-            }
-            do {
-                let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
-                content = result
-                displayResult = result
-                logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
-            } catch {
-                content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+            case .supplement:
+                content = "\(toolLabel) 调用已被用户拒绝。"
                 displayResult = content
-                logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
+                shouldAwaitUserSupplement = true
+                logger.info("  - MCP 工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
+            case .allowOnce, .allowForTool, .allowAll:
+                do {
+                    let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
+                    content = result
+                    displayResult = result
+                    logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
+                } catch {
+                    content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                    displayResult = content
+                    logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
+                }
             }
             
         default:
@@ -989,7 +1002,7 @@ public class ChatService {
             toolCalls: [InternalToolCall(id: toolCall.id, toolName: toolCall.toolName, arguments: toolCall.arguments, result: displayResult)]
         )
         
-        return (message, displayResult)
+        return ToolCallOutcome(message: message, toolResult: displayResult, shouldAwaitUserSupplement: shouldAwaitUserSupplement)
     }
 
     @MainActor
@@ -1765,15 +1778,29 @@ public class ChatService {
 
         // 4. 收集需要同步等待结果的工具调用
         var blockingResultMessages: [ChatMessage] = []
+        var shouldAwaitUserSupplement = false
         if !blockingCalls.isEmpty {
             logger.info("正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             for toolCall in blockingCalls {
-                let (resultMessage, toolResult) = await handleToolCall(toolCall)
-                if let toolResult {
+                let outcome = await handleToolCall(toolCall)
+                if let toolResult = outcome.toolResult {
                     await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                 }
-                blockingResultMessages.append(resultMessage)
+                blockingResultMessages.append(outcome.message)
+                if outcome.shouldAwaitUserSupplement {
+                    shouldAwaitUserSupplement = true
+                    break
+                }
             }
+        }
+
+        if shouldAwaitUserSupplement {
+            var updatedMessages = self.messagesForSessionSubject.value
+            updatedMessages.append(contentsOf: blockingResultMessages)
+            self.messagesForSessionSubject.send(updatedMessages)
+            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            requestStatusSubject.send(.finished)
+            return
         }
 
         var nonBlockingResultsForFollowUp: [ChatMessage] = []
@@ -1783,13 +1810,13 @@ public class ChatService {
                 logger.info("在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
                 Task {
                     for toolCall in nonBlockingCalls {
-                        let (resultMessage, toolResult) = await handleToolCall(toolCall)
-                        if let toolResult {
+                        let outcome = await handleToolCall(toolCall)
+                        if let toolResult = outcome.toolResult {
                             await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                         }
                         // 非阻塞工具也写入消息列表，便于 UI 直接展示结果
                         var messages = self.messagesForSessionSubject.value
-                        messages.append(resultMessage)
+                        messages.append(outcome.message)
                         self.messagesForSessionSubject.send(messages)
                         Persistence.saveMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
@@ -1799,13 +1826,26 @@ public class ChatService {
                 // 没有正文时需要等待工具结果，再次回传给 AI 生成最终回答
                 logger.info("非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
                 for toolCall in nonBlockingCalls {
-                    let (resultMessage, toolResult) = await handleToolCall(toolCall)
-                    if let toolResult {
+                    let outcome = await handleToolCall(toolCall)
+                    if let toolResult = outcome.toolResult {
                         await attachToolResult(toolResult, to: toolCall.id, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                     }
-                    nonBlockingResultsForFollowUp.append(resultMessage)
+                    nonBlockingResultsForFollowUp.append(outcome.message)
+                    if outcome.shouldAwaitUserSupplement {
+                        shouldAwaitUserSupplement = true
+                        break
+                    }
                 }
             }
+        }
+
+        if shouldAwaitUserSupplement {
+            var updatedMessages = self.messagesForSessionSubject.value
+            updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
+            self.messagesForSessionSubject.send(updatedMessages)
+            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            requestStatusSubject.send(.finished)
+            return
         }
 
         let shouldTriggerFollowUp = !blockingResultMessages.isEmpty || !nonBlockingResultsForFollowUp.isEmpty
