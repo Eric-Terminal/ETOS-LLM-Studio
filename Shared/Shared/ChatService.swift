@@ -291,7 +291,9 @@ public class ChatService {
         
         if currentRequestToken == token {
             if let sessionID = currentRequestSessionID, let loadingID = currentLoadingMessageID {
-                removeMessage(withID: loadingID, in: sessionID)
+                if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID) {
+                    removeMessage(withID: loadingID, in: sessionID)
+                }
             }
             currentRequestTask = nil
             currentRequestToken = nil
@@ -2044,7 +2046,7 @@ public class ChatService {
         }
     }
     
-    /// 在取消请求时移除占位消息，保持消息列表干净。
+    /// 在取消请求时，只有占位消息无内容时才移除，避免丢失已接收的部分回复。
     private func removeMessage(withID messageID: UUID, in sessionID: UUID) {
         var messages = messagesForSessionSubject.value
         if let index = messages.firstIndex(where: { $0.id == messageID }) {
@@ -2053,6 +2055,18 @@ public class ChatService {
             Persistence.saveMessages(messages, for: sessionID)
             logger.info("已移除占位消息 \(messageID.uuidString)。")
         }
+    }
+
+    private func shouldRemoveLoadingMessageOnCancel(loadingMessageID: UUID) -> Bool {
+        guard let message = messagesForSessionSubject.value.first(where: { $0.id == loadingMessageID }) else {
+            return false
+        }
+        let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasReasoning = !(message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasToolCalls = !(message.toolCalls ?? []).isEmpty
+        let hasImages = !(message.imageFileNames ?? []).isEmpty
+        let hasAudio = message.audioFileName != nil
+        return !(hasContent || hasReasoning || hasToolCalls || hasImages || hasAudio)
     }
     
     /// 将最终确定的消息更新到消息列表中

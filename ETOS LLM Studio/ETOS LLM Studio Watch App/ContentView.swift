@@ -322,6 +322,14 @@ struct ContentView: View {
         viewModel.sendMessage()
     }
 
+    private func sendOrStopMessage() {
+        if viewModel.isSendingMessage {
+            viewModel.cancelSending()
+        } else {
+            sendMessage()
+        }
+    }
+
     private var inputFillColor: Color {
         viewModel.enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
     }
@@ -389,14 +397,14 @@ struct ContentView: View {
                             transparentInputField
                                 .glassEffect(.clear, in: Capsule())
 
-                            Button(action: sendMessage) {
-                                Image(systemName: "arrow.up")
+                            Button(action: sendOrStopMessage) {
+                                Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
                                     .font(.system(size: 18, weight: .medium))
                                     .frame(width: inputControlHeight, height: inputControlHeight)
                             }
                             .buttonStyle(.plain)
                             .glassEffect(.clear, in: Circle())
-                            .disabled(!canSend || viewModel.isSendingMessage)
+                            .disabled(!viewModel.isSendingMessage && !canSend)
                         } else {
                             ZStack {
                                 Capsule()
@@ -408,8 +416,8 @@ struct ContentView: View {
                                 transparentInputField
                             }
 
-                            Button(action: sendMessage) {
-                                Image(systemName: "arrow.up")
+                            Button(action: sendOrStopMessage) {
+                                Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
                                     .font(.system(size: 18, weight: .medium))
                             }
                             .buttonStyle(.plain)
@@ -418,7 +426,7 @@ struct ContentView: View {
                                 Circle()
                                     .stroke(inputStrokeColor, lineWidth: 0.8)
                             )
-                            .disabled(!canSend || viewModel.isSendingMessage)
+                            .disabled(!viewModel.isSendingMessage && !canSend)
                         }
                     }
                     .frame(height: inputControlHeight)
@@ -434,8 +442,8 @@ struct ContentView: View {
                             transparentInputField
                         }
 
-                        Button(action: sendMessage) {
-                            Image(systemName: "arrow.up")
+                        Button(action: sendOrStopMessage) {
+                            Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
                                 .font(.system(size: 18, weight: .medium))
                         }
                         .buttonStyle(.plain)
@@ -447,7 +455,7 @@ struct ContentView: View {
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
                         )
-                        .disabled(!canSend || viewModel.isSendingMessage)
+                        .disabled(!viewModel.isSendingMessage && !canSend)
                     }
                     .frame(height: inputControlHeight)
                     .padding(.horizontal, 10)

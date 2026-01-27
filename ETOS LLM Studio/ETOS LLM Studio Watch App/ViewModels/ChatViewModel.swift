@@ -285,6 +285,12 @@ class ChatViewModel: ObservableObject {
             )
         }
     }
+
+    func cancelSending() {
+        Task {
+            await chatService.cancelOngoingRequest()
+        }
+    }
     
     /// 清除待发送的音频附件
     func clearPendingAudioAttachment() {
