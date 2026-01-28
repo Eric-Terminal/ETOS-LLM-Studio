@@ -9,6 +9,7 @@
 
 import Foundation
 import Combine
+import CryptoKit
 import os.log
 
 /// 一个组合了 Provider 和 Model 的可运行实体，包含了发起 API 请求所需的所有信息。
@@ -77,8 +78,20 @@ public class ChatService {
     private let urlSession: URLSession
 
     private func sanitizedToolName(_ name: String) -> String {
-        let range = NSRange(name.startIndex..., in: name)
-        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        let sanitized = Self.toolNameRegex.stringByReplacingMatches(in: trimmed, options: [], range: range, withTemplate: "_")
+        return enforceToolNameLimit(sanitized, source: trimmed)
+    }
+
+    private func enforceToolNameLimit(_ name: String, source: String) -> String {
+        let maxLength = 64
+        guard name.count > maxLength else { return name }
+        let digest = SHA256.hash(data: Data(source.utf8))
+        let hash = digest.compactMap { String(format: "%02x", $0) }.joined().prefix(8)
+        let prefixLength = maxLength - 1 - hash.count
+        let prefix = name.prefix(prefixLength)
+        return "\(prefix)_\(hash)"
     }
 
     private func resolveToolName(_ name: String, availableTools: [InternalToolDefinition]) -> String {
