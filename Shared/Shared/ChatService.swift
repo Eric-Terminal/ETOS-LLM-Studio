@@ -999,7 +999,7 @@ public class ChatService {
                 logger.error("  - 无法解析 save_memory 的参数: \(toolCall.arguments)")
             }
             
-        case _ where toolCall.toolName.hasPrefix(MCPManager.toolNamePrefix):
+        case _ where MCPManager.isMCPToolName(toolCall.toolName):
             let toolLabel = await MainActor.run {
                 MCPManager.shared.displayLabel(for: toolCall.toolName)
             } ?? toolCall.toolName

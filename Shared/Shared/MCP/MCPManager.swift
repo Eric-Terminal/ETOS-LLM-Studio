@@ -91,7 +91,11 @@ public final class MCPManager: ObservableObject {
 
     public static let shared = MCPManager()
     public nonisolated static var toolNamePrefix: String { "mcp://" }
+    public nonisolated static var toolAliasPrefix: String { "mcp_" }
     private nonisolated static var resourceNamePrefix: String { "mcpres://" }
+    public nonisolated static func isMCPToolName(_ name: String) -> Bool {
+        name.hasPrefix(toolNamePrefix) || name.hasPrefix(toolAliasPrefix)
+    }
 
     public enum ConnectionState: Equatable {
         case idle
@@ -567,9 +571,16 @@ public final class MCPManager: ObservableObject {
                   case .ready = status.connectionState else { continue }
 
             for tool in status.tools {
-                let name = internalToolName(for: server, tool: tool)
-                aggregatedTools.append(MCPAvailableTool(server: server, tool: tool, internalName: name))
-                newToolRouting[name] = RoutedTool(internalName: name, server: server, tool: tool)
+                let fullName = internalToolName(for: server, tool: tool)
+                let shortNameCandidate = shortToolName(for: server, tool: tool)
+                let shortName = newToolRouting[shortNameCandidate] == nil ? shortNameCandidate : fullName
+
+                aggregatedTools.append(MCPAvailableTool(server: server, tool: tool, internalName: shortName))
+                newToolRouting[shortName] = RoutedTool(internalName: shortName, server: server, tool: tool)
+
+                if shortName != fullName {
+                    newToolRouting[fullName] = RoutedTool(internalName: fullName, server: server, tool: tool)
+                }
             }
 
             for resource in status.resources {
@@ -618,6 +629,11 @@ public final class MCPManager: ObservableObject {
 
     private func internalToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {
         "\(Self.toolNamePrefix)\(server.id.uuidString)/\(tool.toolId)"
+    }
+
+    private func shortToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {
+        let shortID = server.id.uuidString.prefix(8)
+        return "\(Self.toolAliasPrefix)\(shortID)_\(tool.toolId)"
     }
 
     private func internalResourceName(for server: MCPServerConfiguration, resource: MCPResourceDescription) -> String {
