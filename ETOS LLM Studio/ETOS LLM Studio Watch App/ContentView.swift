@@ -29,7 +29,7 @@ struct ContentView: View {
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
-    private let bottomAnchorID = "bottomAnchor"
+    private let bottomAnchorID = "inputBubble"
     
     private var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
@@ -194,12 +194,6 @@ struct ContentView: View {
             }
             
             inputBubble
-                .id("inputBubble")
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-
-            Color.clear
-                .frame(height: 1)
                 .id(bottomAnchorID)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
