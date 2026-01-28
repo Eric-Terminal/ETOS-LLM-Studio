@@ -20,12 +20,8 @@ struct ToolPermissionBubble: View {
         request.displayName ?? request.toolName
     }
 
-    private var cappedArguments: String {
-        let trimmedArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedArguments.count > 600 {
-            return String(trimmedArguments.prefix(600)) + "..."
-        }
-        return trimmedArguments
+    private var trimmedArguments: String {
+        request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var bubbleShape: TelegramBubbleShape {
@@ -48,11 +44,19 @@ struct ToolPermissionBubble: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
 
-                    if !cappedArguments.isEmpty {
-                        Text("参数：\(cappedArguments)")
-                            .font(.caption)
+                    if !trimmedArguments.isEmpty {
+                        Text("参数：")
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(Color.secondary)
-                            .lineLimit(6)
+
+                        ScrollView {
+                            Text(trimmedArguments)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(Color.secondary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 200)
                     }
                 }
 

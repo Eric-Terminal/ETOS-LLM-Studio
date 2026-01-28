@@ -167,6 +167,18 @@ struct ContentView: View {
                 messageRow(for: message, proxy: proxy)
             }
 
+            if let activeRequest = toolPermissionCenter.activeRequest,
+               shouldShowPendingToolCall(for: activeRequest, in: displayMessages) {
+                ToolCallPendingRow(
+                    request: activeRequest,
+                    enableBackground: viewModel.enableBackground,
+                    enableLiquidGlass: isLiquidGlassEnabled
+                )
+                .id("pending-tool-\(activeRequest.id.uuidString)")
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+
             if let activeRequest = toolPermissionCenter.activeRequest {
                 ToolPermissionBubble(
                     request: activeRequest,
@@ -539,6 +551,16 @@ struct ContentView: View {
                 await announcementManager.checkAnnouncement()
             }
     }
+
+    private func shouldShowPendingToolCall(for request: ToolPermissionRequest, in messages: [ChatMessage]) -> Bool {
+        let trimmedArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !messages.contains { message in
+            (message.toolCalls ?? []).contains { call in
+                call.toolName == request.toolName
+                    && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedArguments
+            }
+        }
+    }
 }
 
 // MARK: - 完整错误响应辅助类型
@@ -547,6 +569,66 @@ struct ContentView: View {
 private struct FullErrorContentWrapper: Identifiable {
     let id = UUID()
     let content: String
+}
+
+private struct ToolCallPendingRow: View {
+    let request: ToolPermissionRequest
+    let enableBackground: Bool
+    let enableLiquidGlass: Bool
+
+    private var toolLabel: String {
+        if request.toolName == "save_memory" {
+            return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
+        }
+        return MCPManager.shared.displayLabel(for: request.toolName) ?? request.displayName ?? request.toolName
+    }
+
+    private var bubbleFill: Color {
+        enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
+    }
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("调用：\(toolLabel)")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+
+                let trimmedArgs = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedArgs.isEmpty {
+                    Text(trimmedArgs)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(10)
+            .background(bubbleBackground)
+
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var bubbleBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 12)
+        if enableLiquidGlass {
+            if #available(watchOS 26.0, *) {
+                shape
+                    .fill(bubbleFill)
+                    .glassEffect(.clear, in: shape)
+                    .clipShape(shape)
+            } else {
+                shape
+                    .fill(bubbleFill)
+            }
+        } else {
+            shape
+                .fill(bubbleFill)
+        }
+    }
 }
 
 /// 完整错误响应内容视图

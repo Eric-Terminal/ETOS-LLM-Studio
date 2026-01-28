@@ -20,12 +20,8 @@ struct ToolPermissionBubble: View {
         request.displayName ?? request.toolName
     }
 
-    private var cappedArguments: String {
-        let trimmedArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedArguments.count > 320 {
-            return String(trimmedArguments.prefix(320)) + "..."
-        }
-        return trimmedArguments
+    private var trimmedArguments: String {
+        request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var bubbleFill: Color {
@@ -39,11 +35,17 @@ struct ToolPermissionBubble: View {
                     .font(.caption)
                     .foregroundColor(.primary)
 
-                if !cappedArguments.isEmpty {
-                    Text("参数：\(cappedArguments)")
+                if !trimmedArguments.isEmpty {
+                    Text("参数：")
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                        .lineLimit(4)
+
+                    ScrollView {
+                        Text(trimmedArguments)
+                            .font(.caption2.monospaced())
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxHeight: 120)
                 }
 
                 HStack(spacing: 6) {

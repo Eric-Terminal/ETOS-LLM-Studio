@@ -1055,6 +1055,40 @@ public class ChatService {
         Persistence.saveMessages(messages, for: sessionID)
     }
 
+    private func ensureToolCallsVisible(_ toolCalls: [InternalToolCall], in loadingMessageID: UUID, sessionID: UUID) {
+        guard !toolCalls.isEmpty else { return }
+        var messages = messagesForSessionSubject.value
+        guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
+        var message = messages[messageIndex]
+        var existingCalls = message.toolCalls ?? []
+        var didChange = false
+
+        for call in toolCalls {
+            if let existingIndex = existingCalls.firstIndex(where: { $0.id == call.id }) {
+                let existingResult = existingCalls[existingIndex].result
+                if existingCalls[existingIndex].toolName != call.toolName
+                    || existingCalls[existingIndex].arguments != call.arguments {
+                    existingCalls[existingIndex] = InternalToolCall(
+                        id: call.id,
+                        toolName: call.toolName,
+                        arguments: call.arguments,
+                        result: existingResult
+                    )
+                    didChange = true
+                }
+            } else {
+                existingCalls.append(call)
+                didChange = true
+            }
+        }
+
+        guard didChange else { return }
+        message.toolCalls = existingCalls
+        messages[messageIndex] = message
+        messagesForSessionSubject.send(messages)
+        Persistence.saveMessages(messages, for: sessionID)
+    }
+
     // MARK: - 核心请求执行逻辑 (已重构)
     
     private func executeMessageRequest(
@@ -1792,6 +1826,7 @@ public class ChatService {
         // 1. 将当前 assistant 消息更新为“工具调用”气泡
         updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
         let toolCallMessageID = loadingMessageID
+        ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
 
         // 2. 根据 isBlocking 标志将工具调用分类
         let toolDefs = availableTools ?? []

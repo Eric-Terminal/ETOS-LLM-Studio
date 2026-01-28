@@ -55,6 +55,8 @@ struct ChatView: View {
     @State private var sessionInfo: SessionPickerInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
+    @State private var bottomSafeAreaInset: CGFloat = 0
+    @State private var keyboardHeight: CGFloat = 0
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
@@ -74,6 +76,15 @@ struct ChatView: View {
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
     private let sessionPickerMorphID = "sessionPickerMorph"
+    private var tabBarCompensation: CGFloat {
+        guard keyboardHeight == 0 else { return 0 }
+        let measuredTabBarHeight = UITabBarController().tabBar.frame.height
+        let tabBarHeight = measuredTabBarHeight > 0 ? measuredTabBarHeight : 49
+        guard bottomSafeAreaInset > tabBarHeight + 8, bottomSafeAreaInset < 160 else {
+            return 0
+        }
+        return tabBarHeight
+    }
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -172,6 +183,16 @@ struct ChatView: View {
                                 }
                             }
 
+                            if let activeRequest = toolPermissionCenter.activeRequest,
+                               shouldShowPendingToolCall(for: activeRequest, in: displayedMessages) {
+                                ToolCallPendingBubble(
+                                    request: activeRequest,
+                                    enableBackground: viewModel.enableBackground,
+                                    enableLiquidGlass: isLiquidGlassEnabled
+                                )
+                                .id("pending-tool-\(activeRequest.id.uuidString)")
+                            }
+
                             if let activeRequest = toolPermissionCenter.activeRequest {
                                 ToolPermissionBubble(
                                     request: activeRequest,
@@ -238,6 +259,22 @@ struct ChatView: View {
                 if showSessionPickerPanel {
                     sessionPickerOverlay
                 }
+            }
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(key: SafeAreaBottomKey.self, value: proxy.safeAreaInsets.bottom)
+                }
+            )
+            .onPreferenceChange(SafeAreaBottomKey.self) { newValue in
+                bottomSafeAreaInset = newValue
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+                guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+                keyboardHeight = frame.height
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                keyboardHeight = 0
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
@@ -1053,6 +1090,7 @@ struct ChatView: View {
         .onAppear {
             viewModel.userInput = draftText
         }
+        .padding(.bottom, -tabBarCompensation)
     }
     
     /// Telegram 风格滚动到底部按钮
@@ -1210,6 +1248,70 @@ struct ChatView: View {
     }
 }
 
+private struct ToolCallPendingBubble: View {
+    let request: ToolPermissionRequest
+    let enableBackground: Bool
+    let enableLiquidGlass: Bool
+
+    private var bubbleShape: TelegramBubbleShape {
+        TelegramBubbleShape(isOutgoing: false)
+    }
+
+    private var bubbleFill: some ShapeStyle {
+        let assistantOpacity = enableBackground ? 0.75 : 1.0
+        let baseColor = enableBackground
+            ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
+            : Color(uiColor: .systemBackground)
+        return AnyShapeStyle(baseColor)
+    }
+
+    private var toolCall: InternalToolCall {
+        InternalToolCall(id: request.id.uuidString, toolName: request.toolName, arguments: request.arguments)
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                ToolCallsInlineView(toolCalls: [toolCall], isOutgoing: false)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(bubbleBackground)
+            .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+
+            Spacer(minLength: 20)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private var bubbleBackground: some View {
+        if enableLiquidGlass {
+            if #available(iOS 26.0, *) {
+                bubbleShape
+                    .fill(bubbleFill)
+                    .glassEffect(.clear, in: bubbleShape)
+                    .clipShape(bubbleShape)
+            } else {
+                bubbleShape
+                    .fill(bubbleFill)
+            }
+        } else {
+            bubbleShape
+                .fill(bubbleFill)
+        }
+    }
+}
+
+private struct SafeAreaBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Helpers
 
 private extension ChatView {
@@ -1223,6 +1325,16 @@ private extension ChatView {
             }
         } else {
             action()
+        }
+    }
+
+    func shouldShowPendingToolCall(for request: ToolPermissionRequest, in messages: [ChatMessage]) -> Bool {
+        let trimmedArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !messages.contains { message in
+            (message.toolCalls ?? []).contains { call in
+                call.toolName == request.toolName
+                    && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedArguments
+            }
         }
     }
 }
