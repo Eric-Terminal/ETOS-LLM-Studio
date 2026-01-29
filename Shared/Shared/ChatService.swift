@@ -1808,12 +1808,23 @@ public class ChatService {
     /// 处理已解析的聊天消息，包含所有工具调用和UI更新的核心逻辑 (可测试)
     internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
         var responseMessage = responseMessage // Make mutable
+        if let reasoning = responseMessage.reasoningContent {
+            let normalized = normalizeEscapedNewlinesIfNeeded(reasoning)
+            responseMessage.reasoningContent = normalized.isEmpty ? nil : normalized
+        }
 
         // BUGFIX: 无论是否存在工具调用，都应首先解析并提取思考过程。
         let (finalContent, extractedReasoning) = parseThoughtTags(from: responseMessage.content)
         responseMessage.content = finalContent
         if !extractedReasoning.isEmpty {
-            responseMessage.reasoningContent = (responseMessage.reasoningContent ?? "") + "\n" + extractedReasoning
+            let normalizedExtracted = normalizeEscapedNewlinesIfNeeded(extractedReasoning)
+            if !normalizedExtracted.isEmpty {
+                if let existing = responseMessage.reasoningContent, !existing.isEmpty {
+                    responseMessage.reasoningContent = existing + "\n" + normalizedExtracted
+                } else {
+                    responseMessage.reasoningContent = normalizedExtracted
+                }
+            }
         }
         if let toolCalls = responseMessage.toolCalls {
             let resolvedCalls = resolveToolCalls(toolCalls, availableTools: availableTools ?? [])
@@ -2234,6 +2245,16 @@ public class ChatService {
         let remainingContent = String(text[lastMatchEnd...])
         finalContent += remainingContent
         return (finalContent.trimmingCharacters(in: .whitespacesAndNewlines), finalReasoning)
+    }
+
+    private func normalizeEscapedNewlinesIfNeeded(_ text: String) -> String {
+        guard text.contains("\\n") || text.contains("\\r") else { return text }
+        let hasActualNewline = text.contains("\n") || text.contains("\r")
+        guard !hasActualNewline else { return text }
+        return text
+            .replacingOccurrences(of: "\\r\\n", with: "\n")
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\r", with: "\n")
     }
     
     /// 构建最终的、使用 XML 标签包裹的系统提示词。

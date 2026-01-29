@@ -14,6 +14,19 @@ import os.log
 
 // MARK: - 流式响应的数据片段
 
+private func appendSegment(_ segment: String, to target: inout String?, separator: String = "\n\n") {
+    guard !segment.isEmpty else { return }
+    if target == nil || target?.isEmpty == true {
+        target = segment
+        return
+    }
+    let existing = target ?? ""
+    let existingEndsWithNewline = existing.last == "\n" || existing.last == "\r"
+    let newStartsWithNewline = segment.first == "\n" || segment.first == "\r"
+    let joiner = (existingEndsWithNewline || newStartsWithNewline) ? "" : separator
+    target = existing + joiner + segment
+}
+
 /// 代表从流式 API 响应中解析出的单个数据片段。
 public struct ChatMessagePart {
     public struct ToolCallDelta {
@@ -936,11 +949,7 @@ public class GeminiAdapter: APIAdapter {
             if let text = part.text {
                 if part.thought == true {
                     // 这是思考内容
-                    if reasoningContent == nil {
-                        reasoningContent = text
-                    } else {
-                        reasoningContent! += text
-                    }
+                    appendSegment(text, to: &reasoningContent)
                 } else {
                     textContent += text
                 }
@@ -1476,11 +1485,7 @@ public class AnthropicAdapter: APIAdapter {
                 }
             case "thinking":
                 if let thinking = block.thinking ?? block.text {
-                    if reasoningContent == nil {
-                        reasoningContent = thinking
-                    } else {
-                        reasoningContent! += thinking
-                    }
+                    appendSegment(thinking, to: &reasoningContent)
                 }
             case "tool_use":
                 if let id = block.id, let name = block.name {
