@@ -34,6 +34,15 @@ private struct TelegramColors {
     static let scrollButtonShadow = Color.black.opacity(0.15)
 }
 
+private func resolvedFileMimeType(for url: URL) -> String {
+    let ext = url.pathExtension.lowercased()
+    if let type = UTType(filenameExtension: ext),
+       let mimeType = type.preferredMIMEType {
+        return mimeType
+    }
+    return "application/octet-stream"
+}
+
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
@@ -1452,6 +1461,7 @@ private struct TelegramMessageComposer: View {
     @State private var showCamera = false
     @State private var showAudioRecorder = false
     @State private var showAudioImporter = false
+    @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
@@ -1485,7 +1495,7 @@ private struct TelegramMessageComposer: View {
     var body: some View {
         VStack(spacing: 8) {
             // 附件预览区域
-            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
+            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
                 telegramAttachmentPreview
                     .padding(.horizontal, 16)
             }
@@ -1583,6 +1593,20 @@ private struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
             }
         }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                for url in urls {
+                    importFileAttachment(from: url)
+                }
+            case .failure(let error):
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
     }
 
     private func attachmentMenuButton(size: CGFloat) -> some View {
@@ -1610,6 +1634,12 @@ private struct TelegramMessageComposer: View {
                 showAudioImporter = true
             } label: {
                 Label("从录音备忘录上传", systemImage: "music.note.list")
+            }
+
+            Button {
+                showFileImporter = true
+            } label: {
+                Label("选择文件", systemImage: "doc")
             }
         } label: {
             Image(systemName: "paperclip")
@@ -1785,6 +1815,38 @@ private struct TelegramMessageComposer: View {
                             .fill(Color(uiColor: .secondarySystemBackground))
                     )
                 }
+
+                // 文件预览
+                ForEach(viewModel.pendingFileAttachments) { attachment in
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 18))
+                            .foregroundColor(TelegramColors.attachButtonColor)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("文件")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(attachment.fileName)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        
+                        Button {
+                            viewModel.removePendingFileAttachment(attachment)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(uiColor: .secondarySystemBackground))
+                    )
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -1797,7 +1859,7 @@ private struct TelegramMessageComposer: View {
 
     private var hasContent: Bool {
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty
+        let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty || !viewModel.pendingFileAttachments.isEmpty
         return hasText || hasAttachments
     }
 
@@ -1825,6 +1887,41 @@ private struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
             }
         }
+    }
+
+    private func importFileAttachment(from url: URL) {
+        let mimeType = resolvedFileMimeType(for: url)
+        Task.detached {
+            let needsAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if needsAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let attachment = FileAttachment(
+                    data: data,
+                    mimeType: mimeType,
+                    fileName: url.lastPathComponent
+                )
+                await MainActor.run {
+                    viewModel.addFileAttachment(attachment)
+                }
+            } catch {
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
+    }
+
+    private func fileMimeType(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        if let type = UTType(filenameExtension: ext),
+           let mimeType = type.preferredMIMEType {
+            return mimeType
+        }
+        return "application/octet-stream"
     }
 
     private func audioMimeType(for url: URL) -> String {
@@ -2053,12 +2150,13 @@ private struct MessageComposerView: View {
     @State private var showAttachmentMenu = false
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
+    @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
     var body: some View {
         VStack(spacing: 8) {
             // 附件预览区域
-            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
+            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
                 attachmentPreviewBar
                     .padding(.horizontal, 12)
             }
@@ -2082,6 +2180,9 @@ private struct MessageComposerView: View {
                         Button("录制语音") {
                             showAudioRecorder = true
                         }
+                        Button("选择文件") {
+                            showFileImporter = true
+                        }
                     }
                 } else {
                     Button {
@@ -2098,6 +2199,9 @@ private struct MessageComposerView: View {
                         }
                         Button("录制语音") {
                             showAudioRecorder = true
+                        }
+                        Button("选择文件") {
+                            showFileImporter = true
                         }
                     }
                 }
@@ -2178,6 +2282,20 @@ private struct MessageComposerView: View {
                 viewModel.setAudioAttachment(attachment)
             }
         }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                for url in urls {
+                    importFileAttachment(from: url)
+                }
+            case .failure(let error):
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
     }
     
     @ViewBuilder
@@ -2231,11 +2349,65 @@ private struct MessageComposerView: View {
                     .background(Color(uiColor: .secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+
+                // 文件预览
+                ForEach(viewModel.pendingFileAttachments) { attachment in
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.tint)
+                        
+                        Text(attachment.fileName)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .frame(maxWidth: 120)
+                        
+                        Button {
+                            viewModel.removePendingFileAttachment(attachment)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
         }
     }
+
+    private func importFileAttachment(from url: URL) {
+        let mimeType = resolvedFileMimeType(for: url)
+        Task.detached {
+            let needsAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if needsAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let attachment = FileAttachment(
+                    data: data,
+                    mimeType: mimeType,
+                    fileName: url.lastPathComponent
+                )
+                await MainActor.run {
+                    viewModel.addFileAttachment(attachment)
+                }
+            } catch {
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
+    }
+
+    // file MIME type helper lives at file scope (resolvedFileMimeType)
 }
 
 // MARK: - Camera Image Picker
