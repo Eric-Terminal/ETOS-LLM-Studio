@@ -180,6 +180,10 @@ public class ChatService {
         }
         self.selectedModelSubject.send(initialModel)
         
+        ConfigLoader.fetchDownloadOnceConfigsIfNeeded { [weak self] in
+            self?.reloadProviders()
+        }
+        
         logger.info("  - 初始选中模型为: \(initialModel?.model.displayName ?? "无")")
         logger.info("  - 初始化完成。")
     }
