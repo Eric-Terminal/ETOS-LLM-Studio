@@ -9,11 +9,24 @@ import Foundation
 private let mcpTokenPlaceholder = "{token}"
 
 private func resolveAdditionalHeaders(_ headers: [String: String], token: String?) -> [String: String] {
-    guard !headers.isEmpty else { return [:] }
-    guard let token, !token.isEmpty else { return headers }
-    return headers.reduce(into: [String: String]()) { result, pair in
-        result[pair.key] = pair.value.replacingOccurrences(of: mcpTokenPlaceholder, with: token)
+    var resolved: [String: String]
+    if headers.isEmpty {
+        resolved = [:]
+    } else if let token, !token.isEmpty {
+        resolved = headers.reduce(into: [String: String]()) { result, pair in
+            result[pair.key] = pair.value.replacingOccurrences(of: mcpTokenPlaceholder, with: token)
+        }
+    } else {
+        resolved = headers
     }
+    // apiKey 存在但 headers 中无 Authorization 时，自动添加 Bearer 鉴权头
+    if let token, !token.isEmpty {
+        let hasAuth = resolved.keys.contains { $0.caseInsensitiveCompare("Authorization") == .orderedSame }
+        if !hasAuth {
+            resolved["Authorization"] = "Bearer \(token)"
+        }
+    }
+    return resolved
 }
 
 public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
