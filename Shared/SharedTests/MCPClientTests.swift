@@ -44,6 +44,7 @@ struct MCPClientTests {
         #expect(clientInfo["version"] as? String == "0.1")
         #expect(capabilities["supportsStreamingResponses"] as? Bool == false)
         #expect((capabilities["transports"] as? [String]) == ["http+sse"])
+        #expect(transport.request(named: "notifications/initialized") != nil)
     }
 
     @Test("List tools decodes JSON payload")
@@ -170,6 +171,13 @@ private final class MockTransport: MCPTransport {
         case .failure(let error):
             throw error
         }
+    }
+
+    func sendNotification(_ payload: Data) async throws {
+        let json = try JSONSerialization.jsonObject(with: payload)
+        let dictionary = json as? [String: Any] ?? [:]
+        let method = dictionary["method"] as? String ?? ""
+        recordedRequests.append(RecordedRequest(method: method, payload: dictionary))
     }
 }
 

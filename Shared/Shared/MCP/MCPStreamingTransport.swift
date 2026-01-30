@@ -24,12 +24,22 @@ public protocol MCPNotificationDelegate: AnyObject {
     func didReceiveProgress(_ progress: MCPProgressParams)
 }
 
+// MARK: - Streaming Transport Protocol
+
+public protocol MCPStreamingTransportProtocol: AnyObject {
+    var notificationDelegate: MCPNotificationDelegate? { get set }
+    var samplingHandler: MCPSamplingHandler? { get set }
+    func connectStream()
+    func disconnect()
+}
+
 // MARK: - Streaming Transport
 
-public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
+public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, @unchecked Sendable {
     private let sseEndpoint: URL
     private let session: URLSession
     private let headers: [String: String]
+    private let protocolVersion: String? = MCPProtocolVersion.current
     
     private var sseTask: Task<Void, Never>?
     private let pendingRequestsActor = PendingRequestsActor()
@@ -104,9 +114,45 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
             }
         }
     }
+
+    public func sendNotification(_ payload: Data) async throws {
+        let (endpoint, sessionId) = await state.snapshot()
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.httpBody = payload
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        if let sessionId, !sessionId.isEmpty, !hasHeader("MCP-Session-Id", in: headers) {
+            request.setValue(sessionId, forHTTPHeaderField: "MCP-Session-Id")
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MCPClientError.invalidResponse
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8)
+            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
+        }
+    }
     
     // MARK: - SSE Connection
     
+    public func connectStream() {
+        connectSSE()
+    }
+
     public func connectSSE() {
         disconnect()
         
@@ -136,6 +182,9 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
         
         do {
@@ -275,7 +324,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         guard let data = try? encoder.encode(rpcResponse) else { return }
         
         do {
-            _ = try await sendMessage(data)
+            try await sendNotification(data)
         } catch {
             streamingLogger.error("发送 Sampling 响应失败: \(error.localizedDescription)")
         }
@@ -289,7 +338,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         guard let data = try? encoder.encode(error) else { return }
         
         do {
-            _ = try await sendMessage(data)
+            try await sendNotification(data)
         } catch {
             streamingLogger.error("发送 Sampling 错误响应失败: \(error.localizedDescription)")
         }

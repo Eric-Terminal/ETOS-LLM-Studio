@@ -211,8 +211,8 @@
 "JSON 输入" = "JSON Input";
 "MCP 工具箱" = "MCP Toolbox";
 "MCP 工具集成" = "MCP Tool Integration";
-"MCP 工具集成(试验性)" = "MCP Tool Integration (Beta)";
-"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "Model Context Protocol lets clients discover and call remote tools/resources via a unified interface. Manage servers, view their capabilities, and test with JSON here.";
+"MCP 工具集成(试验性)" = "MCP Tool Integration";
+"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "Set up MCP tool servers so the assistant can call remote capabilities. Manage servers, inspect capabilities, and debug with JSON here.";
 "OpenAI 兼容" = "OpenAI Compatible";
 "PIN 码" = "PIN";
 "PIN 码随机生成,请勿泄露" = "PIN is randomly generated. Do not share.";
@@ -532,7 +532,7 @@
 "连接控制" = "Connection control";
 "连接概览" = "Connection overview";
 "连接状态" = "Connection status";
-"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "Connect MCP tool servers and manage/debug directly in the client.";
+"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "Set up MCP tool servers so the assistant can call external capabilities.";
 "选择背景图" = "Select background image";
 "通过代理可绕过 ATS 限制。" = "Proxy can bypass ATS restrictions.";
 "通过代理将请求转发到目标 MCP Server，以绕过 ATS 对证书/域名的限制。默认使用 mcp.ericterminal.com。" = "Proxy forwards requests to the target MCP Server to bypass ATS certificate/domain restrictions. Default is mcp.ericterminal.com.";
@@ -711,7 +711,7 @@
 "管理应用内数据" = "Manage in-app data";
 "系统公告" = "System announcements";
 "紧急通知" = "Urgent notice";
-"让 AI 能够调用 MCP 提供的各种工具和服务。" = "Let AI call the tools and services provided by MCP.";
+"让 AI 能够调用 MCP 提供的各种工具和服务。" = "Set up MCP tool servers so the assistant can call external capabilities.";
 "记下显示的 IP 地址" = "Note the displayed IP address";
 "设备主动连接电脑端服务器（端口 8765），实时接收命令" = "The device actively connects to the computer server (port 8765) to receive commands in real time.";
 "设备每秒向服务器（端口 7654）请求一次，获取待执行命令" = "The device polls the server (port 7654) once per second to fetch pending commands.";

@@ -24,14 +24,14 @@ struct MCPIntegrationView: View {
     var body: some View {
         List {
             Section("关于 MCP") {
-                Text("Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。")
+                Text("配置 MCP 工具服务器，让助手调用远程能力。可在这里管理 Server、查看能力，并用 JSON 调试。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             
             Section("已配置服务器") {
                 if manager.servers.isEmpty {
-                    Text("尚未添加任何 MCP Server。点击右上角的“＋”来新建。")
+                    Text("尚未添加任何 MCP Server。点击右上角“＋”创建。")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(manager.servers) { server in
@@ -87,13 +87,13 @@ struct MCPIntegrationView: View {
                     )
                 )
                     .font(.footnote)
-                Button("刷新所有已连接服务器") {
+                Button("刷新已连接服务器") {
                     manager.refreshMetadata()
                 }
                 .disabled(manager.isBusy || connectedCount == 0)
                 
                 if manager.isBusy {
-                    ProgressView("正在同步 MCP 状态…")
+                    ProgressView("正在同步…")
                 }
             }
             
@@ -681,13 +681,13 @@ private struct MCPServerEditor: View {
                         .autocorrectionDisabled()
                     Toggle("高级选项", isOn: $showAdvanced)
                     if showAdvanced {
-                        TextField("Message Endpoint (可选)", text: $endpoint)
+                        TextField("Message Endpoint（可选）", text: $endpoint)
                             .keyboardType(.URL)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
                 } else {
-                    TextField("HTTP(S) Endpoint", text: $endpoint)
+                    TextField("Streamable HTTP Endpoint", text: $endpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -757,7 +757,7 @@ private struct MCPServerEditor: View {
             guard let url = URL(string: trimmedEndpoint),
                   let scheme = url.scheme,
                   scheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 HTTP 或 HTTPS 地址。"
+                validationMessage = "请提供合法的 Streamable HTTP 地址。"
                 return
             }
             transport = .http(endpoint: url, apiKey: trimmedKey.isEmpty ? nil : trimmedKey, additionalHeaders: [:])
@@ -849,8 +849,8 @@ private struct MCPServerEditor: View {
         
         var label: String {
             switch self {
-            case .http: return "HTTP / Bearer"
-            case .sse: return "HTTP + SSE"
+            case .http: return "Streamable HTTP"
+            case .sse: return "SSE"
             case .oauth: return "OAuth 2.0"
             }
         }

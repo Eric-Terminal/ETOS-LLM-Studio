@@ -41,7 +41,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("让 AI 能够调用 MCP 提供的各种工具和服务。")
+                Text("配置 MCP 工具服务器，让助手调用外部能力。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }            

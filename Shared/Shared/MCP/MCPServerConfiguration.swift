@@ -86,7 +86,7 @@ public extension MCPServerConfiguration {
             if let apiKey, !apiKey.isEmpty {
                 headers["Authorization"] = "Bearer \(apiKey)"
             }
-            return MCPHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
+            return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
         case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
             var headers = additionalHeaders
             if let apiKey, !apiKey.isEmpty {
@@ -144,7 +144,9 @@ extension MCPServerConfiguration.Transport {
 
     private enum Kind: String, Codable {
         case http
+        case streamableHTTP = "streamable_http"
         case httpSSE
+        case sse
         case oauth
     }
 
@@ -152,12 +154,12 @@ extension MCPServerConfiguration.Transport {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try container.decode(Kind.self, forKey: .kind)
         switch kind {
-        case .http:
+        case .http, .streamableHTTP:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
             let headers = try container.decodeIfPresent([String: String].self, forKey: .additionalHeaders) ?? [:]
             self = .http(endpoint: endpoint, apiKey: apiKey, additionalHeaders: headers)
-        case .httpSSE:
+        case .httpSSE, .sse:
             let legacyEndpoint = try container.decodeIfPresent(URL.self, forKey: .endpoint)
             let explicitMessageEndpoint = try container.decodeIfPresent(URL.self, forKey: .messageEndpoint)
             let explicitSSEEndpoint = try container.decodeIfPresent(URL.self, forKey: .sseEndpoint)
@@ -183,14 +185,14 @@ extension MCPServerConfiguration.Transport {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .http(let endpoint, let apiKey, let headers):
-            try container.encode(Kind.http, forKey: .kind)
+            try container.encode(Kind.streamableHTTP, forKey: .kind)
             try container.encode(endpoint, forKey: .endpoint)
             try container.encodeIfPresent(apiKey, forKey: .apiKey)
             if !headers.isEmpty {
                 try container.encode(headers, forKey: .additionalHeaders)
             }
         case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let headers):
-            try container.encode(Kind.httpSSE, forKey: .kind)
+            try container.encode(Kind.sse, forKey: .kind)
             try container.encode(messageEndpoint, forKey: .endpoint)
             try container.encode(messageEndpoint, forKey: .messageEndpoint)
             try container.encode(sseEndpoint, forKey: .sseEndpoint)

@@ -9,6 +9,8 @@ import Foundation
 
 public protocol MCPTransport: AnyObject {
     func sendMessage(_ payload: Data) async throws -> Data
+    /// 发送不需要响应的通知（JSON-RPC Notification）
+    func sendNotification(_ payload: Data) async throws
 }
 
 public enum MCPTransportError: LocalizedError {
@@ -59,6 +61,27 @@ public final class MCPHTTPTransport: MCPTransport {
 
         return data
     }
+
+    public func sendNotification(_ payload: Data) async throws {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.httpBody = payload
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MCPClientError.invalidResponse
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8)
+            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
+        }
+    }
 }
 
 public final class MCPSSETransport: MCPTransport {
@@ -94,6 +117,28 @@ public final class MCPSSETransport: MCPTransport {
         }
 
         return try extractLastEvent(from: data)
+    }
+
+    public func sendNotification(_ payload: Data) async throws {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.httpBody = payload
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MCPClientError.invalidResponse
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8)
+            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
+        }
     }
 
     private func extractLastEvent(from data: Data) throws -> Data {
@@ -168,6 +213,24 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
             throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
         }
         return data
+    }
+
+    public func sendNotification(_ payload: Data) async throws {
+        let token = try await validToken()
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.httpBody = payload
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token.value)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MCPClientError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8)
+            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
+        }
     }
 
     private func validToken() async throws -> OAuthToken {

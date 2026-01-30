@@ -13,7 +13,7 @@ struct MCPIntegrationView: View {
     var body: some View {
         List {
             Section("关于 MCP") {
-                Text("在手表上直接管理 MCP Server，与 iPhone 端功能保持一致：新增/编辑、连接调试、查看最新响应。")
+                Text("配置 MCP 工具服务器，让助手调用远程能力。可在手表上查看与调试。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -596,10 +596,10 @@ private struct MCPServerEditor: View {
                     TextField("SSE Endpoint", text: $sseEndpoint.watchKeyboardNewlineBinding())
                     Toggle("高级选项", isOn: $showAdvanced)
                     if showAdvanced {
-                        TextField("Message Endpoint (可选)", text: $endpoint.watchKeyboardNewlineBinding())
+                        TextField("Message Endpoint（可选）", text: $endpoint.watchKeyboardNewlineBinding())
                     }
                 } else {
-                    TextField("HTTP(S) Endpoint", text: $endpoint.watchKeyboardNewlineBinding())
+                    TextField("Streamable HTTP Endpoint", text: $endpoint.watchKeyboardNewlineBinding())
                 }
                 if transportOption.requiresAPIKey {
                     TextField("Bearer API Key (可选)", text: $apiKey.watchKeyboardNewlineBinding())
@@ -655,7 +655,7 @@ private struct MCPServerEditor: View {
             guard let url = URL(string: trimmedEndpoint),
                   let scheme = url.scheme,
                   scheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 HTTP/HTTPS 地址。"
+                validationMessage = "请提供合法的 Streamable HTTP 地址。"
                 return
             }
             transport = .http(endpoint: url, apiKey: trimmedKey.isEmpty ? nil : trimmedKey, additionalHeaders: [:])
@@ -747,8 +747,8 @@ private struct MCPServerEditor: View {
         
         var label: String {
             switch self {
-            case .http: return "HTTP / Bearer"
-            case .sse: return "HTTP + SSE"
+            case .http: return "Streamable HTTP"
+            case .sse: return "SSE"
             case .oauth: return "OAuth 2.0"
             }
         }

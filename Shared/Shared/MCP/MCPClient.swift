@@ -34,6 +34,7 @@ public final class MCPClient {
             capabilities: capabilities
         )
         let result: InitializeResult = try await send(method: "initialize", params: AnyEncodable(params))
+        try? await sendNotification(method: "notifications/initialized")
         return result.info
     }
     
@@ -121,6 +122,25 @@ public final class MCPClient {
         } catch {
             mcpClientLogger.error("MCP 响应解析失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             throw MCPClientError.decodingError(error)
+        }
+    }
+
+    private func sendNotification(method: String, params: AnyEncodable? = nil) async throws {
+        let payload: Data
+        do {
+            let notification = JSONRPCNotification(method: method, params: params)
+            payload = try encoder.encode(notification)
+        } catch {
+            mcpClientLogger.error("MCP 通知编码失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            throw MCPClientError.encodingError(error)
+        }
+        logJSON(data: payload, prefix: "发送 MCP 通知 \(method)")
+
+        do {
+            try await transport.sendNotification(payload)
+        } catch {
+            mcpClientLogger.error("MCP 通知失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            throw error
         }
     }
 }

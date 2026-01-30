@@ -117,7 +117,7 @@ public final class MCPManager: ObservableObject {
     public weak var samplingHandler: MCPSamplingHandler?
 
     private var clients: [UUID: MCPClient] = [:]
-    private var streamingTransports: [UUID: MCPStreamingTransport] = [:]
+    private var streamingTransports: [UUID: MCPStreamingTransportProtocol] = [:]
     private var routedTools: [String: RoutedTool] = [:]
     private var routedPrompts: [String: RoutedPrompt] = [:]
     private var debugBusyCount = 0
@@ -196,11 +196,10 @@ public final class MCPManager: ObservableObject {
         clients[server.id] = client
 
         // 设置流式传输（如果支持）
-        if let streamingTransport = transport as? MCPStreamingTransport {
+        if let streamingTransport = transport as? MCPStreamingTransportProtocol {
             streamingTransport.notificationDelegate = self
             streamingTransport.samplingHandler = samplingHandler
             streamingTransports[server.id] = streamingTransport
-            streamingTransport.connectSSE()
         }
 
         Task {
@@ -695,9 +694,9 @@ public final class MCPManager: ObservableObject {
     private func transportLabel(for server: MCPServerConfiguration) -> String {
         switch server.transport {
         case .http:
-            return "http"
+            return "streamable_http"
         case .httpSSE:
-            return "http+sse"
+            return "sse"
         case .oauth:
             return "oauth"
         }
