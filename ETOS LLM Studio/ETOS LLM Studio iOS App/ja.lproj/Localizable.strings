@@ -782,3 +782,4 @@
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API のベースURL例: https://api.anthropic.com/v1";
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API のベースURL例: https://generativelanguage.googleapis.com/v1beta";
 "使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "key=value でリクエストヘッダーを追加します（例: Authorization=Bearer your_token）。\nAuthorization などの認証ヘッダーは手動で入力してください。";
+"使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "key=value でリクエストヘッダーを追加します（例: Authorization=Bearer {token}）。\n{token} は上の Bearer API Key 入力値に置き換えられます。";

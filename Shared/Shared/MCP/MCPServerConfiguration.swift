@@ -6,6 +6,16 @@
 
 import Foundation
 
+private let mcpTokenPlaceholder = "{token}"
+
+private func resolveAdditionalHeaders(_ headers: [String: String], token: String?) -> [String: String] {
+    guard !headers.isEmpty else { return [:] }
+    guard let token, !token.isEmpty else { return headers }
+    return headers.reduce(into: [String: String]()) { result, pair in
+        result[pair.key] = pair.value.replacingOccurrences(of: mcpTokenPlaceholder, with: token)
+    }
+}
+
 public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public enum Transport: Codable, Hashable {
         case http(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
@@ -99,10 +109,10 @@ public extension MCPServerConfiguration {
     func makeTransport(urlSession: URLSession = .shared) -> MCPTransport {
         switch transport {
         case .http(let endpoint, _, let additionalHeaders):
-            let headers = additionalHeaders
+            let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
         case .httpSSE(_, let sseEndpoint, _, let additionalHeaders):
-            let headers = additionalHeaders
+            let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             let messageEndpoint = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):

@@ -776,7 +776,7 @@ private struct MCPServerEditor: View {
     }
 
     private var headerOverridesHint: String {
-        NSLocalizedString("使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。", comment: "")
+        NSLocalizedString("使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。", comment: "")
     }
 
     private var isSaveDisabled: Bool {

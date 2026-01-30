@@ -789,3 +789,4 @@
 "...\n\n(响应已截断，可在更多操作中查看完整内容)" = "...\n\n(Response truncated. View full content in More actions.)";
 "HTTP %d: %@\n\n" = "HTTP %d: %@\n\n";
 "解析响应失败，请查看原始响应:\n%@" = "Failed to parse response. See raw response:\n%@";
+"使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "Use key=value to add request headers, e.g. Authorization=Bearer {token}.\n{token} is replaced with the Bearer API Key input above.";
