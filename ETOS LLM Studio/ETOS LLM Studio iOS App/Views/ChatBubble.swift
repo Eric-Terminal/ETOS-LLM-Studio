@@ -126,6 +126,11 @@ struct ChatBubble: View {
                 if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
                     imageAttachmentsView(fileNames: imageFileNames)
                 }
+
+                // 文件附件 - 作为气泡显示
+                if let fileFileNames = message.fileFileNames, !fileFileNames.isEmpty {
+                    fileAttachmentsView(fileNames: fileFileNames)
+                }
                 
                 // 气泡内容（仅当有非图片内容时显示）
                 if shouldShowTextBubble {
@@ -371,6 +376,30 @@ struct ChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func fileAttachmentsView(fileNames: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(fileNames, id: \.self) { fileName in
+                HStack(spacing: 8) {
+                    Image(systemName: "doc")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
+                    Text(fileName)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground))
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
     }
     
     private func loadImage(fileName: String) -> UIImage? {

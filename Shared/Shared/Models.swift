@@ -276,6 +276,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
     public var audioFileName: String? // 关联的音频文件名，存储在 AudioFiles 目录下
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
+    public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
     public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
 
     public init(
@@ -287,6 +288,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         tokenUsage: MessageTokenUsage? = nil,
         audioFileName: String? = nil,
         imageFileNames: [String]? = nil,
+        fileFileNames: [String]? = nil,
         fullErrorContent: String? = nil
     ) {
         self.id = id
@@ -298,6 +300,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.tokenUsage = tokenUsage
         self.audioFileName = audioFileName
         self.imageFileNames = imageFileNames
+        self.fileFileNames = fileFileNames
         self.fullErrorContent = fullErrorContent
     }
     
@@ -335,7 +338,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, role, content, currentVersionIndex
         case reasoningContent, toolCalls, tokenUsage
-        case audioFileName, imageFileNames, fullErrorContent
+        case audioFileName, imageFileNames, fileFileNames, fullErrorContent
     }
     
     public init(from decoder: Decoder) throws {
@@ -365,6 +368,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.tokenUsage = try container.decodeIfPresent(MessageTokenUsage.self, forKey: .tokenUsage)
         self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
+        self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
         self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
     }
     
@@ -386,6 +390,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(tokenUsage, forKey: .tokenUsage)
         try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
+        try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)
         try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)
     }
 }

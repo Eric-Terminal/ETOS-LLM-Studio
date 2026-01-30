@@ -48,6 +48,7 @@ final class ChatViewModel: ObservableObject {
     
     @Published var pendingAudioAttachment: AudioAttachment? = nil
     @Published var pendingImageAttachments: [ImageAttachment] = []
+    @Published var pendingFileAttachments: [FileAttachment] = []
     @Published var isRecordingAudio: Bool = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var showAttachmentPicker: Bool = false
@@ -239,15 +240,18 @@ final class ChatViewModel: ObservableObject {
         let hasText = !userMessageContent.isEmpty
         let hasAudio = pendingAudioAttachment != nil
         let hasImages = !pendingImageAttachments.isEmpty
+        let hasFiles = !pendingFileAttachments.isEmpty
         
         // 必须有文字或附件才能发送
-        guard (hasText || hasAudio || hasImages), !isSendingMessage else { return }
+        guard (hasText || hasAudio || hasImages || hasFiles), !isSendingMessage else { return }
         
         let audioToSend = pendingAudioAttachment
         let imagesToSend = pendingImageAttachments
+        let filesToSend = pendingFileAttachments
         userInput = ""
         pendingAudioAttachment = nil
         pendingImageAttachments = []
+        pendingFileAttachments = []
         
         // 构建消息内容（仅使用用户输入文本）
         let messageContent = userMessageContent
@@ -265,7 +269,8 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTimeInPrompt,
                 audioAttachment: audioToSend,
-                imageAttachments: imagesToSend
+                imageAttachments: imagesToSend,
+                fileAttachments: filesToSend
             )
         }
     }
@@ -279,7 +284,7 @@ final class ChatViewModel: ObservableObject {
     /// 是否可以发送消息（有文字或附件）
     var canSendMessage: Bool {
         let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty
+        let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty || !pendingFileAttachments.isEmpty
         return (hasText || hasAttachments) && !isSendingMessage
     }
     
@@ -292,11 +297,17 @@ final class ChatViewModel: ObservableObject {
     func removePendingImageAttachment(_ attachment: ImageAttachment) {
         pendingImageAttachments.removeAll { $0.id == attachment.id }
     }
+
+    /// 清除指定文件附件
+    func removePendingFileAttachment(_ attachment: FileAttachment) {
+        pendingFileAttachments.removeAll { $0.id == attachment.id }
+    }
     
     /// 清除所有附件
     func clearAllAttachments() {
         pendingAudioAttachment = nil
         pendingImageAttachments = []
+        pendingFileAttachments = []
     }
     
     /// 添加图片附件
@@ -304,6 +315,11 @@ final class ChatViewModel: ObservableObject {
         if let attachment = ImageAttachment.from(image: image) {
             pendingImageAttachments.append(attachment)
         }
+    }
+
+    /// 添加文件附件
+    func addFileAttachment(_ attachment: FileAttachment) {
+        pendingFileAttachments.append(attachment)
     }
     
     /// 设置音频附件

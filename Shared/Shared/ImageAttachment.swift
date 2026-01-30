@@ -63,3 +63,18 @@ public struct ImageAttachment: Identifiable {
     }
 #endif
 }
+
+/// 通用文件附件，用于发送给支持文件输入的模型
+public struct FileAttachment: Identifiable {
+    public let id: UUID
+    public let data: Data
+    public let mimeType: String
+    public let fileName: String
+    
+    public init(id: UUID = UUID(), data: Data, mimeType: String, fileName: String) {
+        self.id = id
+        self.data = data
+        self.mimeType = mimeType
+        self.fileName = fileName
+    }
+}
