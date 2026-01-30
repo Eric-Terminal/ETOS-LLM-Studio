@@ -108,10 +108,10 @@ public extension MCPServerConfiguration {
 
     func makeTransport(urlSession: URLSession = .shared) -> MCPTransport {
         switch transport {
-        case .http(let endpoint, _, let additionalHeaders):
+        case .http(let endpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
-        case .httpSSE(_, let sseEndpoint, _, let additionalHeaders):
+        case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             let messageEndpoint = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
