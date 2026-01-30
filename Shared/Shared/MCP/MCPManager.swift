@@ -136,6 +136,17 @@ public final class MCPManager: ObservableObject {
         for server in servers {
             var status = newStatuses[server.id] ?? MCPServerStatus()
             status.isSelectedForChat = server.isSelectedForChat
+            if case .idle = status.connectionState, let cache = MCPServerStore.loadMetadata(for: server.id) {
+                if status.info == nil {
+                    status.info = cache.info
+                }
+                if status.tools.isEmpty && status.resources.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
+                    status.tools = cache.tools
+                    status.resources = cache.resources
+                    status.prompts = cache.prompts
+                    status.roots = cache.roots
+                }
+            }
             newStatuses[server.id] = status
         }
         serverStatuses = newStatuses
@@ -173,14 +184,11 @@ public final class MCPManager: ObservableObject {
 
     public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false) {
         mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
+        let cachedMetadata = MCPServerStore.loadMetadata(for: server.id)
+        let shouldRefreshMetadata = cachedMetadata == nil
         updateStatus(for: server.id) {
             $0.connectionState = .connecting
             $0.isBusy = true
-            $0.info = nil
-            $0.tools = []
-            $0.resources = []
-            $0.prompts = []
-            $0.roots = []
         }
 
         let transport = server.makeTransport()
@@ -204,16 +212,30 @@ public final class MCPManager: ObservableObject {
                     self.updateStatus(for: server.id) {
                         $0.connectionState = .ready
                         $0.info = info
-                        $0.isBusy = true // 直到元数据刷新完成
+                        $0.isBusy = shouldRefreshMetadata
                         if shouldSelectForChat {
                             $0.isSelectedForChat = true
+                        }
+                        if let cache = cachedMetadata,
+                           $0.tools.isEmpty && $0.resources.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
+                            $0.tools = cache.tools
+                            $0.resources = cache.resources
+                            $0.prompts = cache.prompts
+                            $0.roots = cache.roots
                         }
                     }
                     if shouldSelectForChat {
                         self.persistSelection(for: server.id, isSelected: true)
                     }
                 }
-                await refreshMetadata(for: server.id, client: client)
+                if let cache = cachedMetadata, cache.info != info {
+                    var updatedCache = cache
+                    updatedCache.info = info
+                    MCPServerStore.saveMetadata(updatedCache, for: server.id)
+                }
+                if shouldRefreshMetadata {
+                    await refreshMetadata(for: server.id, client: client, serverInfo: info)
+                }
             } catch {
                 mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
                 await MainActor.run {
@@ -271,12 +293,13 @@ public final class MCPManager: ObservableObject {
         }
         mcpManagerLogger.info("刷新 MCP 元数据：\(server.displayName, privacy: .public)")
         updateStatus(for: server.id) { $0.isBusy = true }
+        let currentInfo = status(for: server).info
         Task {
-            await refreshMetadata(for: server.id, client: client)
+            await refreshMetadata(for: server.id, client: client, serverInfo: currentInfo)
         }
     }
 
-    private func refreshMetadata(for serverID: UUID, client: MCPClient) async {
+    private func refreshMetadata(for serverID: UUID, client: MCPClient, serverInfo: MCPServerInfo?) async {
         do {
             async let toolsTask = client.listTools()
             async let resourcesTask = listResourcesIfSupported(client: client)
@@ -292,6 +315,22 @@ public final class MCPManager: ObservableObject {
             } else {
                 mcpManagerLogger.info("MCP 元数据加载完成：server=\(serverID.uuidString, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             }
+
+            let resolvedInfo: MCPServerInfo?
+            if let serverInfo {
+                resolvedInfo = serverInfo
+            } else {
+                resolvedInfo = await MainActor.run { self.status(for: serverID).info }
+            }
+            let cache = MCPServerMetadataCache(
+                cachedAt: Date(),
+                info: resolvedInfo,
+                tools: tools,
+                resources: resources,
+                prompts: prompts,
+                roots: roots
+            )
+            MCPServerStore.saveMetadata(cache, for: serverID)
             
             await MainActor.run {
                 self.updateStatus(for: serverID) {

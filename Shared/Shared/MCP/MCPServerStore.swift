@@ -9,6 +9,31 @@ import os.log
 
 private let mcpStoreLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPServerStore")
 
+public struct MCPServerMetadataCache: Codable, Hashable {
+    public var cachedAt: Date
+    public var info: MCPServerInfo?
+    public var tools: [MCPToolDescription]
+    public var resources: [MCPResourceDescription]
+    public var prompts: [MCPPromptDescription]
+    public var roots: [MCPRoot]
+
+    public init(
+        cachedAt: Date = Date(),
+        info: MCPServerInfo?,
+        tools: [MCPToolDescription],
+        resources: [MCPResourceDescription],
+        prompts: [MCPPromptDescription],
+        roots: [MCPRoot]
+    ) {
+        self.cachedAt = cachedAt
+        self.info = info
+        self.tools = tools
+        self.resources = resources
+        self.prompts = prompts
+        self.roots = roots
+    }
+}
+
 public struct MCPServerStore {
     
     private static var documentsDirectory: URL {
@@ -40,34 +65,24 @@ public struct MCPServerStore {
         do {
             let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
             for file in files where file.pathExtension == "json" {
-                do {
-                    let data = try Data(contentsOf: file)
-                    let server = try JSONDecoder().decode(MCPServerConfiguration.self, from: data)
-                    result.append(server)
-                } catch {
-                    mcpStoreLogger.error("解析 MCP Server 文件失败 \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                }
+                guard let record = loadRecord(from: file) else { continue }
+                result.append(record.server)
             }
         } catch {
             mcpStoreLogger.error("读取 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
         }
         return result.sorted { $0.displayName.lowercased() < $1.displayName.lowercased() }
     }
-    
+
     public static func save(_ server: MCPServerConfiguration) {
         setupDirectoryIfNeeded()
-        let url = serversDirectory.appendingPathComponent("\(server.id.uuidString).json")
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(server)
-            try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
-            mcpStoreLogger.info("已保存 MCP Server: \(server.displayName, privacy: .public)")
-        } catch {
-            mcpStoreLogger.error("保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
-        }
+        let existingRecord = loadRecord(for: server.id)
+        let shouldPreserveMetadata = existingRecord?.server.transport == server.transport
+        let metadata = shouldPreserveMetadata ? existingRecord?.metadata : nil
+        let record = MCPServerStoredRecord(server: server, metadata: metadata)
+        writeRecord(record, fileName: server.id.uuidString)
     }
-    
+
     public static func delete(_ server: MCPServerConfiguration) {
         let fm = FileManager.default
         let url = serversDirectory.appendingPathComponent("\(server.id.uuidString).json")
@@ -76,6 +91,87 @@ public struct MCPServerStore {
             mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
         } catch {
             mcpStoreLogger.error("删除 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public static func loadMetadata(for serverID: UUID) -> MCPServerMetadataCache? {
+        setupDirectoryIfNeeded()
+        return loadRecord(for: serverID)?.metadata
+    }
+
+    public static func saveMetadata(_ metadata: MCPServerMetadataCache?, for serverID: UUID) {
+        setupDirectoryIfNeeded()
+        guard var record = loadRecord(for: serverID) else { return }
+        record.metadata = metadata
+        record.schemaVersion = 2
+        writeRecord(record, fileName: serverID.uuidString)
+    }
+
+    private struct MCPServerStoredRecord: Codable {
+        var schemaVersion: Int
+        var server: MCPServerConfiguration
+        var metadata: MCPServerMetadataCache?
+
+        init(schemaVersion: Int = 2, server: MCPServerConfiguration, metadata: MCPServerMetadataCache?) {
+            self.schemaVersion = schemaVersion
+            self.server = server
+            self.metadata = metadata
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case schemaVersion
+            case server
+            case metadata
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            if container.contains(.server) {
+                schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 2
+                server = try container.decode(MCPServerConfiguration.self, forKey: .server)
+                metadata = try container.decodeIfPresent(MCPServerMetadataCache.self, forKey: .metadata)
+            } else {
+                server = try MCPServerConfiguration(from: decoder)
+                schemaVersion = 1
+                metadata = nil
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(schemaVersion, forKey: .schemaVersion)
+            try container.encode(server, forKey: .server)
+            try container.encodeIfPresent(metadata, forKey: .metadata)
+        }
+    }
+
+    private static func loadRecord(for serverID: UUID) -> MCPServerStoredRecord? {
+        let url = serversDirectory.appendingPathComponent("\(serverID.uuidString).json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return loadRecord(from: url)
+    }
+
+    private static func loadRecord(from url: URL) -> MCPServerStoredRecord? {
+        do {
+            let data = try Data(contentsOf: url)
+            let record = try JSONDecoder().decode(MCPServerStoredRecord.self, from: data)
+            return record
+        } catch {
+            mcpStoreLogger.error("解析 MCP Server 文件失败 \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    private static func writeRecord(_ record: MCPServerStoredRecord, fileName: String) {
+        let url = serversDirectory.appendingPathComponent("\(fileName).json")
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(record)
+            try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
+            mcpStoreLogger.info("已保存 MCP Server: \(record.server.displayName, privacy: .public)")
+        } catch {
+            mcpStoreLogger.error("保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
         }
     }
 }
