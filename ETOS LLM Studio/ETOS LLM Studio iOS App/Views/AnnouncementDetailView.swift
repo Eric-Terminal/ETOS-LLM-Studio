@@ -38,7 +38,7 @@ struct AnnouncementDetailView: View {
             // MARK: - 操作部分
             Section {
                 Button(role: .destructive) {
-                    announcementManager.hideCurrentAnnouncement()
+                    announcementManager.hideAnnouncement(announcement)
                     dismiss()
                 } label: {
                     HStack {
@@ -47,7 +47,7 @@ struct AnnouncementDetailView: View {
                     }
                 }
             } footer: {
-                Text("隐藏后，此通知将不会在设置中显示。如有新通知，将自动恢复显示。")
+                Text("隐藏后，此通知将不会在设置中显示；其他新通知仍会正常显示。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

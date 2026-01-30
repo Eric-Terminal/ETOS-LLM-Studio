@@ -209,26 +209,21 @@ public struct ConfigLoader {
         let documentsPath = documentsDirectory.path
         guard fileManager.fileExists(atPath: documentsPath) else { return false }
         
-        do {
-            guard let enumerator = fileManager.enumerator(
-                at: documentsDirectory,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
-            ) else {
-                return false
-            }
-            
-            for case let url as URL in enumerator {
-                if url.pathExtension.lowercased() == "json" {
-                    return true
-                }
-            }
-            
-            return false
-        } catch {
-            logger.error("检查 Documents 目录失败: \(error.localizedDescription)")
+        guard let enumerator = fileManager.enumerator(
+            at: documentsDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
             return false
         }
+        
+        for case let url as URL in enumerator {
+            if url.pathExtension.lowercased() == "json" {
+                return true
+            }
+        }
+        
+        return false
     }
 
     private static func beginDownloadOnce() -> Bool {

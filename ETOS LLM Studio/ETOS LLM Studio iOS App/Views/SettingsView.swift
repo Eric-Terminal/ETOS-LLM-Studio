@@ -111,7 +111,7 @@ struct SettingsView: View {
             // MARK: - 公告通知 Section
             if announcementManager.shouldShowInSettings {
                 Section("系统公告") {
-                    ForEach(announcementManager.currentAnnouncements) { announcement in
+                    ForEach(announcementManager.currentAnnouncements, id: \.uniqueKey) { announcement in
                         NavigationLink {
                             AnnouncementDetailView(
                                 announcement: announcement,
