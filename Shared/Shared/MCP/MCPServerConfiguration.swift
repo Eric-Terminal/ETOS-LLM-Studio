@@ -69,11 +69,8 @@ public extension MCPServerConfiguration {
         switch transport {
         case .http(let endpoint, _, _):
             return endpoint.absoluteString
-        case .httpSSE(let messageEndpoint, let sseEndpoint, _, _):
-            if messageEndpoint == MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint) {
-                return sseEndpoint.absoluteString
-            }
-            return "\(sseEndpoint.absoluteString) (message override)"
+        case .httpSSE(_, let sseEndpoint, _, _):
+            return sseEndpoint.absoluteString
         case .oauth(let endpoint, _, _, _, _):
             return endpoint.absoluteString
         }
@@ -87,11 +84,12 @@ public extension MCPServerConfiguration {
                 headers["Authorization"] = "Bearer \(apiKey)"
             }
             return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
-        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
+        case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
             var headers = additionalHeaders
             if let apiKey, !apiKey.isEmpty {
                 headers["Authorization"] = "Bearer \(apiKey)"
             }
+            let messageEndpoint = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
             return MCPOAuthHTTPTransport(

@@ -517,7 +517,6 @@ private struct MCPServerEditor: View {
     @State private var transportOption: TransportOption
     @State private var notes: String
     @State private var validationMessage: String?
-    @State private var showAdvanced: Bool
     
     init(existingServer: MCPServerConfiguration?, onSave: @escaping (MCPServerConfiguration) -> Void) {
         self.existingServer = existingServer
@@ -536,9 +535,8 @@ private struct MCPServerEditor: View {
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
                 _transportOption = State(initialValue: .http)
-                _showAdvanced = State(initialValue: false)
-            case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, _):
-                _endpoint = State(initialValue: messageEndpoint.absoluteString)
+            case .httpSSE(_, let sseEndpoint, let apiKey, _):
+                _endpoint = State(initialValue: MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint).absoluteString)
                 _sseEndpoint = State(initialValue: sseEndpoint.absoluteString)
                 _apiKey = State(initialValue: apiKey ?? "")
                 _tokenEndpoint = State(initialValue: "")
@@ -546,7 +544,6 @@ private struct MCPServerEditor: View {
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
                 _transportOption = State(initialValue: .sse)
-                _showAdvanced = State(initialValue: messageEndpoint != MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint))
             case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
                 _endpoint = State(initialValue: endpoint.absoluteString)
                 _sseEndpoint = State(initialValue: "")
@@ -556,7 +553,6 @@ private struct MCPServerEditor: View {
                 _oauthScope = State(initialValue: scope ?? "")
                 _apiKey = State(initialValue: "")
                 _transportOption = State(initialValue: .oauth)
-                _showAdvanced = State(initialValue: false)
             @unknown default:
                 _endpoint = State(initialValue: "")
                 _sseEndpoint = State(initialValue: "")
@@ -566,7 +562,6 @@ private struct MCPServerEditor: View {
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
                 _transportOption = State(initialValue: .http)
-                _showAdvanced = State(initialValue: false)
             }
         } else {
             _displayName = State(initialValue: "")
@@ -579,7 +574,6 @@ private struct MCPServerEditor: View {
             _clientSecret = State(initialValue: "")
             _oauthScope = State(initialValue: "")
             _transportOption = State(initialValue: .http)
-            _showAdvanced = State(initialValue: false)
         }
     }
     
@@ -594,10 +588,6 @@ private struct MCPServerEditor: View {
                 }
                 if transportOption == .sse {
                     TextField("SSE Endpoint", text: $sseEndpoint.watchKeyboardNewlineBinding())
-                    Toggle("高级选项", isOn: $showAdvanced)
-                    if showAdvanced {
-                        TextField("Message Endpoint（可选）", text: $endpoint.watchKeyboardNewlineBinding())
-                    }
                 } else {
                     TextField("Streamable HTTP Endpoint", text: $endpoint.watchKeyboardNewlineBinding())
                 }
@@ -637,11 +627,6 @@ private struct MCPServerEditor: View {
                           !oauthFieldsValid())
             }
         }
-        .onChange(of: showAdvanced) { _, newValue in
-            if !newValue && transportOption == .sse {
-                endpoint = ""
-            }
-        }
     }
     
     private func saveServer() {
@@ -667,21 +652,8 @@ private struct MCPServerEditor: View {
                 validationMessage = "请提供合法的 SSE Endpoint。"
                 return
             }
-            let trimmedMessage = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-            let messageURL: URL
-            if trimmedMessage.isEmpty {
-                messageURL = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseURL)
-            } else {
-                guard let parsedMessage = URL(string: trimmedMessage),
-                      let messageScheme = parsedMessage.scheme,
-                      messageScheme.lowercased().hasPrefix("http") else {
-                    validationMessage = "请提供合法的 Message Endpoint。"
-                    return
-                }
-                messageURL = parsedMessage
-            }
             transport = .httpSSE(
-                messageEndpoint: messageURL,
+                messageEndpoint: MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseURL),
                 sseEndpoint: sseURL,
                 apiKey: trimmedKey.isEmpty ? nil : trimmedKey,
                 additionalHeaders: [:]
