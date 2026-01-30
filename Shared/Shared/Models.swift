@@ -20,10 +20,12 @@ public enum JSONValue: Codable, Hashable {
     case string(String), int(Int), double(Double), bool(Bool)
     case dictionary([String: JSONValue])
     case array([JSONValue])
+    case null
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
-        if let v = try? c.decode(String.self) { self = .string(v) }
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
         else if let v = try? c.decode(Int.self) { self = .int(v) }
         else if let v = try? c.decode(Double.self) { self = .double(v) }
         else if let v = try? c.decode(Bool.self) { self = .bool(v) }
@@ -41,6 +43,7 @@ public enum JSONValue: Codable, Hashable {
         case .bool(let v): try c.encode(v)
         case .dictionary(let v): try c.encode(v)
         case .array(let v): try c.encode(v)
+        case .null: try c.encodeNil()
         }
     }
 
@@ -52,6 +55,7 @@ public enum JSONValue: Codable, Hashable {
         case .bool(let v): return v
         case .dictionary(let v): return v.mapValues { $0.toAny() }
         case .array(let v): return v.map { $0.toAny() }
+        case .null: return NSNull()
         }
     }
 

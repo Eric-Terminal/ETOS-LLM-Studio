@@ -228,6 +228,26 @@ private struct MCPServerDetailView: View {
                         ProgressView()
                     }
                 }
+
+                Section("工具") {
+                    if status.tools.isEmpty {
+                        Text("当前服务器尚未公布任何工具。")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(status.tools) { tool in
+                            Toggle(isOn: toolBinding(for: server.id, toolId: tool.toolId)) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(tool.toolId)
+                                    if let desc = tool.description, !desc.isEmpty {
+                                        Text(desc)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 Section("管理") {
                     NavigationLink("编辑配置") {
@@ -256,6 +276,14 @@ private struct MCPServerDetailView: View {
                 dismiss()
             }
             Button("取消", role: .cancel) {}
+        }
+    }
+
+    private func toolBinding(for serverID: UUID, toolId: String) -> Binding<Bool> {
+        Binding {
+            manager.isToolEnabled(serverID: serverID, toolId: toolId)
+        } set: { newValue in
+            manager.setToolEnabled(serverID: serverID, toolId: toolId, isEnabled: newValue)
         }
     }
     

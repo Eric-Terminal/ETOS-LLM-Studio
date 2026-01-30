@@ -88,3 +88,6 @@ DEVELOPMENT*.md\n# MCP Config templates\nassets/mcp_configs/
 
 .claude/
 .vscode/
+AGENTS.md
+GEMINI.md
+CLAUDE.md

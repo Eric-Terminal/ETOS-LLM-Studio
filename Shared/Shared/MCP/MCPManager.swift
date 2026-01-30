@@ -376,7 +376,7 @@ public final class MCPManager: ObservableObject {
     private func listRootsIfSupported(client: MCPClient) async throws -> [MCPRoot] {
         do {
             return try await client.listRoots()
-        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 || error.code == -32602 {
             return []
         }
     }
@@ -563,6 +563,19 @@ public final class MCPManager: ObservableObject {
         return "[\(routed.server.displayName)] \(routed.tool.toolId)"
     }
 
+    public func isToolEnabled(serverID: UUID, toolId: String) -> Bool {
+        guard let server = servers.first(where: { $0.id == serverID }) else {
+            return true
+        }
+        return server.isToolEnabled(toolId)
+    }
+
+    public func setToolEnabled(serverID: UUID, toolId: String, isEnabled: Bool) {
+        guard var server = servers.first(where: { $0.id == serverID }) else { return }
+        server.setToolEnabled(toolId, isEnabled: isEnabled)
+        save(server: server)
+    }
+
     public func connectedServers() -> [MCPServerConfiguration] {
         servers.filter {
             if let status = serverStatuses[$0.id] {
@@ -609,6 +622,7 @@ public final class MCPManager: ObservableObject {
                   case .ready = status.connectionState else { continue }
 
             for tool in status.tools {
+                guard server.isToolEnabled(tool.toolId) else { continue }
                 let fullName = internalToolName(for: server, tool: tool)
                 let shortNameCandidate = shortToolName(for: server, tool: tool)
                 let shortName = newToolRouting[shortNameCandidate] == nil ? shortNameCandidate : fullName

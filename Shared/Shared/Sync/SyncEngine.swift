@@ -572,6 +572,9 @@ public enum SyncEngine {
         hasher.combine(server.baseNameWithoutSyncSuffix)
         hasher.combine(server.notes ?? "")
         hasher.combine(server.isSelectedForChat)
+        for toolId in Set(server.disabledToolIds).sorted() {
+            hasher.combine(toolId)
+        }
         // Transport 配置
         switch server.transport {
         case .http(let endpoint, let apiKey, let headers):

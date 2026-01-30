@@ -254,7 +254,8 @@ extension MCPServerConfiguration {
         displayName == other.displayName &&
         notes == other.notes &&
         transport == other.transport &&
-        isSelectedForChat == other.isSelectedForChat
+        isSelectedForChat == other.isSelectedForChat &&
+        Set(disabledToolIds) == Set(other.disabledToolIds)
     }
     
     /// 去除所有同步后缀的基础名称

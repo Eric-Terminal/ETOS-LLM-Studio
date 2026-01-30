@@ -511,12 +511,14 @@ private struct MCPServerDetailView: View {
                     String(format: NSLocalizedString("工具 (%d)", comment: ""), status.tools.count)
                 ) {
                     ForEach(status.tools) { tool in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(tool.toolId)
-                            if let desc = tool.description {
-                                Text(desc)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                        Toggle(isOn: toolBinding(for: tool.toolId)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(tool.toolId)
+                                if let desc = tool.description {
+                                    Text(desc)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -577,6 +579,14 @@ private struct MCPServerDetailView: View {
             if newValue != current {
                 manager.toggleSelection(for: server)
             }
+        }
+    }
+
+    private func toolBinding(for toolId: String) -> Binding<Bool> {
+        Binding {
+            manager.isToolEnabled(serverID: server.id, toolId: toolId)
+        } set: { newValue in
+            manager.setToolEnabled(serverID: server.id, toolId: toolId, isEnabled: newValue)
         }
     }
 }

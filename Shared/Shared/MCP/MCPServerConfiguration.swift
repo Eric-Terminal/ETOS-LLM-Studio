@@ -18,19 +18,22 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public var notes: String?
     public var transport: Transport
     public var isSelectedForChat: Bool
+    public var disabledToolIds: [String]
 
     public init(
         id: UUID = UUID(),
         displayName: String,
         notes: String? = nil,
         transport: Transport,
-        isSelectedForChat: Bool = false
+        isSelectedForChat: Bool = false,
+        disabledToolIds: [String] = []
     ) {
         self.id = id
         self.displayName = displayName
         self.notes = notes
         self.transport = transport
         self.isSelectedForChat = isSelectedForChat
+        self.disabledToolIds = disabledToolIds
     }
 }
 
@@ -41,6 +44,7 @@ extension MCPServerConfiguration {
         case notes
         case transport
         case isSelectedForChat
+        case disabledToolIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,6 +54,7 @@ extension MCPServerConfiguration {
         notes = try container.decodeIfPresent(String.self, forKey: .notes)
         transport = try container.decode(Transport.self, forKey: .transport)
         isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
+        disabledToolIds = try container.decodeIfPresent([String].self, forKey: .disabledToolIds) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -60,6 +65,10 @@ extension MCPServerConfiguration {
         try container.encode(transport, forKey: .transport)
         if isSelectedForChat {
             try container.encode(isSelectedForChat, forKey: .isSelectedForChat)
+        }
+        if !disabledToolIds.isEmpty {
+            let uniqueIds = Array(Set(disabledToolIds)).sorted()
+            try container.encode(uniqueIds, forKey: .disabledToolIds)
         }
     }
 }
@@ -100,6 +109,20 @@ public extension MCPServerConfiguration {
                 scope: scope,
                 session: urlSession
             )
+        }
+    }
+}
+
+public extension MCPServerConfiguration {
+    func isToolEnabled(_ toolId: String) -> Bool {
+        !disabledToolIds.contains(toolId)
+    }
+
+    mutating func setToolEnabled(_ toolId: String, isEnabled: Bool) {
+        if isEnabled {
+            disabledToolIds.removeAll { $0 == toolId }
+        } else if !disabledToolIds.contains(toolId) {
+            disabledToolIds.append(toolId)
         }
     }
 }
