@@ -352,6 +352,7 @@
 "成功响应" = "Successful response";
 "多个 API Key 用英文逗号分隔。" = "Use commas (,) to separate multiple API keys.";
 "使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}" = "Use key=value to add or override request headers, e.g. User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64).\n{api_key} is replaced with the current API key, e.g. Authorization=Bearer {api_key}";
+"使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "Use key=value to add request headers, e.g. Authorization=Bearer your_token.\nAdd Authorization and other auth headers manually.";
 "请求头表达式，例如 User-Agent=Mozilla/5.0" = "Header expression, e.g. User-Agent=Mozilla/5.0";
 "请求头覆盖" = "Header overrides";
 "请求头预览" = "Header preview";

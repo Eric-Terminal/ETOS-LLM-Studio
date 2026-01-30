@@ -781,3 +781,4 @@
 "API 地址应为基础地址，例如: https://api.openai.com/v1" = "API 地址應為基礎地址，例如: https://api.openai.com/v1";
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API 地址應為基礎地址，例如: https://api.anthropic.com/v1";
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API 地址應為基礎地址，例如: https://generativelanguage.googleapis.com/v1beta";
+"使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "使用 key=value 新增請求標頭，例如: Authorization=Bearer your_token。\nAuthorization 等驗證標頭請手動填寫。";

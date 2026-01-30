@@ -85,19 +85,24 @@ public extension MCPServerConfiguration {
         }
     }
 
+    var additionalHeaders: [String: String] {
+        switch transport {
+        case .http(_, _, let headers):
+            return headers
+        case .httpSSE(_, _, _, let headers):
+            return headers
+        case .oauth:
+            return [:]
+        }
+    }
+
     func makeTransport(urlSession: URLSession = .shared) -> MCPTransport {
         switch transport {
-        case .http(let endpoint, let apiKey, let additionalHeaders):
-            var headers = additionalHeaders
-            if let apiKey, !apiKey.isEmpty {
-                headers["Authorization"] = "Bearer \(apiKey)"
-            }
+        case .http(let endpoint, _, let additionalHeaders):
+            let headers = additionalHeaders
             return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
-        case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
-            var headers = additionalHeaders
-            if let apiKey, !apiKey.isEmpty {
-                headers["Authorization"] = "Bearer \(apiKey)"
-            }
+        case .httpSSE(_, let sseEndpoint, _, let additionalHeaders):
+            let headers = additionalHeaders
             let messageEndpoint = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
