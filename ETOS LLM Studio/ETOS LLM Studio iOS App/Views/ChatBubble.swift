@@ -303,7 +303,7 @@ struct ChatBubble: View {
                 toolCalls: toolCalls,
                 isOutgoing: isOutgoing
             )
-            if let request = activeToolPermissionRequest {
+            if activeToolPermissionRequest != nil {
                 ToolPermissionInlineView(onDecision: { decision in
                     toolPermissionCenter.resolveActiveRequest(with: decision)
                 })
@@ -719,29 +719,72 @@ struct ToolCallsInlineView: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(toolCalls, id: \.id) { call in
-                let trimmedArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
                 let label = displayName(for: call.toolName)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "wrench.and.screwdriver")
-                            .font(.system(size: 12))
-                        Text("调用：\(label)")
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                    }
-                    if !trimmedArgs.isEmpty {
-                        Text(trimmedArgs)
-                            .font(.caption)
-                            .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                ToolCallDisclosureRow(
+                    label: label,
+                    arguments: call.arguments,
+                    isOutgoing: isOutgoing
                 )
             }
+        }
+    }
+
+    private struct ToolCallDisclosureRow: View {
+        let label: String
+        let arguments: String
+        let isOutgoing: Bool
+        @State private var isExpanded = true
+
+        private var trimmedArguments: String {
+            arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                if trimmedArguments.isEmpty {
+                    toolHeader
+                } else {
+                    Button {
+                        isExpanded.toggle()
+                    } label: {
+                        toolHeader
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if !trimmedArguments.isEmpty, isExpanded {
+                    CappedScrollableText(
+                        text: trimmedArguments,
+                        maxHeight: 200,
+                        font: .caption,
+                        foreground: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                        enableSelection: true
+                    )
+                    .padding(6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                    )
+                }
+            }
+        }
+
+        private var toolHeader: some View {
+            HStack(spacing: 6) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.system(size: 12))
+                Text("调用：\(label)")
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                if !trimmedArguments.isEmpty {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+            }
+            .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+            .contentShape(Rectangle())
         }
     }
 }
@@ -827,9 +870,13 @@ struct ToolResultsDisclosureView: View, Equatable {
                             Text(label)
                                 .font(.caption.weight(.semibold))
                             if !result.isEmpty {
-                                Text(result)
-                                    .font(.caption)
-                                    .textSelection(.enabled)
+                                CappedScrollableText(
+                                    text: result,
+                                    maxHeight: 200,
+                                    font: .caption,
+                                    foreground: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                                    enableSelection: true
+                                )
                             }
                         }
                         .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
@@ -845,5 +892,57 @@ struct ToolResultsDisclosureView: View, Equatable {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}
+
+private struct CappedScrollableText: View {
+    let text: String
+    let maxHeight: CGFloat
+    let font: Font
+    let foreground: Color
+    let enableSelection: Bool
+    @State private var measuredHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView {
+            textView
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: TextHeightKey.self, value: proxy.size.height)
+                    }
+                )
+        }
+        .frame(height: resolvedHeight)
+        .onPreferenceChange(TextHeightKey.self) { measuredHeight = $0 }
+    }
+
+    private var resolvedHeight: CGFloat {
+        guard measuredHeight > 0 else { return maxHeight }
+        return min(measuredHeight, maxHeight)
+    }
+
+    @ViewBuilder
+    private var textView: some View {
+        if enableSelection {
+            Text(text)
+                .font(font)
+                .foregroundStyle(foreground)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(text)
+                .font(font)
+                .foregroundStyle(foreground)
+                .textSelection(.disabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct TextHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

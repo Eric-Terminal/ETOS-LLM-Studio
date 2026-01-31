@@ -186,7 +186,7 @@ struct ChatBubble: View {
             let content = VStack(alignment: .leading, spacing: 6) {
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
                     toolCallsInlineView(toolCalls)
-                    if let request = activeToolPermissionRequest {
+                    if activeToolPermissionRequest != nil {
                         toolPermissionInlineView(onDecision: { decision in
                             toolPermissionCenter.resolveActiveRequest(with: decision)
                         })
@@ -223,7 +223,7 @@ struct ChatBubble: View {
 
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
                     toolCallsInlineView(toolCalls)
-                    if let request = activeToolPermissionRequest {
+                    if activeToolPermissionRequest != nil {
                         toolPermissionInlineView(onDecision: { decision in
                             toolPermissionCenter.resolveActiveRequest(with: decision)
                         })
@@ -400,23 +400,63 @@ struct ChatBubble: View {
     private func toolCallsInlineView(_ toolCalls: [InternalToolCall]) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(toolCalls, id: \.id) { toolCall in
-                let trimmedArgs = toolCall.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
                 let label = toolDisplayLabel(for: toolCall.toolName)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("调用：\(label)")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                    if !trimmedArgs.isEmpty {
-                        Text(trimmedArgs)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.leading, 4)
+                ToolCallDisclosureRow(label: label, arguments: toolCall.arguments)
             }
         }
         .padding(.bottom, 5)
+    }
+
+    private struct ToolCallDisclosureRow: View {
+        let label: String
+        let arguments: String
+        @State private var isExpanded = true
+
+        private var trimmedArguments: String {
+            arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 2) {
+                if trimmedArguments.isEmpty {
+                    toolHeader
+                } else {
+                    Button {
+                        isExpanded.toggle()
+                    } label: {
+                        toolHeader
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if !trimmedArguments.isEmpty, isExpanded {
+                    CappedScrollableText(
+                        text: trimmedArguments,
+                        maxHeight: 120,
+                        font: .caption2,
+                        foreground: .secondary
+                    )
+                }
+            }
+            .padding(.leading, 4)
+        }
+
+        private var toolHeader: some View {
+            HStack(spacing: 4) {
+                Text("调用：\(label)")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                if !trimmedArguments.isEmpty {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+            }
+            .contentShape(Rectangle())
+        }
     }
 
     private func toolPermissionInlineView(onDecision: @escaping (ToolPermissionDecision) -> Void) -> some View {
@@ -455,9 +495,12 @@ struct ChatBubble: View {
                             .font(.caption2.weight(.semibold))
                             .foregroundColor(.secondary)
                         if !result.isEmpty {
-                            Text(result)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+                            CappedScrollableText(
+                                text: result,
+                                maxHeight: 120,
+                                font: .caption2,
+                                foreground: .secondary
+                            )
                         }
                     }
                     .padding(.leading, 4)
@@ -516,6 +559,43 @@ struct ChatBubble: View {
                 }
             }
             .controlSize(.mini)
+        }
+    }
+
+    private struct CappedScrollableText: View {
+        let text: String
+        let maxHeight: CGFloat
+        let font: Font
+        let foreground: Color
+        @State private var measuredHeight: CGFloat = 0
+
+        var body: some View {
+            ScrollView {
+                Text(text)
+                    .font(font)
+                    .foregroundColor(foreground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: TextHeightKey.self, value: proxy.size.height)
+                        }
+                    )
+            }
+            .frame(height: resolvedHeight)
+            .onPreferenceChange(TextHeightKey.self) { measuredHeight = $0 }
+        }
+
+        private var resolvedHeight: CGFloat {
+            guard measuredHeight > 0 else { return maxHeight }
+            return min(measuredHeight, maxHeight)
+        }
+    }
+
+    private struct TextHeightKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
         }
     }
     
