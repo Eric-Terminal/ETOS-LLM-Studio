@@ -121,6 +121,11 @@ public final class MCPManager: ObservableObject {
     private var routedTools: [String: RoutedTool] = [:]
     private var routedPrompts: [String: RoutedPrompt] = [:]
     private var debugBusyCount = 0
+    private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
+    private var autoConnectRetryAttempts: [UUID: Int] = [:]
+    private let autoConnectMaxRetries = 5
+    private let autoConnectBaseDelay: TimeInterval = 1.0
+    private let autoConnectMaxDelay: TimeInterval = 30.0
 
     private init() {
         reloadServers()
@@ -131,6 +136,10 @@ public final class MCPManager: ObservableObject {
     public func reloadServers() {
         servers = MCPServerStore.loadServers()
         let serverIDs = Set(servers.map { $0.id })
+        let removedIDs = Set(autoConnectRetryTasks.keys).subtracting(serverIDs)
+        for serverID in removedIDs {
+            cancelAutoConnectRetry(for: serverID, resetAttempts: true)
+        }
 
         var newStatuses: [UUID: MCPServerStatus] = serverStatuses.filter { serverIDs.contains($0.key) }
         for server in servers {
@@ -162,6 +171,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func delete(server: MCPServerConfiguration) {
+        cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         MCPServerStore.delete(server)
         clients[server.id] = nil
         serverStatuses[server.id] = nil
@@ -175,14 +185,19 @@ public final class MCPManager: ObservableObject {
             case .ready, .connecting:
                 continue
             case .idle, .failed:
-                connect(to: server, preserveSelection: true)
+                connect(to: server, preserveSelection: true, retryOnFailure: true)
             @unknown default:
                 continue
             }
         }
     }
 
-    public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false) {
+    public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false, retryOnFailure: Bool = false) {
+        if retryOnFailure {
+            cancelAutoConnectRetry(for: server.id, resetAttempts: false)
+        } else {
+            cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+        }
         mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
         let cachedMetadata = MCPServerStore.loadMetadata(for: server.id)
         let shouldRefreshMetadata = cachedMetadata == nil
@@ -232,6 +247,9 @@ public final class MCPManager: ObservableObject {
                     updatedCache.info = info
                     MCPServerStore.saveMetadata(updatedCache, for: server.id)
                 }
+                await MainActor.run {
+                    self.cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+                }
                 if shouldRefreshMetadata {
                     await refreshMetadata(for: server.id, client: client, serverInfo: info)
                 }
@@ -248,12 +266,18 @@ public final class MCPManager: ObservableObject {
                     self.streamingTransports[server.id]?.disconnect()
                     self.streamingTransports[server.id] = nil
                 }
+                await MainActor.run {
+                    if retryOnFailure, server.isSelectedForChat {
+                        self.scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
+                    }
+                }
             }
         }
     }
 
     public func disconnect(server: MCPServerConfiguration) {
         mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
+        cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         clients[server.id] = nil
         streamingTransports[server.id]?.disconnect()
         streamingTransports[server.id] = nil
@@ -266,6 +290,60 @@ public final class MCPManager: ObservableObject {
             $0.roots = []
             $0.isBusy = false
         }
+    }
+
+    private func scheduleAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) {
+        let attempt = (autoConnectRetryAttempts[serverID] ?? 0) + 1
+        if attempt > autoConnectMaxRetries {
+            autoConnectRetryAttempts[serverID] = nil
+            return
+        }
+        autoConnectRetryAttempts[serverID] = attempt
+        autoConnectRetryTasks[serverID]?.cancel()
+        let delaySeconds = autoConnectBackoffDelaySeconds(attempt: attempt)
+        let delayNanoseconds = UInt64(delaySeconds * 1_000_000_000)
+        mcpManagerLogger.info("MCP 自动重试连接：server=\(serverID.uuidString, privacy: .public)，attempt=\(attempt)，delay=\(delaySeconds, privacy: .public)s")
+        autoConnectRetryTasks[serverID] = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: delayNanoseconds)
+            } catch {
+                return
+            }
+            await MainActor.run {
+                guard let self else { return }
+                guard let server = self.servers.first(where: { $0.id == serverID }) else {
+                    self.cancelAutoConnectRetry(for: serverID, resetAttempts: true)
+                    return
+                }
+                guard server.isSelectedForChat else {
+                    self.cancelAutoConnectRetry(for: serverID, resetAttempts: true)
+                    return
+                }
+                let state = self.status(for: server).connectionState
+                switch state {
+                case .ready, .connecting:
+                    return
+                case .idle, .failed:
+                    self.connect(to: server, preserveSelection: preserveSelection, retryOnFailure: true)
+                @unknown default:
+                    return
+                }
+            }
+        }
+    }
+
+    private func cancelAutoConnectRetry(for serverID: UUID, resetAttempts: Bool) {
+        autoConnectRetryTasks[serverID]?.cancel()
+        autoConnectRetryTasks[serverID] = nil
+        if resetAttempts {
+            autoConnectRetryAttempts[serverID] = nil
+        }
+    }
+
+    private func autoConnectBackoffDelaySeconds(attempt: Int) -> TimeInterval {
+        let exponent = max(0, attempt - 1)
+        let delay = autoConnectBaseDelay * pow(2.0, Double(exponent))
+        return min(delay, autoConnectMaxDelay)
     }
 
     public func toggleSelection(for server: MCPServerConfiguration) {
