@@ -35,6 +35,57 @@ struct TelegramBubbleShape: Shape {
     }
 }
 
+private struct BubbleCornerShape: Shape {
+    let topLeft: CGFloat
+    let topRight: CGFloat
+    let bottomLeft: CGFloat
+    let bottomRight: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let tl = min(min(topLeft, rect.width / 2), rect.height / 2)
+        let tr = min(min(topRight, rect.width / 2), rect.height / 2)
+        let bl = min(min(bottomLeft, rect.width / 2), rect.height / 2)
+        let br = min(min(bottomRight, rect.width / 2), rect.height / 2)
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr),
+            radius: tr,
+            startAngle: .degrees(-90),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - br, y: rect.maxY - br),
+            radius: br,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
+        path.addArc(
+            center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl),
+            radius: bl,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
+        path.addArc(
+            center: CGPoint(x: rect.minX + tl, y: rect.minY + tl),
+            radius: tl,
+            startAngle: .degrees(180),
+            endAngle: .degrees(270),
+            clockwise: false
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct ChatBubble: View {
     let message: ChatMessage
     @Binding var isReasoningExpanded: Bool
@@ -42,6 +93,8 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    let mergeWithPrevious: Bool
+    let mergeWithNext: Bool
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
@@ -60,8 +113,17 @@ struct ChatBubble: View {
         message.role == .error || (message.role == .assistant && message.content.hasPrefix("重试失败"))
     }
 
-    private var bubbleShape: TelegramBubbleShape {
-        TelegramBubbleShape(isOutgoing: isOutgoing)
+    private var bubbleShape: BubbleCornerShape {
+        let baseRadius: CGFloat = 18
+        let mergedRadius: CGFloat = 8
+        let topRadius = mergeWithPrevious ? mergedRadius : baseRadius
+        let bottomRadius = mergeWithNext ? mergedRadius : baseRadius
+        return BubbleCornerShape(
+            topLeft: topRadius,
+            topRight: topRadius,
+            bottomLeft: bottomRadius,
+            bottomRight: bottomRadius
+        )
     }
     
     /// 图片占位符文本（各语言版本）
@@ -174,7 +236,8 @@ struct ChatBubble: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 2)
+        .padding(.top, mergeWithPrevious ? 0 : 3)
+        .padding(.bottom, mergeWithNext ? 0 : 3)
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()

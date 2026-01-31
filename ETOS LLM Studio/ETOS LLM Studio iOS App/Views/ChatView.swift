@@ -153,7 +153,7 @@ struct ChatView: View {
                 // Z-Index 1: 消息列表
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 2, pinnedViews: []) {
+                        LazyVStack(spacing: 0, pinnedViews: []) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear.frame(height: 8)
                             
@@ -161,7 +161,11 @@ struct ChatView: View {
                             historyBanner
                             
                             // 消息列表
-                            ForEach(displayedMessages) { message in
+                            ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, message in
+                                let previousMessage = index > 0 ? displayedMessages[index - 1] : nil
+                                let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1] : nil
+                                let mergeWithPrevious = shouldMergeToolResult(previousMessage, with: message)
+                                let mergeWithNext = shouldMergeToolResult(message, with: nextMessage)
                                 ChatBubble(
                                     message: message,
                                     isReasoningExpanded: Binding(
@@ -174,7 +178,9 @@ struct ChatView: View {
                                     ),
                                     enableMarkdown: viewModel.enableMarkdown,
                                     enableBackground: viewModel.enableBackground,
-                                    enableLiquidGlass: isLiquidGlassEnabled
+                                    enableLiquidGlass: isLiquidGlassEnabled,
+                                    mergeWithPrevious: mergeWithPrevious,
+                                    mergeWithNext: mergeWithNext
                                 )
                                 .id(message.id)
                                 .contextMenu {
@@ -1246,6 +1252,12 @@ private struct SafeAreaBottomKey: PreferenceKey {
 // MARK: - Helpers
 
 private extension ChatView {
+    func shouldMergeToolResult(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard let message, let nextMessage else { return false }
+        guard message.role == .tool else { return false }
+        return nextMessage.role == .assistant || nextMessage.role == .system
+    }
+
     func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
         let action = {
             proxy.scrollTo(scrollBottomAnchorID, anchor: .bottom)

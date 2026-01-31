@@ -161,9 +161,17 @@ struct ContentView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
             }
 
-            ForEach(displayMessages) { message in
-                // 修复: 将复杂内容提取到辅助函数中，避免编译器超时
-                messageRow(for: message, proxy: proxy)
+            ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
+                let previousMessage = index > 0 ? displayMessages[index - 1] : nil
+                let nextMessage = index + 1 < displayMessages.count ? displayMessages[index + 1] : nil
+                let mergeWithPrevious = shouldMergeToolResult(previousMessage, with: message)
+                let mergeWithNext = shouldMergeToolResult(message, with: nextMessage)
+                messageRow(
+                    for: message,
+                    proxy: proxy,
+                    mergeWithPrevious: mergeWithPrevious,
+                    mergeWithNext: mergeWithNext
+                )
             }
 
             inputBubble
@@ -195,7 +203,7 @@ struct ContentView: View {
     }
     
     /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
-    private func messageRow(for message: ChatMessage, proxy: ScrollViewProxy) -> some View {
+    private func messageRow(for message: ChatMessage, proxy: ScrollViewProxy, mergeWithPrevious: Bool, mergeWithNext: Bool) -> some View {
         let isReasoningExpandedBinding = Binding<Bool>(
             get: { viewModel.reasoningExpandedState[message.id, default: false] },
             set: { viewModel.reasoningExpandedState[message.id] = $0 }
@@ -212,7 +220,9 @@ struct ContentView: View {
             isToolCallsExpanded: isToolCallsExpandedBinding,
             enableMarkdown: viewModel.enableMarkdown,
             enableBackground: viewModel.enableBackground,
-            enableLiquidGlass: isLiquidGlassEnabled
+            enableLiquidGlass: isLiquidGlassEnabled,
+            mergeWithPrevious: mergeWithPrevious,
+            mergeWithNext: mergeWithNext
         )
         .id(message.id)
         .listRowInsets(EdgeInsets())
@@ -281,6 +291,12 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .padding(.bottom, 6)
         .transition(.scale.combined(with: .opacity))
+    }
+
+    private func shouldMergeToolResult(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard let message, let nextMessage else { return false }
+        guard message.role == .tool else { return false }
+        return nextMessage.role == .assistant || nextMessage.role == .system
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
