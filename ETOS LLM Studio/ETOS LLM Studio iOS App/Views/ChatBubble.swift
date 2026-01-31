@@ -186,6 +186,13 @@ struct ChatBubble: View {
         }
         return hasCallResults
     }
+
+    private var hasPendingToolResults: Bool {
+        guard message.role != .tool else { return false }
+        guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return false }
+        guard !hasToolResults else { return false }
+        return activeToolPermissionRequest == nil
+    }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
         guard message.role != .user,
@@ -435,12 +442,14 @@ struct ChatBubble: View {
                     toolPermissionCenter.resolveActiveRequest(with: decision)
                 })
             }
-            if hasToolResults {
+            let shouldShowResults = hasToolResults || hasPendingToolResults
+            if shouldShowResults {
                 ToolResultsDisclosureView(
                     toolCalls: toolCalls,
                     resultText: message.role == .tool ? message.content : "",
                     isExpanded: $isToolCallsExpanded,
-                    isOutgoing: isOutgoing
+                    isOutgoing: isOutgoing,
+                    isPending: hasPendingToolResults
                 )
             }
         }
@@ -954,9 +963,14 @@ struct ToolResultsDisclosureView: View, Equatable {
     let resultText: String
     @Binding var isExpanded: Bool
     let isOutgoing: Bool
+    let isPending: Bool
     
     static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
-        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing && lhs.resultText == rhs.resultText
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
+            && lhs.isExpanded == rhs.isExpanded
+            && lhs.isOutgoing == rhs.isOutgoing
+            && lhs.resultText == rhs.resultText
+            && lhs.isPending == rhs.isPending
     }
 
     private func displayName(for toolName: String) -> String {
@@ -969,26 +983,46 @@ struct ToolResultsDisclosureView: View, Equatable {
     var body: some View {
         let toolNames = toolCalls.map { displayName(for: $0.toolName) }
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                isExpanded.toggle()
-            } label: {
+            if isPending {
                 HStack(spacing: 6) {
                     Image(systemName: "wrench.and.screwdriver")
                         .font(.system(size: 12))
-                    Text("结果：\(toolNames.joined(separator: ", "))")
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
+                    ShimmeringText(
+                        text: "结果：\(toolNames.joined(separator: ", "))",
+                        font: .subheadline.weight(.medium),
+                        baseColor: isOutgoing ? Color.white.opacity(0.9) : Color.secondary,
+                        highlightColor: isOutgoing ? Color.white : Color.primary.opacity(0.85)
+                    )
+                    .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.4) : Color.secondary.opacity(0.6))
                 }
                 .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
                 .contentShape(Rectangle())
+            } else {
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.system(size: 12))
+                        Text("结果：\(toolNames.joined(separator: ", "))")
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    }
+                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             
-            if isExpanded {
+            if isExpanded && !isPending {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(toolCalls, id: \.id) { call in
                         let result = (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1019,6 +1053,51 @@ struct ToolResultsDisclosureView: View, Equatable {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}
+
+private struct ShimmeringText: View {
+    let text: String
+    let font: Font
+    let baseColor: Color
+    let highlightColor: Color
+    var duration: Double = 1.6
+    var angle: Double = 18
+    var bandWidthRatio: CGFloat = 0.6
+
+    @State private var isAnimating = false
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(baseColor)
+            .overlay(
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    let bandWidth = max(1, width * bandWidthRatio)
+                    let travel = width + bandWidth
+                    LinearGradient(
+                        colors: [Color.clear, highlightColor, Color.clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: bandWidth, height: proxy.size.height * 2)
+                    .rotationEffect(.degrees(angle))
+                    .offset(x: isAnimating ? travel : -travel)
+                    .blendMode(.screen)
+                }
+                .mask(
+                    Text(text)
+                        .font(font)
+                )
+                .allowsHitTesting(false)
+            )
+            .onAppear {
+                guard !isAnimating else { return }
+                withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                    isAnimating = true
+                }
+            }
     }
 }
 

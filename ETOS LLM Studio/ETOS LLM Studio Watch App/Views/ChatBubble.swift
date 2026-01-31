@@ -115,6 +115,13 @@ struct ChatBubble: View {
         return hasCallResults
     }
 
+    private var hasPendingToolResults: Bool {
+        guard message.role != .tool else { return false }
+        guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return false }
+        guard !hasToolResults else { return false }
+        return activeToolPermissionRequest == nil
+    }
+
     private var assistantBubbleShape: BubbleCornerShape {
         let baseRadius: CGFloat = 12
         let mergedRadius: CGFloat = 0
@@ -307,8 +314,13 @@ struct ChatBubble: View {
                             toolPermissionCenter.resolveActiveRequest(with: decision)
                         })
                     }
-                    if hasToolResults {
-                        toolResultsDisclosureView(toolCalls, resultText: message.content)
+                    let shouldShowResults = hasToolResults || hasPendingToolResults
+                    if shouldShowResults {
+                        toolResultsDisclosureView(
+                            toolCalls,
+                            resultText: message.content,
+                            isPending: hasPendingToolResults
+                        )
                     }
                 } else if hasNonPlaceholderText {
                     renderContent(message.content)
@@ -334,8 +346,13 @@ struct ChatBubble: View {
                             toolPermissionCenter.resolveActiveRequest(with: decision)
                         })
                     }
-                    if hasToolResults {
-                        toolResultsDisclosureView(toolCalls, resultText: "")
+                    let shouldShowResults = hasToolResults || hasPendingToolResults
+                    if shouldShowResults {
+                        toolResultsDisclosureView(
+                            toolCalls,
+                            resultText: "",
+                            isPending: hasPendingToolResults
+                        )
                     }
                 }
 
@@ -560,28 +577,49 @@ struct ChatBubble: View {
     }
 
     @ViewBuilder
-    private func toolResultsDisclosureView(_ toolCalls: [InternalToolCall], resultText: String) -> some View {
+    private func toolResultsDisclosureView(
+        _ toolCalls: [InternalToolCall],
+        resultText: String,
+        isPending: Bool
+    ) -> some View {
         let toolNames = toolCalls.map { toolDisplayLabel(for: $0.toolName) }
         VStack(alignment: .leading, spacing: 5) {
-            Button(action: {
-                withAnimation {
-                    isToolCallsExpanded.toggle()
-                }
-            }) {
+            if isPending {
                 HStack {
-                    Text("结果：\(toolNames.joined(separator: ", "))")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    ShimmeringText(
+                        text: "结果：\(toolNames.joined(separator: ", "))",
+                        font: .footnote,
+                        baseColor: .secondary,
+                        highlightColor: .primary.opacity(0.85)
+                    )
+                    .lineLimit(1)
                     Spacer()
-                    Image(systemName: isToolCallsExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
                         .font(.caption)
+                        .foregroundColor(.secondary.opacity(0.6))
                 }
                 .foregroundColor(.secondary)
+            } else {
+                Button(action: {
+                    withAnimation {
+                        isToolCallsExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Text("结果：\(toolNames.joined(separator: ", "))")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: isToolCallsExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
-            if isToolCallsExpanded {
+            if isToolCallsExpanded && !isPending {
                 ForEach(toolCalls, id: \.id) { toolCall in
                     let result = (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
                     let label = toolDisplayLabel(for: toolCall.toolName)
@@ -603,6 +641,51 @@ struct ChatBubble: View {
             }
         }
         .padding(.bottom, 5)
+    }
+
+    private struct ShimmeringText: View {
+        let text: String
+        let font: Font
+        let baseColor: Color
+        let highlightColor: Color
+        var duration: Double = 1.6
+        var angle: Double = 18
+        var bandWidthRatio: CGFloat = 0.7
+
+        @State private var isAnimating = false
+
+        var body: some View {
+            Text(text)
+                .font(font)
+                .foregroundStyle(baseColor)
+                .overlay(
+                    GeometryReader { proxy in
+                        let width = proxy.size.width
+                        let bandWidth = max(1, width * bandWidthRatio)
+                        let travel = width + bandWidth
+                        LinearGradient(
+                            colors: [Color.clear, highlightColor, Color.clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: bandWidth, height: proxy.size.height * 2)
+                        .rotationEffect(.degrees(angle))
+                        .offset(x: isAnimating ? travel : -travel)
+                        .blendMode(.screen)
+                    }
+                    .mask(
+                        Text(text)
+                            .font(font)
+                    )
+                    .allowsHitTesting(false)
+                )
+                .onAppear {
+                    guard !isAnimating else { return }
+                    withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                        isAnimating = true
+                    }
+                }
+        }
     }
 
     private struct ToolPermissionInlineView: View {
