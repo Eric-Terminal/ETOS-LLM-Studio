@@ -193,6 +193,12 @@ struct ChatBubble: View {
         guard !hasToolResults else { return false }
         return activeToolPermissionRequest == nil
     }
+
+    private var shouldShimmerReasoningHeader: Bool {
+        guard viewModel.isSendingMessage, message.role == .assistant else { return false }
+        let latestAssistantID = viewModel.messages.last(where: { $0.role == .assistant })?.id
+        return latestAssistantID == message.id
+    }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
         guard message.role != .user,
@@ -426,7 +432,8 @@ struct ChatBubble: View {
             ReasoningDisclosureView(
                 reasoning: reasoning,
                 isExpanded: $isReasoningExpanded,
-                isOutgoing: isOutgoing
+                isOutgoing: isOutgoing,
+                isShimmering: shouldShimmerReasoningHeader
             )
         }
         
@@ -468,8 +475,14 @@ struct ChatBubble: View {
                   (message.reasoningContent ?? "").isEmpty,
                   (message.toolCalls ?? []).isEmpty {
             // 加载指示器
-            HStack(spacing: 8) {
-                TelegramTypingIndicator()
+            if viewModel.isSendingMessage {
+                ShimmeringText(
+                    text: "正在思考...",
+                    font: .subheadline,
+                    baseColor: Color.secondary,
+                    highlightColor: Color.primary.opacity(0.85)
+                )
+            } else {
                 Text("正在思考...")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
@@ -785,12 +798,16 @@ struct ReasoningDisclosureView: View, Equatable {
     let reasoning: String
     @Binding var isExpanded: Bool
     let isOutgoing: Bool
+    let isShimmering: Bool
     
     // 限制显示的最大字符数，超过时截断并提示
     private static let maxDisplayLength = 8000
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
-        lhs.reasoning == rhs.reasoning && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing
+        lhs.reasoning == rhs.reasoning
+            && lhs.isExpanded == rhs.isExpanded
+            && lhs.isOutgoing == rhs.isOutgoing
+            && lhs.isShimmering == rhs.isShimmering
     }
     
     private var displayText: String {
@@ -802,6 +819,8 @@ struct ReasoningDisclosureView: View, Equatable {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            let baseColor = isOutgoing ? Color.white.opacity(0.9) : Color.secondary
+            let highlightColor = isOutgoing ? Color.white : Color.primary.opacity(0.85)
             // 点击区域：标题行
             Button {
                 isExpanded.toggle()
@@ -809,14 +828,27 @@ struct ReasoningDisclosureView: View, Equatable {
                 HStack(spacing: 6) {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 12))
-                    Text("思考过程")
-                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(baseColor)
+                    if isShimmering {
+                        ShimmeringText(
+                            text: "思考过程",
+                            font: .subheadline.weight(.medium),
+                            baseColor: baseColor,
+                            highlightColor: highlightColor
+                        )
+                        .lineLimit(1)
+                    } else {
+                        Text("思考过程")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(baseColor)
+                            .lineLimit(1)
+                    }
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundStyle(baseColor)
                 }
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

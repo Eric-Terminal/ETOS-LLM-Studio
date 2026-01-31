@@ -224,6 +224,7 @@ struct ContentView: View {
             mergeWithPrevious: mergeWithPrevious,
             mergeWithNext: mergeWithNext
         )
+        .environmentObject(viewModel)
         .id(message.id)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)

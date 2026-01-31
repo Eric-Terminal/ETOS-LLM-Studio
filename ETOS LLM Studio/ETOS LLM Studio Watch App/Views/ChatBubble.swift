@@ -88,6 +88,7 @@ struct ChatBubble: View {
     @State private var imagePreview: ImagePreviewPayload?
     @State private var availableWidth: CGFloat = 0
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
 
@@ -120,6 +121,12 @@ struct ChatBubble: View {
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return false }
         guard !hasToolResults else { return false }
         return activeToolPermissionRequest == nil
+    }
+
+    private var shouldShimmerReasoningHeader: Bool {
+        guard viewModel.isSendingMessage, message.role == .assistant else { return false }
+        let latestAssistantID = viewModel.messages.last(where: { $0.role == .assistant })?.id
+        return latestAssistantID == message.id
     }
 
     private var assistantBubbleShape: BubbleCornerShape {
@@ -366,8 +373,14 @@ struct ChatBubble: View {
                 }
 
                 if shouldShowThinkingIndicator {
-                    HStack(spacing: 4) {
-                        ProgressView().controlSize(.small)
+                    if viewModel.isSendingMessage {
+                        ShimmeringText(
+                            text: currentThinkingText,
+                            font: .caption,
+                            baseColor: .secondary,
+                            highlightColor: .primary.opacity(0.85)
+                        )
+                    } else {
                         Text(currentThinkingText)
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -481,14 +494,25 @@ struct ChatBubble: View {
                 }
             }) {
                 HStack {
-                    Text("思考过程")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+                    if shouldShimmerReasoningHeader {
+                        ShimmeringText(
+                            text: "思考过程",
+                            font: .footnote,
+                            baseColor: .secondary,
+                            highlightColor: .primary.opacity(0.85)
+                        )
+                        .lineLimit(1)
+                    } else {
+                        Text("思考过程")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
                     Spacer()
                     Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
                         .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
 
