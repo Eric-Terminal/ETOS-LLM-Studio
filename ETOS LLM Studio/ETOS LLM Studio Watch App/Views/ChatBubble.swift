@@ -651,6 +651,7 @@ struct ChatBubble: View {
         var duration: Double = 1.6
         var angle: Double = 18
         var bandWidthRatio: CGFloat = 0.7
+        var bandHeightRatio: CGFloat = 1.6
 
         @State private var isAnimating = false
 
@@ -661,17 +662,28 @@ struct ChatBubble: View {
                 .overlay(
                     GeometryReader { proxy in
                         let width = proxy.size.width
+                        let height = proxy.size.height
                         let bandWidth = max(1, width * bandWidthRatio)
-                        let travel = width + bandWidth
-                        LinearGradient(
-                            colors: [Color.clear, highlightColor, Color.clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: bandWidth, height: proxy.size.height * 2)
-                        .rotationEffect(.degrees(angle))
-                        .offset(x: isAnimating ? travel : -travel)
-                        .blendMode(.screen)
+                        let bandHeight = max(1, height * bandHeightRatio)
+                        let startX = -bandWidth
+                        let endX = width + bandWidth
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0),
+                                        .init(color: highlightColor, location: 0.35),
+                                        .init(color: highlightColor, location: 0.65),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: bandWidth, height: bandHeight)
+                            .rotationEffect(.degrees(angle))
+                            .position(x: isAnimating ? endX : startX, y: height / 2)
+                            .blendMode(.screen)
                     }
                     .mask(
                         Text(text)
