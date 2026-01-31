@@ -98,8 +98,10 @@ struct ChatBubble: View {
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
+    @State private var availableWidth: CGFloat = 0
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.colorScheme) private var colorScheme
     
     // Telegram 颜色
     private let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
@@ -115,7 +117,7 @@ struct ChatBubble: View {
 
     private var bubbleShape: BubbleCornerShape {
         let baseRadius: CGFloat = 18
-        let mergedRadius: CGFloat = 8
+        let mergedRadius: CGFloat = 0
         let topRadius = mergeWithPrevious ? mergedRadius : baseRadius
         let bottomRadius = mergeWithNext ? mergedRadius : baseRadius
         return BubbleCornerShape(
@@ -124,6 +126,37 @@ struct ChatBubble: View {
             bottomLeft: bottomRadius,
             bottomRight: bottomRadius
         )
+    }
+
+    private var shouldShowMergedSeparator: Bool {
+        mergeWithPrevious && !isOutgoing
+    }
+
+    private var separatorThickness: CGFloat {
+        1 / UIScreen.main.scale
+    }
+
+    private var separatorColor: Color {
+        if isOutgoing {
+            return Color.white.opacity(0.2)
+        }
+        return colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08)
+    }
+
+    private var bubbleShadow: (color: Color, radius: CGFloat, y: CGFloat) {
+        if mergeWithPrevious && mergeWithNext {
+            return (Color.black.opacity(0.04), 1, 0)
+        }
+        return (Color.black.opacity(0.08), 3, 1)
+    }
+
+    private var bubbleMaxWidth: CGFloat {
+        let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
+        return baseWidth * 0.88
+    }
+
+    private var shouldForceMergedWidth: Bool {
+        !isOutgoing && (mergeWithPrevious || mergeWithNext)
     }
     
     /// 图片占位符文本（各语言版本）
@@ -224,11 +257,12 @@ struct ChatBubble: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(bubbleBackground)
-                    .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+                    .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
+                    .background(bubbleDecoratedBackground)
+                    .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
                 }
             }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.88, alignment: isOutgoing ? .trailing : .leading)
+            .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
             
             // AI 消息靠左：右边放 Spacer
             if !isOutgoing {
@@ -238,6 +272,16 @@ struct ChatBubble: View {
         .padding(.horizontal, 8)
         .padding(.top, mergeWithPrevious ? 0 : 3)
         .padding(.bottom, mergeWithNext ? 0 : 3)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)
+            }
+        )
+        .onPreferenceChange(RowWidthKey.self) { newValue in
+            if availableWidth != newValue {
+                availableWidth = newValue
+            }
+        }
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -246,6 +290,14 @@ struct ChatBubble: View {
                     .scaledToFit()
                     .padding(24)
             }
+        }
+    }
+
+    private struct RowWidthKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
         }
     }
     
@@ -343,6 +395,18 @@ struct ChatBubble: View {
             bubbleShape
                 .fill(bubbleGradient)
         }
+    }
+
+    private var bubbleDecoratedBackground: some View {
+        ZStack(alignment: .top) {
+            bubbleBackground
+            if shouldShowMergedSeparator {
+                Rectangle()
+                    .fill(separatorColor)
+                    .frame(height: separatorThickness)
+            }
+        }
+        .clipShape(bubbleShape)
     }
     
     // MARK: - Content

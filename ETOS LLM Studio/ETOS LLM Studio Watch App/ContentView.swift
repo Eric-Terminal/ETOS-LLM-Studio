@@ -164,8 +164,8 @@ struct ContentView: View {
             ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
                 let previousMessage = index > 0 ? displayMessages[index - 1] : nil
                 let nextMessage = index + 1 < displayMessages.count ? displayMessages[index + 1] : nil
-                let mergeWithPrevious = shouldMergeToolResult(previousMessage, with: message)
-                let mergeWithNext = shouldMergeToolResult(message, with: nextMessage)
+                let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
+                let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
                 messageRow(
                     for: message,
                     proxy: proxy,
@@ -293,10 +293,20 @@ struct ContentView: View {
         .transition(.scale.combined(with: .opacity))
     }
 
-    private func shouldMergeToolResult(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+    private func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
-        guard message.role == .tool else { return false }
-        return nextMessage.role == .assistant || nextMessage.role == .system
+        return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+    }
+
+    private func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
+        switch message.role {
+        case .assistant, .tool, .system:
+            return true
+        case .user, .error:
+            return false
+        @unknown default:
+            return false
+        }
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {

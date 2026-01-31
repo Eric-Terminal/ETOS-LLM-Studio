@@ -164,8 +164,8 @@ struct ChatView: View {
                             ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, message in
                                 let previousMessage = index > 0 ? displayedMessages[index - 1] : nil
                                 let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1] : nil
-                                let mergeWithPrevious = shouldMergeToolResult(previousMessage, with: message)
-                                let mergeWithNext = shouldMergeToolResult(message, with: nextMessage)
+                                let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
+                                let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
                                 ChatBubble(
                                     message: message,
                                     isReasoningExpanded: Binding(
@@ -1252,10 +1252,20 @@ private struct SafeAreaBottomKey: PreferenceKey {
 // MARK: - Helpers
 
 private extension ChatView {
-    func shouldMergeToolResult(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+    func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
-        guard message.role == .tool else { return false }
-        return nextMessage.role == .assistant || nextMessage.role == .system
+        return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+    }
+
+    func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
+        switch message.role {
+        case .assistant, .tool, .system:
+            return true
+        case .user, .error:
+            return false
+        @unknown default:
+            return false
+        }
     }
 
     func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {

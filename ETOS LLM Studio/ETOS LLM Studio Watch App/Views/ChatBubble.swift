@@ -11,6 +11,7 @@
 // ============================================================================
 
 import SwiftUI
+import WatchKit
 import Foundation
 import MarkdownUI
 import Shared
@@ -85,7 +86,10 @@ struct ChatBubble: View {
     
     @StateObject private var audioPlayer = WatchAudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
+    @State private var availableWidth: CGFloat = 0
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var colorScheme
 
     /// 图片占位符文本（各语言版本）
     private static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
@@ -113,7 +117,7 @@ struct ChatBubble: View {
 
     private var assistantBubbleShape: BubbleCornerShape {
         let baseRadius: CGFloat = 12
-        let mergedRadius: CGFloat = 6
+        let mergedRadius: CGFloat = 0
         let topRadius = mergeWithPrevious ? mergedRadius : baseRadius
         let bottomRadius = mergeWithNext ? mergedRadius : baseRadius
         return BubbleCornerShape(
@@ -122,6 +126,33 @@ struct ChatBubble: View {
             bottomLeft: bottomRadius,
             bottomRight: bottomRadius
         )
+    }
+
+    private var shouldShowMergedSeparator: Bool {
+        mergeWithPrevious && message.role != .user && message.role != .error
+    }
+
+    private var separatorThickness: CGFloat {
+        1 / displayScale
+    }
+
+    private var separatorColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.12)
+    }
+
+    private var separatorLine: some View {
+        Rectangle()
+            .fill(separatorColor)
+            .frame(height: separatorThickness)
+    }
+
+    private var bubbleMaxWidth: CGFloat {
+        let baseWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
+        return baseWidth * 0.86
+    }
+
+    private var shouldForceMergedWidth: Bool {
+        message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
@@ -162,6 +193,16 @@ struct ChatBubble: View {
         .padding(.horizontal)
         .padding(.top, mergeWithPrevious ? 0 : 4)
         .padding(.bottom, mergeWithNext ? 0 : 4)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)
+            }
+        )
+        .onPreferenceChange(RowWidthKey.self) { newValue in
+            if availableWidth != newValue {
+                availableWidth = newValue
+            }
+        }
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -170,6 +211,14 @@ struct ChatBubble: View {
                     .scaledToFit()
                     .padding(12)
             }
+        }
+    }
+
+    private struct RowWidthKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
         }
     }
     
@@ -267,19 +316,7 @@ struct ChatBubble: View {
             }
             .padding(10)
             
-            Group {
-                if enableLiquidGlass {
-                    if #available(watchOS 26.0, *) {
-                        content
-                            .glassEffect(.clear, in: assistantBubbleShape)
-                            .clipShape(assistantBubbleShape)
-                    } else {
-                        assistantBubbleFallback(content, isError: false)
-                    }
-                } else {
-                    assistantBubbleFallback(content, isError: false)
-                }
-            }
+            assistantBubbleContainer(content, isError: false)
             .contentShape(Rectangle())
         } else {
             let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
@@ -322,20 +359,7 @@ struct ChatBubble: View {
             }
             .padding(10)
 
-            Group {
-                if enableLiquidGlass {
-                    if #available(watchOS 26.0, *) {
-                        content
-                            .glassEffect(.clear, in: assistantBubbleShape)
-                            .background(isErrorVersion ? Color.red.opacity(0.5) : nil)
-                            .clipShape(assistantBubbleShape)
-                    } else {
-                        assistantBubbleFallback(content, isError: isErrorVersion)
-                    }
-                } else {
-                    assistantBubbleFallback(content, isError: isErrorVersion)
-                }
-            }
+            assistantBubbleContainer(content, isError: isErrorVersion)
             .contentShape(Rectangle())
         }
     }
@@ -691,6 +715,32 @@ struct ChatBubble: View {
         content
             .background(isError ? Color.red.opacity(0.7) : (enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)))
             .clipShape(assistantBubbleShape)
+    }
+
+    @ViewBuilder
+    private func assistantBubbleContainer<Content: View>(_ content: Content, isError: Bool) -> some View {
+        let sizedContent = content
+            .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
+        
+        Group {
+            if enableLiquidGlass {
+                if #available(watchOS 26.0, *) {
+                    sizedContent
+                        .glassEffect(.clear, in: assistantBubbleShape)
+                        .background(isError ? Color.red.opacity(0.5) : nil)
+                } else {
+                    assistantBubbleFallback(sizedContent, isError: isError)
+                }
+            } else {
+                assistantBubbleFallback(sizedContent, isError: isError)
+            }
+        }
+        .overlay(alignment: .top) {
+            if shouldShowMergedSeparator {
+                separatorLine
+            }
+        }
+        .clipShape(assistantBubbleShape)
     }
 }
 
