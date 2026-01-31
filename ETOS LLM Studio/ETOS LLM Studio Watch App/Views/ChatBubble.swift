@@ -32,6 +32,7 @@ struct ChatBubble: View {
     
     @StateObject private var audioPlayer = WatchAudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
+    @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
 
     /// 图片占位符文本（各语言版本）
     private static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
@@ -55,6 +56,20 @@ struct ChatBubble: View {
             return hasCallResults || hasContent
         }
         return hasCallResults
+    }
+    
+    private var activeToolPermissionRequest: ToolPermissionRequest? {
+        guard message.role != .user,
+              let request = toolPermissionCenter.activeRequest,
+              let toolCalls = message.toolCalls else {
+            return nil
+        }
+        let trimmedArgs = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = toolCalls.contains { call in
+            call.toolName == request.toolName
+                && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedArgs
+        }
+        return matches ? request : nil
     }
 
 
@@ -171,6 +186,11 @@ struct ChatBubble: View {
             let content = VStack(alignment: .leading, spacing: 6) {
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
                     toolCallsInlineView(toolCalls)
+                    if let request = activeToolPermissionRequest {
+                        toolPermissionInlineView(onDecision: { decision in
+                            toolPermissionCenter.resolveActiveRequest(with: decision)
+                        })
+                    }
                     if hasToolResults {
                         toolResultsDisclosureView(toolCalls, resultText: message.content)
                     }
@@ -199,6 +219,18 @@ struct ChatBubble: View {
             let content = VStack(alignment: .leading, spacing: 8) {
                 if let reasoning = message.reasoningContent, !reasoning.isEmpty {
                     reasoningView(reasoning)
+                }
+
+                if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+                    toolCallsInlineView(toolCalls)
+                    if let request = activeToolPermissionRequest {
+                        toolPermissionInlineView(onDecision: { decision in
+                            toolPermissionCenter.resolveActiveRequest(with: decision)
+                        })
+                    }
+                    if hasToolResults {
+                        toolResultsDisclosureView(toolCalls, resultText: "")
+                    }
                 }
 
                 if hasReasoning && hasNonPlaceholderText {
@@ -246,7 +278,7 @@ struct ChatBubble: View {
         if message.role == .tool {
             return hasToolCalls || hasNonPlaceholderText
         }
-        return hasReasoning || hasNonPlaceholderText || shouldShowThinkingIndicator
+        return hasToolCalls || hasReasoning || hasNonPlaceholderText || shouldShowThinkingIndicator
     }
     
     // MARK: - 辅助视图
@@ -387,6 +419,11 @@ struct ChatBubble: View {
         .padding(.bottom, 5)
     }
 
+    private func toolPermissionInlineView(onDecision: @escaping (ToolPermissionDecision) -> Void) -> some View {
+        ToolPermissionInlineView(onDecision: onDecision)
+            .padding(.bottom, 5)
+    }
+
     @ViewBuilder
     private func toolResultsDisclosureView(_ toolCalls: [InternalToolCall], resultText: String) -> some View {
         let toolNames = toolCalls.map { toolDisplayLabel(for: $0.toolName) }
@@ -428,6 +465,58 @@ struct ChatBubble: View {
             }
         }
         .padding(.bottom, 5)
+    }
+
+    private struct ToolPermissionInlineView: View {
+        let onDecision: (ToolPermissionDecision) -> Void
+        @State private var isShowingMoreOptions = false
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Button("允许") {
+                        onDecision(.allowOnce)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingMoreOptions.toggle()
+                        }
+                    } label: {
+                        Label("更多", systemImage: "ellipsis")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if isShowingMoreOptions {
+                    HStack(spacing: 6) {
+                        Button("拒绝", role: .destructive) {
+                            onDecision(.deny)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("补充提示") {
+                            onDecision(.supplement)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    HStack(spacing: 6) {
+                        Button("保持允许") {
+                            onDecision(.allowForTool)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("完全权限") {
+                            onDecision(.allowAll)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .controlSize(.mini)
+        }
     }
     
     // MARK: - 回退样式

@@ -45,6 +45,7 @@ struct ChatBubble: View {
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
+    @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @EnvironmentObject private var viewModel: ChatViewModel
     
     // Telegram 颜色
@@ -89,6 +90,20 @@ struct ChatBubble: View {
             return hasCallResults || hasContent
         }
         return hasCallResults
+    }
+    
+    private var activeToolPermissionRequest: ToolPermissionRequest? {
+        guard message.role != .user,
+              let request = toolPermissionCenter.activeRequest,
+              let toolCalls = message.toolCalls else {
+            return nil
+        }
+        let trimmedArgs = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = toolCalls.contains { call in
+            call.toolName == request.toolName
+                && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedArgs
+        }
+        return matches ? request : nil
     }
 
     private var shouldShowTextBubble: Bool {
@@ -288,6 +303,11 @@ struct ChatBubble: View {
                 toolCalls: toolCalls,
                 isOutgoing: isOutgoing
             )
+            if let request = activeToolPermissionRequest {
+                ToolPermissionInlineView(onDecision: { decision in
+                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                })
+            }
             if hasToolResults {
                 ToolResultsDisclosureView(
                     toolCalls: toolCalls,
@@ -723,6 +743,39 @@ struct ToolCallsInlineView: View, Equatable {
                 )
             }
         }
+    }
+}
+
+private struct ToolPermissionInlineView: View {
+    let onDecision: (ToolPermissionDecision) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button("允许") {
+                onDecision(.allowOnce)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Menu {
+                Button("拒绝", role: .destructive) {
+                    onDecision(.deny)
+                }
+                Button("补充提示") {
+                    onDecision(.supplement)
+                }
+                Button("保持允许") {
+                    onDecision(.allowForTool)
+                }
+                Button("完全权限") {
+                    onDecision(.allowAll)
+                }
+            } label: {
+                Label("更多", systemImage: "ellipsis")
+            }
+            .buttonStyle(.bordered)
+        }
+        .controlSize(.small)
+        .padding(.top, 4)
     }
 }
 

@@ -192,28 +192,6 @@ struct ChatView: View {
                                 }
                             }
 
-                            if let activeRequest = toolPermissionCenter.activeRequest,
-                               shouldShowPendingToolCall(for: activeRequest, in: displayedMessages) {
-                                ToolCallPendingBubble(
-                                    request: activeRequest,
-                                    enableBackground: viewModel.enableBackground,
-                                    enableLiquidGlass: isLiquidGlassEnabled
-                                )
-                                .id("pending-tool-\(activeRequest.id.uuidString)")
-                            }
-
-                            if let activeRequest = toolPermissionCenter.activeRequest {
-                                ToolPermissionBubble(
-                                    request: activeRequest,
-                                    enableBackground: viewModel.enableBackground,
-                                    enableLiquidGlass: isLiquidGlassEnabled,
-                                    onDecision: { decision in
-                                        toolPermissionCenter.resolveActiveRequest(with: decision)
-                                    }
-                                )
-                                .id(activeRequest.id)
-                            }
-                            
                             Color.clear
                                 .frame(height: 8)
                                 .id(scrollBottomAnchorID)
@@ -1257,62 +1235,6 @@ struct ChatView: View {
     }
 }
 
-private struct ToolCallPendingBubble: View {
-    let request: ToolPermissionRequest
-    let enableBackground: Bool
-    let enableLiquidGlass: Bool
-
-    private var bubbleShape: TelegramBubbleShape {
-        TelegramBubbleShape(isOutgoing: false)
-    }
-
-    private var bubbleFill: some ShapeStyle {
-        let assistantOpacity = enableBackground ? 0.75 : 1.0
-        let baseColor = enableBackground
-            ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
-            : Color(uiColor: .systemBackground)
-        return AnyShapeStyle(baseColor)
-    }
-
-    private var toolCall: InternalToolCall {
-        InternalToolCall(id: request.id.uuidString, toolName: request.toolName, arguments: request.arguments)
-    }
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                ToolCallsInlineView(toolCalls: [toolCall], isOutgoing: false)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(bubbleBackground)
-            .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
-
-            Spacer(minLength: 20)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 2)
-    }
-
-    @ViewBuilder
-    private var bubbleBackground: some View {
-        if enableLiquidGlass {
-            if #available(iOS 26.0, *) {
-                bubbleShape
-                    .fill(bubbleFill)
-                    .glassEffect(.clear, in: bubbleShape)
-                    .clipShape(bubbleShape)
-            } else {
-                bubbleShape
-                    .fill(bubbleFill)
-            }
-        } else {
-            bubbleShape
-                .fill(bubbleFill)
-        }
-    }
-}
-
 private struct SafeAreaBottomKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 
@@ -1337,15 +1259,6 @@ private extension ChatView {
         }
     }
 
-    func shouldShowPendingToolCall(for request: ToolPermissionRequest, in messages: [ChatMessage]) -> Bool {
-        let trimmedArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !messages.contains { message in
-            (message.toolCalls ?? []).contains { call in
-                call.toolName == request.toolName
-                    && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedArguments
-            }
-        }
-    }
 }
 
 // MARK: - Telegram Default Background
