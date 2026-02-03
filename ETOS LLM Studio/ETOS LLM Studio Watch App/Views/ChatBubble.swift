@@ -129,6 +129,22 @@ struct ChatBubble: View {
         return latestAssistantID == message.id
     }
 
+    private var resolvedToolCallsPlacement: ToolCallsPlacement {
+        if let placement = message.toolCallsPlacement {
+            return placement
+        }
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedContent.isEmpty ? .afterReasoning : .afterContent
+    }
+
+    private var shouldShowToolCallsBeforeContent: Bool {
+        hasToolCalls && resolvedToolCallsPlacement == .afterReasoning
+    }
+
+    private var shouldShowToolCallsAfterContent: Bool {
+        hasToolCalls && resolvedToolCallsPlacement == .afterContent
+    }
+
     private var assistantBubbleShape: BubbleCornerShape {
         let baseRadius: CGFloat = 12
         let mergedRadius: CGFloat = 0
@@ -346,21 +362,8 @@ struct ChatBubble: View {
                     reasoningView(reasoning)
                 }
 
-                if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-                    toolCallsInlineView(toolCalls)
-                    if activeToolPermissionRequest != nil {
-                        toolPermissionInlineView(onDecision: { decision in
-                            toolPermissionCenter.resolveActiveRequest(with: decision)
-                        })
-                    }
-                    let shouldShowResults = hasToolResults || hasPendingToolResults
-                    if shouldShowResults {
-                        toolResultsDisclosureView(
-                            toolCalls,
-                            resultText: "",
-                            isPending: hasPendingToolResults
-                        )
-                    }
+                if shouldShowToolCallsBeforeContent {
+                    toolCallsSection
                 }
 
                 if hasReasoning && hasNonPlaceholderText {
@@ -370,6 +373,10 @@ struct ChatBubble: View {
                 if hasNonPlaceholderText {
                     renderContent(message.content)
                         .foregroundColor(isErrorVersion ? .white : nil)
+                }
+
+                if shouldShowToolCallsAfterContent {
+                    toolCallsSection
                 }
 
                 if shouldShowThinkingIndicator {
@@ -391,6 +398,26 @@ struct ChatBubble: View {
 
             assistantBubbleContainer(content, isError: isErrorVersion)
             .contentShape(Rectangle())
+        }
+    }
+
+    @ViewBuilder
+    private var toolCallsSection: some View {
+        if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+            toolCallsInlineView(toolCalls)
+            if activeToolPermissionRequest != nil {
+                toolPermissionInlineView(onDecision: { decision in
+                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                })
+            }
+            let shouldShowResults = hasToolResults || hasPendingToolResults
+            if shouldShowResults {
+                toolResultsDisclosureView(
+                    toolCalls,
+                    resultText: "",
+                    isPending: hasPendingToolResults
+                )
+            }
         }
     }
 

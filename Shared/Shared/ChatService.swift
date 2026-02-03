@@ -1985,6 +1985,9 @@ public class ChatService {
             }
             responseMessage.toolCalls = filteredCalls.isEmpty ? nil : filteredCalls
         }
+        if responseMessage.toolCalls != nil, responseMessage.toolCallsPlacement == nil {
+            responseMessage.toolCallsPlacement = inferredToolCallsPlacement(from: responseMessage.content)
+        }
         // 保持 assistant 角色不变：工具调用消息仍应作为 assistant 消息发送给模型。
 
         // --- 检查是否存在工具调用 ---
@@ -2195,6 +2198,9 @@ public class ChatService {
                             return InternalToolCall(id: id, toolName: resolvedName, arguments: builder.arguments)
                         }
                         if !partialToolCalls.isEmpty {
+                            if messages[index].toolCallsPlacement == nil {
+                                messages[index].toolCallsPlacement = inferredToolCallsPlacement(from: messages[index].content)
+                            }
                             messages[index].toolCalls = partialToolCalls
                         }
                     }
@@ -2222,6 +2228,9 @@ public class ChatService {
                         return InternalToolCall(id: id, toolName: resolvedName, arguments: builder.arguments)
                     }
                     if !finalToolCalls.isEmpty {
+                        if messages[index].toolCallsPlacement == nil {
+                            messages[index].toolCallsPlacement = inferredToolCallsPlacement(from: messages[index].content)
+                        }
                         messages[index].toolCalls = finalToolCalls
                     }
                 }
@@ -2335,6 +2344,9 @@ public class ChatService {
             if let newToolCalls = newMessage.toolCalls {
                 targetMessage.toolCalls = newToolCalls
             }
+            if let newPlacement = newMessage.toolCallsPlacement {
+                targetMessage.toolCallsPlacement = newPlacement
+            }
             
             messages[targetIndex] = targetMessage
             
@@ -2364,6 +2376,7 @@ public class ChatService {
                 content: newMessage.content,
                 reasoningContent: newMessage.reasoningContent,
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
+                toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,
                 tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage
             )
             messagesForSessionSubject.send(messages)
@@ -2398,6 +2411,30 @@ public class ChatService {
         let remainingContent = String(text[lastMatchEnd...])
         finalContent += remainingContent
         return (finalContent.trimmingCharacters(in: .whitespacesAndNewlines), finalReasoning)
+    }
+
+    private func inferredToolCallsPlacement(from content: String) -> ToolCallsPlacement {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return .afterReasoning
+        }
+        let lowered = trimmed.lowercased()
+        let startsWithThought = lowered.hasPrefix("<thought") || lowered.hasPrefix("<thinking") || lowered.hasPrefix("<think")
+        if startsWithThought {
+            let hasClosing = lowered.contains("</thought>") || lowered.contains("</thinking>") || lowered.contains("</think>")
+            if !hasClosing {
+                return .afterReasoning
+            }
+        }
+
+        let (contentWithoutThought, _) = parseThoughtTags(from: content)
+        if !contentWithoutThought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .afterContent
+        }
+        if lowered.contains("<thought") || lowered.contains("<thinking") || lowered.contains("<think") {
+            return .afterReasoning
+        }
+        return .afterContent
     }
 
     private func normalizeEscapedNewlinesIfNeeded(_ text: String) -> String {

@@ -88,13 +88,57 @@ public enum Persistence {
 
         do {
             let data = try Data(contentsOf: fileURL)
-            let loadedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            var loadedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            var didMigratePlacement = false
+            for index in loadedMessages.indices {
+                guard loadedMessages[index].toolCallsPlacement == nil,
+                      let toolCalls = loadedMessages[index].toolCalls,
+                      !toolCalls.isEmpty else { continue }
+                loadedMessages[index].toolCallsPlacement = inferToolCallsPlacement(from: loadedMessages[index].content)
+                didMigratePlacement = true
+            }
+            if didMigratePlacement {
+                logger.info("Migrated toolCallsPlacement for session \(sessionID.uuidString).")
+                saveMessages(loadedMessages, for: sessionID)
+            }
             logger.info("Successfully loaded \(loadedMessages.count) messages for session \(sessionID.uuidString).")
             return loadedMessages
         } catch {
             logger.warning("Failed to load messages for session \(sessionID.uuidString), returning empty list: \(error.localizedDescription)")
             return []
         }
+    }
+
+    private static func inferToolCallsPlacement(from content: String) -> ToolCallsPlacement {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return .afterReasoning
+        }
+        let lowered = trimmed.lowercased()
+        let startsWithThought = lowered.hasPrefix("<thought") || lowered.hasPrefix("<thinking") || lowered.hasPrefix("<think")
+        if startsWithThought {
+            let hasClosing = lowered.contains("</thought>") || lowered.contains("</thinking>") || lowered.contains("</think>")
+            if !hasClosing {
+                return .afterReasoning
+            }
+        }
+        let contentWithoutThought = stripThoughtTags(from: content)
+        if !contentWithoutThought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .afterContent
+        }
+        if lowered.contains("<thought") || lowered.contains("<thinking") || lowered.contains("<think") {
+            return .afterReasoning
+        }
+        return .afterContent
+    }
+
+    private static func stripThoughtTags(from text: String) -> String {
+        let pattern = "<(thought|thinking|think)>(.*?)</\\1>"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+            return text
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "")
     }
     
     // MARK: - 音频文件持久化

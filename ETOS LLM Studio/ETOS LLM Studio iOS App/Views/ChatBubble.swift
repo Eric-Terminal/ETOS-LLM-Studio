@@ -199,6 +199,22 @@ struct ChatBubble: View {
         let latestAssistantID = viewModel.messages.last(where: { $0.role == .assistant })?.id
         return latestAssistantID == message.id
     }
+
+    private var resolvedToolCallsPlacement: ToolCallsPlacement {
+        if let placement = message.toolCallsPlacement {
+            return placement
+        }
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedContent.isEmpty ? .afterReasoning : .afterContent
+    }
+
+    private var shouldShowToolCallsBeforeContent: Bool {
+        hasToolCalls && resolvedToolCallsPlacement == .afterReasoning
+    }
+
+    private var shouldShowToolCallsAfterContent: Bool {
+        hasToolCalls && resolvedToolCallsPlacement == .afterContent
+    }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
         guard message.role != .user,
@@ -436,29 +452,9 @@ struct ChatBubble: View {
                 isShimmering: shouldShimmerReasoningHeader
             )
         }
-        
-        // 工具调用/结果（折叠展示）
-        if let toolCalls = message.toolCalls,
-           !toolCalls.isEmpty {
-            ToolCallsInlineView(
-                toolCalls: toolCalls,
-                isOutgoing: isOutgoing
-            )
-            if activeToolPermissionRequest != nil {
-                ToolPermissionInlineView(onDecision: { decision in
-                    toolPermissionCenter.resolveActiveRequest(with: decision)
-                })
-            }
-            let shouldShowResults = hasToolResults || hasPendingToolResults
-            if shouldShowResults {
-                ToolResultsDisclosureView(
-                    toolCalls: toolCalls,
-                    resultText: message.role == .tool ? message.content : "",
-                    isExpanded: $isToolCallsExpanded,
-                    isOutgoing: isOutgoing,
-                    isPending: hasPendingToolResults
-                )
-            }
+
+        if shouldShowToolCallsBeforeContent {
+            toolCallsSection
         }
         
         // 消息正文
@@ -486,6 +482,36 @@ struct ChatBubble: View {
                 Text("正在思考...")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
+            }
+        }
+
+        if shouldShowToolCallsAfterContent {
+            toolCallsSection
+        }
+    }
+
+    @ViewBuilder
+    private var toolCallsSection: some View {
+        if let toolCalls = message.toolCalls,
+           !toolCalls.isEmpty {
+            ToolCallsInlineView(
+                toolCalls: toolCalls,
+                isOutgoing: isOutgoing
+            )
+            if activeToolPermissionRequest != nil {
+                ToolPermissionInlineView(onDecision: { decision in
+                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                })
+            }
+            let shouldShowResults = hasToolResults || hasPendingToolResults
+            if shouldShowResults {
+                ToolResultsDisclosureView(
+                    toolCalls: toolCalls,
+                    resultText: message.role == .tool ? message.content : "",
+                    isExpanded: $isToolCallsExpanded,
+                    isOutgoing: isOutgoing,
+                    isPending: hasPendingToolResults
+                )
             }
         }
     }
