@@ -26,6 +26,7 @@ struct ContentView: View {
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
     @State private var shouldForceScrollToBottom = false
+    @State private var suppressAutoScrollOnce = false
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
@@ -147,6 +148,7 @@ struct ContentView: View {
             if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
                 let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
                 Button(action: {
+                    suppressAutoScrollOnce = true
                     withAnimation {
                         viewModel.loadMoreHistoryChunk()
                     }
@@ -191,6 +193,10 @@ struct ContentView: View {
             }
         }
         .onChange(of: viewModel.messages.count) {
+            if suppressAutoScrollOnce {
+                suppressAutoScrollOnce = false
+                return
+            }
             let shouldScroll = isAtBottom || shouldForceScrollToBottom
             shouldForceScrollToBottom = false
             guard shouldScroll else { return }

@@ -48,6 +48,7 @@ struct ChatView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var showScrollToBottom = false
+    @State private var suppressAutoScrollOnce = false
     @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
     @State private var messageInfo: MessageInfoPayload?
@@ -213,6 +214,10 @@ struct ChatView: View {
                     )
                     .onChange(of: viewModel.messages.count) { _, _ in
                         guard !viewModel.messages.isEmpty else { return }
+                        if suppressAutoScrollOnce {
+                            suppressAutoScrollOnce = false
+                            return
+                        }
                         scrollToBottom(proxy: proxy)
                     }
                     .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
@@ -1111,6 +1116,7 @@ struct ChatView: View {
         if remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
             let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
             Button {
+                suppressAutoScrollOnce = true
                 withAnimation {
                     viewModel.loadMoreHistoryChunk()
                 }
