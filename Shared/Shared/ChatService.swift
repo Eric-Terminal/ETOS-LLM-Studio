@@ -1455,7 +1455,6 @@ public class ChatService {
         let loadingMessage = ChatMessage(role: .assistant, content: "")
         var requestMessages = leadingMessages
         requestMessages.append(messageToSend)
-        requestMessages.append(loadingMessage)
         
         // 移除旧的 assistant 到下一个 user 之间的消息（不包括被重试的消息本身）
         var middleMessages: [ChatMessage] = []
