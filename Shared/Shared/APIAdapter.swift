@@ -9,9 +9,36 @@
 // ============================================================================
 
 import Foundation
+import CryptoKit
 import os.log
 
 // MARK: - 流式响应的数据片段
+
+private func appendSegment(_ segment: String, to target: inout String?, separator: String = "\n\n") {
+    guard !segment.isEmpty else { return }
+    if target == nil || target?.isEmpty == true {
+        target = segment
+        return
+    }
+    let existing = target ?? ""
+    let existingEndsWithNewline = existing.last == "\n" || existing.last == "\r"
+    let newStartsWithNewline = segment.first == "\n" || segment.first == "\r"
+    let joiner = (existingEndsWithNewline || newStartsWithNewline) ? "" : separator
+    target = existing + joiner + segment
+}
+
+private let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+private let audioPlaceholders: Set<String> = ["[语音消息]", "[語音訊息]", "[音声メッセージ]", "[Voice message]"]
+private let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]"]
+
+private func shouldSendText(_ text: String) -> Bool {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    if imagePlaceholders.contains(trimmed) { return false }
+    if audioPlaceholders.contains(trimmed) { return false }
+    if filePlaceholders.contains(trimmed) { return false }
+    return true
+}
 
 /// 代表从流式 API 响应中解析出的单个数据片段。
 public struct ChatMessagePart {
@@ -43,13 +70,18 @@ public protocol APIAdapter {
     ///   - tools: 一个可选的 `InternalToolDefinition` 数组，定义了可供 AI 使用的工具。
     ///   - audioAttachments: 一个字典，将消息 ID 映射到对应的音频附件，支持历史消息中的音频持续发送。
     ///   - imageAttachments: 一个字典，将消息 ID 映射到对应的图片附件列表，支持视觉模型。
+    ///   - fileAttachments: 一个字典，将消息 ID 映射到对应的文件附件列表。
     /// - Returns: 一个配置好的 `URLRequest` 对象，如果构建失败则返回 `nil`。
-    func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest?
+    func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest?
     
     /// 构建一个用于获取模型列表的网络请求。
     /// - Parameter provider: 需要查询的 `Provider`。
     /// - Returns: 一个配置好的 `URLRequest` 对象。
     func buildModelListRequest(for provider: Provider) -> URLRequest?
+
+    /// 解析模型列表响应，返回模型数组。
+    /// - Parameter data: 从服务器接收到的 `Data` 对象。
+    func parseModelListResponse(data: Data) throws -> [Model]
     
     /// 解析一次性返回的（非流式）API 响应。
     /// - Parameter data: 从服务器接收到的 `Data` 对象。
@@ -90,6 +122,11 @@ public extension APIAdapter {
     func parseEmbeddingResponse(data: Data) throws -> [[Float]] {
         throw NSError(domain: "APIAdapter", code: -11, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现嵌入 API。"])
     }
+
+    func parseModelListResponse(data: Data) throws -> [Model] {
+        let modelResponse = try JSONDecoder().decode(ModelListResponse.self, from: data)
+        return modelResponse.data.map { Model(modelName: $0.id) }
+    }
 }
 
 
@@ -102,8 +139,20 @@ public class OpenAIAdapter: APIAdapter {
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
-        let range = NSRange(name.startIndex..., in: name)
-        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        let sanitized = Self.toolNameRegex.stringByReplacingMatches(in: trimmed, options: [], range: range, withTemplate: "_")
+        return enforceToolNameLimit(sanitized, source: trimmed)
+    }
+
+    private func enforceToolNameLimit(_ name: String, source: String) -> String {
+        let maxLength = 64
+        guard name.count > maxLength else { return name }
+        let digest = SHA256.hash(data: Data(source.utf8))
+        let hash = digest.compactMap { String(format: "%02x", $0) }.joined().prefix(8)
+        let prefixLength = maxLength - 1 - hash.count
+        let prefix = name.prefix(prefixLength)
+        return "\(prefix)_\(hash)"
     }
 
     // MARK: - 内部解码模型 (实现细节)
@@ -154,7 +203,7 @@ public class OpenAIAdapter: APIAdapter {
 
     // MARK: - 协议方法实现
 
-    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest? {
+    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -176,17 +225,18 @@ public class OpenAIAdapter: APIAdapter {
         let apiMessages: [[String: Any]] = messages.map { msg in
             var dict: [String: Any] = ["role": msg.role.rawValue]
             
-            // 检查该消息是否有关联的音频或图片附件
+            // 检查该消息是否有关联的音频、图片或文件附件
             let audioAttachment = audioAttachments[msg.id]
             let msgImageAttachments = imageAttachments[msg.id] ?? []
-            let hasMultiContent = (audioAttachment != nil || !msgImageAttachments.isEmpty) && msg.role == .user
+            let msgFileAttachments = fileAttachments[msg.id] ?? []
+            let hasMultiContent = (audioAttachment != nil || !msgImageAttachments.isEmpty || !msgFileAttachments.isEmpty) && msg.role == .user
             
             if hasMultiContent {
                 var contentParts: [[String: Any]] = []
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 
                 // 添加文本内容
-                if !trimmed.isEmpty && trimmed != "[语音消息]" && trimmed != "[图片]" {
+                if shouldSendText(trimmed) {
                     contentParts.append([
                         "type": "text",
                         "text": trimmed
@@ -211,6 +261,19 @@ public class OpenAIAdapter: APIAdapter {
                         "input_audio": [
                             "data": base64Audio,
                             "format": audioAttachment.format
+                        ]
+                    ])
+                }
+
+                // 添加文件内容
+                for fileAttachment in msgFileAttachments {
+                    let base64File = fileAttachment.data.base64EncodedString()
+                    contentParts.append([
+                        "type": "input_file",
+                        "input_file": [
+                            "data": base64File,
+                            "mime_type": fileAttachment.mimeType,
+                            "file_name": fileAttachment.fileName
                         ]
                     ])
                 }
@@ -269,7 +332,8 @@ public class OpenAIAdapter: APIAdapter {
         
         let containsAudioAttachment = !audioAttachments.isEmpty
         let containsImageAttachment = !imageAttachments.isEmpty
-        let containsMediaAttachment = containsAudioAttachment || containsImageAttachment
+        let containsFileAttachment = !fileAttachments.isEmpty
+        let containsMediaAttachment = containsAudioAttachment || containsImageAttachment || containsFileAttachment
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
@@ -289,6 +353,15 @@ public class OpenAIAdapter: APIAdapter {
                                        let rawData = audioInfo["data"] as? String {
                                         audioInfo["data"] = "[base64 omitted: \(rawData.count) chars]"
                                         contentItem["input_audio"] = audioInfo
+                                    }
+                                }
+                                
+                                // 隐藏文件 base64
+                                if type == "input_file" {
+                                    if var fileInfo = contentItem["input_file"] as? [String: Any],
+                                       let rawData = fileInfo["data"] as? String {
+                                        fileInfo["data"] = "[base64 omitted: \(rawData.count) chars]"
+                                        contentItem["input_file"] = fileInfo
                                     }
                                 }
                                 
@@ -579,8 +652,20 @@ public class GeminiAdapter: APIAdapter {
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
-        let range = NSRange(name.startIndex..., in: name)
-        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        let sanitized = Self.toolNameRegex.stringByReplacingMatches(in: trimmed, options: [], range: range, withTemplate: "_")
+        return enforceToolNameLimit(sanitized, source: trimmed)
+    }
+
+    private func enforceToolNameLimit(_ name: String, source: String) -> String {
+        let maxLength = 64
+        guard name.count > maxLength else { return name }
+        let digest = SHA256.hash(data: Data(source.utf8))
+        let hash = digest.compactMap { String(format: "%02x", $0) }.joined().prefix(8)
+        let prefixLength = maxLength - 1 - hash.count
+        let prefix = name.prefix(prefixLength)
+        return "\(prefix)_\(hash)"
     }
 
     // MARK: - 内部解码模型
@@ -611,6 +696,23 @@ public class GeminiAdapter: APIAdapter {
             let thoughtsTokenCount: Int?
         }
         let usageMetadata: UsageMetadata?
+        struct Error: Decodable {
+            let message: String?
+            let code: Int?
+        }
+        let error: Error?
+    }
+
+    private struct GeminiModelListResponse: Decodable {
+        struct ModelInfo: Decodable {
+            let name: String
+            let displayName: String?
+            let supportedGenerationMethods: [String]?
+        }
+        let models: [ModelInfo]?
+    }
+
+    private struct GeminiErrorEnvelope: Decodable {
         struct Error: Decodable {
             let message: String?
             let code: Int?
@@ -654,7 +756,7 @@ public class GeminiAdapter: APIAdapter {
     
     // MARK: - 协议方法实现
     
-    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest? {
+    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -709,8 +811,14 @@ public class GeminiAdapter: APIAdapter {
             case .tool:
                 // 工具结果需要特殊处理
                 if let toolCall = msg.toolCalls?.first {
+                    let rawName = toolCall.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let sanitizedName = sanitizedToolName(rawName)
+                    if sanitizedName.isEmpty {
+                        logger.error("Gemini 工具结果缺少有效名称，已忽略该条工具响应。")
+                        continue
+                    }
                     let functionResponse: [String: Any] = [
-                        "name": sanitizedToolName(toolCall.toolName),
+                        "name": sanitizedName,
                         "response": ["result": msg.content]
                     ]
                     geminiContents.append([
@@ -727,11 +835,12 @@ public class GeminiAdapter: APIAdapter {
             
             // 检查是否有附件
             let msgImageAttachments = imageAttachments[msg.id] ?? []
+            let msgFileAttachments = fileAttachments[msg.id] ?? []
             let audioAttachment = audioAttachments[msg.id]
             
             // 添加文本内容
             let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty && trimmed != "[语音消息]" && trimmed != "[图片]" {
+            if shouldSendText(trimmed) {
                 parts.append(["text": trimmed])
             }
             
@@ -759,10 +868,27 @@ public class GeminiAdapter: APIAdapter {
                     ]
                 ])
             }
+
+            // 添加文件 (Gemini 格式: inline_data)
+            for fileAttachment in msgFileAttachments {
+                let base64File = fileAttachment.data.base64EncodedString()
+                parts.append([
+                    "inline_data": [
+                        "mime_type": fileAttachment.mimeType,
+                        "data": base64File
+                    ]
+                ])
+            }
             
             // 处理 assistant 消息中的工具调用
             if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 for toolCall in toolCalls {
+                    let rawName = toolCall.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let sanitizedName = sanitizedToolName(rawName)
+                    if sanitizedName.isEmpty {
+                        logger.error("Gemini 工具调用缺少有效名称，已忽略该条工具调用。")
+                        continue
+                    }
                     var argsDict: [String: Any] = [:]
                     if let argsData = toolCall.arguments.data(using: .utf8),
                        let parsed = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] {
@@ -770,7 +896,7 @@ public class GeminiAdapter: APIAdapter {
                     }
                     parts.append([
                         "functionCall": [
-                            "name": sanitizedToolName(toolCall.toolName),
+                            "name": sanitizedName,
                             "args": argsDict
                         ]
                     ])
@@ -824,8 +950,9 @@ public class GeminiAdapter: APIAdapter {
         // 工具定义
         if let tools = tools, !tools.isEmpty {
             let functionDeclarations = tools.map { tool -> [String: Any] in
+                let sanitizedName = sanitizedToolName(tool.name)
                 var funcDef: [String: Any] = [
-                    "name": sanitizedToolName(tool.name),
+                    "name": sanitizedName,
                     "description": tool.description
                 ]
                 if let params = tool.parameters.toAny() as? [String: Any] {
@@ -833,7 +960,12 @@ public class GeminiAdapter: APIAdapter {
                 }
                 return funcDef
             }
-            payload["tools"] = [["function_declarations": functionDeclarations]]
+            let validDeclarations = functionDeclarations.filter { !($0["name"] as? String ?? "").isEmpty }
+            if validDeclarations.isEmpty {
+                logger.error("Gemini 工具定义缺少有效名称，已跳过 tools 字段。")
+            } else {
+                payload["tools"] = [["function_declarations": validDeclarations]]
+            }
         }
         
         do {
@@ -870,6 +1002,29 @@ public class GeminiAdapter: APIAdapter {
         applyHeaderOverrides(provider.headerOverrides, apiKey: apiKey, to: &request)
         return request
     }
+
+    public func parseModelListResponse(data: Data) throws -> [Model] {
+        if let errorEnvelope = try? JSONDecoder().decode(GeminiErrorEnvelope.self, from: data),
+           let error = errorEnvelope.error {
+            throw NSError(domain: "GeminiAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+        }
+
+        let response = try JSONDecoder().decode(GeminiModelListResponse.self, from: data)
+        guard let models = response.models else {
+            return []
+        }
+
+        let supportedModels = models.filter { info in
+            guard let methods = info.supportedGenerationMethods else { return true }
+            return methods.contains("generateContent") || methods.contains("streamGenerateContent")
+        }
+
+        return supportedModels.map { info in
+            let rawName = info.name
+            let normalizedName = rawName.hasPrefix("models/") ? String(rawName.dropFirst("models/".count)) : rawName
+            return Model(modelName: normalizedName, displayName: info.displayName)
+        }
+    }
     
     public func parseResponse(data: Data) throws -> ChatMessage {
         let apiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
@@ -893,11 +1048,7 @@ public class GeminiAdapter: APIAdapter {
             if let text = part.text {
                 if part.thought == true {
                     // 这是思考内容
-                    if reasoningContent == nil {
-                        reasoningContent = text
-                    } else {
-                        reasoningContent! += text
-                    }
+                    appendSegment(text, to: &reasoningContent)
                 } else {
                     textContent += text
                 }
@@ -1098,8 +1249,20 @@ public class AnthropicAdapter: APIAdapter {
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
-        let range = NSRange(name.startIndex..., in: name)
-        return Self.toolNameRegex.stringByReplacingMatches(in: name, options: [], range: range, withTemplate: "_")
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        let sanitized = Self.toolNameRegex.stringByReplacingMatches(in: trimmed, options: [], range: range, withTemplate: "_")
+        return enforceToolNameLimit(sanitized, source: trimmed)
+    }
+
+    private func enforceToolNameLimit(_ name: String, source: String) -> String {
+        let maxLength = 64
+        guard name.count > maxLength else { return name }
+        let digest = SHA256.hash(data: Data(source.utf8))
+        let hash = digest.compactMap { String(format: "%02x", $0) }.joined().prefix(8)
+        let prefixLength = maxLength - 1 - hash.count
+        let prefix = name.prefix(prefixLength)
+        return "\(prefix)_\(hash)"
     }
     
     // MARK: - 内部解码模型
@@ -1180,10 +1343,32 @@ public class AnthropicAdapter: APIAdapter {
     }
     
     public init() {}
+
+    private struct AnthropicModelListResponse: Decodable {
+        struct ModelInfo: Decodable {
+            let id: String
+            let displayName: String?
+            let name: String?
+
+            enum CodingKeys: String, CodingKey {
+                case id
+                case displayName = "display_name"
+                case name
+            }
+        }
+        let data: [ModelInfo]?
+    }
+
+    private struct AnthropicErrorEnvelope: Decodable {
+        struct Error: Decodable {
+            let message: String?
+        }
+        let error: Error?
+    }
     
     // MARK: - 协议方法实现
     
-    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]]) -> URLRequest? {
+    public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -1213,6 +1398,11 @@ public class AnthropicAdapter: APIAdapter {
             if msg.role == .system {
                 systemPrompt = msg.content
                 continue
+            }
+            
+            let hasUnsupportedAttachments = audioAttachments[msg.id] != nil || !(fileAttachments[msg.id] ?? []).isEmpty
+            if hasUnsupportedAttachments {
+                logger.warning("Anthropic 不支持音频/文件附件，已忽略该消息的附件内容。")
             }
             
             // Anthropic 只支持 user 和 assistant 角色
@@ -1264,7 +1454,7 @@ public class AnthropicAdapter: APIAdapter {
                 
                 // 添加文本
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty && trimmed != "[图片]" {
+                if shouldSendText(trimmed) {
                     contentBlocks.append([
                         "type": "text",
                         "text": trimmed
@@ -1311,10 +1501,13 @@ public class AnthropicAdapter: APIAdapter {
                 ])
             } else {
                 // 普通文本消息
-                anthropicMessages.append([
-                    "role": anthropicRole,
-                    "content": msg.content
-                ])
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if shouldSendText(trimmed) {
+                    anthropicMessages.append([
+                        "role": anthropicRole,
+                        "content": msg.content
+                    ])
+                }
             }
         }
         
@@ -1392,9 +1585,40 @@ public class AnthropicAdapter: APIAdapter {
     }
     
     public func buildModelListRequest(for provider: Provider) -> URLRequest? {
-        // Anthropic 没有公开的模型列表 API
-        logger.warning("Anthropic 不提供模型列表 API，请手动配置模型。")
-        return nil
+        guard let baseURL = URL(string: provider.baseURL) else {
+            logger.error("构建模型列表请求失败: 无效的 API 基础 URL - \(provider.baseURL)")
+            return nil
+        }
+
+        guard let apiKey = provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建模型列表请求失败: 提供商 '\(provider.name)' 未配置有效的 API Key。")
+            return nil
+        }
+
+        let modelsURL = baseURL.appendingPathComponent("models")
+        var request = URLRequest(url: modelsURL)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        applyHeaderOverrides(provider.headerOverrides, apiKey: apiKey, to: &request)
+        return request
+    }
+
+    public func parseModelListResponse(data: Data) throws -> [Model] {
+        if let errorEnvelope = try? JSONDecoder().decode(AnthropicErrorEnvelope.self, from: data),
+           let error = errorEnvelope.error {
+            throw NSError(domain: "AnthropicAPIError", code: -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+        }
+
+        let response = try JSONDecoder().decode(AnthropicModelListResponse.self, from: data)
+        guard let models = response.data else {
+            return []
+        }
+        return models.map { info in
+            let displayName = info.displayName ?? info.name
+            return Model(modelName: info.id, displayName: displayName)
+        }
     }
     
     public func parseResponse(data: Data) throws -> ChatMessage {
@@ -1421,11 +1645,7 @@ public class AnthropicAdapter: APIAdapter {
                 }
             case "thinking":
                 if let thinking = block.thinking ?? block.text {
-                    if reasoningContent == nil {
-                        reasoningContent = thinking
-                    } else {
-                        reasoningContent! += thinking
-                    }
+                    appendSegment(thinking, to: &reasoningContent)
                 }
             case "tool_use":
                 if let id = block.id, let name = block.name {

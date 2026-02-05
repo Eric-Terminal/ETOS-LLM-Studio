@@ -35,18 +35,78 @@ struct TelegramBubbleShape: Shape {
     }
 }
 
+private struct BubbleCornerShape: Shape {
+    let topLeft: CGFloat
+    let topRight: CGFloat
+    let bottomLeft: CGFloat
+    let bottomRight: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let tl = min(min(topLeft, rect.width / 2), rect.height / 2)
+        let tr = min(min(topRight, rect.width / 2), rect.height / 2)
+        let bl = min(min(bottomLeft, rect.width / 2), rect.height / 2)
+        let br = min(min(bottomRight, rect.width / 2), rect.height / 2)
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr),
+            radius: tr,
+            startAngle: .degrees(-90),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - br, y: rect.maxY - br),
+            radius: br,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
+        path.addArc(
+            center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl),
+            radius: bl,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
+        path.addArc(
+            center: CGPoint(x: rect.minX + tl, y: rect.minY + tl),
+            radius: tl,
+            startAngle: .degrees(180),
+            endAngle: .degrees(270),
+            clockwise: false
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct ChatBubble: View {
-    let message: ChatMessage
+    @ObservedObject var messageState: ChatMessageRenderState
     @Binding var isReasoningExpanded: Bool
     @Binding var isToolCallsExpanded: Bool
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    let mergeWithPrevious: Bool
+    let mergeWithNext: Bool
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
+    @State private var availableWidth: CGFloat = 0
+    @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.colorScheme) private var colorScheme
     
+    private var message: ChatMessage {
+        messageState.message
+    }
+
     // Telegram 颜色
     private let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
     private let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
@@ -59,8 +119,48 @@ struct ChatBubble: View {
         message.role == .error || (message.role == .assistant && message.content.hasPrefix("重试失败"))
     }
 
-    private var bubbleShape: TelegramBubbleShape {
-        TelegramBubbleShape(isOutgoing: isOutgoing)
+    private var bubbleShape: BubbleCornerShape {
+        let baseRadius: CGFloat = 18
+        let mergedRadius: CGFloat = 0
+        let topRadius = mergeWithPrevious ? mergedRadius : baseRadius
+        let bottomRadius = mergeWithNext ? mergedRadius : baseRadius
+        return BubbleCornerShape(
+            topLeft: topRadius,
+            topRight: topRadius,
+            bottomLeft: bottomRadius,
+            bottomRight: bottomRadius
+        )
+    }
+
+    private var shouldShowMergedSeparator: Bool {
+        mergeWithPrevious && !isOutgoing
+    }
+
+    private var separatorThickness: CGFloat {
+        1 / UIScreen.main.scale
+    }
+
+    private var separatorColor: Color {
+        if isOutgoing {
+            return Color.white.opacity(0.2)
+        }
+        return colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08)
+    }
+
+    private var bubbleShadow: (color: Color, radius: CGFloat, y: CGFloat) {
+        if mergeWithPrevious && mergeWithNext {
+            return (Color.black.opacity(0.04), 1, 0)
+        }
+        return (Color.black.opacity(0.08), 3, 1)
+    }
+
+    private var bubbleMaxWidth: CGFloat {
+        let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
+        return baseWidth * 0.88
+    }
+
+    private var shouldForceMergedWidth: Bool {
+        !isOutgoing && (mergeWithPrevious || mergeWithNext)
     }
     
     /// 图片占位符文本（各语言版本）
@@ -75,6 +175,63 @@ struct ChatBubble: View {
         let isPlaceholderOnly = trimmedContent.isEmpty || Self.imagePlaceholders.contains(trimmedContent)
         return isPlaceholderOnly && message.reasoningContent == nil && message.toolCalls == nil && message.audioFileName == nil
     }
+    
+    private var hasToolCalls: Bool {
+        !(message.toolCalls ?? []).isEmpty
+    }
+    
+    private var hasToolResults: Bool {
+        let hasCallResults = message.toolCalls?.contains { call in
+            !(call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } ?? false
+        if message.role == .tool {
+            let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return hasCallResults || hasContent
+        }
+        return hasCallResults
+    }
+
+    private var hasPendingToolResults: Bool {
+        guard message.role != .tool else { return false }
+        guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return false }
+        guard !hasToolResults else { return false }
+        return activeToolPermissionRequest == nil
+    }
+
+    private var shouldShimmerReasoningHeader: Bool {
+        guard viewModel.isSendingMessage, message.role == .assistant else { return false }
+        return viewModel.latestAssistantMessageID == message.id
+    }
+
+    private var resolvedToolCallsPlacement: ToolCallsPlacement {
+        if let placement = message.toolCallsPlacement {
+            return placement
+        }
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedContent.isEmpty ? .afterReasoning : .afterContent
+    }
+
+    private var shouldShowToolCallsBeforeContent: Bool {
+        hasToolCalls && resolvedToolCallsPlacement == .afterReasoning
+    }
+
+    private var shouldShowToolCallsAfterContent: Bool {
+        hasToolCalls && resolvedToolCallsPlacement == .afterContent
+    }
+    
+    private var activeToolPermissionRequest: ToolPermissionRequest? {
+        guard message.role != .user,
+              let request = toolPermissionCenter.activeRequest,
+              let toolCalls = message.toolCalls else {
+            return nil
+        }
+        let trimmedArgs = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = toolCalls.contains { call in
+            call.toolName == request.toolName
+                && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedArgs
+        }
+        return matches ? request : nil
+    }
 
     private var shouldShowTextBubble: Bool {
         if hasOnlyImages {
@@ -82,7 +239,6 @@ struct ChatBubble: View {
         }
         let hasReasoning = !(message.reasoningContent ?? "").isEmpty
         let hasContent = !message.content.isEmpty
-        let hasToolCalls = !(message.toolCalls ?? []).isEmpty
         let shouldShowThinking = message.role == .assistant
             && !hasContent
             && !hasReasoning
@@ -92,11 +248,11 @@ struct ChatBubble: View {
         case .tool:
             return hasToolCalls || hasContent
         case .assistant, .system:
-            return hasReasoning || hasContent || shouldShowThinking
+            return hasToolCalls || hasReasoning || hasContent || shouldShowThinking
         case .user, .error:
             return hasContent || hasReasoning || hasToolCalls
         @unknown default:
-            return hasReasoning || hasContent || hasToolCalls
+            return hasReasoning || hasContent
         }
     }
     
@@ -111,6 +267,11 @@ struct ChatBubble: View {
                 // 图片附件 - 作为气泡显示
                 if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
                     imageAttachmentsView(fileNames: imageFileNames)
+                }
+
+                // 文件附件 - 作为气泡显示
+                if let fileFileNames = message.fileFileNames, !fileFileNames.isEmpty {
+                    fileAttachmentsView(fileNames: fileFileNames)
                 }
                 
                 // 气泡内容（仅当有非图片内容时显示）
@@ -128,11 +289,12 @@ struct ChatBubble: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(bubbleBackground)
-                    .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+                    .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
+                    .background(bubbleDecoratedBackground)
+                    .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
                 }
             }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.88, alignment: isOutgoing ? .trailing : .leading)
+            .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
             
             // AI 消息靠左：右边放 Spacer
             if !isOutgoing {
@@ -140,7 +302,18 @@ struct ChatBubble: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 2)
+        .padding(.top, mergeWithPrevious ? 0 : 3)
+        .padding(.bottom, mergeWithNext ? 0 : 3)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)
+            }
+        )
+        .onPreferenceChange(RowWidthKey.self) { newValue in
+            if availableWidth != newValue {
+                availableWidth = newValue
+            }
+        }
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -149,6 +322,14 @@ struct ChatBubble: View {
                     .scaledToFit()
                     .padding(24)
             }
+        }
+    }
+
+    private struct RowWidthKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
         }
     }
     
@@ -247,6 +428,18 @@ struct ChatBubble: View {
                 .fill(bubbleGradient)
         }
     }
+
+    private var bubbleDecoratedBackground: some View {
+        ZStack(alignment: .top) {
+            bubbleBackground
+            if shouldShowMergedSeparator {
+                Rectangle()
+                    .fill(separatorColor)
+                    .frame(height: separatorThickness)
+            }
+        }
+        .clipShape(bubbleShape)
+    }
     
     // MARK: - Content
     
@@ -258,24 +451,13 @@ struct ChatBubble: View {
             ReasoningDisclosureView(
                 reasoning: reasoning,
                 isExpanded: $isReasoningExpanded,
-                isOutgoing: isOutgoing
+                isOutgoing: isOutgoing,
+                isShimmering: shouldShimmerReasoningHeader
             )
         }
-        
-        // 工具调用/结果（折叠展示）
-        if let toolCalls = message.toolCalls,
-           !toolCalls.isEmpty,
-           message.role == .tool {
-            ToolCallsInlineView(
-                toolCalls: toolCalls,
-                isOutgoing: isOutgoing
-            )
-            ToolResultsDisclosureView(
-                toolCalls: toolCalls,
-                resultText: message.content,
-                isExpanded: $isToolCallsExpanded,
-                isOutgoing: isOutgoing
-            )
+
+        if shouldShowToolCallsBeforeContent {
+            toolCallsSection
         }
         
         // 消息正文
@@ -292,11 +474,47 @@ struct ChatBubble: View {
                   (message.reasoningContent ?? "").isEmpty,
                   (message.toolCalls ?? []).isEmpty {
             // 加载指示器
-            HStack(spacing: 8) {
-                TelegramTypingIndicator()
+            if viewModel.isSendingMessage {
+                ShimmeringText(
+                    text: "正在思考...",
+                    font: .subheadline,
+                    baseColor: Color.secondary,
+                    highlightColor: Color.primary.opacity(0.85)
+                )
+            } else {
                 Text("正在思考...")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
+            }
+        }
+
+        if shouldShowToolCallsAfterContent {
+            toolCallsSection
+        }
+    }
+
+    @ViewBuilder
+    private var toolCallsSection: some View {
+        if let toolCalls = message.toolCalls,
+           !toolCalls.isEmpty {
+            ToolCallsInlineView(
+                toolCalls: toolCalls,
+                isOutgoing: isOutgoing
+            )
+            if activeToolPermissionRequest != nil {
+                ToolPermissionInlineView(onDecision: { decision in
+                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                })
+            }
+            let shouldShowResults = hasToolResults || hasPendingToolResults
+            if shouldShowResults {
+                ToolResultsDisclosureView(
+                    toolCalls: toolCalls,
+                    resultText: message.role == .tool ? message.content : "",
+                    isExpanded: $isToolCallsExpanded,
+                    isOutgoing: isOutgoing,
+                    isPending: hasPendingToolResults
+                )
             }
         }
     }
@@ -356,6 +574,30 @@ struct ChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func fileAttachmentsView(fileNames: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(fileNames, id: \.self) { fileName in
+                HStack(spacing: 8) {
+                    Image(systemName: "doc")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
+                    Text(fileName)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground))
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
     }
     
     private func loadImage(fileName: String) -> UIImage? {
@@ -585,12 +827,16 @@ struct ReasoningDisclosureView: View, Equatable {
     let reasoning: String
     @Binding var isExpanded: Bool
     let isOutgoing: Bool
+    let isShimmering: Bool
     
     // 限制显示的最大字符数，超过时截断并提示
     private static let maxDisplayLength = 8000
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
-        lhs.reasoning == rhs.reasoning && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing
+        lhs.reasoning == rhs.reasoning
+            && lhs.isExpanded == rhs.isExpanded
+            && lhs.isOutgoing == rhs.isOutgoing
+            && lhs.isShimmering == rhs.isShimmering
     }
     
     private var displayText: String {
@@ -602,6 +848,8 @@ struct ReasoningDisclosureView: View, Equatable {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            let baseColor = isOutgoing ? Color.white.opacity(0.9) : Color.secondary
+            let highlightColor = isOutgoing ? Color.white : Color.primary.opacity(0.85)
             // 点击区域：标题行
             Button {
                 isExpanded.toggle()
@@ -609,14 +857,27 @@ struct ReasoningDisclosureView: View, Equatable {
                 HStack(spacing: 6) {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 12))
-                    Text("思考过程")
-                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(baseColor)
+                    if isShimmering {
+                        ShimmeringText(
+                            text: "思考过程",
+                            font: .subheadline.weight(.medium),
+                            baseColor: baseColor,
+                            highlightColor: highlightColor
+                        )
+                        .lineLimit(1)
+                    } else {
+                        Text("思考过程")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(baseColor)
+                            .lineLimit(1)
+                    }
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundStyle(baseColor)
                 }
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -655,30 +916,106 @@ struct ToolCallsInlineView: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(toolCalls, id: \.id) { call in
-                let trimmedArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
                 let label = displayName(for: call.toolName)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "wrench.and.screwdriver")
-                            .font(.system(size: 12))
-                        Text("调用：\(label)")
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                    }
-                    if !trimmedArgs.isEmpty {
-                        Text(trimmedArgs)
-                            .font(.caption)
-                            .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                ToolCallDisclosureRow(
+                    label: label,
+                    arguments: call.arguments,
+                    isOutgoing: isOutgoing
                 )
             }
         }
+    }
+
+    private struct ToolCallDisclosureRow: View {
+        let label: String
+        let arguments: String
+        let isOutgoing: Bool
+        @State private var isExpanded = true
+
+        private var trimmedArguments: String {
+            arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                if trimmedArguments.isEmpty {
+                    toolHeader
+                } else {
+                    Button {
+                        isExpanded.toggle()
+                    } label: {
+                        toolHeader
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if !trimmedArguments.isEmpty, isExpanded {
+                    CappedScrollableText(
+                        text: trimmedArguments,
+                        maxHeight: 200,
+                        font: .caption,
+                        foreground: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                        enableSelection: true
+                    )
+                    .padding(6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                    )
+                }
+            }
+        }
+
+        private var toolHeader: some View {
+            HStack(spacing: 6) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.system(size: 12))
+                Text("调用：\(label)")
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                if !trimmedArguments.isEmpty {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+            }
+            .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+            .contentShape(Rectangle())
+        }
+    }
+}
+
+private struct ToolPermissionInlineView: View {
+    let onDecision: (ToolPermissionDecision) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button("允许") {
+                onDecision(.allowOnce)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Menu {
+                Button("拒绝", role: .destructive) {
+                    onDecision(.deny)
+                }
+                Button("补充提示") {
+                    onDecision(.supplement)
+                }
+                Button("保持允许") {
+                    onDecision(.allowForTool)
+                }
+                Button("完全权限") {
+                    onDecision(.allowAll)
+                }
+            } label: {
+                Label("更多", systemImage: "ellipsis")
+            }
+            .buttonStyle(.bordered)
+        }
+        .controlSize(.small)
+        .padding(.top, 4)
     }
 }
 
@@ -687,9 +1024,14 @@ struct ToolResultsDisclosureView: View, Equatable {
     let resultText: String
     @Binding var isExpanded: Bool
     let isOutgoing: Bool
+    let isPending: Bool
     
     static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
-        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isExpanded == rhs.isExpanded && lhs.isOutgoing == rhs.isOutgoing && lhs.resultText == rhs.resultText
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
+            && lhs.isExpanded == rhs.isExpanded
+            && lhs.isOutgoing == rhs.isOutgoing
+            && lhs.resultText == rhs.resultText
+            && lhs.isPending == rhs.isPending
     }
 
     private func displayName(for toolName: String) -> String {
@@ -702,26 +1044,46 @@ struct ToolResultsDisclosureView: View, Equatable {
     var body: some View {
         let toolNames = toolCalls.map { displayName(for: $0.toolName) }
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                isExpanded.toggle()
-            } label: {
+            if isPending {
                 HStack(spacing: 6) {
                     Image(systemName: "wrench.and.screwdriver")
                         .font(.system(size: 12))
-                    Text("结果：\(toolNames.joined(separator: ", "))")
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
+                    ShimmeringText(
+                        text: "结果：\(toolNames.joined(separator: ", "))",
+                        font: .subheadline.weight(.medium),
+                        baseColor: isOutgoing ? Color.white.opacity(0.9) : Color.secondary,
+                        highlightColor: isOutgoing ? Color.white : Color.primary.opacity(0.85)
+                    )
+                    .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.4) : Color.secondary.opacity(0.6))
                 }
                 .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
                 .contentShape(Rectangle())
+            } else {
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.system(size: 12))
+                        Text("结果：\(toolNames.joined(separator: ", "))")
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    }
+                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             
-            if isExpanded {
+            if isExpanded && !isPending {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(toolCalls, id: \.id) { call in
                         let result = (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -730,9 +1092,13 @@ struct ToolResultsDisclosureView: View, Equatable {
                             Text(label)
                                 .font(.caption.weight(.semibold))
                             if !result.isEmpty {
-                                Text(result)
-                                    .font(.caption)
-                                    .textSelection(.enabled)
+                                CappedScrollableText(
+                                    text: result,
+                                    maxHeight: 200,
+                                    font: .caption,
+                                    foreground: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                                    enableSelection: true
+                                )
                             }
                         }
                         .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
@@ -748,5 +1114,114 @@ struct ToolResultsDisclosureView: View, Equatable {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}
+
+private struct ShimmeringText: View {
+    let text: String
+    let font: Font
+    let baseColor: Color
+    let highlightColor: Color
+    var duration: Double = 1.6
+    var angle: Double = 18
+    var bandWidthRatio: CGFloat = 0.6
+    var bandHeightRatio: CGFloat = 1.6
+
+    @State private var isAnimating = false
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(baseColor)
+            .overlay(
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    let height = proxy.size.height
+                    let bandWidth = max(1, width * bandWidthRatio)
+                    let bandHeight = max(1, height * bandHeightRatio)
+                    let startX = -bandWidth
+                    let endX = width + bandWidth
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: highlightColor, location: 0.35),
+                                    .init(color: highlightColor, location: 0.65),
+                                    .init(color: .clear, location: 1)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: bandWidth, height: bandHeight)
+                        .rotationEffect(.degrees(angle))
+                        .position(x: isAnimating ? endX : startX, y: height / 2)
+                        .blendMode(.screen)
+                }
+                .mask(
+                    Text(text)
+                        .font(font)
+                )
+                .allowsHitTesting(false)
+            )
+            .onAppear {
+                guard !isAnimating else { return }
+                withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                    isAnimating = true
+                }
+            }
+    }
+}
+
+private struct CappedScrollableText: View {
+    let text: String
+    let maxHeight: CGFloat
+    let font: Font
+    let foreground: Color
+    let enableSelection: Bool
+    @State private var measuredHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView {
+            textView
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: TextHeightKey.self, value: proxy.size.height)
+                    }
+                )
+        }
+        .frame(height: resolvedHeight)
+        .onPreferenceChange(TextHeightKey.self) { measuredHeight = $0 }
+    }
+
+    private var resolvedHeight: CGFloat {
+        guard measuredHeight > 0 else { return maxHeight }
+        return min(measuredHeight, maxHeight)
+    }
+
+    @ViewBuilder
+    private var textView: some View {
+        if enableSelection {
+            Text(text)
+                .font(font)
+                .foregroundStyle(foreground)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(text)
+                .font(font)
+                .foregroundStyle(foreground)
+                .textSelection(.disabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct TextHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

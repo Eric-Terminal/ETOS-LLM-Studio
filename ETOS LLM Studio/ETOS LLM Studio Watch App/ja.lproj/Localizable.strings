@@ -55,7 +55,7 @@
 "同步记忆（仅文本）" = "記憶同期（テキストのみ）";
 "名称" = "名前";
 "向上加载 %d 条记录" = "過去の記録を %d 件読み込み";
-"向上加载 %d 轮对话" = "過去の %d ラウンドを読み込む（2 ラウンドずつ）";
+"向上加载 %d 轮对话" = "過去の %d ラウンドを読み込む";
 "启用液态玻璃" = "液体ガラスを有効化";
 "唯一标识" = "識別子";
 "基础信息" = "基本情報";
@@ -209,8 +209,8 @@
 "JSON 输入" = "JSON 入力";
 "MCP 工具箱" = "MCP ツールボックス";
 "MCP 工具集成" = "MCP ツール連携";
-"MCP 工具集成(试验性)" = "MCP ツール連携（試験的）";
-"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "Model Context Protocol は統一インターフェースでリモートのツール/リソースを発見・呼び出しできます。ここでサーバー管理、能力の確認、JSON テストが可能です。";
+"MCP 工具集成(试验性)" = "MCP ツール連携";
+"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "MCP ツールサーバーを設定し、アシスタントにリモート機能を呼び出させます。ここでサーバー管理・能力確認・JSON デバッグができます。";
 "OpenAI 兼容" = "OpenAI 互換";
 "PIN 码" = "PIN コード";
 "PIN 码随机生成,请勿泄露" = "PIN はランダム生成です。共有しないでください。";
@@ -523,7 +523,7 @@
 "连接控制" = "接続制御";
 "连接概览" = "接続概要";
 "连接状态" = "接続状態";
-"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "Model Context Protocol 準拠のツールサーバーに接続し、クライアントで管理/デバッグします。";
+"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "MCP ツールサーバーを設定し、アシスタントに外部機能を呼び出させます。";
 "选择背景图" = "背景画像を選択";
 "通过代理可绕过 ATS 限制。" = "プロキシで ATS 制限を回避できます。";
 "通过代理将请求转发到目标 MCP Server，以绕过 ATS 对证书/域名的限制。默认使用 mcp.ericterminal.com。" = "プロキシで MCP Server への要求を転送し、ATS の証明書/ドメイン制限を回避します。既定は mcp.ericterminal.com。";
@@ -627,7 +627,7 @@
 "管理应用内数据" = "アプリ内データを管理";
 "系统公告" = "システム告知";
 "紧急通知" = "緊急通知";
-"让 AI 能够调用 MCP 提供的各种工具和服务。" = "AI が MCP 提供の各種ツールやサービスを呼び出せるようにします。";
+"让 AI 能够调用 MCP 提供的各种工具和服务。" = "MCP ツールサーバーを設定し、アシスタントに外部機能を呼び出させます。";
 "记下显示的 IP 地址" = "表示された IP アドレスを控えてください";
 "设备主动连接电脑端服务器（端口 8765），实时接收命令" = "デバイスがPC側サーバー（ポート8765）へ能動的に接続し、リアルタイムでコマンドを受信します。";
 "设备每秒向服务器（端口 7654）请求一次，获取待执行命令" = "デバイスはサーバー（ポート7654）へ毎秒1回リクエストし、待機中のコマンドを取得します。";
@@ -703,3 +703,5 @@
 "API 地址应为基础地址，例如: https://api.openai.com/v1" = "API のベースURL例: https://api.openai.com/v1";
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API のベースURL例: https://api.anthropic.com/v1";
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API のベースURL例: https://generativelanguage.googleapis.com/v1beta";
+"使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "key=value でリクエストヘッダーを追加します（例: Authorization=Bearer your_token）。\nAuthorization などの認証ヘッダーは手動で入力してください。";
+"使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "key=value でリクエストヘッダーを追加します（例: Authorization=Bearer {token}）。\n{token} は上の Bearer API Key 入力値に置き換えられます。";

@@ -24,14 +24,14 @@ struct MCPIntegrationView: View {
     var body: some View {
         List {
             Section("关于 MCP") {
-                Text("Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。")
+                Text("配置 MCP 工具服务器，让助手调用远程能力。可在这里管理 Server、查看能力，并用 JSON 调试。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             
             Section("已配置服务器") {
                 if manager.servers.isEmpty {
-                    Text("尚未添加任何 MCP Server。点击右上角的“＋”来新建。")
+                    Text("尚未添加任何 MCP Server。点击右上角“＋”创建。")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(manager.servers) { server in
@@ -87,13 +87,13 @@ struct MCPIntegrationView: View {
                     )
                 )
                     .font(.footnote)
-                Button("刷新所有已连接服务器") {
+                Button("刷新已连接服务器") {
                     manager.refreshMetadata()
                 }
                 .disabled(manager.isBusy || connectedCount == 0)
                 
                 if manager.isBusy {
-                    ProgressView("正在同步 MCP 状态…")
+                    ProgressView("正在同步…")
                 }
             }
             
@@ -511,12 +511,14 @@ private struct MCPServerDetailView: View {
                     String(format: NSLocalizedString("工具 (%d)", comment: ""), status.tools.count)
                 ) {
                     ForEach(status.tools) { tool in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(tool.toolId)
-                            if let desc = tool.description {
-                                Text(desc)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                        Toggle(isOn: toolBinding(for: tool.toolId)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(tool.toolId)
+                                if let desc = tool.description {
+                                    Text(desc)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -579,6 +581,14 @@ private struct MCPServerDetailView: View {
             }
         }
     }
+
+    private func toolBinding(for toolId: String) -> Binding<Bool> {
+        Binding {
+            manager.isToolEnabled(serverID: server.id, toolId: toolId)
+        } set: { newValue in
+            manager.setToolEnabled(serverID: server.id, toolId: toolId, isEnabled: newValue)
+        }
+    }
 }
 
 // MARK: - Server Editor
@@ -598,8 +608,8 @@ private struct MCPServerEditor: View {
     @State private var oauthScope: String
     @State private var transportOption: TransportOption
     @State private var notes: String
+    @State private var headerOverrideEntries: [HeaderOverrideEntry]
     @State private var validationMessage: String?
-    @State private var showAdvanced: Bool
     
     init(existingServer: MCPServerConfiguration?, onSave: @escaping (MCPServerConfiguration) -> Void) {
         self.existingServer = existingServer
@@ -610,6 +620,7 @@ private struct MCPServerEditor: View {
             _notes = State(initialValue: server.notes ?? "")
             switch server.transport {
             case .http(let endpoint, let apiKey, _):
+                let serializedHeaders = HeaderExpressionParser.serialize(headers: server.additionalHeaders)
                 _endpoint = State(initialValue: endpoint.absoluteString)
                 _sseEndpoint = State(initialValue: "")
                 _apiKey = State(initialValue: apiKey ?? "")
@@ -618,9 +629,12 @@ private struct MCPServerEditor: View {
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
                 _transportOption = State(initialValue: .http)
-                _showAdvanced = State(initialValue: false)
-            case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, _):
-                _endpoint = State(initialValue: messageEndpoint.absoluteString)
+                _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
+                    ? [HeaderOverrideEntry(text: "")]
+                    : serializedHeaders.map { HeaderOverrideEntry(text: $0) })
+            case .httpSSE(_, let sseEndpoint, let apiKey, _):
+                let serializedHeaders = HeaderExpressionParser.serialize(headers: server.additionalHeaders)
+                _endpoint = State(initialValue: MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint).absoluteString)
                 _sseEndpoint = State(initialValue: sseEndpoint.absoluteString)
                 _apiKey = State(initialValue: apiKey ?? "")
                 _tokenEndpoint = State(initialValue: "")
@@ -628,7 +642,9 @@ private struct MCPServerEditor: View {
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
                 _transportOption = State(initialValue: .sse)
-                _showAdvanced = State(initialValue: messageEndpoint != MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint))
+                _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
+                    ? [HeaderOverrideEntry(text: "")]
+                    : serializedHeaders.map { HeaderOverrideEntry(text: $0) })
             case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
                 _endpoint = State(initialValue: endpoint.absoluteString)
                 _sseEndpoint = State(initialValue: "")
@@ -638,7 +654,7 @@ private struct MCPServerEditor: View {
                 _oauthScope = State(initialValue: scope ?? "")
                 _apiKey = State(initialValue: "")
                 _transportOption = State(initialValue: .oauth)
-                _showAdvanced = State(initialValue: false)
+                _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
             @unknown default:
                 _endpoint = State(initialValue: "")
                 _sseEndpoint = State(initialValue: "")
@@ -648,7 +664,7 @@ private struct MCPServerEditor: View {
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
                 _transportOption = State(initialValue: .http)
-                _showAdvanced = State(initialValue: false)
+                _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
             }
         } else {
             _displayName = State(initialValue: "")
@@ -661,7 +677,7 @@ private struct MCPServerEditor: View {
             _clientSecret = State(initialValue: "")
             _oauthScope = State(initialValue: "")
             _transportOption = State(initialValue: .http)
-            _showAdvanced = State(initialValue: false)
+            _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
         }
     }
     
@@ -679,15 +695,8 @@ private struct MCPServerEditor: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    Toggle("高级选项", isOn: $showAdvanced)
-                    if showAdvanced {
-                        TextField("Message Endpoint (可选)", text: $endpoint)
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
                 } else {
-                    TextField("HTTP(S) Endpoint", text: $endpoint)
+                    TextField("Streamable HTTP Endpoint", text: $endpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -714,6 +723,31 @@ private struct MCPServerEditor: View {
                     .frame(minHeight: 60)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
             }
+
+            if transportOption.requiresAPIKey {
+                Section(header: Text("请求头覆盖"), footer: Text(headerOverridesHint)) {
+                    ForEach($headerOverrideEntries) { $entry in
+                        HeaderOverrideRow(entry: $entry)
+                            .onChange(of: entry.text) { _, _ in
+                                validateHeaderOverrideEntry(withId: entry.id)
+                            }
+                    }
+                    .onDelete(perform: deleteHeaderOverrideEntries)
+
+                    Button {
+                        addHeaderOverrideEntry()
+                    } label: {
+                        Label("添加表达式", systemImage: "plus")
+                    }
+                }
+
+                Section(header: Text("请求头预览")) {
+                    Text(headerOverridesPreview.text)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(headerOverridesPreview.isPlaceholder ? .secondary : .primary)
+                        .textSelection(.enabled)
+                }
+            }
             
             if let validationMessage {
                 Section {
@@ -732,22 +766,20 @@ private struct MCPServerEditor: View {
                 Button("保存") {
                     saveServer()
                 }
-                .disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty ||
-                          (transportOption == .sse
-                           ? sseEndpoint.trimmingCharacters(in: .whitespaces).isEmpty
-                           : endpoint.trimmingCharacters(in: .whitespaces).isEmpty) ||
-                          !oauthFieldsValid())
-            }
-        }
-        .onChange(of: showAdvanced) { _, newValue in
-            if !newValue && transportOption == .sse {
-                endpoint = ""
+                .disabled(isSaveDisabled)
             }
         }
     }
     
     private func saveServer() {
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let additionalHeaders: [String: String]
+        if transportOption.requiresAPIKey {
+            guard let builtHeaders = buildHeaderOverrides() else { return }
+            additionalHeaders = builtHeaders
+        } else {
+            additionalHeaders = [:]
+        }
         
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let transport: MCPServerConfiguration.Transport
@@ -757,10 +789,10 @@ private struct MCPServerEditor: View {
             guard let url = URL(string: trimmedEndpoint),
                   let scheme = url.scheme,
                   scheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 HTTP 或 HTTPS 地址。"
+                validationMessage = "请提供合法的 Streamable HTTP 地址。"
                 return
             }
-            transport = .http(endpoint: url, apiKey: trimmedKey.isEmpty ? nil : trimmedKey, additionalHeaders: [:])
+            transport = .http(endpoint: url, apiKey: trimmedKey.isEmpty ? nil : trimmedKey, additionalHeaders: additionalHeaders)
         case .sse:
             let trimmedSSE = sseEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let sseURL = URL(string: trimmedSSE),
@@ -769,24 +801,11 @@ private struct MCPServerEditor: View {
                 validationMessage = "请提供合法的 SSE Endpoint。"
                 return
             }
-            let trimmedMessage = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-            let messageURL: URL
-            if trimmedMessage.isEmpty {
-                messageURL = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseURL)
-            } else {
-                guard let parsedMessage = URL(string: trimmedMessage),
-                      let messageScheme = parsedMessage.scheme,
-                      messageScheme.lowercased().hasPrefix("http") else {
-                    validationMessage = "请提供合法的 Message Endpoint。"
-                    return
-                }
-                messageURL = parsedMessage
-            }
             transport = .httpSSE(
-                messageEndpoint: messageURL,
+                messageEndpoint: MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseURL),
                 sseEndpoint: sseURL,
                 apiKey: trimmedKey.isEmpty ? nil : trimmedKey,
-                additionalHeaders: [:]
+                additionalHeaders: additionalHeaders
             )
         case .oauth:
             let trimmedEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -839,6 +858,125 @@ private struct MCPServerEditor: View {
         }
         return true
     }
+
+    private var headerOverridesHint: String {
+        NSLocalizedString("使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。", comment: "")
+    }
+
+    private var isSaveDisabled: Bool {
+        displayName.trimmingCharacters(in: .whitespaces).isEmpty ||
+        (transportOption == .sse
+         ? sseEndpoint.trimmingCharacters(in: .whitespaces).isEmpty
+         : endpoint.trimmingCharacters(in: .whitespaces).isEmpty) ||
+        !oauthFieldsValid() ||
+        (transportOption.requiresAPIKey && headerOverrideEntries.contains { $0.error != nil })
+    }
+
+    private func addHeaderOverrideEntry() {
+        headerOverrideEntries.append(HeaderOverrideEntry(text: ""))
+    }
+
+    private func deleteHeaderOverrideEntries(at offsets: IndexSet) {
+        headerOverrideEntries.remove(atOffsets: offsets)
+        if headerOverrideEntries.isEmpty {
+            addHeaderOverrideEntry()
+        }
+    }
+
+    private func validateHeaderOverrideEntry(withId id: UUID) {
+        guard let index = headerOverrideEntries.firstIndex(where: { $0.id == id }) else { return }
+        var entry = headerOverrideEntries[index]
+        let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            entry.error = nil
+            headerOverrideEntries[index] = entry
+            return
+        }
+
+        do {
+            _ = try HeaderExpressionParser.parse(trimmed)
+            entry.error = nil
+        } catch {
+            entry.error = error.localizedDescription
+        }
+        headerOverrideEntries[index] = entry
+    }
+
+    private func buildHeaderOverrides() -> [String: String]? {
+        var updatedEntries = headerOverrideEntries
+        var parsedExpressions: [HeaderExpressionParser.ParsedExpression] = []
+        var hasError = false
+
+        for index in updatedEntries.indices {
+            let trimmed = updatedEntries[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                updatedEntries[index].error = nil
+                continue
+            }
+
+            do {
+                let parsed = try HeaderExpressionParser.parse(trimmed)
+                parsedExpressions.append(parsed)
+                updatedEntries[index].error = nil
+            } catch {
+                updatedEntries[index].error = error.localizedDescription
+                hasError = true
+            }
+        }
+
+        headerOverrideEntries = updatedEntries
+        if hasError {
+            return nil
+        }
+        return HeaderExpressionParser.buildHeaders(from: parsedExpressions)
+    }
+
+    private var headerOverridesPreview: HeaderOverridesPreview {
+        let result = previewHeaderOverrides()
+        if result.hasError {
+            return HeaderOverridesPreview(
+                text: NSLocalizedString("表达式有误，无法预览", comment: ""),
+                isPlaceholder: true
+            )
+        }
+        if result.headers.isEmpty {
+            return HeaderOverridesPreview(
+                text: NSLocalizedString("暂无请求头表达式", comment: ""),
+                isPlaceholder: true
+            )
+        }
+        return HeaderOverridesPreview(
+            text: prettyPrintedJSON(result.headers),
+            isPlaceholder: false
+        )
+    }
+
+    private func previewHeaderOverrides() -> (headers: [String: String], hasError: Bool) {
+        var headers: [String: String] = [:]
+        var hasError = false
+
+        for entry in headerOverrideEntries {
+            let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            do {
+                let parsed = try HeaderExpressionParser.parse(trimmed)
+                headers[parsed.key] = parsed.value
+            } catch {
+                hasError = true
+            }
+        }
+
+        return (headers: headers, hasError: hasError)
+    }
+
+    private func prettyPrintedJSON(_ headers: [String: String]) -> String {
+        guard JSONSerialization.isValidJSONObject(headers),
+              let data = try? JSONSerialization.data(withJSONObject: headers, options: [.prettyPrinted, .sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else {
+            return "\(headers)"
+        }
+        return string
+    }
     
     private enum TransportOption: String, CaseIterable, Identifiable {
         case http
@@ -849,8 +987,8 @@ private struct MCPServerEditor: View {
         
         var label: String {
             switch self {
-            case .http: return "HTTP / Bearer"
-            case .sse: return "HTTP + SSE"
+            case .http: return "Streamable HTTP"
+            case .sse: return "SSE"
             case .oauth: return "OAuth 2.0"
             }
         }
@@ -859,6 +997,42 @@ private struct MCPServerEditor: View {
             switch self {
             case .http, .sse: return true
             case .oauth: return false
+            }
+        }
+    }
+}
+
+private struct HeaderOverridesPreview {
+    let text: String
+    let isPlaceholder: Bool
+}
+
+private struct HeaderOverrideEntry: Identifiable, Equatable {
+    let id: UUID
+    var text: String
+    var error: String?
+
+    init(id: UUID = UUID(), text: String, error: String? = nil) {
+        self.id = id
+        self.text = text
+        self.error = error
+    }
+}
+
+private struct HeaderOverrideRow: View {
+    @Binding var entry: HeaderOverrideEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.body.monospaced())
+
+            if let error = entry.error {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
             }
         }
     }

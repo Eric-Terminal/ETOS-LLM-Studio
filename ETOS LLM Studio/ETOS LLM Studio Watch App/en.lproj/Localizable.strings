@@ -55,7 +55,7 @@
 "同步记忆（仅文本）" = "Sync memory (text only)";
 "名称" = "Name";
 "向上加载 %d 条记录" = "Load %d earlier";
-"向上加载 %d 轮对话" = "Load %d earlier rounds (2 at a time)";
+"向上加载 %d 轮对话" = "Load %d earlier rounds";
 "启用液态玻璃" = "Enable Liquid Glass";
 "唯一标识" = "Identifier";
 "基础信息" = "Basic info";
@@ -209,8 +209,8 @@
 "JSON 输入" = "JSON Input";
 "MCP 工具箱" = "MCP Toolbox";
 "MCP 工具集成" = "MCP Tool Integration";
-"MCP 工具集成(试验性)" = "MCP Tool Integration (Beta)";
-"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "Model Context Protocol lets clients discover and call remote tools/resources via a unified interface. Manage servers, view their capabilities, and test with JSON here.";
+"MCP 工具集成(试验性)" = "MCP Tool Integration";
+"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "Set up MCP tool servers so the assistant can call remote capabilities. Manage servers, inspect capabilities, and debug with JSON here.";
 "OpenAI 兼容" = "OpenAI Compatible";
 "PIN 码" = "PIN";
 "PIN 码随机生成,请勿泄露" = "PIN is randomly generated. Do not share.";
@@ -350,6 +350,7 @@
 "成功响应" = "Successful response";
 "多个 API Key 用英文逗号分隔。" = "Use commas (,) to separate multiple API keys.";
 "使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}" = "Use key=value to add or override request headers, e.g. User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64).\n{api_key} is replaced with the current API key, e.g. Authorization=Bearer {api_key}";
+"使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "Use key=value to add request headers, e.g. Authorization=Bearer your_token.\nAdd Authorization and other auth headers manually.";
 "请求头表达式，例如 User-Agent=Mozilla/5.0" = "Header expression, e.g. User-Agent=Mozilla/5.0";
 "请求头覆盖" = "Header overrides";
 "请求头预览" = "Header preview";
@@ -530,7 +531,7 @@
 "连接控制" = "Connection control";
 "连接概览" = "Connection overview";
 "连接状态" = "Connection status";
-"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "Connect MCP tool servers and manage/debug directly in the client.";
+"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "Set up MCP tool servers so the assistant can call external capabilities.";
 "选择背景图" = "Select background image";
 "通过代理可绕过 ATS 限制。" = "Proxy can bypass ATS restrictions.";
 "通过代理将请求转发到目标 MCP Server，以绕过 ATS 对证书/域名的限制。默认使用 mcp.ericterminal.com。" = "Proxy forwards requests to the target MCP Server to bypass ATS certificate/domain restrictions. Default is mcp.ericterminal.com.";
@@ -634,7 +635,7 @@
 "管理应用内数据" = "Manage in-app data";
 "系统公告" = "System announcements";
 "紧急通知" = "Urgent notice";
-"让 AI 能够调用 MCP 提供的各种工具和服务。" = "Let AI call the tools and services provided by MCP.";
+"让 AI 能够调用 MCP 提供的各种工具和服务。" = "Set up MCP tool servers so the assistant can call external capabilities.";
 "记下显示的 IP 地址" = "Note the displayed IP address";
 "设备主动连接电脑端服务器（端口 8765），实时接收命令" = "The device actively connects to the computer server (port 8765) to receive commands in real time.";
 "设备每秒向服务器（端口 7654）请求一次，获取待执行命令" = "The device polls the server (port 7654) once per second to fetch pending commands.";
@@ -710,3 +711,4 @@
 "API 地址应为基础地址，例如: https://api.openai.com/v1" = "API base URL example: https://api.openai.com/v1";
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API base URL example: https://api.anthropic.com/v1";
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API base URL example: https://generativelanguage.googleapis.com/v1beta";
+"使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "Use key=value to add request headers, e.g. Authorization=Bearer {token}.\n{token} is replaced with the Bearer API Key input above.";

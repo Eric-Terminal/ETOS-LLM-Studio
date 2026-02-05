@@ -20,10 +20,12 @@ public enum JSONValue: Codable, Hashable {
     case string(String), int(Int), double(Double), bool(Bool)
     case dictionary([String: JSONValue])
     case array([JSONValue])
+    case null
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
-        if let v = try? c.decode(String.self) { self = .string(v) }
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
         else if let v = try? c.decode(Int.self) { self = .int(v) }
         else if let v = try? c.decode(Double.self) { self = .double(v) }
         else if let v = try? c.decode(Bool.self) { self = .bool(v) }
@@ -41,6 +43,7 @@ public enum JSONValue: Codable, Hashable {
         case .bool(let v): try c.encode(v)
         case .dictionary(let v): try c.encode(v)
         case .array(let v): try c.encode(v)
+        case .null: try c.encodeNil()
         }
     }
 
@@ -52,6 +55,7 @@ public enum JSONValue: Codable, Hashable {
         case .bool(let v): return v
         case .dictionary(let v): return v.mapValues { $0.toAny() }
         case .array(let v): return v.map { $0.toAny() }
+        case .null: return NSNull()
         }
     }
 
@@ -225,6 +229,12 @@ public enum MessageRole: String, Codable, Sendable {
     case error
 }
 
+/// 工具调用展示顺序（相对于正文）
+public enum ToolCallsPlacement: String, Codable, Sendable {
+    case afterReasoning
+    case afterContent
+}
+
 /// 聊天消息数据结构 (App的"官方语言")
 /// 这是一个纯粹的数据模型，不包含任何UI状态
 /// 支持多版本历史记录功能 - 重试时保留旧版本，用户可在版本间切换
@@ -273,9 +283,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     
     public var reasoningContent: String? // 用于存放推理过程等附加信息
     public var toolCalls: [InternalToolCall]? // AI发出的工具调用指令
+    public var toolCallsPlacement: ToolCallsPlacement? // 工具调用在正文前/后显示
     public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
     public var audioFileName: String? // 关联的音频文件名，存储在 AudioFiles 目录下
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
+    public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
     public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
 
     public init(
@@ -284,9 +296,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         content: String,
         reasoningContent: String? = nil,
         toolCalls: [InternalToolCall]? = nil,
+        toolCallsPlacement: ToolCallsPlacement? = nil,
         tokenUsage: MessageTokenUsage? = nil,
         audioFileName: String? = nil,
         imageFileNames: [String]? = nil,
+        fileFileNames: [String]? = nil,
         fullErrorContent: String? = nil
     ) {
         self.id = id
@@ -295,9 +309,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.currentVersionIndex = 0
         self.reasoningContent = reasoningContent
         self.toolCalls = toolCalls
+        self.toolCallsPlacement = toolCallsPlacement
         self.tokenUsage = tokenUsage
         self.audioFileName = audioFileName
         self.imageFileNames = imageFileNames
+        self.fileFileNames = fileFileNames
         self.fullErrorContent = fullErrorContent
     }
     
@@ -334,8 +350,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     
     enum CodingKeys: String, CodingKey {
         case id, role, content, currentVersionIndex
-        case reasoningContent, toolCalls, tokenUsage
-        case audioFileName, imageFileNames, fullErrorContent
+        case reasoningContent, toolCalls, toolCallsPlacement, tokenUsage
+        case audioFileName, imageFileNames, fileFileNames, fullErrorContent
     }
     
     public init(from decoder: Decoder) throws {
@@ -362,9 +378,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         
         self.reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
         self.toolCalls = try container.decodeIfPresent([InternalToolCall].self, forKey: .toolCalls)
+        self.toolCallsPlacement = try container.decodeIfPresent(ToolCallsPlacement.self, forKey: .toolCallsPlacement)
         self.tokenUsage = try container.decodeIfPresent(MessageTokenUsage.self, forKey: .tokenUsage)
         self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
+        self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
         self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
     }
     
@@ -383,9 +401,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         
         try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
         try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
+        try container.encodeIfPresent(toolCallsPlacement, forKey: .toolCallsPlacement)
         try container.encodeIfPresent(tokenUsage, forKey: .tokenUsage)
         try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
+        try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)
         try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)
     }
 }

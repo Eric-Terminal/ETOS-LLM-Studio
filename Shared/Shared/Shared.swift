@@ -15,6 +15,7 @@ public enum ToolPermissionDecision: String {
     case allowOnce
     case allowForTool
     case allowAll
+    case supplement
 }
 
 public struct ToolPermissionRequest: Identifiable, Equatable {
@@ -66,7 +67,7 @@ public final class ToolPermissionCenter: ObservableObject {
             allowAll = true
         case .allowForTool:
             allowedTools.insert(activeRequest.toolName)
-        case .deny, .allowOnce:
+        case .deny, .allowOnce, .supplement:
             break
         }
         

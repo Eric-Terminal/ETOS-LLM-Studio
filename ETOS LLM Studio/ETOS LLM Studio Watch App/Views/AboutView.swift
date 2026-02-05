@@ -11,6 +11,7 @@ import SwiftUI
 import Foundation
 
 struct AboutView: View {
+    private let privacyURL = URL(string: "http://privacy.els.ericterminal.com/")!
     
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "N/A"
@@ -87,14 +88,12 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     InfoRow(title: "开源协议", value: "GPLv3")
                     
-                    NavigationLink {
-                        PrivacyPolicyView()
-                    } label: {
+                    Link(destination: privacyURL) {
                         HStack {
                             Text("隐私政策")
                                 .font(.caption)
                             Spacer()
-                            Image(systemName: "chevron.right")
+                            Image(systemName: "safari")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -167,50 +166,7 @@ private struct FeatureRow: View {
 
 // MARK: - Privacy Policy View
 
-private struct PrivacyPolicyView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("隐私政策")
-                    .font(.headline)
-                
-                Text("最后更新：2025年12月")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                
-                PolicySection(title: "数据收集", content: "ETOS LLM Studio 不会收集、存储或传输任何个人数据到我们的服务器。所有数据均存储在您的设备本地。")
-                
-                PolicySection(
-                    title: "本地数据存储",
-                    content: NSLocalizedString("privacy_storage_details_plain", comment: "")
-                )
-                
-                PolicySection(title: "第三方服务", content: "当您使用 AI 聊天功能时，您的消息将发送到您配置的 API 提供商（如 OpenAI、Anthropic 等）。请参阅相应服务商的隐私政策了解他们如何处理您的数据。")
-                
-                PolicySection(title: "iCloud 同步", content: "如果您启用了设备同步功能，部分数据可能通过 iCloud 在您的设备之间同步。Apple 的 iCloud 隐私政策适用于此类数据传输。")
-                
-                PolicySection(title: "联系我们", content: "如有隐私相关问题，请通过 GitHub Issues 联系我们。")
-            }
-            .padding(.horizontal)
-        }
-        .navigationTitle("隐私政策")
-    }
-}
-
-private struct PolicySection: View {
-    let title: String
-    let content: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-            Text(content)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
+// Privacy policy is hosted externally.
 
 // MARK: - Project Links View
 

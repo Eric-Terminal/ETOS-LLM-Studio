@@ -11,6 +11,7 @@ struct AboutView: View {
     }
     
     private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
+    private let privacyURL = URL(string: "http://privacy.els.ericterminal.com/")!
     
     var body: some View {
         List {
@@ -83,10 +84,16 @@ struct AboutView: View {
             // MARK: - Legal
             Section(header: Text("法律信息")) {
                 LabeledContent("开源协议", value: "GPLv3")
-                NavigationLink {
-                    PrivacyPolicyView()
+                Button {
+                    openURL(privacyURL)
                 } label: {
-                    Text("隐私政策")
+                    HStack {
+                        Label("隐私政策", systemImage: "shield")
+                        Spacer()
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             
@@ -139,53 +146,4 @@ private struct FeatureRow: View {
 
 // MARK: - Privacy Policy View
 
-private struct PrivacyPolicyView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Group {
-                    Text("隐私政策")
-                        .font(.title.weight(.bold))
-                    
-                    Text("最后更新：2026年1月")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Group {
-                    SectionHeader("数据收集")
-                    Text("ETOS LLM Studio 不会收集、存储或传输任何个人数据到我们的服务器。所有数据均存储在您的设备本地。")
-                    
-                    SectionHeader("本地数据存储")
-                    Text("您的聊天记录、会话配置和模型参数都安全地存储在设备本地沙盒中。")
-                    
-                    SectionHeader("第三方服务")
-                    Text("当您使用 AI 聊天功能时，您的消息将直接发送到您自行配置的 API 提供商（如 OpenAI、Anthropic 等）。我们不会拦截这些数据，请参阅相应服务商的隐私政策。")
-                    
-                    SectionHeader("设备间同步")
-                    Text("iPhone 与 Apple Watch 之间的数据同步通过 WatchConnectivity 框架完成。这是一种加密的点对点直接传输，数据不会离开您的个人设备生态系统。")
-                    
-                    SectionHeader("联系我们")
-                    Text("如有隐私相关问题，请通过 GitHub Issues 或 contact@ericterminal.com 联系我们。")
-                }
-            }
-            .padding()
-        }
-        .navigationTitle("隐私政策")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-private struct SectionHeader: View {
-    let text: String
-    
-    init(_ text: String) {
-        self.text = text
-    }
-    
-    var body: some View {
-        Text(text)
-            .font(.headline)
-            .padding(.top, 8)
-    }
-}
+// Privacy policy is hosted externally.

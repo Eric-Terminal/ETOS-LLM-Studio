@@ -34,10 +34,21 @@ private struct TelegramColors {
     static let scrollButtonShadow = Color.black.opacity(0.15)
 }
 
+private func resolvedFileMimeType(for url: URL) -> String {
+    let ext = url.pathExtension.lowercased()
+    if let type = UTType(filenameExtension: ext),
+       let mimeType = type.preferredMIMEType {
+        return mimeType
+    }
+    return "application/octet-stream"
+}
+
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var showScrollToBottom = false
+    @State private var suppressAutoScrollOnce = false
     @State private var navigationDestination: ChatNavigationDestination?
     @State private var editingMessage: ChatMessage?
     @State private var messageInfo: MessageInfoPayload?
@@ -54,6 +65,8 @@ struct ChatView: View {
     @State private var sessionInfo: SessionPickerInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
+    @State private var bottomSafeAreaInset: CGFloat = 0
+    @State private var keyboardHeight: CGFloat = 0
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
@@ -73,6 +86,15 @@ struct ChatView: View {
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
     private let sessionPickerMorphID = "sessionPickerMorph"
+    private var tabBarCompensation: CGFloat {
+        guard keyboardHeight == 0 else { return 0 }
+        let measuredTabBarHeight = UITabBarController().tabBar.frame.height
+        let tabBarHeight = measuredTabBarHeight > 0 ? measuredTabBarHeight : 49
+        guard bottomSafeAreaInset > tabBarHeight + 8, bottomSafeAreaInset < 160 else {
+            return 0
+        }
+        return tabBarHeight
+    }
     private var navBarPillHeight: CGFloat {
         navBarTitleFont.lineHeight
             + navBarSubtitleFont.lineHeight
@@ -100,8 +122,18 @@ struct ChatView: View {
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
+    private var displayMessages: [ChatMessageRenderState] {
+        let representedToolCallIDs = viewModel.toolCallResultIDs
+        return viewModel.messages.filter { state in
+            let message = state.message
+            guard message.role == .tool else { return true }
+            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
+            return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
+        }
+    }
     
     var body: some View {
+        let displayedMessages = displayMessages
         NavigationStack {
             ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
@@ -111,7 +143,7 @@ struct ChatView: View {
                 // Z-Index 1: 消息列表
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 2, pinnedViews: []) {
+                        LazyVStack(spacing: 0, pinnedViews: []) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear.frame(height: 8)
                             
@@ -119,9 +151,14 @@ struct ChatView: View {
                             historyBanner
                             
                             // 消息列表
-                            ForEach(viewModel.messages) { message in
+                            ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
+                                let message = state.message
+                                let previousMessage = index > 0 ? displayedMessages[index - 1].message : nil
+                                let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
+                                let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
+                                let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
                                 ChatBubble(
-                                    message: message,
+                                    messageState: state,
                                     isReasoningExpanded: Binding(
                                         get: { viewModel.reasoningExpandedState[message.id, default: false] },
                                         set: { viewModel.reasoningExpandedState[message.id] = $0 }
@@ -132,24 +169,26 @@ struct ChatView: View {
                                     ),
                                     enableMarkdown: viewModel.enableMarkdown,
                                     enableBackground: viewModel.enableBackground,
-                                    enableLiquidGlass: isLiquidGlassEnabled
+                                    enableLiquidGlass: isLiquidGlassEnabled,
+                                    mergeWithPrevious: mergeWithPrevious,
+                                    mergeWithNext: mergeWithNext
                                 )
-                                .id(message.id)
+                                .id(state.id)
                                 .contextMenu {
                                     contextMenu(for: message)
                                 }
                                 .onAppear {
-                                    if message.id == viewModel.messages.last?.id {
+                                    if state.id == displayedMessages.last?.id {
                                         showScrollToBottom = false
                                     }
                                 }
                                 .onDisappear {
-                                    if message.id == viewModel.messages.last?.id {
+                                    if state.id == displayedMessages.last?.id {
                                         showScrollToBottom = true
                                     }
                                 }
                             }
-                            
+
                             Color.clear
                                 .frame(height: 8)
                                 .id(scrollBottomAnchorID)
@@ -165,6 +204,14 @@ struct ChatView: View {
                     )
                     .onChange(of: viewModel.messages.count) { _, _ in
                         guard !viewModel.messages.isEmpty else { return }
+                        if suppressAutoScrollOnce {
+                            suppressAutoScrollOnce = false
+                            return
+                        }
+                        scrollToBottom(proxy: proxy)
+                    }
+                    .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
+                        guard newValue != nil, !showScrollToBottom else { return }
                         scrollToBottom(proxy: proxy)
                     }
                     .overlay(alignment: .bottomTrailing) {
@@ -200,6 +247,22 @@ struct ChatView: View {
                 if showSessionPickerPanel {
                     sessionPickerOverlay
                 }
+            }
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(key: SafeAreaBottomKey.self, value: proxy.safeAreaInsets.bottom)
+                }
+            )
+            .onPreferenceChange(SafeAreaBottomKey.self) { newValue in
+                bottomSafeAreaInset = newValue
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+                guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+                keyboardHeight = frame.height
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                keyboardHeight = 0
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
@@ -1015,6 +1078,7 @@ struct ChatView: View {
         .onAppear {
             viewModel.userInput = draftText
         }
+        .padding(.bottom, -tabBarCompensation)
     }
     
     /// Telegram 风格滚动到底部按钮
@@ -1038,16 +1102,11 @@ struct ChatView: View {
     /// Telegram 风格历史加载提示
     @ViewBuilder
     private var historyBanner: some View {
-        let totalRounds = viewModel.allMessagesForSession.reduce(0) { count, message in
-            count + (message.role == .user ? 1 : 0)
-        }
-        let visibleRounds = viewModel.messages.reduce(0) { count, message in
-            count + (message.role == .user ? 1 : 0)
-        }
-        let remainingRounds = max(0, totalRounds - visibleRounds)
-        if remainingRounds > 0 && !viewModel.isHistoryFullyLoaded {
-            let chunk = min(remainingRounds, viewModel.historyLoadChunkSize)
+        let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
+        if remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
+            let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
             Button {
+                suppressAutoScrollOnce = true
                 withAnimation {
                     viewModel.loadMoreHistoryChunk()
                 }
@@ -1055,7 +1114,7 @@ struct ChatView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.circle")
                         .font(.system(size: 14))
-                    Text(String(format: NSLocalizedString("加载更早的 %d 轮对话", comment: ""), chunk))
+                    Text(String(format: NSLocalizedString("加载更早的 %d 条消息", comment: ""), chunk))
                         .font(.system(size: 13, weight: .medium))
                 }
                 .foregroundColor(TelegramColors.attachButtonColor)
@@ -1178,9 +1237,33 @@ struct ChatView: View {
     }
 }
 
+private struct SafeAreaBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Helpers
 
 private extension ChatView {
+    func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard let message, let nextMessage else { return false }
+        return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+    }
+
+    func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
+        switch message.role {
+        case .assistant, .tool, .system:
+            return true
+        case .user, .error:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
     func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
         let action = {
             proxy.scrollTo(scrollBottomAnchorID, anchor: .bottom)
@@ -1193,6 +1276,7 @@ private extension ChatView {
             action()
         }
     }
+
 }
 
 // MARK: - Telegram Default Background
@@ -1308,6 +1392,7 @@ private struct TelegramMessageComposer: View {
     @State private var showCamera = false
     @State private var showAudioRecorder = false
     @State private var showAudioImporter = false
+    @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
@@ -1341,7 +1426,7 @@ private struct TelegramMessageComposer: View {
     var body: some View {
         VStack(spacing: 8) {
             // 附件预览区域
-            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
+            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
                 telegramAttachmentPreview
                     .padding(.horizontal, 16)
             }
@@ -1439,6 +1524,20 @@ private struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
             }
         }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                for url in urls {
+                    importFileAttachment(from: url)
+                }
+            case .failure(let error):
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
     }
 
     private func attachmentMenuButton(size: CGFloat) -> some View {
@@ -1466,6 +1565,12 @@ private struct TelegramMessageComposer: View {
                 showAudioImporter = true
             } label: {
                 Label("从录音备忘录上传", systemImage: "music.note.list")
+            }
+
+            Button {
+                showFileImporter = true
+            } label: {
+                Label("选择文件", systemImage: "doc")
             }
         } label: {
             Image(systemName: "paperclip")
@@ -1641,6 +1746,38 @@ private struct TelegramMessageComposer: View {
                             .fill(Color(uiColor: .secondarySystemBackground))
                     )
                 }
+
+                // 文件预览
+                ForEach(viewModel.pendingFileAttachments) { attachment in
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 18))
+                            .foregroundColor(TelegramColors.attachButtonColor)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("文件")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(attachment.fileName)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        
+                        Button {
+                            viewModel.removePendingFileAttachment(attachment)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(uiColor: .secondarySystemBackground))
+                    )
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -1653,7 +1790,7 @@ private struct TelegramMessageComposer: View {
 
     private var hasContent: Bool {
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty
+        let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty || !viewModel.pendingFileAttachments.isEmpty
         return hasText || hasAttachments
     }
 
@@ -1681,6 +1818,41 @@ private struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载音频文件: %@", comment: ""), error.localizedDescription))
             }
         }
+    }
+
+    private func importFileAttachment(from url: URL) {
+        let mimeType = resolvedFileMimeType(for: url)
+        Task.detached {
+            let needsAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if needsAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let attachment = FileAttachment(
+                    data: data,
+                    mimeType: mimeType,
+                    fileName: url.lastPathComponent
+                )
+                await MainActor.run {
+                    viewModel.addFileAttachment(attachment)
+                }
+            } catch {
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
+    }
+
+    private func fileMimeType(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        if let type = UTType(filenameExtension: ext),
+           let mimeType = type.preferredMIMEType {
+            return mimeType
+        }
+        return "application/octet-stream"
     }
 
     private func audioMimeType(for url: URL) -> String {
@@ -1909,12 +2081,13 @@ private struct MessageComposerView: View {
     @State private var showAttachmentMenu = false
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
+    @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
     var body: some View {
         VStack(spacing: 8) {
             // 附件预览区域
-            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil {
+            if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
                 attachmentPreviewBar
                     .padding(.horizontal, 12)
             }
@@ -1938,6 +2111,9 @@ private struct MessageComposerView: View {
                         Button("录制语音") {
                             showAudioRecorder = true
                         }
+                        Button("选择文件") {
+                            showFileImporter = true
+                        }
                     }
                 } else {
                     Button {
@@ -1954,6 +2130,9 @@ private struct MessageComposerView: View {
                         }
                         Button("录制语音") {
                             showAudioRecorder = true
+                        }
+                        Button("选择文件") {
+                            showFileImporter = true
                         }
                     }
                 }
@@ -2034,6 +2213,20 @@ private struct MessageComposerView: View {
                 viewModel.setAudioAttachment(attachment)
             }
         }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                for url in urls {
+                    importFileAttachment(from: url)
+                }
+            case .failure(let error):
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
     }
     
     @ViewBuilder
@@ -2087,11 +2280,65 @@ private struct MessageComposerView: View {
                     .background(Color(uiColor: .secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+
+                // 文件预览
+                ForEach(viewModel.pendingFileAttachments) { attachment in
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.tint)
+                        
+                        Text(attachment.fileName)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .frame(maxWidth: 120)
+                        
+                        Button {
+                            viewModel.removePendingFileAttachment(attachment)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
         }
     }
+
+    private func importFileAttachment(from url: URL) {
+        let mimeType = resolvedFileMimeType(for: url)
+        Task.detached {
+            let needsAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if needsAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let attachment = FileAttachment(
+                    data: data,
+                    mimeType: mimeType,
+                    fileName: url.lastPathComponent
+                )
+                await MainActor.run {
+                    viewModel.addFileAttachment(attachment)
+                }
+            } catch {
+                print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
+    }
+
+    // file MIME type helper lives at file scope (resolvedFileMimeType)
 }
 
 // MARK: - Camera Image Picker

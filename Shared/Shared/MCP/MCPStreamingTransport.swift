@@ -24,12 +24,23 @@ public protocol MCPNotificationDelegate: AnyObject {
     func didReceiveProgress(_ progress: MCPProgressParams)
 }
 
+// MARK: - Streaming Transport Protocol
+
+public protocol MCPStreamingTransportProtocol: AnyObject {
+    var notificationDelegate: MCPNotificationDelegate? { get set }
+    var samplingHandler: MCPSamplingHandler? { get set }
+    func connectStream()
+    func disconnect()
+}
+
 // MARK: - Streaming Transport
 
-public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
+public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, @unchecked Sendable {
     private let sseEndpoint: URL
     private let session: URLSession
     private let headers: [String: String]
+    private let protocolVersion: String? = MCPProtocolVersion.current
+    private let endpointWaitTimeout: TimeInterval = 0.8
     
     private var sseTask: Task<Void, Never>?
     private let pendingRequestsActor = PendingRequestsActor()
@@ -69,7 +80,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
             Task {
                 await pendingRequestsActor.add(id: requestId, continuation: continuation)
                 do {
-                    let (endpoint, sessionId) = await state.snapshot()
+                    let (endpoint, sessionId) = await state.snapshot(waitForEndpointTimeout: endpointWaitTimeout)
                     var request = URLRequest(url: endpoint)
                     request.httpMethod = "POST"
                     request.httpBody = payload
@@ -104,11 +115,48 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
             }
         }
     }
+
+    public func sendNotification(_ payload: Data) async throws {
+        let (endpoint, sessionId) = await state.snapshot(waitForEndpointTimeout: endpointWaitTimeout)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.httpBody = payload
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        if let sessionId, !sessionId.isEmpty, !hasHeader("MCP-Session-Id", in: headers) {
+            request.setValue(sessionId, forHTTPHeaderField: "MCP-Session-Id")
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MCPClientError.invalidResponse
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8)
+            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
+        }
+    }
     
     // MARK: - SSE Connection
     
+    public func connectStream() {
+        connectSSE()
+    }
+
     public func connectSSE() {
         disconnect()
+        Task { await state.prepareForNewStream() }
         
         sseTask = Task { [weak self] in
             guard let self = self else { return }
@@ -136,6 +184,9 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
         
         do {
@@ -275,7 +326,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         guard let data = try? encoder.encode(rpcResponse) else { return }
         
         do {
-            _ = try await sendMessage(data)
+            try await sendNotification(data)
         } catch {
             streamingLogger.error("发送 Sampling 响应失败: \(error.localizedDescription)")
         }
@@ -289,7 +340,7 @@ public final class MCPStreamingTransport: MCPTransport, @unchecked Sendable {
         guard let data = try? encoder.encode(error) else { return }
         
         do {
-            _ = try await sendMessage(data)
+            try await sendNotification(data)
         } catch {
             streamingLogger.error("发送 Sampling 错误响应失败: \(error.localizedDescription)")
         }
@@ -468,20 +519,59 @@ private actor PendingRequestsActor {
 private actor StreamingState {
     private var messageEndpoint: URL
     private var sessionId: String?
+    private var endpointReady = false
+    private var endpointWaiters: [UUID: CheckedContinuation<URL, Never>] = [:]
 
     init(messageEndpoint: URL) {
         self.messageEndpoint = messageEndpoint
     }
 
-    func snapshot() -> (URL, String?) {
-        (messageEndpoint, sessionId)
+    func snapshot(waitForEndpointTimeout: TimeInterval?) async -> (URL, String?) {
+        let endpoint = await awaitMessageEndpoint(timeout: waitForEndpointTimeout)
+        return (endpoint, sessionId)
     }
 
     func updateMessageEndpoint(_ endpoint: URL) {
         messageEndpoint = endpoint
+        endpointReady = true
+        if !endpointWaiters.isEmpty {
+            let waiters = endpointWaiters
+            endpointWaiters.removeAll()
+            for (_, continuation) in waiters {
+                continuation.resume(returning: endpoint)
+            }
+        }
     }
 
     func updateSessionId(_ id: String?) {
         sessionId = id
+    }
+
+    func prepareForNewStream() {
+        endpointReady = false
+        sessionId = nil
+    }
+
+    private func awaitMessageEndpoint(timeout: TimeInterval?) async -> URL {
+        if endpointReady {
+            return messageEndpoint
+        }
+        return await withCheckedContinuation { continuation in
+            let token = UUID()
+            endpointWaiters[token] = continuation
+            if let timeout, timeout > 0 {
+                Task { [weak self] in
+                    let nanos = UInt64(timeout * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: nanos)
+                    await self?.resumeWaiterIfNeeded(token: token)
+                }
+            }
+        }
+    }
+
+    private func resumeWaiterIfNeeded(token: UUID) {
+        guard let continuation = endpointWaiters.removeValue(forKey: token) else { return }
+        endpointReady = true
+        continuation.resume(returning: messageEndpoint)
     }
 }

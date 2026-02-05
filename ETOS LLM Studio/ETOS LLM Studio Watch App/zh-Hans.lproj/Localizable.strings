@@ -55,7 +55,7 @@
 "同步记忆（仅文本）" = "同步记忆（仅文本）";
 "名称" = "名称";
 "向上加载 %d 条记录" = "向上加载 %d 条记录";
-"向上加载 %d 轮对话" = "向上加载 %d 轮对话（每次 2 轮）";
+"向上加载 %d 轮对话" = "向上加载 %d 轮对话";
 "启用液态玻璃" = "启用液态玻璃";
 "唯一标识" = "唯一标识";
 "基础信息" = "基础信息";
@@ -209,8 +209,8 @@
 "JSON 输入" = "JSON 输入";
 "MCP 工具箱" = "MCP 工具箱";
 "MCP 工具集成" = "MCP 工具集成";
-"MCP 工具集成(试验性)" = "MCP 工具集成(试验性)";
-"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。";
+"MCP 工具集成(试验性)" = "MCP 工具集成";
+"Model Context Protocol 允许客户端通过统一接口发现并调用远程工具/资源。这里可以管理 Server、查看它们暴露的能力，并用 JSON 直接测试。" = "配置 MCP 工具服务器，让助手调用远程能力。可在这里管理 Server、查看能力，并用 JSON 调试。";
 "OpenAI 兼容" = "OpenAI 兼容";
 "PIN 码" = "PIN 码";
 "PIN 码随机生成,请勿泄露" = "PIN 码随机生成,请勿泄露";
@@ -312,7 +312,7 @@
 "完成编辑" = "完成编辑";
 "将删除旧的 SQLite 向量数据库，并根据当前记忆重新生成嵌入。" = "将删除旧的 SQLite 向量数据库，并根据当前记忆重新生成嵌入。";
 "将清空旧向量数据库，并按当前记忆重算所有嵌入。" = "将清空旧向量数据库，并按当前记忆重算所有嵌入。";
-"尚未添加任何 MCP Server。点击右上角的“＋”来新建。" = "尚未添加任何 MCP Server。点击右上角的“＋”来新建。";
+"尚未添加任何 MCP Server。点击右上角的“＋”来新建。" = "尚未添加任何 MCP Server。点击右上角“＋”创建。";
 "尚未添加服务器，点击下方入口新建。" = "尚未添加服务器，点击下方入口新建。";
 "尚未选择语音转文字模型。" = "尚未选择语音转文字模型。";
 "远程文件访问" = "远程文件访问";
@@ -523,7 +523,7 @@
 "连接控制" = "连接控制";
 "连接概览" = "连接概览";
 "连接状态" = "连接状态";
-"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。";
+"连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。" = "配置 MCP 工具服务器，让助手调用外部能力。";
 "选择背景图" = "选择背景图";
 "通过代理可绕过 ATS 限制。" = "通过代理可绕过 ATS 限制。";
 "通过代理将请求转发到目标 MCP Server，以绕过 ATS 对证书/域名的限制。默认使用 mcp.ericterminal.com。" = "通过代理将请求转发到目标 MCP Server，以绕过 ATS 对证书/域名的限制。默认使用 mcp.ericterminal.com。";
@@ -627,7 +627,7 @@
 "管理应用内数据" = "管理应用内数据";
 "系统公告" = "系统公告";
 "紧急通知" = "紧急通知";
-"让 AI 能够调用 MCP 提供的各种工具和服务。" = "让 AI 能够调用 MCP 提供的各种工具和服务。";
+"让 AI 能够调用 MCP 提供的各种工具和服务。" = "配置 MCP 工具服务器，让助手调用外部能力。";
 "记下显示的 IP 地址" = "记下显示的 IP 地址";
 "设备主动连接电脑端服务器（端口 8765），实时接收命令" = "设备主动连接电脑端服务器（端口 8765），实时接收命令";
 "设备每秒向服务器（端口 7654）请求一次，获取待执行命令" = "设备每秒向服务器（端口 7654）请求一次，获取待执行命令";
@@ -703,3 +703,5 @@
 "API 地址应为基础地址，例如: https://api.openai.com/v1" = "API 地址应为基础地址，例如: https://api.openai.com/v1";
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API 地址应为基础地址，例如: https://api.anthropic.com/v1";
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta";
+"使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。";
+"使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。";

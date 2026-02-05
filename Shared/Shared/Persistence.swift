@@ -88,13 +88,57 @@ public enum Persistence {
 
         do {
             let data = try Data(contentsOf: fileURL)
-            let loadedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            var loadedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            var didMigratePlacement = false
+            for index in loadedMessages.indices {
+                guard loadedMessages[index].toolCallsPlacement == nil,
+                      let toolCalls = loadedMessages[index].toolCalls,
+                      !toolCalls.isEmpty else { continue }
+                loadedMessages[index].toolCallsPlacement = inferToolCallsPlacement(from: loadedMessages[index].content)
+                didMigratePlacement = true
+            }
+            if didMigratePlacement {
+                logger.info("Migrated toolCallsPlacement for session \(sessionID.uuidString).")
+                saveMessages(loadedMessages, for: sessionID)
+            }
             logger.info("Successfully loaded \(loadedMessages.count) messages for session \(sessionID.uuidString).")
             return loadedMessages
         } catch {
             logger.warning("Failed to load messages for session \(sessionID.uuidString), returning empty list: \(error.localizedDescription)")
             return []
         }
+    }
+
+    private static func inferToolCallsPlacement(from content: String) -> ToolCallsPlacement {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return .afterReasoning
+        }
+        let lowered = trimmed.lowercased()
+        let startsWithThought = lowered.hasPrefix("<thought") || lowered.hasPrefix("<thinking") || lowered.hasPrefix("<think")
+        if startsWithThought {
+            let hasClosing = lowered.contains("</thought>") || lowered.contains("</thinking>") || lowered.contains("</think>")
+            if !hasClosing {
+                return .afterReasoning
+            }
+        }
+        let contentWithoutThought = stripThoughtTags(from: content)
+        if !contentWithoutThought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .afterContent
+        }
+        if lowered.contains("<thought") || lowered.contains("<thinking") || lowered.contains("<think") {
+            return .afterReasoning
+        }
+        return .afterContent
+    }
+
+    private static func stripThoughtTags(from text: String) -> String {
+        let pattern = "<(thought|thinking|think)>(.*?)</\\1>"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+            return text
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "")
     }
     
     // MARK: - 音频文件持久化
@@ -289,6 +333,105 @@ public enum Persistence {
             return fileURLs.map { $0.lastPathComponent }
         } catch {
             logger.warning("Failed to list image files: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    // MARK: - 通用文件持久化
+
+    /// 获取用于存储文件附件的目录URL
+    /// - Returns: 文件附件存储目录的URL路径
+    public static func getFileDirectory() -> URL {
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        let fileDirectory = paths[0].appendingPathComponent("FileAttachments")
+        if !FileManager.default.fileExists(atPath: fileDirectory.path) {
+            logger.info("File attachment directory does not exist, creating: \(fileDirectory.path)")
+            try? FileManager.default.createDirectory(at: fileDirectory, withIntermediateDirectories: true)
+        }
+        return fileDirectory
+    }
+
+    /// 保存文件数据到文件
+    /// - Parameters:
+    ///   - data: 文件数据
+    ///   - fileName: 文件名（包含扩展名）
+    /// - Returns: 保存成功返回文件URL，失败返回nil
+    @discardableResult
+    public static func saveFile(_ data: Data, fileName: String) -> URL? {
+        let fileURL = getFileDirectory().appendingPathComponent(fileName)
+        logger.info("Saving file attachment: \(fileName)")
+        
+        do {
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+            logger.info("File attachment saved successfully: \(fileName)")
+            return fileURL
+        } catch {
+            logger.error("Failed to save file attachment \(fileName): \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    /// 加载文件数据
+    /// - Parameter fileName: 文件名（包含扩展名）
+    /// - Returns: 文件数据，如果文件不存在则返回nil
+    public static func loadFile(fileName: String) -> Data? {
+        let fileURL = getFileDirectory().appendingPathComponent(fileName)
+        logger.info("Loading file attachment: \(fileName)")
+        
+        do {
+            let data = try Data(contentsOf: fileURL)
+            logger.info("File attachment loaded successfully: \(fileName)")
+            return data
+        } catch {
+            logger.warning("Failed to load file attachment \(fileName): \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    /// 检查文件是否存在
+    /// - Parameter fileName: 文件名（包含扩展名）
+    /// - Returns: 文件是否存在
+    public static func fileExists(fileName: String) -> Bool {
+        let fileURL = getFileDirectory().appendingPathComponent(fileName)
+        return FileManager.default.fileExists(atPath: fileURL.path)
+    }
+    
+    /// 删除指定的文件
+    /// - Parameter fileName: 文件名（包含扩展名）
+    public static func deleteFile(fileName: String) {
+        let fileURL = getFileDirectory().appendingPathComponent(fileName)
+        logger.info("Deleting file attachment: \(fileName)")
+        
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+            logger.info("File attachment deleted successfully: \(fileName)")
+        } catch {
+            logger.warning("Failed to delete file attachment \(fileName): \(error.localizedDescription)")
+        }
+    }
+    
+    /// 删除会话相关的所有文件附件
+    /// - Parameters:
+    ///   - messages: 会话中的消息列表
+    public static func deleteFileFiles(for messages: [ChatMessage]) {
+        let fileNames = messages.flatMap { $0.fileFileNames ?? [] }
+        for fileName in fileNames {
+            deleteFile(fileName: fileName)
+        }
+        if !fileNames.isEmpty {
+            logger.info("Deleted \(fileNames.count) file attachments for session.")
+        }
+    }
+    
+    /// 获取所有文件附件名
+    /// - Returns: 文件附件名数组
+    public static func getAllFileNames() -> [String] {
+        let directory = getFileDirectory()
+        do {
+            let fileURLs = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            return fileURLs.map { $0.lastPathComponent }
+        } catch {
+            logger.warning("Failed to list file attachments: \(error.localizedDescription)")
             return []
         }
     }

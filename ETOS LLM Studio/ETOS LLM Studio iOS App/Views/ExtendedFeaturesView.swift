@@ -23,10 +23,10 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     MCPIntegrationView()
                 } label: {
-                    Label("MCP 工具集成(试验性)", systemImage: "network")
+                    Label("MCP 工具集成", systemImage: "network")
                 }
             } footer: {
-                Text("连接符合 Model Context Protocol 的工具服务器，直接在客户端管理和调试。")
+                Text("配置 MCP 工具服务器，让助手调用外部能力。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }            

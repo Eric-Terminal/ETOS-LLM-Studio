@@ -25,15 +25,28 @@ struct ContentView: View {
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
+    @State private var shouldForceScrollToBottom = false
+    @State private var suppressAutoScrollOnce = false
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
+    private let bottomAnchorID = "inputBubble"
     
     private var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
             return viewModel.enableLiquidGlass
         } else {
             return false
+        }
+    }
+    
+    private var displayMessages: [ChatMessageRenderState] {
+        let representedToolCallIDs = viewModel.toolCallResultIDs
+        return viewModel.messages.filter { state in
+            let message = state.message
+            guard message.role == .tool else { return true }
+            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
+            return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
         }
     }
     
@@ -85,29 +98,6 @@ struct ContentView: View {
                 )) { wrapper in
                     FullErrorContentView(content: wrapper.content)
                 }
-                .confirmationDialog("允许执行工具？", isPresented: Binding(
-                    get: { toolPermissionCenter.activeRequest != nil },
-                    set: { isPresented in
-                        if !isPresented, toolPermissionCenter.activeRequest != nil {
-                            toolPermissionCenter.resolveActiveRequest(with: .deny)
-                        }
-                    }
-                )) {
-                    Button("拒绝", role: .destructive) {
-                        toolPermissionCenter.resolveActiveRequest(with: .deny)
-                    }
-                    Button("允许本次") {
-                        toolPermissionCenter.resolveActiveRequest(with: .allowOnce)
-                    }
-                    Button("保持允许") {
-                        toolPermissionCenter.resolveActiveRequest(with: .allowForTool)
-                    }
-                    Button("完全权限") {
-                        toolPermissionCenter.resolveActiveRequest(with: .allowAll)
-                    }
-                } message: {
-                    Text(toolPermissionPrompt(for: toolPermissionCenter.activeRequest))
-                }
             }
             .onChange(of: viewModel.activeSheet) {
                 if viewModel.activeSheet == nil {
@@ -115,24 +105,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    private func toolPermissionPrompt(for request: ToolPermissionRequest?) -> String {
-        guard let request else { return "" }
-        let toolName = request.displayName ?? request.toolName
-        let trimmedArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cappedArguments: String
-        if trimmedArguments.count > 400 {
-            cappedArguments = String(trimmedArguments.prefix(400)) + "..."
-        } else {
-            cappedArguments = trimmedArguments
-        }
-        var message = "工具：\(toolName)"
-        if !cappedArguments.isEmpty {
-            message += "\n参数：\(cappedArguments)"
-        }
-        message += "\n\n拒绝：本次调用不执行\n允许本次：仅执行这一次\n保持允许：本次运行内同工具自动允许\n完全权限：本次运行内允许所有工具"
-        return message
     }
     
     // MARK: - 视图组件
@@ -161,22 +133,17 @@ struct ContentView: View {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
             
-            let totalRounds = viewModel.allMessagesForSession.reduce(0) { count, message in
-                count + (message.role == .user ? 1 : 0)
-            }
-            let visibleRounds = viewModel.messages.reduce(0) { count, message in
-                count + (message.role == .user ? 1 : 0)
-            }
-            let remainingRounds = max(0, totalRounds - visibleRounds)
-            if !viewModel.isHistoryFullyLoaded && remainingRounds > 0 {
-                let chunk = min(remainingRounds, viewModel.historyLoadChunkSize)
+            let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
+            if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
+                let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
                 Button(action: {
+                    suppressAutoScrollOnce = true
                     withAnimation {
                         viewModel.loadMoreHistoryChunk()
                     }
                 }) {
                     Label(
-                        String(format: NSLocalizedString("向上加载 %d 轮对话", comment: ""), chunk),
+                        String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk),
                         systemImage: "arrow.up.circle"
                     )
                 }
@@ -185,17 +152,25 @@ struct ContentView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
             }
 
-            ForEach(viewModel.messages) { message in
-                // 修复: 将复杂内容提取到辅助函数中，避免编译器超时
-                messageRow(for: message, proxy: proxy)
+            ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, state in
+                let message = state.message
+                let previousMessage = index > 0 ? displayMessages[index - 1].message : nil
+                let nextMessage = index + 1 < displayMessages.count ? displayMessages[index + 1].message : nil
+                let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
+                let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                messageRow(
+                    for: state,
+                    proxy: proxy,
+                    mergeWithPrevious: mergeWithPrevious,
+                    mergeWithNext: mergeWithNext
+                )
             }
-            
+
             inputBubble
-                .id("inputBubble")
+                .id(bottomAnchorID)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .onAppear { isAtBottom = true; showScrollToBottomButton = false }
-                // 修复: 修正拼写错误
                 .onDisappear { isAtBottom = false; showScrollToBottomButton = true }
         }
         .listStyle(.plain)
@@ -208,16 +183,24 @@ struct ContentView: View {
             }
         }
         .onChange(of: viewModel.messages.count) {
-            if isAtBottom {
-                withAnimation {
-                    proxy.scrollTo("inputBubble", anchor: .bottom)
-                }
+            if suppressAutoScrollOnce {
+                suppressAutoScrollOnce = false
+                return
             }
+            let shouldScroll = isAtBottom || shouldForceScrollToBottom
+            shouldForceScrollToBottom = false
+            guard shouldScroll else { return }
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+        .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
+            guard newValue != nil, isAtBottom else { return }
+            scrollToBottom(proxy: proxy, animated: false)
         }
     }
     
     /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
-    private func messageRow(for message: ChatMessage, proxy: ScrollViewProxy) -> some View {
+    private func messageRow(for state: ChatMessageRenderState, proxy: ScrollViewProxy, mergeWithPrevious: Bool, mergeWithNext: Bool) -> some View {
+        let message = state.message
         let isReasoningExpandedBinding = Binding<Bool>(
             get: { viewModel.reasoningExpandedState[message.id, default: false] },
             set: { viewModel.reasoningExpandedState[message.id] = $0 }
@@ -229,14 +212,17 @@ struct ContentView: View {
         )
         
         return ChatBubble(
-            message: message,
+            messageState: state,
             isReasoningExpanded: isReasoningExpandedBinding,
             isToolCallsExpanded: isToolCallsExpandedBinding,
             enableMarkdown: viewModel.enableMarkdown,
             enableBackground: viewModel.enableBackground,
-            enableLiquidGlass: isLiquidGlassEnabled
+            enableLiquidGlass: isLiquidGlassEnabled,
+            mergeWithPrevious: mergeWithPrevious,
+            mergeWithNext: mergeWithNext
         )
-        .id(message.id)
+        .environmentObject(viewModel)
+        .id(state.id)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
         .swipeActions(edge: .leading) {
@@ -280,9 +266,7 @@ struct ContentView: View {
         let scrollAction = {
             // 点击回底按钮时，重置懒加载状态到初始数量
             viewModel.resetLazyLoadState()
-            withAnimation {
-                proxy.scrollTo("inputBubble", anchor: .bottom)
-            }
+            scrollToBottom(proxy: proxy, animated: true)
         }
         
         return Button(action: scrollAction) {
@@ -305,6 +289,48 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .padding(.bottom, 6)
         .transition(.scale.combined(with: .opacity))
+    }
+
+    private func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard let message, let nextMessage else { return false }
+        return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+    }
+
+    private func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
+        switch message.role {
+        case .assistant, .tool, .system:
+            return true
+        case .user, .error:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        let action = {
+            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
+        if animated {
+            withAnimation {
+                action()
+            }
+        } else {
+            action()
+        }
+    }
+
+    private func sendMessage() {
+        shouldForceScrollToBottom = true
+        viewModel.sendMessage()
+    }
+
+    private func sendOrStopMessage() {
+        if viewModel.isSendingMessage {
+            viewModel.cancelSending()
+        } else {
+            sendMessage()
+        }
     }
 
     private var inputFillColor: Color {
@@ -374,14 +400,14 @@ struct ContentView: View {
                             transparentInputField
                                 .glassEffect(.clear, in: Capsule())
 
-                            Button(action: viewModel.sendMessage) {
-                                Image(systemName: "arrow.up")
+                            Button(action: sendOrStopMessage) {
+                                Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
                                     .font(.system(size: 18, weight: .medium))
                                     .frame(width: inputControlHeight, height: inputControlHeight)
                             }
                             .buttonStyle(.plain)
                             .glassEffect(.clear, in: Circle())
-                            .disabled(!canSend || viewModel.isSendingMessage)
+                            .disabled(!viewModel.isSendingMessage && !canSend)
                         } else {
                             ZStack {
                                 Capsule()
@@ -393,8 +419,8 @@ struct ContentView: View {
                                 transparentInputField
                             }
 
-                            Button(action: viewModel.sendMessage) {
-                                Image(systemName: "arrow.up")
+                            Button(action: sendOrStopMessage) {
+                                Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
                                     .font(.system(size: 18, weight: .medium))
                             }
                             .buttonStyle(.plain)
@@ -403,7 +429,7 @@ struct ContentView: View {
                                 Circle()
                                     .stroke(inputStrokeColor, lineWidth: 0.8)
                             )
-                            .disabled(!canSend || viewModel.isSendingMessage)
+                            .disabled(!viewModel.isSendingMessage && !canSend)
                         }
                     }
                     .frame(height: inputControlHeight)
@@ -419,8 +445,8 @@ struct ContentView: View {
                             transparentInputField
                         }
 
-                        Button(action: viewModel.sendMessage) {
-                            Image(systemName: "arrow.up")
+                        Button(action: sendOrStopMessage) {
+                            Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
                                 .font(.system(size: 18, weight: .medium))
                         }
                         .buttonStyle(.plain)
@@ -432,7 +458,7 @@ struct ContentView: View {
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
                         )
-                        .disabled(!canSend || viewModel.isSendingMessage)
+                        .disabled(!viewModel.isSendingMessage && !canSend)
                     }
                     .frame(height: inputControlHeight)
                     .padding(.horizontal, 10)
@@ -516,6 +542,7 @@ struct ContentView: View {
                 await announcementManager.checkAnnouncement()
             }
     }
+
 }
 
 // MARK: - 完整错误响应辅助类型

@@ -298,6 +298,8 @@ public enum ParameterExpressionParser {
         case .array(let array):
             let items = array.map { serializeValue($0) }.joined(separator: ", ")
             return "[\(items)]"
+        case .null:
+            return "null"
         }
     }
     

@@ -25,8 +25,8 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - @Published 属性 (UI 状态)
     
-    @Published var messages: [ChatMessage] = []
-    @Published var allMessagesForSession: [ChatMessage] = []
+    @Published private(set) var messages: [ChatMessageRenderState] = []
+    private(set) var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
     @Published var messageToEdit: ChatMessage?
@@ -58,6 +58,8 @@ class ChatViewModel: ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
+    @Published private(set) var latestAssistantMessageID: UUID?
+    @Published private(set) var toolCallResultIDs: Set<String> = []
     
     // MARK: - 用户偏好设置 (AppStorage)
     
@@ -71,7 +73,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("systemPrompt") var systemPrompt: String = ""
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = false
-    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 2
+    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 3
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = ""
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
@@ -117,12 +119,14 @@ class ChatViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var additionalHistoryLoaded: Int = 0
     private var lastSessionID: UUID?
-    private let incrementalHistoryBatchSize = 2
+    private let incrementalHistoryBatchSize = 5
     private var audioRecorder: AVAudioRecorder?
     private var speechRecordingURL: URL?
     private var recordingStartDate: Date?
     private var recordingTimer: Timer?
     private let waveformSampleCount: Int = 24
+    private var allMessageStates: [ChatMessageRenderState] = []
+    private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
     
     // MARK: - 初始化
 
@@ -174,7 +178,9 @@ class ChatViewModel: ObservableObject {
             
         chatService.messagesForSessionSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.allMessagesForSession, on: self)
+            .sink { [weak self] messages in
+                self?.applyMessagesUpdate(messages)
+            }
             .store(in: &cancellables)
         
         chatService.providersSubject
@@ -211,12 +217,7 @@ class ChatViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
-        $allMessagesForSession
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.updateDisplayedMessages()
-            }
-            .store(in: &cancellables)
+        
             
         MemoryManager.shared.memoriesPublisher
             .receive(on: DispatchQueue.main)
@@ -283,6 +284,12 @@ class ChatViewModel: ObservableObject {
                 includeSystemTime: includeSystemTimeInPrompt,
                 audioAttachment: audioToSend
             )
+        }
+    }
+
+    func cancelSending() {
+        Task {
+            await chatService.cancelOngoingRequest()
         }
     }
     
@@ -722,39 +729,90 @@ class ChatViewModel: ObservableObject {
     
     // MARK: 视图状态与持久化
     
+    private func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
+        allMessagesForSession = incomingMessages
+        
+        var newStates: [ChatMessageRenderState] = []
+        newStates.reserveCapacity(incomingMessages.count)
+        var newIDs = Set<UUID>()
+        var newToolCallResultIDs = Set<String>()
+        var newestAssistantID: UUID?
+        
+        for message in incomingMessages {
+            newIDs.insert(message.id)
+            
+            let state: ChatMessageRenderState
+            if let existing = messageStateByID[message.id] {
+                state = existing
+            } else {
+                let created = ChatMessageRenderState(message: message)
+                messageStateByID[message.id] = created
+                state = created
+            }
+            state.update(with: message)
+            newStates.append(state)
+            
+            if message.role != .tool, let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+                for call in toolCalls {
+                    let trimmedResult = (call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedResult.isEmpty {
+                        newToolCallResultIDs.insert(call.id)
+                    }
+                }
+            }
+            
+            if message.role == .assistant {
+                newestAssistantID = message.id
+            }
+        }
+        
+        if messageStateByID.count != newIDs.count {
+            messageStateByID = messageStateByID.filter { newIDs.contains($0.key) }
+        }
+        
+        allMessageStates = newStates
+        updateDisplayedMessages()
+        
+        if toolCallResultIDs != newToolCallResultIDs {
+            toolCallResultIDs = newToolCallResultIDs
+        }
+        if latestAssistantMessageID != newestAssistantID {
+            latestAssistantMessageID = newestAssistantID
+        }
+    }
+    
     func updateDisplayedMessages() {
-        let filtered = visibleMessages(from: allMessagesForSession)
+        let filtered = visibleMessages(from: allMessageStates)
         
         if lastSessionID != currentSession?.id {
             lastSessionID = currentSession?.id
             additionalHistoryLoaded = 0
         }
         
-        let lazyRounds = lazyLoadMessageCount
-        let totalRounds = userRoundCount(in: filtered)
-        if lazyRounds > 0 && totalRounds > lazyRounds {
-            let limit = lazyRounds + additionalHistoryLoaded
-            if totalRounds > limit {
-                messages = messagesForRecentRounds(filtered, rounds: limit)
-                isHistoryFullyLoaded = false
+        let lazyCount = lazyLoadMessageCount
+        if lazyCount > 0 && filtered.count > lazyCount {
+            let limit = lazyCount + additionalHistoryLoaded
+            if filtered.count > limit {
+                let subset = Array(filtered.suffix(limit))
+                updateDisplayedStatesIfNeeded(subset)
+                updateHistoryFullyLoadedIfNeeded(false)
             } else {
-                messages = filtered
-                isHistoryFullyLoaded = true
-                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, totalRounds - lazyRounds))
+                updateDisplayedStatesIfNeeded(filtered)
+                updateHistoryFullyLoadedIfNeeded(true)
+                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, filtered.count - lazyCount))
             }
         } else {
-            messages = filtered
-            isHistoryFullyLoaded = true
+            updateDisplayedStatesIfNeeded(filtered)
+            updateHistoryFullyLoadedIfNeeded(true)
             additionalHistoryLoaded = 0
         }
     }
     
     func loadEntireHistory() {
-        let filtered = visibleMessages(from: allMessagesForSession)
-        let totalRounds = userRoundCount(in: filtered)
-        additionalHistoryLoaded = max(0, totalRounds - lazyLoadMessageCount)
-        messages = filtered
-        isHistoryFullyLoaded = true
+        let filtered = visibleMessages(from: allMessageStates)
+        additionalHistoryLoaded = max(0, filtered.count - lazyLoadMessageCount)
+        updateDisplayedStatesIfNeeded(filtered)
+        updateHistoryFullyLoadedIfNeeded(true)
     }
     
     func loadMoreHistoryChunk(count: Int? = nil) {
@@ -879,32 +937,20 @@ class ChatViewModel: ObservableObject {
         extendedSession = nil
     }
     
-    private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
+    private func updateDisplayedStatesIfNeeded(_ newStates: [ChatMessageRenderState]) {
+        let currentIDs = messages.map(\.id)
+        let newIDs = newStates.map(\.id)
+        guard currentIDs != newIDs else { return }
+        messages = newStates
+    }
+    
+    private func updateHistoryFullyLoadedIfNeeded(_ newValue: Bool) {
+        guard isHistoryFullyLoaded != newValue else { return }
+        isHistoryFullyLoaded = newValue
+    }
+    
+    private func visibleMessages(from source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
         source
     }
     
-    private func userRoundCount(in messages: [ChatMessage]) -> Int {
-        messages.reduce(0) { count, message in
-            count + (message.role == .user ? 1 : 0)
-        }
-    }
-    
-    private func messagesForRecentRounds(_ messages: [ChatMessage], rounds: Int) -> [ChatMessage] {
-        guard rounds > 0 else { return messages }
-        var userCount = 0
-        var startIndex: Int?
-        
-        for index in messages.indices.reversed() {
-            if messages[index].role == .user {
-                userCount += 1
-                if userCount == rounds {
-                    startIndex = index
-                    break
-                }
-            }
-        }
-        
-        guard let startIndex else { return messages }
-        return Array(messages[startIndex...])
-    }
 }

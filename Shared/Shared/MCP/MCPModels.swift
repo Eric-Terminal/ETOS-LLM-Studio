@@ -389,6 +389,21 @@ struct JSONRPCRequest: Encodable {
     }
 }
 
+struct JSONRPCNotification: Encodable {
+    let jsonrpc: String = "2.0"
+    let method: String
+    let params: AnyEncodable?
+
+    init(method: String, params: AnyEncodable?) {
+        self.method = method
+        self.params = params
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case jsonrpc, method, params
+    }
+}
+
 struct JSONRPCResponse<Result: Decodable>: Decodable {
     let jsonrpc: String
     let id: String?
@@ -452,6 +467,6 @@ public extension MCPClientInfo {
 
 public extension MCPClientCapabilities {
     static var httpOnly: MCPClientCapabilities {
-        MCPClientCapabilities(transports: ["http+sse"], supportsStreamingResponses: true)
+        MCPClientCapabilities(transports: ["streamable_http", "sse"], supportsStreamingResponses: true)
     }
 }

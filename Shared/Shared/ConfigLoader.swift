@@ -17,6 +17,20 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConfigL
 public struct ConfigLoader {
     
     // MARK: - 目录管理
+    
+    private struct DownloadOnceEntry: Decodable {
+        let path: String
+        let url: String
+    }
+    
+    private struct DownloadOnceEnvelope: Decodable {
+        let downloads: [DownloadOnceEntry]
+    }
+
+    private static let downloadOnceURLString = "https://notify.els.ericterminal.com/download_once.json"
+    private static let downloadOnceTimeout: TimeInterval = 8
+    private static let downloadOnceStateQueue = DispatchQueue(label: "com.ETOS.LLM.Studio.downloadOnce")
+    private static var downloadOnceInProgress = false
 
     /// 获取用户专属的根目录 URL
     private static var documentsDirectory: URL {
@@ -45,6 +59,32 @@ public struct ConfigLoader {
             logger.info("  - 成功创建目录: \(providersDirectory.path)")
         } catch {
             logger.error("初始化提供商配置目录失败: \(error.localizedDescription)")
+        }
+    }
+    
+    /// 首次启动且无提供商配置时，从远端拉取下载清单并写入本地。
+    /// 失败时仅记录日志，不能影响应用启动。
+    public static func fetchDownloadOnceConfigsIfNeeded(onDownload: (() -> Void)? = nil) {
+        guard beginDownloadOnce() else { return }
+        guard !hasAnyJsonConfigs() else {
+            endDownloadOnce()
+            return
+        }
+        guard let url = URL(string: downloadOnceURLString) else {
+            logger.error("download_once.json URL 无效: \(downloadOnceURLString)")
+            endDownloadOnce()
+            return
+        }
+        
+        Task {
+            let didDownload = await fetchAndStoreDownloadOnceConfigs(from: url)
+            endDownloadOnce()
+            
+            if didDownload {
+                await MainActor.run {
+                    onDownload?()
+                }
+            }
         }
     }
 
@@ -160,5 +200,184 @@ public struct ConfigLoader {
         
         logger.info("总共加载了 \(imageNames.count) 个背景图片。")
         return imageNames
+    }
+    
+    // MARK: - Download-once 支持
+    
+    private static func hasAnyJsonConfigs() -> Bool {
+        let fileManager = FileManager.default
+        let documentsPath = documentsDirectory.path
+        guard fileManager.fileExists(atPath: documentsPath) else { return false }
+        
+        guard let enumerator = fileManager.enumerator(
+            at: documentsDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return false
+        }
+        
+        for case let url as URL in enumerator {
+            if url.pathExtension.lowercased() == "json" {
+                return true
+            }
+        }
+        
+        return false
+    }
+
+    private static func beginDownloadOnce() -> Bool {
+        downloadOnceStateQueue.sync {
+            if downloadOnceInProgress {
+                return false
+            }
+            downloadOnceInProgress = true
+            return true
+        }
+    }
+
+    private static func endDownloadOnce() {
+        downloadOnceStateQueue.sync {
+            downloadOnceInProgress = false
+        }
+    }
+    
+    private static func fetchAndStoreDownloadOnceConfigs(from url: URL) async -> Bool {
+        logger.info("正在获取 download_once.json...")
+        
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = downloadOnceTimeout
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                logger.error("download_once.json 响应无效")
+                return false
+            }
+            
+            let entries = parseDownloadOncePayload(data)
+            guard !entries.isEmpty else {
+                logger.warning("download_once.json 内容为空或格式不受支持")
+                return false
+            }
+            
+            var didDownload = false
+            
+            for entry in entries {
+                guard let remoteURL = URL(string: entry.url) else {
+                    logger.error("下载地址无效: \(entry.url)")
+                    continue
+                }
+                
+                guard let destinationDir = resolveDownloadDestination(for: entry.path) else {
+                    logger.error("下载路径无效: \(entry.path)")
+                    continue
+                }
+                
+                if await downloadFile(from: remoteURL, to: destinationDir) {
+                    didDownload = true
+                }
+            }
+            
+            return didDownload
+        } catch {
+            logger.error("下载 download_once.json 失败: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    private static func parseDownloadOncePayload(_ data: Data) -> [DownloadOnceEntry] {
+        let decoder = JSONDecoder()
+        
+        if let envelope = try? decoder.decode(DownloadOnceEnvelope.self, from: data) {
+            return envelope.downloads
+        }
+        
+        if let entries = try? decoder.decode([DownloadOnceEntry].self, from: data) {
+            return entries
+        }
+        
+        if let mapping = try? decoder.decode([String: String].self, from: data) {
+            return mapping.map { DownloadOnceEntry(path: $0.key, url: $0.value) }
+        }
+        
+        return []
+    }
+    
+    private static func resolveDownloadDestination(for rawPath: String) -> URL? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        
+        let normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
+        
+        if normalized.hasPrefix("/Documents/") {
+            let relativePath = String(normalized.dropFirst("/Documents/".count))
+            return documentsDirectory.appendingPathComponent(relativePath)
+        }
+        
+        if normalized == "/Documents" {
+            return documentsDirectory
+        }
+        
+        if normalized.hasPrefix("Documents/") {
+            let relativePath = String(normalized.dropFirst("Documents/".count))
+            return documentsDirectory.appendingPathComponent(relativePath)
+        }
+        
+        if normalized == "Documents" {
+            return documentsDirectory
+        }
+        
+        if normalized.hasPrefix("/") {
+            return nil
+        }
+        
+        return documentsDirectory.appendingPathComponent(normalized)
+    }
+    
+    private static func downloadFile(from remoteURL: URL, to directory: URL) async -> Bool {
+        let fileName = remoteURL.lastPathComponent
+        guard !fileName.isEmpty else {
+            logger.error("下载地址缺少文件名: \(remoteURL.absoluteString)")
+            return false
+        }
+        
+        let fileManager = FileManager.default
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            logger.error("创建下载目录失败: \(directory.path) - \(error.localizedDescription)")
+            return false
+        }
+        
+        let destinationURL = directory.appendingPathComponent(fileName)
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            logger.info("下载文件已存在，跳过: \(destinationURL.lastPathComponent)")
+            return false
+        }
+        
+        do {
+            var request = URLRequest(url: remoteURL)
+            request.timeoutInterval = downloadOnceTimeout
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                logger.error("下载文件响应无效: \(remoteURL.absoluteString)")
+                return false
+            }
+            
+            try data.write(to: destinationURL, options: [.atomicWrite, .completeFileProtection])
+            logger.info("下载完成: \(destinationURL.lastPathComponent)")
+            return true
+        } catch {
+            logger.error("下载文件失败: \(remoteURL.absoluteString) - \(error.localizedDescription)")
+            return false
+        }
     }
 }

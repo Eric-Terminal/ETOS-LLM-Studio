@@ -6,6 +6,29 @@
 
 import Foundation
 
+private let mcpTokenPlaceholder = "{token}"
+
+private func resolveAdditionalHeaders(_ headers: [String: String], token: String?) -> [String: String] {
+    var resolved: [String: String]
+    if headers.isEmpty {
+        resolved = [:]
+    } else if let token, !token.isEmpty {
+        resolved = headers.reduce(into: [String: String]()) { result, pair in
+            result[pair.key] = pair.value.replacingOccurrences(of: mcpTokenPlaceholder, with: token)
+        }
+    } else {
+        resolved = headers
+    }
+    // apiKey 存在但 headers 中无 Authorization 时，自动添加 Bearer 鉴权头
+    if let token, !token.isEmpty {
+        let hasAuth = resolved.keys.contains { $0.caseInsensitiveCompare("Authorization") == .orderedSame }
+        if !hasAuth {
+            resolved["Authorization"] = "Bearer \(token)"
+        }
+    }
+    return resolved
+}
+
 public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public enum Transport: Codable, Hashable {
         case http(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
@@ -18,19 +41,22 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public var notes: String?
     public var transport: Transport
     public var isSelectedForChat: Bool
+    public var disabledToolIds: [String]
 
     public init(
         id: UUID = UUID(),
         displayName: String,
         notes: String? = nil,
         transport: Transport,
-        isSelectedForChat: Bool = false
+        isSelectedForChat: Bool = false,
+        disabledToolIds: [String] = []
     ) {
         self.id = id
         self.displayName = displayName
         self.notes = notes
         self.transport = transport
         self.isSelectedForChat = isSelectedForChat
+        self.disabledToolIds = disabledToolIds
     }
 }
 
@@ -41,6 +67,7 @@ extension MCPServerConfiguration {
         case notes
         case transport
         case isSelectedForChat
+        case disabledToolIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,6 +77,7 @@ extension MCPServerConfiguration {
         notes = try container.decodeIfPresent(String.self, forKey: .notes)
         transport = try container.decode(Transport.self, forKey: .transport)
         isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
+        disabledToolIds = try container.decodeIfPresent([String].self, forKey: .disabledToolIds) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -61,6 +89,10 @@ extension MCPServerConfiguration {
         if isSelectedForChat {
             try container.encode(isSelectedForChat, forKey: .isSelectedForChat)
         }
+        if !disabledToolIds.isEmpty {
+            let uniqueIds = Array(Set(disabledToolIds)).sorted()
+            try container.encode(uniqueIds, forKey: .disabledToolIds)
+        }
     }
 }
 
@@ -69,29 +101,32 @@ public extension MCPServerConfiguration {
         switch transport {
         case .http(let endpoint, _, _):
             return endpoint.absoluteString
-        case .httpSSE(let messageEndpoint, let sseEndpoint, _, _):
-            if messageEndpoint == MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint) {
-                return sseEndpoint.absoluteString
-            }
-            return "\(sseEndpoint.absoluteString) (message override)"
+        case .httpSSE(_, let sseEndpoint, _, _):
+            return sseEndpoint.absoluteString
         case .oauth(let endpoint, _, _, _, _):
             return endpoint.absoluteString
+        }
+    }
+
+    var additionalHeaders: [String: String] {
+        switch transport {
+        case .http(_, _, let headers):
+            return headers
+        case .httpSSE(_, _, _, let headers):
+            return headers
+        case .oauth:
+            return [:]
         }
     }
 
     func makeTransport(urlSession: URLSession = .shared) -> MCPTransport {
         switch transport {
         case .http(let endpoint, let apiKey, let additionalHeaders):
-            var headers = additionalHeaders
-            if let apiKey, !apiKey.isEmpty {
-                headers["Authorization"] = "Bearer \(apiKey)"
-            }
-            return MCPHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
-        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
-            var headers = additionalHeaders
-            if let apiKey, !apiKey.isEmpty {
-                headers["Authorization"] = "Bearer \(apiKey)"
-            }
+            let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
+            return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
+        case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
+            let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
+            let messageEndpoint = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
             return MCPOAuthHTTPTransport(
@@ -102,6 +137,20 @@ public extension MCPServerConfiguration {
                 scope: scope,
                 session: urlSession
             )
+        }
+    }
+}
+
+public extension MCPServerConfiguration {
+    func isToolEnabled(_ toolId: String) -> Bool {
+        !disabledToolIds.contains(toolId)
+    }
+
+    mutating func setToolEnabled(_ toolId: String, isEnabled: Bool) {
+        if isEnabled {
+            disabledToolIds.removeAll { $0 == toolId }
+        } else if !disabledToolIds.contains(toolId) {
+            disabledToolIds.append(toolId)
         }
     }
 }
@@ -144,7 +193,9 @@ extension MCPServerConfiguration.Transport {
 
     private enum Kind: String, Codable {
         case http
+        case streamableHTTP = "streamable_http"
         case httpSSE
+        case sse
         case oauth
     }
 
@@ -152,12 +203,12 @@ extension MCPServerConfiguration.Transport {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try container.decode(Kind.self, forKey: .kind)
         switch kind {
-        case .http:
+        case .http, .streamableHTTP:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
             let headers = try container.decodeIfPresent([String: String].self, forKey: .additionalHeaders) ?? [:]
             self = .http(endpoint: endpoint, apiKey: apiKey, additionalHeaders: headers)
-        case .httpSSE:
+        case .httpSSE, .sse:
             let legacyEndpoint = try container.decodeIfPresent(URL.self, forKey: .endpoint)
             let explicitMessageEndpoint = try container.decodeIfPresent(URL.self, forKey: .messageEndpoint)
             let explicitSSEEndpoint = try container.decodeIfPresent(URL.self, forKey: .sseEndpoint)
@@ -183,14 +234,14 @@ extension MCPServerConfiguration.Transport {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .http(let endpoint, let apiKey, let headers):
-            try container.encode(Kind.http, forKey: .kind)
+            try container.encode(Kind.streamableHTTP, forKey: .kind)
             try container.encode(endpoint, forKey: .endpoint)
             try container.encodeIfPresent(apiKey, forKey: .apiKey)
             if !headers.isEmpty {
                 try container.encode(headers, forKey: .additionalHeaders)
             }
         case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let headers):
-            try container.encode(Kind.httpSSE, forKey: .kind)
+            try container.encode(Kind.sse, forKey: .kind)
             try container.encode(messageEndpoint, forKey: .endpoint)
             try container.encode(messageEndpoint, forKey: .messageEndpoint)
             try container.encode(sseEndpoint, forKey: .sseEndpoint)
