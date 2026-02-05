@@ -74,7 +74,7 @@ struct ChatBubble: View {
     
     // MARK: - 属性与绑定
     
-    let message: ChatMessage
+    @ObservedObject var messageState: ChatMessageRenderState
     @Binding var isReasoningExpanded: Bool
     @Binding var isToolCallsExpanded: Bool
     
@@ -91,6 +91,10 @@ struct ChatBubble: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
+    
+    private var message: ChatMessage {
+        messageState.message
+    }
 
     /// 图片占位符文本（各语言版本）
     private static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
@@ -125,8 +129,7 @@ struct ChatBubble: View {
 
     private var shouldShimmerReasoningHeader: Bool {
         guard viewModel.isSendingMessage, message.role == .assistant else { return false }
-        let latestAssistantID = viewModel.messages.last(where: { $0.role == .assistant })?.id
-        return latestAssistantID == message.id
+        return viewModel.latestAssistantMessageID == message.id
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {

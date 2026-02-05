@@ -122,21 +122,10 @@ struct ChatView: View {
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
-    private var displayMessages: [ChatMessage] {
-        var representedToolCallIDs = Set<String>()
-        for message in viewModel.messages {
-            guard message.role != .tool,
-                  let toolCalls = message.toolCalls,
-                  !toolCalls.isEmpty else { continue }
-            for call in toolCalls {
-                let trimmedResult = (call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmedResult.isEmpty {
-                    representedToolCallIDs.insert(call.id)
-                }
-            }
-        }
-
-        return viewModel.messages.filter { message in
+    private var displayMessages: [ChatMessageRenderState] {
+        let representedToolCallIDs = viewModel.toolCallResultIDs
+        return viewModel.messages.filter { state in
+            let message = state.message
             guard message.role == .tool else { return true }
             guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
             return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
@@ -162,13 +151,14 @@ struct ChatView: View {
                             historyBanner
                             
                             // 消息列表
-                            ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, message in
-                                let previousMessage = index > 0 ? displayedMessages[index - 1] : nil
-                                let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1] : nil
+                            ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
+                                let message = state.message
+                                let previousMessage = index > 0 ? displayedMessages[index - 1].message : nil
+                                let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
                                 let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
                                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
                                 ChatBubble(
-                                    message: message,
+                                    messageState: state,
                                     isReasoningExpanded: Binding(
                                         get: { viewModel.reasoningExpandedState[message.id, default: false] },
                                         set: { viewModel.reasoningExpandedState[message.id] = $0 }
@@ -183,17 +173,17 @@ struct ChatView: View {
                                     mergeWithPrevious: mergeWithPrevious,
                                     mergeWithNext: mergeWithNext
                                 )
-                                .id(message.id)
+                                .id(state.id)
                                 .contextMenu {
                                     contextMenu(for: message)
                                 }
                                 .onAppear {
-                                    if message.id == displayedMessages.last?.id {
+                                    if state.id == displayedMessages.last?.id {
                                         showScrollToBottom = false
                                     }
                                 }
                                 .onDisappear {
-                                    if message.id == displayedMessages.last?.id {
+                                    if state.id == displayedMessages.last?.id {
                                         showScrollToBottom = true
                                     }
                                 }

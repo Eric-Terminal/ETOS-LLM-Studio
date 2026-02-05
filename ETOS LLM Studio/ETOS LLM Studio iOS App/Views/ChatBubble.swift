@@ -87,7 +87,7 @@ private struct BubbleCornerShape: Shape {
 }
 
 struct ChatBubble: View {
-    let message: ChatMessage
+    @ObservedObject var messageState: ChatMessageRenderState
     @Binding var isReasoningExpanded: Bool
     @Binding var isToolCallsExpanded: Bool
     let enableMarkdown: Bool
@@ -103,6 +103,10 @@ struct ChatBubble: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
     
+    private var message: ChatMessage {
+        messageState.message
+    }
+
     // Telegram 颜色
     private let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
     private let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
@@ -196,8 +200,7 @@ struct ChatBubble: View {
 
     private var shouldShimmerReasoningHeader: Bool {
         guard viewModel.isSendingMessage, message.role == .assistant else { return false }
-        let latestAssistantID = viewModel.messages.last(where: { $0.role == .assistant })?.id
-        return latestAssistantID == message.id
+        return viewModel.latestAssistantMessageID == message.id
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {

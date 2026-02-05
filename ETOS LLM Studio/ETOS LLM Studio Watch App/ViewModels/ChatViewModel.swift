@@ -25,8 +25,8 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - @Published 属性 (UI 状态)
     
-    @Published var messages: [ChatMessage] = []
-    @Published var allMessagesForSession: [ChatMessage] = []
+    @Published private(set) var messages: [ChatMessageRenderState] = []
+    private(set) var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
     @Published var messageToEdit: ChatMessage?
@@ -58,6 +58,8 @@ class ChatViewModel: ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
+    @Published private(set) var latestAssistantMessageID: UUID?
+    @Published private(set) var toolCallResultIDs: Set<String> = []
     
     // MARK: - 用户偏好设置 (AppStorage)
     
@@ -123,6 +125,8 @@ class ChatViewModel: ObservableObject {
     private var recordingStartDate: Date?
     private var recordingTimer: Timer?
     private let waveformSampleCount: Int = 24
+    private var allMessageStates: [ChatMessageRenderState] = []
+    private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
     
     // MARK: - 初始化
 
@@ -174,7 +178,9 @@ class ChatViewModel: ObservableObject {
             
         chatService.messagesForSessionSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.allMessagesForSession, on: self)
+            .sink { [weak self] messages in
+                self?.applyMessagesUpdate(messages)
+            }
             .store(in: &cancellables)
         
         chatService.providersSubject
@@ -211,12 +217,7 @@ class ChatViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
-        $allMessagesForSession
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.updateDisplayedMessages()
-            }
-            .store(in: &cancellables)
+        
             
         MemoryManager.shared.memoriesPublisher
             .receive(on: DispatchQueue.main)
@@ -728,8 +729,60 @@ class ChatViewModel: ObservableObject {
     
     // MARK: 视图状态与持久化
     
+    private func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
+        allMessagesForSession = incomingMessages
+        
+        var newStates: [ChatMessageRenderState] = []
+        newStates.reserveCapacity(incomingMessages.count)
+        var newIDs = Set<UUID>()
+        var newToolCallResultIDs = Set<String>()
+        var newestAssistantID: UUID?
+        
+        for message in incomingMessages {
+            newIDs.insert(message.id)
+            
+            let state: ChatMessageRenderState
+            if let existing = messageStateByID[message.id] {
+                state = existing
+            } else {
+                let created = ChatMessageRenderState(message: message)
+                messageStateByID[message.id] = created
+                state = created
+            }
+            state.update(with: message)
+            newStates.append(state)
+            
+            if message.role != .tool, let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+                for call in toolCalls {
+                    let trimmedResult = (call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedResult.isEmpty {
+                        newToolCallResultIDs.insert(call.id)
+                    }
+                }
+            }
+            
+            if message.role == .assistant {
+                newestAssistantID = message.id
+            }
+        }
+        
+        if messageStateByID.count != newIDs.count {
+            messageStateByID = messageStateByID.filter { newIDs.contains($0.key) }
+        }
+        
+        allMessageStates = newStates
+        updateDisplayedMessages()
+        
+        if toolCallResultIDs != newToolCallResultIDs {
+            toolCallResultIDs = newToolCallResultIDs
+        }
+        if latestAssistantMessageID != newestAssistantID {
+            latestAssistantMessageID = newestAssistantID
+        }
+    }
+    
     func updateDisplayedMessages() {
-        let filtered = visibleMessages(from: allMessagesForSession)
+        let filtered = visibleMessages(from: allMessageStates)
         
         if lastSessionID != currentSession?.id {
             lastSessionID = currentSession?.id
@@ -740,25 +793,26 @@ class ChatViewModel: ObservableObject {
         if lazyCount > 0 && filtered.count > lazyCount {
             let limit = lazyCount + additionalHistoryLoaded
             if filtered.count > limit {
-                messages = Array(filtered.suffix(limit))
-                isHistoryFullyLoaded = false
+                let subset = Array(filtered.suffix(limit))
+                updateDisplayedStatesIfNeeded(subset)
+                updateHistoryFullyLoadedIfNeeded(false)
             } else {
-                messages = filtered
-                isHistoryFullyLoaded = true
+                updateDisplayedStatesIfNeeded(filtered)
+                updateHistoryFullyLoadedIfNeeded(true)
                 additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, filtered.count - lazyCount))
             }
         } else {
-            messages = filtered
-            isHistoryFullyLoaded = true
+            updateDisplayedStatesIfNeeded(filtered)
+            updateHistoryFullyLoadedIfNeeded(true)
             additionalHistoryLoaded = 0
         }
     }
     
     func loadEntireHistory() {
-        let filtered = visibleMessages(from: allMessagesForSession)
+        let filtered = visibleMessages(from: allMessageStates)
         additionalHistoryLoaded = max(0, filtered.count - lazyLoadMessageCount)
-        messages = filtered
-        isHistoryFullyLoaded = true
+        updateDisplayedStatesIfNeeded(filtered)
+        updateHistoryFullyLoadedIfNeeded(true)
     }
     
     func loadMoreHistoryChunk(count: Int? = nil) {
@@ -883,7 +937,19 @@ class ChatViewModel: ObservableObject {
         extendedSession = nil
     }
     
-    private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
+    private func updateDisplayedStatesIfNeeded(_ newStates: [ChatMessageRenderState]) {
+        let currentIDs = messages.map(\.id)
+        let newIDs = newStates.map(\.id)
+        guard currentIDs != newIDs else { return }
+        messages = newStates
+    }
+    
+    private func updateHistoryFullyLoadedIfNeeded(_ newValue: Bool) {
+        guard isHistoryFullyLoaded != newValue else { return }
+        isHistoryFullyLoaded = newValue
+    }
+    
+    private func visibleMessages(from source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
         source
     }
     
