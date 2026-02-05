@@ -122,18 +122,8 @@ struct ChatView: View {
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
-    private var displayMessages: [ChatMessageRenderState] {
-        let representedToolCallIDs = viewModel.toolCallResultIDs
-        return viewModel.messages.filter { state in
-            let message = state.message
-            guard message.role == .tool else { return true }
-            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
-            return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
-        }
-    }
-    
     var body: some View {
-        let displayedMessages = displayMessages
+        let displayedMessages = viewModel.displayMessages
         NavigationStack {
             ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
@@ -391,7 +381,7 @@ struct ChatView: View {
         GeometryReader { geometry in
             Group {
                 if viewModel.enableBackground,
-                   let image = viewModel.currentBackgroundImageUIImage {
+                   let image = viewModel.currentBackgroundImageBlurredUIImage {
                     ZStack {
                         if viewModel.backgroundContentMode == "fit" {
                             Color.black
@@ -405,7 +395,6 @@ struct ChatView: View {
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
                             .clipped()
-                            .blur(radius: viewModel.backgroundBlur)
                             .opacity(viewModel.backgroundOpacity)
                     }
                 } else {
@@ -1102,9 +1091,9 @@ struct ChatView: View {
     /// Telegram 风格历史加载提示
     @ViewBuilder
     private var historyBanner: some View {
-        let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
+        let remainingCount = viewModel.remainingHistoryCount
         if remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
-            let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
+            let chunk = viewModel.historyLoadChunkCount
             Button {
                 suppressAutoScrollOnce = true
                 withAnimation {

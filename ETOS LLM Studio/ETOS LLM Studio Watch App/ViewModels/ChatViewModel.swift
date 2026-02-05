@@ -17,6 +17,7 @@ import Combine
 import Shared
 import AVFoundation
 import AVFAudio
+import CoreImage
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
@@ -26,6 +27,7 @@ class ChatViewModel: ObservableObject {
     // MARK: - @Published 属性 (UI 状态)
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
+    @Published private(set) var displayMessages: [ChatMessageRenderState] = []
     private(set) var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
@@ -64,8 +66,12 @@ class ChatViewModel: ObservableObject {
     // MARK: - 用户偏好设置 (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
-    @AppStorage("enableBackground") var enableBackground: Bool = true
-    @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0
+    @AppStorage("enableBackground") var enableBackground: Bool = true {
+        didSet { refreshBlurredBackgroundImage() }
+    }
+    @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0 {
+        didSet { refreshBlurredBackgroundImage() }
+    }
     @AppStorage("backgroundOpacity") var backgroundOpacity: Double = 0.7
     @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill" // "fill" 或 "fit"
     @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
@@ -74,7 +80,9 @@ class ChatViewModel: ObservableObject {
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = false
     @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 3
-    @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = ""
+    @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
+        didSet { refreshBlurredBackgroundImage() }
+    }
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
     @AppStorage("enableMemory") var enableMemory: Bool = true
@@ -95,11 +103,11 @@ class ChatViewModel: ObservableObject {
     // MARK: - 公开属性
     
     @Published var backgroundImages: [String] = []
+    @Published private(set) var currentBackgroundImageBlurredUIImage: UIImage?
     
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
-        let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(currentBackgroundImage)
-        return UIImage(contentsOfFile: fileURL.path)
+        return loadBackgroundImage(named: currentBackgroundImage)
     }
     
     var embeddingModelOptions: [RunnableModel] {
@@ -110,6 +118,14 @@ class ChatViewModel: ObservableObject {
     
     var historyLoadChunkSize: Int {
         incrementalHistoryBatchSize
+    }
+
+    var remainingHistoryCount: Int {
+        max(0, allMessagesForSession.count - messages.count)
+    }
+
+    var historyLoadChunkCount: Int {
+        min(remainingHistoryCount, historyLoadChunkSize)
     }
     
     // MARK: - 私有属性
@@ -127,6 +143,17 @@ class ChatViewModel: ObservableObject {
     private let waveformSampleCount: Int = 24
     private var allMessageStates: [ChatMessageRenderState] = []
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    private let backgroundImageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 6
+        return cache
+    }()
+    private let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 6
+        return cache
+    }()
+    private var backgroundBlurTask: Task<Void, Never>?
     
     // MARK: - 初始化
 
@@ -149,6 +176,7 @@ class ChatViewModel: ObservableObject {
 
         // 自动轮换背景逻辑
         rotateBackgroundImageIfNeeded()
+        refreshBlurredBackgroundImage()
         
         logger.info("ChatViewModel initialized and subscribed to ChatService.")
     }
@@ -775,6 +803,7 @@ class ChatViewModel: ObservableObject {
         
         if toolCallResultIDs != newToolCallResultIDs {
             toolCallResultIDs = newToolCallResultIDs
+            updateDisplayMessagesIfNeeded()
         }
         if latestAssistantMessageID != newestAssistantID {
             latestAssistantMessageID = newestAssistantID
@@ -867,6 +896,7 @@ class ChatViewModel: ObservableObject {
         if !images.contains(currentBackgroundImage) {
             currentBackgroundImage = images.first ?? ""
         }
+        refreshBlurredBackgroundImage()
     }
     
     private func requestMicrophonePermission() async -> Bool {
@@ -942,6 +972,7 @@ class ChatViewModel: ObservableObject {
         let newIDs = newStates.map(\.id)
         guard currentIDs != newIDs else { return }
         messages = newStates
+        updateDisplayMessagesIfNeeded(with: newStates)
     }
     
     private func updateHistoryFullyLoadedIfNeeded(_ newValue: Bool) {
@@ -951,6 +982,91 @@ class ChatViewModel: ObservableObject {
     
     private func visibleMessages(from source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
         source
+    }
+
+    private func updateDisplayMessagesIfNeeded(with source: [ChatMessageRenderState]? = nil) {
+        let base = source ?? messages
+        let filtered = filterDisplayMessages(base)
+        let currentIDs = displayMessages.map(\.id)
+        let newIDs = filtered.map(\.id)
+        guard currentIDs != newIDs else { return }
+        displayMessages = filtered
+    }
+
+    private func filterDisplayMessages(_ source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
+        guard !toolCallResultIDs.isEmpty else { return source }
+        return source.filter { state in
+            let message = state.message
+            guard message.role == .tool else { return true }
+            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
+            return toolCalls.allSatisfy { !toolCallResultIDs.contains($0.id) }
+        }
+    }
+
+    private func loadBackgroundImage(named name: String) -> UIImage? {
+        if let cached = backgroundImageCache.object(forKey: name as NSString) {
+            return cached
+        }
+        let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(name)
+        guard let image = UIImage(contentsOfFile: fileURL.path) else { return nil }
+        backgroundImageCache.setObject(image, forKey: name as NSString)
+        return image
+    }
+
+    private func blurredCacheKey(for name: String, radius: Double) -> NSString {
+        let scaled = Int((radius * 10).rounded())
+        return "\(name)|blur:\(scaled)" as NSString
+    }
+
+    private func refreshBlurredBackgroundImage() {
+        backgroundBlurTask?.cancel()
+        guard enableBackground, !currentBackgroundImage.isEmpty else {
+            currentBackgroundImageBlurredUIImage = nil
+            return
+        }
+        guard let baseImage = loadBackgroundImage(named: currentBackgroundImage) else {
+            currentBackgroundImageBlurredUIImage = nil
+            return
+        }
+        let radius = backgroundBlur
+        if radius <= 0.01 {
+            currentBackgroundImageBlurredUIImage = baseImage
+            return
+        }
+        let cacheKey = blurredCacheKey(for: currentBackgroundImage, radius: radius)
+        if let cached = blurredBackgroundImageCache.object(forKey: cacheKey) {
+            currentBackgroundImageBlurredUIImage = cached
+            return
+        }
+        currentBackgroundImageBlurredUIImage = baseImage
+        let expectedName = currentBackgroundImage
+        let expectedRadius = radius
+        backgroundBlurTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            let blurred = Self.makeBlurredImage(from: baseImage, radius: expectedRadius)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard self.enableBackground,
+                      self.currentBackgroundImage == expectedName,
+                      self.backgroundBlur == expectedRadius else { return }
+                if let blurred {
+                    self.blurredBackgroundImageCache.setObject(blurred, forKey: cacheKey)
+                }
+                self.currentBackgroundImageBlurredUIImage = blurred ?? baseImage
+            }
+        }
+    }
+
+    private static func makeBlurredImage(from image: UIImage, radius: Double) -> UIImage? {
+        guard let ciImage = CIImage(image: image) else { return nil }
+        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
+        filter.setValue(ciImage, forKey: kCIInputImageKey)
+        filter.setValue(radius, forKey: kCIInputRadiusKey)
+        guard let output = filter.outputImage else { return nil }
+        let cropped = output.cropped(to: ciImage.extent)
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(cropped, from: ciImage.extent) else { return nil }
+        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
     }
     
 }

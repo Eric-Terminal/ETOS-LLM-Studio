@@ -40,22 +40,12 @@ struct ContentView: View {
         }
     }
     
-    private var displayMessages: [ChatMessageRenderState] {
-        let representedToolCallIDs = viewModel.toolCallResultIDs
-        return viewModel.messages.filter { state in
-            let message = state.message
-            guard message.role == .tool else { return true }
-            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
-            return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
-        }
-    }
-    
     // MARK: - 视图主体
     
     var body: some View {
         ZStack {
             // 背景图
-            if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageUIImage {
+            if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageBlurredUIImage {
                 GeometryReader { proxy in
                     let size = proxy.size
                     ZStack {
@@ -69,7 +59,6 @@ struct ContentView: View {
                             .frame(width: size.width, height: size.height)
                             .position(x: size.width / 2, y: size.height / 2)
                             .clipped()
-                            .blur(radius: viewModel.backgroundBlur)
                             .opacity(viewModel.backgroundOpacity)
                     }
                     .frame(width: size.width, height: size.height)
@@ -128,14 +117,15 @@ struct ContentView: View {
     }
     
     private func chatList(proxy: ScrollViewProxy) -> some View {
+        let displayedMessages = viewModel.displayMessages
         List {
             if viewModel.messages.isEmpty {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
             
-            let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
+            let remainingCount = viewModel.remainingHistoryCount
             if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
-                let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
+                let chunk = viewModel.historyLoadChunkCount
                 Button(action: {
                     suppressAutoScrollOnce = true
                     withAnimation {
@@ -152,10 +142,10 @@ struct ContentView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
             }
 
-            ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, state in
+            ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
                 let message = state.message
-                let previousMessage = index > 0 ? displayMessages[index - 1].message : nil
-                let nextMessage = index + 1 < displayMessages.count ? displayMessages[index + 1].message : nil
+                let previousMessage = index > 0 ? displayedMessages[index - 1].message : nil
+                let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
                 let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
                 messageRow(
