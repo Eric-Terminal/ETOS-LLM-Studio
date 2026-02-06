@@ -213,20 +213,6 @@ public class OpenAIAdapter: APIAdapter {
         return capabilities
     }
 
-    /// 生图请求不允许透传与工具调用相关的覆盖参数，避免在生图模式下误带 MCP/函数调用配置。
-    private func sanitizedImageGenerationOverrides(_ overrides: [String: Any]) -> [String: Any] {
-        let disallowedKeys: Set<String> = [
-            "stream",
-            "messages",
-            "tools",
-            "tool_choice",
-            "functions",
-            "function_call",
-            "parallel_tool_calls"
-        ]
-        return overrides.filter { !disallowedKeys.contains($0.key) }
-    }
-
     // MARK: - 内部解码模型 (实现细节)
     
     private struct OpenAIToolCall: Decodable {
@@ -697,8 +683,7 @@ public class OpenAIAdapter: APIAdapter {
             return nil
         }
 
-        let rawOverrides = model.model.overrideParameters.mapValues { $0.toAny() }
-        let overrides = sanitizedImageGenerationOverrides(rawOverrides)
+        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
         if referenceImages.isEmpty {
             let imagesURL = baseURL.appendingPathComponent("images/generations")
             var request = URLRequest(url: imagesURL)
