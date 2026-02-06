@@ -22,6 +22,7 @@ struct ImageGenerationFeatureView: View {
     @State private var prompt: String = ""
     @State private var referenceImages: [ImageAttachment] = []
     @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var showGalleryFromStatus: Bool = false
 
     private var availableImageModels: [RunnableModel] {
         viewModel.imageGenerationModelOptions
@@ -46,6 +47,20 @@ struct ImageGenerationFeatureView: View {
 
     private var generatedImageCount: Int {
         generatedImageItems(from: viewModel.allMessagesForSession).count
+    }
+
+    private var galleryDestination: some View {
+        ImageGenerationGalleryView(
+            onReusePrompt: { reusedPrompt in
+                prompt = reusedPrompt
+            },
+            onContinueGeneration: { reusedPrompt, attachment in
+                prompt = reusedPrompt
+                referenceImages = [attachment]
+                selectedPhotos = []
+            }
+        )
+        .environmentObject(viewModel)
     }
 
     var body: some View {
@@ -133,9 +148,16 @@ struct ImageGenerationFeatureView: View {
             }
 
             Section {
+                imageGenerationStatusContent
+            } header: {
+                Text(NSLocalizedString("生图状态", comment: "Image generation status section title"))
+            } footer: {
+                Text(NSLocalizedString("等待时可取消，完成后可复用提示词或继续编辑。", comment: "Image generation status section footer"))
+            }
+
+            Section {
                 NavigationLink {
-                    ImageGenerationGalleryView()
-                        .environmentObject(viewModel)
+                    galleryDestination
                 } label: {
                     Label(NSLocalizedString("生成相册", comment: "Generated image gallery title"), systemImage: "photo.stack")
                 }
@@ -164,6 +186,9 @@ struct ImageGenerationFeatureView: View {
         .onChange(of: viewModel.activatedModels) { _, _ in
             syncSelectedImageModel()
         }
+        .navigationDestination(isPresented: $showGalleryFromStatus) {
+            galleryDestination
+        }
         .toolbar {
             if !prompt.isEmpty || !referenceImages.isEmpty {
                 Button("清空") {
@@ -190,6 +215,137 @@ struct ImageGenerationFeatureView: View {
                 Color(uiColor: .secondarySystemBackground)
                 Image(systemName: "photo")
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var imageGenerationStatusContent: some View {
+        switch viewModel.imageGenerationFeedback.phase {
+        case .idle:
+            Text(NSLocalizedString("尚未开始生图。", comment: "No image generation has been started yet"))
+                .foregroundStyle(.secondary)
+        case .running:
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text(NSLocalizedString("正在生成图片…", comment: "Image generation is in progress"))
+                        .font(.headline)
+                }
+
+                if let startedAt = viewModel.imageGenerationFeedback.startedAt {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let elapsed = max(0, Int(context.date.timeIntervalSince(startedAt)))
+                        Text(
+                            String(
+                                format: NSLocalizedString("已等待 %d 秒", comment: "Image generation elapsed seconds"),
+                                elapsed
+                            )
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                if !viewModel.imageGenerationFeedback.prompt.isEmpty {
+                    Text(viewModel.imageGenerationFeedback.prompt)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Button(role: .destructive) {
+                    viewModel.cancelSending()
+                } label: {
+                    Label(NSLocalizedString("取消生成", comment: "Cancel image generation"), systemImage: "stop.circle")
+                }
+            }
+        case .success:
+            VStack(alignment: .leading, spacing: 10) {
+                Text(
+                    String(
+                        format: NSLocalizedString("生成完成，共 %d 张。", comment: "Image generation succeeded with count"),
+                        viewModel.imageGenerationFeedback.imageCount
+                    )
+                )
+                .font(.headline)
+
+                if !viewModel.imageGenerationFeedback.prompt.isEmpty {
+                    Text(viewModel.imageGenerationFeedback.prompt)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        showGalleryFromStatus = true
+                    } label: {
+                        Label(NSLocalizedString("查看结果", comment: "Open generated image gallery"), systemImage: "photo.stack")
+                    }
+
+                    Button {
+                        prompt = viewModel.imageGenerationFeedback.prompt
+                    } label: {
+                        Label(NSLocalizedString("复用提示词", comment: "Reuse last image generation prompt"), systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(viewModel.imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        case .failure:
+            VStack(alignment: .leading, spacing: 10) {
+                Text(NSLocalizedString("生成失败", comment: "Image generation failed status"))
+                    .font(.headline)
+                    .foregroundStyle(.red)
+
+                if let reason = viewModel.imageGenerationFeedback.errorMessage, !reason.isEmpty {
+                    Text(reason)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        viewModel.retryLastImageGeneration(model: selectedImageModel)
+                    } label: {
+                        Label(NSLocalizedString("重试生成", comment: "Retry image generation"), systemImage: "arrow.clockwise")
+                    }
+
+                    Button {
+                        prompt = viewModel.imageGenerationFeedback.prompt
+                    } label: {
+                        Label(NSLocalizedString("复用提示词", comment: "Reuse last image generation prompt"), systemImage: "text.quote")
+                    }
+                    .disabled(viewModel.imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        case .cancelled:
+            VStack(alignment: .leading, spacing: 10) {
+                Text(NSLocalizedString("已取消生成", comment: "Image generation cancelled status"))
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+
+                if !viewModel.imageGenerationFeedback.prompt.isEmpty {
+                    Text(viewModel.imageGenerationFeedback.prompt)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        viewModel.retryLastImageGeneration(model: selectedImageModel)
+                    } label: {
+                        Label(NSLocalizedString("再次生成", comment: "Generate again"), systemImage: "arrow.clockwise")
+                    }
+
+                    Button {
+                        prompt = viewModel.imageGenerationFeedback.prompt
+                    } label: {
+                        Label(NSLocalizedString("复用提示词", comment: "Reuse last image generation prompt"), systemImage: "text.quote")
+                    }
+                    .disabled(viewModel.imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
         }
     }
@@ -270,9 +426,12 @@ struct ImageGenerationFeatureView: View {
 
 private struct ImageGenerationGalleryView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var previewPayload: ImagePreviewPayload?
     @State private var pendingDeleteItem: GeneratedImageItem?
     @State private var alertMessage: String?
+    let onReusePrompt: (String) -> Void
+    let onContinueGeneration: (String, ImageAttachment) -> Void
     
     private let galleryColumns: [GridItem] = [
         GridItem(.flexible(), spacing: 12),
@@ -416,6 +575,24 @@ private struct ImageGenerationGalleryView: View {
 
                 Menu {
                     Button {
+                        onReusePrompt(item.prompt)
+                        dismiss()
+                    } label: {
+                        Label(NSLocalizedString("复用提示词", comment: "Reuse prompt from generated image"), systemImage: "text.quote")
+                    }
+
+                    Button {
+                        if let attachment = imageAttachment(for: item.fileName) {
+                            onContinueGeneration(item.prompt, attachment)
+                            dismiss()
+                        } else {
+                            alertMessage = NSLocalizedString("图片文件不存在。", comment: "Generated image file missing")
+                        }
+                    } label: {
+                        Label(NSLocalizedString("以此图继续生成", comment: "Continue generation with selected image"), systemImage: "wand.and.stars")
+                    }
+
+                    Button {
                         Task {
                             await downloadImage(item)
                         }
@@ -445,6 +622,26 @@ private struct ImageGenerationGalleryView: View {
     private func generatedUIImage(fileName: String) -> UIImage? {
         let url = Persistence.getImageDirectory().appendingPathComponent(fileName)
         return UIImage(contentsOfFile: url.path)
+    }
+
+    private func imageAttachment(for fileName: String) -> ImageAttachment? {
+        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        let mimeType: String
+        switch ext {
+        case "jpg", "jpeg":
+            mimeType = "image/jpeg"
+        case "png":
+            mimeType = "image/png"
+        case "webp":
+            mimeType = "image/webp"
+        case "heic", "heif":
+            mimeType = "image/heic"
+        default:
+            mimeType = "image/jpeg"
+        }
+        return ImageAttachment(data: data, mimeType: mimeType, fileName: fileName)
     }
 
     private func downloadImage(_ item: GeneratedImageItem) async {

@@ -761,3 +761,17 @@
 "响应速度" = "Response speed";
 "token/s" = "token/s";
 "估算" = "Estimated";
+"生图状态" = "Generation status";
+"等待时可取消，完成后可复用提示词。" = "You can cancel while waiting. After completion, reuse the prompt.";
+"尚未开始生图。" = "No image generation yet.";
+"正在生成图片…" = "Generating image...";
+"已等待 %d 秒" = "Waiting for %d s";
+"取消生成" = "Cancel generation";
+"生成完成，共 %d 张。" = "Done. Generated %d image(s).";
+"查看结果" = "View results";
+"复用提示词" = "Reuse prompt";
+"生成失败" = "Generation failed";
+"重试生成" = "Retry";
+"已取消生成" = "Generation cancelled";
+"再次生成" = "Generate again";
+"以此图继续生成" = "Continue with this image";

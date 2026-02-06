@@ -54,12 +54,20 @@ public class ChatService {
     public let selectedModelSubject: CurrentValueSubject<RunnableModel?, Never>
 
     public let requestStatusSubject = PassthroughSubject<RequestStatus, Never>()
+    public let imageGenerationStatusSubject = PassthroughSubject<ImageGenerationStatus, Never>()
     
     public enum RequestStatus {
         case started
         case finished
         case error
         case cancelled
+    }
+
+    public enum ImageGenerationStatus {
+        case started(sessionID: UUID, loadingMessageID: UUID, prompt: String, startedAt: Date, referenceCount: Int)
+        case succeeded(sessionID: UUID, loadingMessageID: UUID, prompt: String, imageFileNames: [String], finishedAt: Date)
+        case failed(sessionID: UUID?, loadingMessageID: UUID?, prompt: String, reason: String, finishedAt: Date)
+        case cancelled(sessionID: UUID?, loadingMessageID: UUID?, prompt: String, finishedAt: Date)
     }
 
     // MARK: - 私有状态
@@ -73,12 +81,20 @@ public class ChatService {
     private var currentRequestSessionID: UUID?
     /// 当前请求生成的加载占位消息 ID，方便在取消时移除。
     private var currentLoadingMessageID: UUID?
+    /// 当前生图请求上下文，用于向 UI 广播更细粒度的生图状态。
+    private var currentImageGenerationContext: ImageGenerationContext?
     /// 重试时要添加新版本的assistant消息ID（如果有）
     private var retryTargetMessageID: UUID?
     private var providers: [Provider]
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
     private let urlSession: URLSession
+
+    private struct ImageGenerationContext {
+        let sessionID: UUID
+        let loadingMessageID: UUID
+        let prompt: String
+    }
 
     private func sanitizedToolName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -292,6 +308,7 @@ public class ChatService {
     public func cancelOngoingRequest() async {
         guard let task = currentRequestTask else { return }
         let token = currentRequestToken
+        var cancelledImageContext: ImageGenerationContext?
         task.cancel()
         
         do {
@@ -313,13 +330,25 @@ public class ChatService {
                     removeMessage(withID: loadingID, in: sessionID)
                 }
             }
+            cancelledImageContext = currentImageGenerationContext
             currentRequestTask = nil
             currentRequestToken = nil
             currentRequestSessionID = nil
             currentLoadingMessageID = nil
+            currentImageGenerationContext = nil
         }
         
         requestStatusSubject.send(.cancelled)
+        if let context = cancelledImageContext {
+            imageGenerationStatusSubject.send(
+                .cancelled(
+                    sessionID: context.sessionID,
+                    loadingMessageID: context.loadingMessageID,
+                    prompt: context.prompt,
+                    finishedAt: Date()
+                )
+            )
+        }
     }
     
     public func saveAndReloadProviders(from providers: [Provider]) {
@@ -1026,21 +1055,51 @@ public class ChatService {
         runnableModel: RunnableModel? = nil
     ) async {
         guard var currentSession = currentSessionSubject.value else {
-            addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
+            let reason = NSLocalizedString("错误: 没有当前会话。", comment: "No current session error")
+            addErrorMessage(reason)
             requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: nil,
+                    loadingMessageID: nil,
+                    prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
             return
         }
 
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else {
-            addErrorMessage(NSLocalizedString("错误: 生图提示词不能为空。", comment: "Image generation prompt empty"))
+            let reason = NSLocalizedString("错误: 生图提示词不能为空。", comment: "Image generation prompt empty")
+            addErrorMessage(reason)
             requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
             return
         }
 
         guard let runnableModel = runnableModel ?? selectedModelSubject.value else {
-            addErrorMessage(NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"))
+            let reason = NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error")
+            addErrorMessage(reason)
             requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
             return
         }
 
@@ -1049,17 +1108,37 @@ public class ChatService {
         )
 
         guard let adapter = adapters[runnableModel.provider.apiFormat] else {
-            addErrorMessage(String(
+            let reason = String(
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
                 runnableModel.provider.apiFormat
-            ))
+            )
+            addErrorMessage(reason)
             requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
             return
         }
 
         guard runnableModel.model.supportsImageGeneration || likelyImageGenerationModelName(runnableModel.model.modelName) else {
-            addErrorMessage(NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: "Model has no image generation capability"))
+            let reason = NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: "Model has no image generation capability")
+            addErrorMessage(reason)
             requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
             return
         }
 
@@ -1113,10 +1192,24 @@ public class ChatService {
 
         Persistence.saveMessages(messages, for: currentSession.id)
         requestStatusSubject.send(.started)
+        imageGenerationStatusSubject.send(
+            .started(
+                sessionID: currentSession.id,
+                loadingMessageID: loadingMessage.id,
+                prompt: trimmedPrompt,
+                startedAt: Date(),
+                referenceCount: imageAttachments.count
+            )
+        )
         logger.info("生图请求即将发送: session=\(currentSession.id.uuidString)")
 
         currentRequestSessionID = currentSession.id
         currentLoadingMessageID = loadingMessage.id
+        currentImageGenerationContext = ImageGenerationContext(
+            sessionID: currentSession.id,
+            loadingMessageID: loadingMessage.id,
+            prompt: trimmedPrompt
+        )
         let requestToken = UUID()
         currentRequestToken = requestToken
 
@@ -1139,6 +1232,7 @@ public class ChatService {
                 currentRequestToken = nil
                 currentRequestSessionID = nil
                 currentLoadingMessageID = nil
+                currentImageGenerationContext = nil
             }
         }
 
@@ -1932,8 +2026,18 @@ public class ChatService {
             referenceImages: referenceImages
         ) else {
             logger.error("生图请求构建失败: session=\(currentSessionID.uuidString)")
-            addErrorMessage(NSLocalizedString("错误: 无法构建生图请求。", comment: "Failed to build image generation request"))
+            let reason = NSLocalizedString("错误: 无法构建生图请求。", comment: "Failed to build image generation request")
+            addErrorMessage(reason)
             requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSessionID,
+                    loadingMessageID: loadingMessageID,
+                    prompt: prompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
             return
         }
 
@@ -1975,8 +2079,18 @@ public class ChatService {
 
             guard !generatedImageFileNames.isEmpty else {
                 logger.error("生图响应中没有可保存图片: session=\(currentSessionID.uuidString)")
-                addErrorMessage(NSLocalizedString("生图响应中没有可保存的图片。", comment: "No generated image could be saved"))
+                let reason = NSLocalizedString("生图响应中没有可保存的图片。", comment: "No generated image could be saved")
+                addErrorMessage(reason)
                 requestStatusSubject.send(.error)
+                imageGenerationStatusSubject.send(
+                    .failed(
+                        sessionID: currentSessionID,
+                        loadingMessageID: loadingMessageID,
+                        prompt: prompt,
+                        reason: reason,
+                        finishedAt: Date()
+                    )
+                )
                 return
             }
 
@@ -2001,6 +2115,15 @@ public class ChatService {
             }
 
             requestStatusSubject.send(.finished)
+            imageGenerationStatusSubject.send(
+                .succeeded(
+                    sessionID: currentSessionID,
+                    loadingMessageID: loadingMessageID,
+                    prompt: prompt,
+                    imageFileNames: generatedImageFileNames,
+                    finishedAt: Date()
+                )
+            )
             logger.info("生图流程完成: session=\(currentSessionID.uuidString), imageCount=\(generatedImageFileNames.count)")
         } catch is CancellationError {
             logger.info("生图请求在处理中被取消。")
@@ -2009,16 +2132,35 @@ public class ChatService {
             logger.error("生图请求失败(HTTP \(code)): \(snippet)")
             addErrorMessage(snippet, httpStatusCode: code)
             requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSessionID,
+                    loadingMessageID: loadingMessageID,
+                    prompt: prompt,
+                    reason: snippet,
+                    finishedAt: Date()
+                )
+            )
         } catch {
             if isCancellationError(error) {
                 logger.info("生图请求在处理中被取消 (URLError)。")
             } else {
                 logger.error("生图请求失败: \(error.localizedDescription)")
-                addErrorMessage(String(
+                let reason = String(
                     format: NSLocalizedString("生图请求失败: %@", comment: "Image generation request failed with reason"),
                     error.localizedDescription
-                ))
+                )
+                addErrorMessage(reason)
                 requestStatusSubject.send(.error)
+                imageGenerationStatusSubject.send(
+                    .failed(
+                        sessionID: currentSessionID,
+                        loadingMessageID: loadingMessageID,
+                        prompt: prompt,
+                        reason: reason,
+                        finishedAt: Date()
+                    )
+                )
             }
         }
     }

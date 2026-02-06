@@ -63,6 +63,7 @@ class ChatViewModel: ObservableObject {
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
     @Published private(set) var latestAssistantMessageID: UUID?
     @Published private(set) var toolCallResultIDs: Set<String> = []
+    @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     
     // MARK: - 用户偏好设置 (AppStorage)
     
@@ -156,6 +157,34 @@ class ChatViewModel: ObservableObject {
         return cache
     }()
     private var backgroundBlurTask: Task<Void, Never>?
+
+    enum ImageGenerationFeedbackPhase {
+        case idle
+        case running
+        case success
+        case failure
+        case cancelled
+    }
+
+    struct ImageGenerationFeedback {
+        var phase: ImageGenerationFeedbackPhase
+        var prompt: String
+        var startedAt: Date?
+        var finishedAt: Date?
+        var imageCount: Int
+        var errorMessage: String?
+        var referenceCount: Int
+
+        static let idle = ImageGenerationFeedback(
+            phase: .idle,
+            prompt: "",
+            startedAt: nil,
+            finishedAt: nil,
+            imageCount: 0,
+            errorMessage: nil,
+            referenceCount: 0
+        )
+    }
     
     // MARK: - 初始化
 
@@ -203,7 +232,11 @@ class ChatViewModel: ObservableObject {
             
         chatService.currentSessionSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.currentSession, on: self)
+            .sink { [weak self] session in
+                guard let self else { return }
+                currentSession = session
+                imageGenerationFeedback = .idle
+            }
             .store(in: &cancellables)
             
         chatService.messagesForSessionSubject
@@ -247,6 +280,13 @@ class ChatViewModel: ObservableObject {
                     // 为未来可能的状态保留，不做任何操作
                     break
                 }
+            }
+            .store(in: &cancellables)
+
+        chatService.imageGenerationStatusSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.applyImageGenerationStatus(status)
             }
             .store(in: &cancellables)
         
@@ -357,11 +397,25 @@ class ChatViewModel: ObservableObject {
         return imageGenerationModelOptions.first(where: { $0.id == identifier })
     }
 
-    func generateImage(prompt: String, model: RunnableModel? = nil) {
+    func generateImage(prompt: String, referenceImages: [ImageAttachment] = [], model: RunnableModel? = nil) {
         guard !isSendingMessage else { return }
         Task {
-            await chatService.generateImageAndProcessMessage(prompt: prompt, runnableModel: model)
+            await chatService.generateImageAndProcessMessage(
+                prompt: prompt,
+                imageAttachments: referenceImages,
+                runnableModel: model
+            )
         }
+    }
+
+    func clearImageGenerationFeedback() {
+        imageGenerationFeedback = .idle
+    }
+
+    func retryLastImageGeneration(model: RunnableModel? = nil, referenceImages: [ImageAttachment] = []) {
+        let prompt = imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        generateImage(prompt: prompt, referenceImages: referenceImages, model: model)
     }
 
     func removeGeneratedImage(fileName: String, fromMessageID messageID: UUID) {
@@ -870,6 +924,57 @@ class ChatViewModel: ObservableObject {
         }
         if latestAssistantMessageID != newestAssistantID {
             latestAssistantMessageID = newestAssistantID
+        }
+    }
+
+    private func applyImageGenerationStatus(_ status: ChatService.ImageGenerationStatus) {
+        switch status {
+        case .started(let sessionID, _, let prompt, let startedAt, let referenceCount):
+            guard sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .running,
+                prompt: prompt,
+                startedAt: startedAt,
+                finishedAt: nil,
+                imageCount: 0,
+                errorMessage: nil,
+                referenceCount: referenceCount
+            )
+        case .succeeded(let sessionID, _, let prompt, let imageFileNames, let finishedAt):
+            guard sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .success,
+                prompt: prompt,
+                startedAt: imageGenerationFeedback.startedAt,
+                finishedAt: finishedAt,
+                imageCount: imageFileNames.count,
+                errorMessage: nil,
+                referenceCount: imageGenerationFeedback.referenceCount
+            )
+        case .failed(let sessionID, _, let prompt, let reason, let finishedAt):
+            guard sessionID == nil || sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .failure,
+                prompt: prompt,
+                startedAt: imageGenerationFeedback.startedAt,
+                finishedAt: finishedAt,
+                imageCount: 0,
+                errorMessage: reason,
+                referenceCount: imageGenerationFeedback.referenceCount
+            )
+        case .cancelled(let sessionID, _, let prompt, let finishedAt):
+            guard sessionID == nil || sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .cancelled,
+                prompt: prompt,
+                startedAt: imageGenerationFeedback.startedAt,
+                finishedAt: finishedAt,
+                imageCount: 0,
+                errorMessage: nil,
+                referenceCount: imageGenerationFeedback.referenceCount
+            )
+        @unknown default:
+            imageGenerationFeedback = .idle
         }
     }
     
