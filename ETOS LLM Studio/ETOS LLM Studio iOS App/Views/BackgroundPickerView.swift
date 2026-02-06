@@ -415,11 +415,14 @@ private struct BackgroundCropEditorView: View {
         if colorScheme == .dark {
             return Color.black.opacity(0.9)
         }
-        return Color(uiColor: .secondarySystemBackground)
+        return Color(uiColor: .systemBackground)
     }
     
-    private var cropMaskOpacity: Double {
-        colorScheme == .dark ? 0.5 : 0.28
+    private var cropMaskColor: Color {
+        if colorScheme == .dark {
+            return Color.black.opacity(0.5)
+        }
+        return Color.white.opacity(0.7)
     }
     
     private var cropBorderColor: Color {
@@ -486,8 +489,12 @@ private struct BackgroundCropEditorView: View {
     }
     
     private func cropRect(in size: CGSize, aspectRatio: CGFloat) -> CGRect {
-        let maxWidth = size.width
-        let maxHeight = size.height
+        // 给裁切框预留足够安全边距，避免边框贴边被裁掉。
+        // 手表比例更接近正方形，优先加大水平边距，确保左右边框始终可见。
+        let horizontalInset: CGFloat = aspectRatio > 0.7 ? 40 : 22
+        let verticalInset: CGFloat = aspectRatio > 0.7 ? 24 : 20
+        let maxWidth = max(size.width - horizontalInset * 2, 1)
+        let maxHeight = max(size.height - verticalInset * 2, 1)
         
         let widthBasedHeight = maxWidth / aspectRatio
         let cropSize: CGSize
@@ -515,10 +522,10 @@ private struct BackgroundCropEditorView: View {
                     style: .continuous
                 )
             }
-            .fill(Color.black.opacity(cropMaskOpacity), style: FillStyle(eoFill: true))
+            .fill(cropMaskColor, style: FillStyle(eoFill: true))
             
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(cropBorderColor, lineWidth: 2)
+                .strokeBorder(cropBorderColor, lineWidth: 2)
                 .frame(width: cropRect.width, height: cropRect.height)
                 .position(x: cropRect.midX, y: cropRect.midY)
         }
