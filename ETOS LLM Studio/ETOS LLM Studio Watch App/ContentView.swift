@@ -118,7 +118,7 @@ struct ContentView: View {
     
     private func chatList(proxy: ScrollViewProxy) -> some View {
         let displayedMessages = viewModel.displayMessages
-        List {
+        return List {
             if viewModel.messages.isEmpty {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }

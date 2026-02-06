@@ -817,6 +817,12 @@ final class ChatViewModel: ObservableObject {
             currentBackgroundImageBlurredUIImage = nil
             return
         }
+        guard let baseCGImage = baseImage.cgImage else {
+            currentBackgroundImageBlurredUIImage = baseImage
+            return
+        }
+        let baseScale = baseImage.scale
+        let baseOrientation = baseImage.imageOrientation
         let radius = backgroundBlur
         if radius <= 0.01 {
             currentBackgroundImageBlurredUIImage = baseImage
@@ -832,30 +838,35 @@ final class ChatViewModel: ObservableObject {
         let expectedRadius = radius
         backgroundBlurTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            let blurred = Self.makeBlurredImage(from: baseImage, radius: expectedRadius)
+            let ciImage = CIImage(cgImage: baseCGImage)
+            let blurredCGImage: CGImage?
+            if let filter = CIFilter(name: "CIGaussianBlur") {
+                filter.setValue(ciImage, forKey: kCIInputImageKey)
+                filter.setValue(expectedRadius, forKey: kCIInputRadiusKey)
+                if let output = filter.outputImage {
+                    let cropped = output.cropped(to: ciImage.extent)
+                    let context = CIContext()
+                    blurredCGImage = context.createCGImage(cropped, from: ciImage.extent)
+                } else {
+                    blurredCGImage = nil
+                }
+            } else {
+                blurredCGImage = nil
+            }
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard self.enableBackground,
                       self.currentBackgroundImage == expectedName,
                       self.backgroundBlur == expectedRadius else { return }
-                if let blurred {
-                    self.blurredBackgroundImageCache.setObject(blurred, forKey: cacheKey)
+                let blurredUIImage = blurredCGImage.map {
+                    UIImage(cgImage: $0, scale: baseScale, orientation: baseOrientation)
                 }
-                self.currentBackgroundImageBlurredUIImage = blurred ?? baseImage
+                if let blurredUIImage {
+                    self.blurredBackgroundImageCache.setObject(blurredUIImage, forKey: cacheKey)
+                }
+                self.currentBackgroundImageBlurredUIImage = blurredUIImage ?? self.currentBackgroundImageUIImage
             }
         }
     }
 
-    private static func makeBlurredImage(from image: UIImage, radius: Double) -> UIImage? {
-        guard let ciImage = CIImage(image: image) else { return nil }
-        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
-        filter.setValue(ciImage, forKey: kCIInputImageKey)
-        filter.setValue(radius, forKey: kCIInputRadiusKey)
-        guard let output = filter.outputImage else { return nil }
-        let cropped = output.cropped(to: ciImage.extent)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(cropped, from: ciImage.extent) else { return nil }
-        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
-    }
-    
 }
