@@ -72,26 +72,6 @@ public struct ExtendedFeaturesView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
-
-            Section {
-                Toggle(NSLocalizedString("启用生图模式", comment: "Enable image generation mode toggle title"), isOn: $viewModel.isImageGenerationModeEnabled)
-
-                if viewModel.isImageGenerationModeEnabled {
-                    Text(NSLocalizedString("已开启生图模式，请返回主页面，在输入框输入提示词后发送。", comment: "Guide user to return to main chat page for image generation"))
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-
-                    if !viewModel.supportsImageGenerationForSelectedModel {
-                        Text(NSLocalizedString("当前模型不支持生图，请先切换到支持生图的模型。", comment: "Selected model not support image generation warning"))
-                            .font(.footnote)
-                            .foregroundColor(.orange)
-                    }
-                }
-            } footer: {
-                Text(NSLocalizedString("该开关为临时状态，不会保存到本地；重启 App 后会自动关闭。", comment: "Image mode toggle not persisted note"))
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
         }
         .navigationTitle("拓展功能")
     }

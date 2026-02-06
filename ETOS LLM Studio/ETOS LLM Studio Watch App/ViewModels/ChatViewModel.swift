@@ -25,6 +25,11 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatVie
 
 @MainActor
 class ChatViewModel: ObservableObject {
+    enum ComposerMode: String {
+        case chat
+        case imageGeneration
+    }
+    
     // MARK: - @Published 属性 (UI 状态)
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
@@ -58,10 +63,10 @@ class ChatViewModel: ObservableObject {
     @Published var showSpeechErrorAlert: Bool = false
     @Published var showDimensionMismatchAlert: Bool = false
     @Published var dimensionMismatchMessage: String = ""
-    @Published var isImageGenerationModeEnabled: Bool = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
+    @Published var composerMode: ComposerMode = .chat
     @Published private(set) var latestAssistantMessageID: UUID?
     @Published private(set) var toolCallResultIDs: Set<String> = []
     
@@ -230,6 +235,9 @@ class ChatViewModel: ObservableObject {
             .sink { [weak self] model in
                 guard let self else { return }
                 selectedModel = model
+                if composerMode == .imageGeneration && !supportsImageGenerationForSelectedModel {
+                    composerMode = .chat
+                }
             }
             .store(in: &cancellables)
             
@@ -293,39 +301,35 @@ class ChatViewModel: ObservableObject {
         let hasText = !userMessageContent.isEmpty
         let hasAudio = pendingAudioAttachment != nil
 
-        guard !isSendingMessage else { return }
-
-        if isImageGenerationModeEnabled {
-            guard hasText else { return }
+        if composerMode == .imageGeneration {
+            guard hasText, !isSendingMessage else { return }
             guard supportsImageGenerationForSelectedModel else {
                 chatService.addErrorMessage(NSLocalizedString("当前模型不支持生图，请切换模型或在模型设置中开启“生图”能力。", comment: "Selected model does not support image generation"))
                 return
             }
-            guard !hasAudio else {
-                chatService.addErrorMessage(NSLocalizedString("生图模式不支持语音附件。", comment: "Image mode does not support audio attachments"))
+            if hasAudio {
+                chatService.addErrorMessage(NSLocalizedString("生图模式不支持语音附件。", comment: "Image generation mode does not support audio attachment"))
                 return
             }
-
-            let prompt = userMessageContent
+            let promptToSend = userMessageContent
             userInput = ""
             pendingAudioAttachment = nil
-
             Task {
-                await chatService.generateImageAndProcessMessage(prompt: prompt)
+                await chatService.generateImageAndProcessMessage(prompt: promptToSend)
             }
             return
         }
-
+        
         // 必须有文字或音频附件才能发送
-        guard (hasText || hasAudio) else { return }
-
+        guard (hasText || hasAudio), !isSendingMessage else { return }
+        
         let audioToSend = pendingAudioAttachment
         userInput = ""
         pendingAudioAttachment = nil
-
+        
         // 构建消息内容（仅使用用户输入文本）
         let messageContent = userMessageContent
-
+        
         Task {
             await chatService.sendAndProcessMessage(
                 content: messageContent,
@@ -354,15 +358,6 @@ class ChatViewModel: ObservableObject {
         pendingAudioAttachment = nil
     }
 
-    var canSendMessage: Bool {
-        let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if isImageGenerationModeEnabled {
-            return hasText && !isSendingMessage
-        }
-        let hasAudio = pendingAudioAttachment != nil
-        return (hasText || hasAudio) && !isSendingMessage
-    }
-
     var supportsImageGenerationForSelectedModel: Bool {
         guard let selectedModel else { return false }
         if selectedModel.model.supportsImageGeneration {
@@ -375,16 +370,14 @@ class ChatViewModel: ObservableObject {
             || lowered.contains("dall")
     }
 
-    func generateImage(prompt: String) {
-        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedPrompt.isEmpty, !isSendingMessage else { return }
-        guard supportsImageGenerationForSelectedModel else {
-            chatService.addErrorMessage(NSLocalizedString("当前模型不支持生图，请切换模型或在模型设置中开启“生图”能力。", comment: "Selected model does not support image generation"))
+    func setComposerMode(_ mode: ComposerMode) {
+        if mode == .imageGeneration, !supportsImageGenerationForSelectedModel {
             return
         }
-        Task {
-            await chatService.generateImageAndProcessMessage(prompt: trimmedPrompt)
+        if mode == .imageGeneration {
+            pendingAudioAttachment = nil
         }
+        composerMode = mode
     }
     
     func addErrorMessage(_ content: String) {
