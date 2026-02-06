@@ -213,6 +213,20 @@ public class OpenAIAdapter: APIAdapter {
         return capabilities
     }
 
+    private func sanitizedImageGenerationOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        let blockedKeys: Set<String> = [
+            "messages",
+            "tools",
+            "tool_choice",
+            "functions",
+            "function_call",
+            "parallel_tool_calls",
+            "stream",
+            "stream_options"
+        ]
+        return overrides.filter { !blockedKeys.contains($0.key) }
+    }
+
     // MARK: - 内部解码模型 (实现细节)
     
     private struct OpenAIToolCall: Decodable {
@@ -683,7 +697,9 @@ public class OpenAIAdapter: APIAdapter {
             return nil
         }
 
-        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let overrides = sanitizedImageGenerationOverrides(
+            model.model.overrideParameters.mapValues { $0.toAny() }
+        )
         if referenceImages.isEmpty {
             let imagesURL = baseURL.appendingPathComponent("images/generations")
             var request = URLRequest(url: imagesURL)
@@ -742,7 +758,7 @@ public class OpenAIAdapter: APIAdapter {
         }
 
         for (key, value) in overrides {
-            if ["model", "prompt", "response_format", "stream", "messages", "tools", "tool_choice"].contains(key) {
+            if ["model", "prompt", "response_format"].contains(key) {
                 continue
             }
             let valueString: String?

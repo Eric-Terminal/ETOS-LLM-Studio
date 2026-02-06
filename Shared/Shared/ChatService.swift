@@ -1020,7 +1020,8 @@ public class ChatService {
 
     public func generateImageAndProcessMessage(
         prompt: String,
-        imageAttachments: [ImageAttachment] = []
+        imageAttachments: [ImageAttachment] = [],
+        runnableModel: RunnableModel? = nil
     ) async {
         guard var currentSession = currentSessionSubject.value else {
             addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
@@ -1035,11 +1036,15 @@ public class ChatService {
             return
         }
 
-        guard let runnableModel = selectedModelSubject.value else {
+        guard let runnableModel = runnableModel ?? selectedModelSubject.value else {
             addErrorMessage(NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"))
             requestStatusSubject.send(.error)
             return
         }
+
+        logger.info(
+            "开始生图流程: session=\(currentSession.id.uuidString), provider=\(runnableModel.provider.name), model=\(runnableModel.model.displayName), promptLength=\(trimmedPrompt.count), referenceCount=\(imageAttachments.count)"
+        )
 
         guard let adapter = adapters[runnableModel.provider.apiFormat] else {
             addErrorMessage(String(
@@ -1070,6 +1075,9 @@ public class ChatService {
             }
             if Persistence.saveImage(imageAttachment.data, fileName: targetName) != nil {
                 savedImageFileNames.append(targetName)
+                logger.info("生图参考图已保存: \(targetName)")
+            } else {
+                logger.error("生图参考图保存失败: \(targetName)")
             }
         }
 
@@ -1084,6 +1092,7 @@ public class ChatService {
         messages.append(userMessage)
         messages.append(loadingMessage)
         messagesForSessionSubject.send(messages)
+        logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
 
         if currentSession.isTemporary {
             currentSession.name = String(trimmedPrompt.prefix(20))
@@ -1095,16 +1104,14 @@ public class ChatService {
             }
             chatSessionsSubject.send(updatedSessions)
             Persistence.saveChatSessions(updatedSessions)
-
-            Task {
-                await self.generateAndApplySessionTitle(for: currentSession.id, firstUserMessage: userMessage)
-            }
+            logger.info("生图请求已跳过自动标题生成: session=\(currentSession.id.uuidString)")
         } else {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         }
 
         Persistence.saveMessages(messages, for: currentSession.id)
         requestStatusSubject.send(.started)
+        logger.info("生图请求即将发送: session=\(currentSession.id.uuidString)")
 
         currentRequestSessionID = currentSession.id
         currentLoadingMessageID = loadingMessage.id
@@ -1870,41 +1877,58 @@ public class ChatService {
         loadingMessageID: UUID,
         currentSessionID: UUID
     ) async {
+        logger.info(
+            "构建生图请求: session=\(currentSessionID.uuidString), model=\(runnableModel.model.modelName), referenceCount=\(referenceImages.count)"
+        )
         guard let request = adapter.buildImageGenerationRequest(
             for: runnableModel,
             prompt: prompt,
             referenceImages: referenceImages
         ) else {
+            logger.error("生图请求构建失败: session=\(currentSessionID.uuidString)")
             addErrorMessage(NSLocalizedString("错误: 无法构建生图请求。", comment: "Failed to build image generation request"))
             requestStatusSubject.send(.error)
             return
         }
 
+        logger.info("生图请求构建成功: method=\(request.httpMethod ?? "POST"), url=\(request.url?.absoluteString ?? "unknown")")
+
         do {
+            logger.info("生图请求发送中: session=\(currentSessionID.uuidString)")
             let data = try await fetchData(for: request)
+            logger.info("生图响应已返回: session=\(currentSessionID.uuidString), bytes=\(data.count)")
             let imageResults = try adapter.parseImageGenerationResponse(data: data)
+            logger.info("生图响应解析完成: session=\(currentSessionID.uuidString), results=\(imageResults.count)")
 
             var generatedImageFileNames: [String] = []
             var revisedPrompts: [String] = []
 
-            for result in imageResults {
+            for (index, result) in imageResults.enumerated() {
                 if let revised = result.revisedPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !revised.isEmpty {
                     revisedPrompts.append(revised)
+                    logger.info("生图结果[\(index)] 包含 revised prompt: length=\(revised.count)")
                 }
 
                 guard let payload = try await resolveGeneratedImagePayload(from: result) else {
+                    logger.warning("生图结果[\(index)] 未解析到有效图片数据，已跳过。")
                     continue
                 }
+
+                logger.info("生图结果[\(index)] 图片负载就绪: mime=\(payload.mimeType), bytes=\(payload.data.count)")
 
                 let ext = imageFileExtension(for: payload.mimeType)
                 let fileName = "\(UUID().uuidString).\(ext)"
                 if Persistence.saveImage(payload.data, fileName: fileName) != nil {
                     generatedImageFileNames.append(fileName)
+                    logger.info("生图结果[\(index)] 已保存图片: \(fileName)")
+                } else {
+                    logger.error("生图结果[\(index)] 保存图片失败: \(fileName)")
                 }
             }
 
             guard !generatedImageFileNames.isEmpty else {
+                logger.error("生图响应中没有可保存图片: session=\(currentSessionID.uuidString)")
                 addErrorMessage(NSLocalizedString("生图响应中没有可保存的图片。", comment: "No generated image could be saved"))
                 requestStatusSubject.send(.error)
                 return
@@ -1923,19 +1947,27 @@ public class ChatService {
                 )
                 messagesForSessionSubject.send(messages)
                 Persistence.saveMessages(messages, for: currentSessionID)
+                logger.info(
+                    "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
+                )
+            } else {
+                logger.warning("未找到生图占位消息，无法替换: loadingMessageID=\(loadingMessageID.uuidString)")
             }
 
             requestStatusSubject.send(.finished)
+            logger.info("生图流程完成: session=\(currentSessionID.uuidString), imageCount=\(generatedImageFileNames.count)")
         } catch is CancellationError {
             logger.info("生图请求在处理中被取消。")
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let snippet = responseBodySnippet(from: bodyData)
+            logger.error("生图请求失败(HTTP \(code)): \(snippet)")
             addErrorMessage(snippet, httpStatusCode: code)
             requestStatusSubject.send(.error)
         } catch {
             if isCancellationError(error) {
                 logger.info("生图请求在处理中被取消 (URLError)。")
             } else {
+                logger.error("生图请求失败: \(error.localizedDescription)")
                 addErrorMessage(String(
                     format: NSLocalizedString("生图请求失败: %@", comment: "Image generation request failed with reason"),
                     error.localizedDescription
@@ -1948,17 +1980,24 @@ public class ChatService {
     private func resolveGeneratedImagePayload(from result: GeneratedImageResult) async throws -> (data: Data, mimeType: String)? {
         if let imageData = result.data, !imageData.isEmpty {
             let mimeType = (result.mimeType?.isEmpty == false ? result.mimeType! : detectImageMimeType(from: imageData))
+            logger.info("生图结果使用内联图片数据: mime=\(mimeType), bytes=\(imageData.count)")
             return (imageData, mimeType)
         }
 
         guard let remoteURL = result.remoteURL else { return nil }
+        logger.info("生图结果改为下载远端图片: \(remoteURL.absoluteString)")
 
         let (data, response) = try await urlSession.data(from: remoteURL)
         if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            logger.error("下载生图结果失败: status=\(httpResponse.statusCode), url=\(remoteURL.absoluteString)")
             throw NetworkError.badStatusCode(code: httpResponse.statusCode, responseBody: data.isEmpty ? nil : data)
         }
-        guard !data.isEmpty else { return nil }
+        guard !data.isEmpty else {
+            logger.warning("下载生图结果返回空数据: \(remoteURL.absoluteString)")
+            return nil
+        }
         let mimeType = result.mimeType ?? response.mimeType ?? detectImageMimeType(from: data)
+        logger.info("下载生图结果成功: mime=\(mimeType), bytes=\(data.count)")
         return (data, mimeType)
     }
 

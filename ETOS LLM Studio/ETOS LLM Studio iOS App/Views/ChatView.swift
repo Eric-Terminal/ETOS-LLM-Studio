@@ -13,6 +13,7 @@ import MarkdownUI
 import Shared
 import UIKit
 import PhotosUI
+import Photos
 import AVFoundation
 import UniformTypeIdentifiers
 
@@ -65,6 +66,7 @@ struct ChatView: View {
     @State private var sessionInfo: SessionPickerInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
+    @State private var imageDownloadAlertMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @FocusState private var composerFocused: Bool
@@ -370,6 +372,19 @@ struct ChatView: View {
                 }
             } message: {
                 Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
+            }
+            .alert(
+                Text(NSLocalizedString("提示", comment: "Notice")),
+                isPresented: Binding(
+                    get: { imageDownloadAlertMessage != nil },
+                    set: { isPresented in
+                        if !isPresented { imageDownloadAlertMessage = nil }
+                    }
+                )
+            ) {
+                Button(NSLocalizedString("确定", comment: "OK"), role: .cancel) {}
+            } message: {
+                Text(imageDownloadAlertMessage ?? "")
             }
         }
     }
@@ -1206,6 +1221,16 @@ struct ChatView: View {
         
         Divider()
         
+        if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+            Button {
+                Task {
+                    await downloadImagesToPhotoLibrary(fileNames: imageFileNames)
+                }
+            } label: {
+                Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
+            }
+        }
+
         Button {
             UIPasteboard.general.string = message.content
         } label: {
@@ -1221,6 +1246,68 @@ struct ChatView: View {
                 )
             } label: {
                 Label("查看消息信息", systemImage: "info.circle")
+            }
+        }
+    }
+
+    private func downloadImagesToPhotoLibrary(fileNames: [String]) async {
+        do {
+            try await saveImagesToPhotoLibrary(fileNames: fileNames)
+            await MainActor.run {
+                imageDownloadAlertMessage = NSLocalizedString("已保存到相册。", comment: "Saved to photo library")
+            }
+        } catch {
+            await MainActor.run {
+                imageDownloadAlertMessage = String(
+                    format: NSLocalizedString("保存失败: %@", comment: "Save generated image failed"),
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func saveImagesToPhotoLibrary(fileNames: [String]) async throws {
+        let fileURLs = fileNames.map { Persistence.getImageDirectory().appendingPathComponent($0) }
+        guard fileURLs.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+            throw NSError(
+                domain: "ChatViewImageDownload",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("图片文件不存在。", comment: "Generated image file missing")]
+            )
+        }
+
+        let status = await requestPhotoLibraryAccessStatus()
+        guard status == .authorized || status == .limited else {
+            throw NSError(
+                domain: "ChatViewImageDownload",
+                code: 403,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("没有相册访问权限。", comment: "Photo library permission denied")]
+            )
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                for fileURL in fileURLs {
+                    PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
+                }
+            }) { success, error in
+                if success {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: error ?? NSError(
+                        domain: "ChatViewImageDownload",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("保存到相册失败。", comment: "Failed to save image to photo library")]
+                    ))
+                }
+            }
+        }
+    }
+
+    private func requestPhotoLibraryAccessStatus() async -> PHAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                continuation.resume(returning: status)
             }
         }
     }
@@ -1399,9 +1486,6 @@ private struct TelegramMessageComposer: View {
     private let textHorizontalPadding: CGFloat = 10
     private let compactTextVerticalPadding: CGFloat = 4
     private let expandedTextVerticalPadding: CGFloat = 6
-    private var isImageGenerationMode: Bool {
-        viewModel.composerMode == .imageGeneration
-    }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -1417,9 +1501,6 @@ private struct TelegramMessageComposer: View {
     
     var body: some View {
         VStack(spacing: 8) {
-            composerModePicker
-                .padding(.horizontal, 16)
-
             // 附件预览区域
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
                 telegramAttachmentPreview
@@ -1550,24 +1631,22 @@ private struct TelegramMessageComposer: View {
             }
             .disabled(!isCameraAvailable)
 
-            if !isImageGenerationMode {
-                Button {
-                    showAudioRecorder = true
-                } label: {
-                    Label("录制语音", systemImage: "waveform")
-                }
+            Button {
+                showAudioRecorder = true
+            } label: {
+                Label("录制语音", systemImage: "waveform")
+            }
 
-                Button {
-                    showAudioImporter = true
-                } label: {
-                    Label("从录音备忘录上传", systemImage: "music.note.list")
-                }
+            Button {
+                showAudioImporter = true
+            } label: {
+                Label("从录音备忘录上传", systemImage: "music.note.list")
+            }
 
-                Button {
-                    showFileImporter = true
-                } label: {
-                    Label("选择文件", systemImage: "doc")
-                }
+            Button {
+                showFileImporter = true
+            } label: {
+                Label("选择文件", systemImage: "doc")
             }
         } label: {
             Image(systemName: "paperclip")
@@ -1579,63 +1658,13 @@ private struct TelegramMessageComposer: View {
         .buttonStyle(.plain)
     }
 
-    private var composerModePicker: some View {
-        HStack(spacing: 8) {
-            modeButton(
-                title: NSLocalizedString("聊天", comment: "Chat composer mode title"),
-                systemImage: "bubble.left.and.bubble.right",
-                isSelected: !isImageGenerationMode,
-                isEnabled: true
-            ) {
-                viewModel.setComposerMode(.chat)
-            }
-
-            modeButton(
-                title: NSLocalizedString("生图", comment: "Image generation composer mode title"),
-                systemImage: "photo.badge.sparkles",
-                isSelected: isImageGenerationMode,
-                isEnabled: viewModel.supportsImageGenerationForSelectedModel
-            ) {
-                viewModel.setComposerMode(.imageGeneration)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func modeButton(
-        title: String,
-        systemImage: String,
-        isSelected: Bool,
-        isEnabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundColor(isSelected ? .white : TelegramColors.attachButtonColor)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(isSelected ? TelegramColors.sendButtonColor : Color(uiColor: .secondarySystemBackground))
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.45)
-    }
-
     private func actionControlButton(size: CGFloat) -> some View {
         Button {
             if isSending {
                 stopAction()
             } else if hasContent {
                 sendAction()
-            } else if viewModel.enableSpeechInput && !isImageGenerationMode {
+            } else if viewModel.enableSpeechInput {
                 showAudioRecorder = true
             } else {
                 focus.wrappedValue = true
@@ -1666,10 +1695,7 @@ private struct TelegramMessageComposer: View {
                 .padding(.horizontal, textHorizontalPadding)
 
             if text.isEmpty {
-                Text(isImageGenerationMode
-                    ? NSLocalizedString("输入生图提示词", comment: "Image generation prompt placeholder")
-                    : "Message"
-                )
+                Text("Message")
                     .font(.system(size: inputFont.pointSize))
                     .foregroundColor(.secondary)
                     .padding(.top, verticalPadding + textContainerInset)
@@ -1839,9 +1865,6 @@ private struct TelegramMessageComposer: View {
     }
 
     private var hasContent: Bool {
-        if isImageGenerationMode {
-            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty || !viewModel.pendingFileAttachments.isEmpty
         return hasText || hasAttachments
@@ -1929,7 +1952,7 @@ private struct TelegramMessageComposer: View {
         if hasContent {
             return "arrow.up"
         }
-        if viewModel.enableSpeechInput && !isImageGenerationMode {
+        if viewModel.enableSpeechInput {
             return "mic.fill"
         }
         return "arrow.up"
@@ -1938,9 +1961,6 @@ private struct TelegramMessageComposer: View {
     private var actionForegroundColor: Color {
         if isSending || hasContent {
             return .white
-        }
-        if isImageGenerationMode {
-            return TelegramColors.attachButtonColor
         }
         return TelegramColors.attachButtonColor
     }
