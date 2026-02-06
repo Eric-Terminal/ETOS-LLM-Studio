@@ -808,3 +808,17 @@
 "生图" = "Image";
 "聊" = "Chat";
 "图" = "Image";
+"生图工坊" = "Image Lab";
+"提示词" = "Prompt";
+"当前模型不支持生图，请先在“当前模型”中切换。" = "The current model does not support image generation. Switch it in \"Current Model\" first.";
+"参考图（图生图）" = "Reference Images (Image-to-Image)";
+"生图中..." = "Generating...";
+"开始生图" = "Generate";
+"最近生成" = "Recent Generations";
+"当前模型不支持生图，请先切换模型。" = "The current model does not support image generation. Please switch models first.";
+"预览" = "Preview";
+"启用生图模式" = "Enable image generation mode";
+"已开启生图模式，请返回主页面，在输入框输入提示词后发送。" = "Image mode is enabled. Return to the main page and send your prompt from the input box.";
+"当前模型不支持生图，请先切换到支持生图的模型。" = "Current model does not support image generation. Switch to an image-capable model first.";
+"该开关为临时状态，不会保存到本地；重启 App 后会自动关闭。" = "This toggle is temporary and is not persisted; it resets after restarting the app.";
+"生图模式" = "Image mode";
