@@ -28,6 +28,13 @@ struct ModelSettingsView: View {
                     .autocorrectionDisabled()
                     .font(.footnote.monospaced())
             }
+
+            Section("模型能力") {
+                Toggle("聊天", isOn: capabilityBinding(.chat))
+                Toggle("语音转文字", isOn: capabilityBinding(.speechToText))
+                Toggle("嵌入", isOn: capabilityBinding(.embedding))
+                Toggle("生图", isOn: capabilityBinding(.imageGeneration))
+            }
             
             Section("参数表达式") {
                 ForEach($expressionEntries) { $entry in
@@ -292,6 +299,27 @@ extension ModelSettingsView {
             return "\(value)"
         }
         return string
+    }
+
+    private func capabilityBinding(_ capability: Model.Capability) -> Binding<Bool> {
+        Binding(
+            get: {
+                model.capabilities.contains(capability)
+            },
+            set: { isEnabled in
+                var capabilitySet = Set(model.capabilities)
+                if isEnabled {
+                    capabilitySet.insert(capability)
+                } else {
+                    capabilitySet.remove(capability)
+                }
+                if capabilitySet.isEmpty {
+                    capabilitySet.insert(.chat)
+                }
+                let ordered: [Model.Capability] = [.chat, .speechToText, .embedding, .imageGeneration]
+                model.capabilities = ordered.filter { capabilitySet.contains($0) }
+            }
+        )
     }
 }
 

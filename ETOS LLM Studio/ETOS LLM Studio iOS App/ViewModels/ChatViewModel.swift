@@ -10,6 +10,7 @@
 // ============================================================================
 
 import Combine
+import CoreImage
 import Foundation
 import SwiftUI
 import Shared
@@ -22,10 +23,10 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatVie
 
 @MainActor
 final class ChatViewModel: ObservableObject {
-    
     // MARK: - Published UI State
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
+    @Published private(set) var displayMessages: [ChatMessageRenderState] = []
     private(set) var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
@@ -45,6 +46,7 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedSpeechModel: RunnableModel?
     @Published private(set) var latestAssistantMessageID: UUID?
     @Published private(set) var toolCallResultIDs: Set<String> = []
+    @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     
     // MARK: - Attachment State
     
@@ -62,8 +64,12 @@ final class ChatViewModel: ObservableObject {
     // MARK: - User Preferences (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
-    @AppStorage("enableBackground") var enableBackground: Bool = true
-    @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0
+    @AppStorage("enableBackground") var enableBackground: Bool = true {
+        didSet { refreshBlurredBackgroundImage() }
+    }
+    @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0 {
+        didSet { refreshBlurredBackgroundImage() }
+    }
     @AppStorage("backgroundOpacity") var backgroundOpacity: Double = 0.7
     @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill"
     @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
@@ -71,9 +77,12 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("systemPrompt") var systemPrompt: String = ""
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = true
+    @AppStorage("enableResponseSpeedMetrics") var enableResponseSpeedMetrics: Bool = true
     @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 0
-    @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = ""
-    @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
+    @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
+        didSet { refreshBlurredBackgroundImage() }
+    }
+    @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = false
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
@@ -93,15 +102,23 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Public Properties
     
     @Published var backgroundImages: [String] = []
+    @Published private(set) var currentBackgroundImageBlurredUIImage: UIImage?
     
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
-        let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(currentBackgroundImage)
-        return UIImage(contentsOfFile: fileURL.path)
+        return loadBackgroundImage(named: currentBackgroundImage)
     }
     
     var historyLoadChunkSize: Int {
         incrementalHistoryBatchSize
+    }
+
+    var remainingHistoryCount: Int {
+        max(0, allMessagesForSession.count - messages.count)
+    }
+
+    var historyLoadChunkCount: Int {
+        min(remainingHistoryCount, historyLoadChunkSize)
     }
     
     var embeddingModelOptions: [RunnableModel] {
@@ -119,6 +136,45 @@ final class ChatViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var allMessageStates: [ChatMessageRenderState] = []
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    private let backgroundImageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 8
+        return cache
+    }()
+    private let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 8
+        return cache
+    }()
+    private var backgroundBlurTask: Task<Void, Never>?
+
+    enum ImageGenerationFeedbackPhase {
+        case idle
+        case running
+        case success
+        case failure
+        case cancelled
+    }
+
+    struct ImageGenerationFeedback {
+        var phase: ImageGenerationFeedbackPhase
+        var prompt: String
+        var startedAt: Date?
+        var finishedAt: Date?
+        var imageCount: Int
+        var errorMessage: String?
+        var referenceCount: Int
+
+        static let idle = ImageGenerationFeedback(
+            phase: .idle,
+            prompt: "",
+            startedAt: nil,
+            finishedAt: nil,
+            imageCount: 0,
+            errorMessage: nil,
+            referenceCount: 0
+        )
+    }
     
     // MARK: - Init
     
@@ -133,6 +189,7 @@ final class ChatViewModel: ObservableObject {
         setupSubscriptions()
         rotateBackgroundImageIfNeeded()
         registerLifecycleObservers()
+        refreshBlurredBackgroundImage()
     }
     
     private func registerLifecycleObservers() {
@@ -160,7 +217,11 @@ final class ChatViewModel: ObservableObject {
         
         chatService.currentSessionSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.currentSession, on: self)
+            .sink { [weak self] session in
+                guard let self else { return }
+                currentSession = session
+                imageGenerationFeedback = .idle
+            }
             .store(in: &cancellables)
         
         chatService.messagesForSessionSubject
@@ -184,7 +245,10 @@ final class ChatViewModel: ObservableObject {
         
         chatService.selectedModelSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.selectedModel, on: self)
+            .sink { [weak self] model in
+                guard let self else { return }
+                selectedModel = model
+            }
             .store(in: &cancellables)
         
         chatService.requestStatusSubject
@@ -199,6 +263,13 @@ final class ChatViewModel: ObservableObject {
                 @unknown default:
                     isSendingMessage = false
                 }
+            }
+            .store(in: &cancellables)
+
+        chatService.imageGenerationStatusSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.applyImageGenerationStatus(status)
             }
             .store(in: &cancellables)
         
@@ -269,6 +340,7 @@ final class ChatViewModel: ObservableObject {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTimeInPrompt,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 audioAttachment: audioToSend,
                 imageAttachments: imagesToSend,
                 fileAttachments: filesToSend
@@ -287,6 +359,90 @@ final class ChatViewModel: ObservableObject {
         let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty || !pendingFileAttachments.isEmpty
         return (hasText || hasAttachments) && !isSendingMessage
+    }
+
+    var imageGenerationModelOptions: [RunnableModel] {
+        activatedModels.filter { supportsImageGeneration(for: $0) }
+    }
+
+    var supportsImageGenerationForSelectedModel: Bool {
+        supportsImageGeneration(for: selectedModel)
+    }
+
+    func supportsImageGeneration(for runnableModel: RunnableModel?) -> Bool {
+        guard let runnableModel else { return false }
+        if runnableModel.model.supportsImageGeneration {
+            return true
+        }
+        let lowered = runnableModel.model.modelName.lowercased()
+        return lowered.contains("gpt-image")
+            || lowered.contains("imagen")
+            || lowered.contains("image")
+            || lowered.contains("dall")
+    }
+
+    func imageGenerationModel(with identifier: String) -> RunnableModel? {
+        guard !identifier.isEmpty else { return nil }
+        return imageGenerationModelOptions.first(where: { $0.id == identifier })
+    }
+
+    func generateImage(
+        prompt: String,
+        referenceImages: [ImageAttachment] = [],
+        model: RunnableModel? = nil,
+        runtimeOverrideParameters: [String: JSONValue] = [:]
+    ) {
+        guard !isSendingMessage else { return }
+        Task {
+            await chatService.generateImageAndProcessMessage(
+                prompt: prompt,
+                imageAttachments: referenceImages,
+                runnableModel: model,
+                runtimeOverrideParameters: runtimeOverrideParameters
+            )
+        }
+    }
+
+    func clearImageGenerationFeedback() {
+        imageGenerationFeedback = .idle
+    }
+
+    func retryLastImageGeneration(
+        model: RunnableModel? = nil,
+        referenceImages: [ImageAttachment] = [],
+        runtimeOverrideParameters: [String: JSONValue] = [:]
+    ) {
+        let prompt = imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        generateImage(
+            prompt: prompt,
+            referenceImages: referenceImages,
+            model: model,
+            runtimeOverrideParameters: runtimeOverrideParameters
+        )
+    }
+
+    func removeGeneratedImage(fileName: String, fromMessageID messageID: UUID) {
+        guard let sessionID = currentSession?.id else { return }
+        guard let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == messageID }) else { return }
+
+        var updatedMessages = allMessagesForSession
+        var updatedMessage = updatedMessages[messageIndex]
+        guard var imageFileNames = updatedMessage.imageFileNames else { return }
+
+        imageFileNames.removeAll { $0 == fileName }
+        updatedMessage.imageFileNames = imageFileNames.isEmpty ? nil : imageFileNames
+        updatedMessages[messageIndex] = updatedMessage
+
+        chatService.updateMessages(updatedMessages, for: sessionID)
+        saveCurrentSessionDetails()
+
+        let isStillReferenced = updatedMessages.contains { message in
+            (message.imageFileNames ?? []).contains(fileName)
+        }
+        if !isStillReferenced {
+            Persistence.deleteImage(fileName: fileName)
+        }
     }
     
     /// 清除音频附件
@@ -409,7 +565,8 @@ final class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                includeSystemTime: includeSystemTimeInPrompt
+                includeSystemTime: includeSystemTimeInPrompt,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
         }
     }
@@ -499,7 +656,8 @@ final class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                includeSystemTime: includeSystemTimeInPrompt
+                includeSystemTime: includeSystemTimeInPrompt,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
         }
     }
@@ -635,9 +793,61 @@ final class ChatViewModel: ObservableObject {
         
         if toolCallResultIDs != newToolCallResultIDs {
             toolCallResultIDs = newToolCallResultIDs
+            updateDisplayMessagesIfNeeded()
         }
         if latestAssistantMessageID != newestAssistantID {
             latestAssistantMessageID = newestAssistantID
+        }
+    }
+
+    private func applyImageGenerationStatus(_ status: ChatService.ImageGenerationStatus) {
+        switch status {
+        case .started(let sessionID, _, let prompt, let startedAt, let referenceCount):
+            guard sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .running,
+                prompt: prompt,
+                startedAt: startedAt,
+                finishedAt: nil,
+                imageCount: 0,
+                errorMessage: nil,
+                referenceCount: referenceCount
+            )
+        case .succeeded(let sessionID, _, let prompt, let imageFileNames, let finishedAt):
+            guard sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .success,
+                prompt: prompt,
+                startedAt: imageGenerationFeedback.startedAt,
+                finishedAt: finishedAt,
+                imageCount: imageFileNames.count,
+                errorMessage: nil,
+                referenceCount: imageGenerationFeedback.referenceCount
+            )
+        case .failed(let sessionID, _, let prompt, let reason, let finishedAt):
+            guard sessionID == nil || sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .failure,
+                prompt: prompt,
+                startedAt: imageGenerationFeedback.startedAt,
+                finishedAt: finishedAt,
+                imageCount: 0,
+                errorMessage: reason,
+                referenceCount: imageGenerationFeedback.referenceCount
+            )
+        case .cancelled(let sessionID, _, let prompt, let finishedAt):
+            guard sessionID == nil || sessionID == currentSession?.id else { return }
+            imageGenerationFeedback = ImageGenerationFeedback(
+                phase: .cancelled,
+                prompt: prompt,
+                startedAt: imageGenerationFeedback.startedAt,
+                finishedAt: finishedAt,
+                imageCount: 0,
+                errorMessage: nil,
+                referenceCount: imageGenerationFeedback.referenceCount
+            )
+        default:
+            imageGenerationFeedback = .idle
         }
     }
     
@@ -724,6 +934,7 @@ final class ChatViewModel: ObservableObject {
         if !images.contains(currentBackgroundImage) {
             currentBackgroundImage = images.first ?? ""
         }
+        refreshBlurredBackgroundImage()
     }
 
     private func updateDisplayedStatesIfNeeded(_ newStates: [ChatMessageRenderState]) {
@@ -731,6 +942,7 @@ final class ChatViewModel: ObservableObject {
         let newIDs = newStates.map(\.id)
         guard currentIDs != newIDs else { return }
         messages = newStates
+        updateDisplayMessagesIfNeeded(with: newStates)
     }
     
     private func updateHistoryFullyLoadedIfNeeded(_ newValue: Bool) {
@@ -741,5 +953,101 @@ final class ChatViewModel: ObservableObject {
     private func visibleMessages(from source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
         source
     }
-    
+
+    private func updateDisplayMessagesIfNeeded(with source: [ChatMessageRenderState]? = nil) {
+        let base = source ?? messages
+        let filtered = filterDisplayMessages(base)
+        let currentIDs = displayMessages.map(\.id)
+        let newIDs = filtered.map(\.id)
+        guard currentIDs != newIDs else { return }
+        displayMessages = filtered
+    }
+
+    private func filterDisplayMessages(_ source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
+        guard !toolCallResultIDs.isEmpty else { return source }
+        return source.filter { state in
+            let message = state.message
+            guard message.role == .tool else { return true }
+            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
+            return toolCalls.allSatisfy { !toolCallResultIDs.contains($0.id) }
+        }
+    }
+
+    private func loadBackgroundImage(named name: String) -> UIImage? {
+        if let cached = backgroundImageCache.object(forKey: name as NSString) {
+            return cached
+        }
+        let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(name)
+        guard let image = UIImage(contentsOfFile: fileURL.path) else { return nil }
+        backgroundImageCache.setObject(image, forKey: name as NSString)
+        return image
+    }
+
+    private func blurredCacheKey(for name: String, radius: Double) -> NSString {
+        let scaled = Int((radius * 10).rounded())
+        return "\(name)|blur:\(scaled)" as NSString
+    }
+
+    private func refreshBlurredBackgroundImage() {
+        backgroundBlurTask?.cancel()
+        guard enableBackground, !currentBackgroundImage.isEmpty else {
+            currentBackgroundImageBlurredUIImage = nil
+            return
+        }
+        guard let baseImage = loadBackgroundImage(named: currentBackgroundImage) else {
+            currentBackgroundImageBlurredUIImage = nil
+            return
+        }
+        guard let baseCGImage = baseImage.cgImage else {
+            currentBackgroundImageBlurredUIImage = baseImage
+            return
+        }
+        let baseScale = baseImage.scale
+        let baseOrientation = baseImage.imageOrientation
+        let radius = backgroundBlur
+        if radius <= 0.01 {
+            currentBackgroundImageBlurredUIImage = baseImage
+            return
+        }
+        let cacheKey = blurredCacheKey(for: currentBackgroundImage, radius: radius)
+        if let cached = blurredBackgroundImageCache.object(forKey: cacheKey) {
+            currentBackgroundImageBlurredUIImage = cached
+            return
+        }
+        currentBackgroundImageBlurredUIImage = baseImage
+        let expectedName = currentBackgroundImage
+        let expectedRadius = radius
+        backgroundBlurTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            let ciImage = CIImage(cgImage: baseCGImage)
+            let blurredCGImage: CGImage?
+            if let filter = CIFilter(name: "CIGaussianBlur") {
+                filter.setValue(ciImage, forKey: kCIInputImageKey)
+                filter.setValue(expectedRadius, forKey: kCIInputRadiusKey)
+                if let output = filter.outputImage {
+                    let cropped = output.cropped(to: ciImage.extent)
+                    let context = CIContext()
+                    blurredCGImage = context.createCGImage(cropped, from: ciImage.extent)
+                } else {
+                    blurredCGImage = nil
+                }
+            } else {
+                blurredCGImage = nil
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard self.enableBackground,
+                      self.currentBackgroundImage == expectedName,
+                      self.backgroundBlur == expectedRadius else { return }
+                let blurredUIImage = blurredCGImage.map {
+                    UIImage(cgImage: $0, scale: baseScale, orientation: baseOrientation)
+                }
+                if let blurredUIImage {
+                    self.blurredBackgroundImageCache.setObject(blurredUIImage, forKey: cacheKey)
+                }
+                self.currentBackgroundImageBlurredUIImage = blurredUIImage ?? self.currentBackgroundImageUIImage
+            }
+        }
+    }
+
 }

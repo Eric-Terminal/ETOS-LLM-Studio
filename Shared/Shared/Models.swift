@@ -151,6 +151,7 @@ public struct Model: Codable, Identifiable, Hashable {
         case chat
         case speechToText
         case embedding
+        case imageGeneration
     }
     
     public var id: UUID
@@ -216,6 +217,10 @@ public extension Model {
     var supportsEmbedding: Bool {
         capabilities.contains(.embedding)
     }
+
+    var supportsImageGeneration: Bool {
+        capabilities.contains(.imageGeneration)
+    }
 }
 
 // MARK: - 核心消息与会话模型 (已重构)
@@ -233,6 +238,40 @@ public enum MessageRole: String, Codable, Sendable {
 public enum ToolCallsPlacement: String, Codable, Sendable {
     case afterReasoning
     case afterContent
+}
+
+/// 单次 API 请求的响应测速信息
+public struct MessageResponseMetrics: Codable, Hashable, Sendable {
+    public static let currentSchemaVersion = 1
+
+    public var schemaVersion: Int
+    public var requestStartedAt: Date?
+    public var responseCompletedAt: Date?
+    public var totalResponseDuration: TimeInterval?
+    public var timeToFirstToken: TimeInterval?
+    public var completionTokensForSpeed: Int?
+    public var tokenPerSecond: Double?
+    public var isTokenPerSecondEstimated: Bool
+
+    public init(
+        schemaVersion: Int = MessageResponseMetrics.currentSchemaVersion,
+        requestStartedAt: Date? = nil,
+        responseCompletedAt: Date? = nil,
+        totalResponseDuration: TimeInterval? = nil,
+        timeToFirstToken: TimeInterval? = nil,
+        completionTokensForSpeed: Int? = nil,
+        tokenPerSecond: Double? = nil,
+        isTokenPerSecondEstimated: Bool = false
+    ) {
+        self.schemaVersion = schemaVersion
+        self.requestStartedAt = requestStartedAt
+        self.responseCompletedAt = responseCompletedAt
+        self.totalResponseDuration = totalResponseDuration
+        self.timeToFirstToken = timeToFirstToken
+        self.completionTokensForSpeed = completionTokensForSpeed
+        self.tokenPerSecond = tokenPerSecond
+        self.isTokenPerSecondEstimated = isTokenPerSecondEstimated
+    }
 }
 
 /// 聊天消息数据结构 (App的"官方语言")
@@ -289,6 +328,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
     public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
     public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
+    public var responseMetrics: MessageResponseMetrics? // 单次请求的响应测速信息
 
     public init(
         id: UUID = UUID(),
@@ -301,7 +341,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         audioFileName: String? = nil,
         imageFileNames: [String]? = nil,
         fileFileNames: [String]? = nil,
-        fullErrorContent: String? = nil
+        fullErrorContent: String? = nil,
+        responseMetrics: MessageResponseMetrics? = nil
     ) {
         self.id = id
         self.role = role
@@ -315,6 +356,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.imageFileNames = imageFileNames
         self.fileFileNames = fileFileNames
         self.fullErrorContent = fullErrorContent
+        self.responseMetrics = responseMetrics
     }
     
     // MARK: - 版本管理方法
@@ -351,7 +393,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, role, content, currentVersionIndex
         case reasoningContent, toolCalls, toolCallsPlacement, tokenUsage
-        case audioFileName, imageFileNames, fileFileNames, fullErrorContent
+        case audioFileName, imageFileNames, fileFileNames, fullErrorContent, responseMetrics
     }
     
     public init(from decoder: Decoder) throws {
@@ -384,6 +426,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
         self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
         self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
+        self.responseMetrics = try container.decodeIfPresent(MessageResponseMetrics.self, forKey: .responseMetrics)
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -407,6 +450,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
         try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)
         try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)
+        try container.encodeIfPresent(responseMetrics, forKey: .responseMetrics)
     }
 }
 

@@ -54,12 +54,20 @@ public class ChatService {
     public let selectedModelSubject: CurrentValueSubject<RunnableModel?, Never>
 
     public let requestStatusSubject = PassthroughSubject<RequestStatus, Never>()
+    public let imageGenerationStatusSubject = PassthroughSubject<ImageGenerationStatus, Never>()
     
     public enum RequestStatus {
         case started
         case finished
         case error
         case cancelled
+    }
+
+    public enum ImageGenerationStatus {
+        case started(sessionID: UUID, loadingMessageID: UUID, prompt: String, startedAt: Date, referenceCount: Int)
+        case succeeded(sessionID: UUID, loadingMessageID: UUID, prompt: String, imageFileNames: [String], finishedAt: Date)
+        case failed(sessionID: UUID?, loadingMessageID: UUID?, prompt: String, reason: String, finishedAt: Date)
+        case cancelled(sessionID: UUID?, loadingMessageID: UUID?, prompt: String, finishedAt: Date)
     }
 
     // MARK: - 私有状态
@@ -73,12 +81,20 @@ public class ChatService {
     private var currentRequestSessionID: UUID?
     /// 当前请求生成的加载占位消息 ID，方便在取消时移除。
     private var currentLoadingMessageID: UUID?
+    /// 当前生图请求上下文，用于向 UI 广播更细粒度的生图状态。
+    private var currentImageGenerationContext: ImageGenerationContext?
     /// 重试时要添加新版本的assistant消息ID（如果有）
     private var retryTargetMessageID: UUID?
     private var providers: [Provider]
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
     private let urlSession: URLSession
+
+    private struct ImageGenerationContext {
+        let sessionID: UUID
+        let loadingMessageID: UUID
+        let prompt: String
+    }
 
     private func sanitizedToolName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -292,6 +308,7 @@ public class ChatService {
     public func cancelOngoingRequest() async {
         guard let task = currentRequestTask else { return }
         let token = currentRequestToken
+        var cancelledImageContext: ImageGenerationContext?
         task.cancel()
         
         do {
@@ -313,13 +330,25 @@ public class ChatService {
                     removeMessage(withID: loadingID, in: sessionID)
                 }
             }
+            cancelledImageContext = currentImageGenerationContext
             currentRequestTask = nil
             currentRequestToken = nil
             currentRequestSessionID = nil
             currentLoadingMessageID = nil
+            currentImageGenerationContext = nil
         }
         
         requestStatusSubject.send(.cancelled)
+        if let context = cancelledImageContext {
+            imageGenerationStatusSubject.send(
+                .cancelled(
+                    sessionID: context.sessionID,
+                    loadingMessageID: context.loadingMessageID,
+                    prompt: context.prompt,
+                    finishedAt: Date()
+                )
+            )
+        }
     }
     
     public func saveAndReloadProviders(from providers: [Provider]) {
@@ -807,6 +836,7 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool = true,
         audioAttachment: AudioAttachment? = nil,
         imageAttachments: [ImageAttachment] = [],
         fileAttachments: [FileAttachment] = []
@@ -989,6 +1019,7 @@ public class ChatService {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: audioAttachment,
                 currentFileAttachments: fileAttachments
             )
@@ -1014,6 +1045,214 @@ public class ChatService {
                 logger.info("请求已被用户取消 (URLError)，将等待后续动作。")
             } else {
                 logger.error("请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    public func generateImageAndProcessMessage(
+        prompt: String,
+        imageAttachments: [ImageAttachment] = [],
+        runnableModel: RunnableModel? = nil,
+        runtimeOverrideParameters: [String: JSONValue] = [:]
+    ) async {
+        guard var currentSession = currentSessionSubject.value else {
+            let reason = NSLocalizedString("错误: 没有当前会话。", comment: "No current session error")
+            addErrorMessage(reason)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: nil,
+                    loadingMessageID: nil,
+                    prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
+            return
+        }
+
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else {
+            let reason = NSLocalizedString("错误: 生图提示词不能为空。", comment: "Image generation prompt empty")
+            addErrorMessage(reason)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
+            return
+        }
+
+        guard let runnableModel = runnableModel ?? selectedModelSubject.value else {
+            let reason = NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error")
+            addErrorMessage(reason)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
+            return
+        }
+
+        logger.info(
+            "开始生图流程: session=\(currentSession.id.uuidString), provider=\(runnableModel.provider.name), model=\(runnableModel.model.displayName), promptLength=\(trimmedPrompt.count), referenceCount=\(imageAttachments.count), runtimeOverrideCount=\(runtimeOverrideParameters.count)"
+        )
+
+        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
+            let reason = String(
+                format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
+                runnableModel.provider.apiFormat
+            )
+            addErrorMessage(reason)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
+            return
+        }
+
+        guard runnableModel.model.supportsImageGeneration || likelyImageGenerationModelName(runnableModel.model.modelName) else {
+            let reason = NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: "Model has no image generation capability")
+            addErrorMessage(reason)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSession.id,
+                    loadingMessageID: nil,
+                    prompt: trimmedPrompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
+            return
+        }
+
+        var savedImageFileNames: [String] = []
+        for imageAttachment in imageAttachments {
+            var targetName = imageAttachment.fileName
+            if targetName.isEmpty {
+                targetName = "\(UUID().uuidString).jpg"
+            }
+            if Persistence.imageFileExists(fileName: targetName) {
+                let ext = (targetName as NSString).pathExtension
+                let stem = (targetName as NSString).deletingPathExtension
+                let suffix = UUID().uuidString.prefix(8)
+                targetName = ext.isEmpty ? "\(stem)_\(suffix)" : "\(stem)_\(suffix).\(ext)"
+            }
+            if Persistence.saveImage(imageAttachment.data, fileName: targetName) != nil {
+                savedImageFileNames.append(targetName)
+                logger.info("生图参考图已保存: \(targetName)")
+            } else {
+                logger.error("生图参考图保存失败: \(targetName)")
+            }
+        }
+
+        let userMessage = ChatMessage(
+            role: .user,
+            content: trimmedPrompt,
+            imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
+        )
+        let loadingMessage = ChatMessage(role: .assistant, content: "")
+
+        var messages = messagesForSessionSubject.value
+        messages.append(userMessage)
+        messages.append(loadingMessage)
+        messagesForSessionSubject.send(messages)
+        logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
+
+        if currentSession.isTemporary {
+            currentSession.name = String(trimmedPrompt.prefix(20))
+            currentSession.isTemporary = false
+            currentSessionSubject.send(currentSession)
+            var updatedSessions = chatSessionsSubject.value
+            if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
+                updatedSessions[index] = currentSession
+            }
+            chatSessionsSubject.send(updatedSessions)
+            Persistence.saveChatSessions(updatedSessions)
+            logger.info("生图请求已跳过自动标题生成: session=\(currentSession.id.uuidString)")
+        } else {
+            promoteSessionToTopIfNeeded(sessionID: currentSession.id)
+        }
+
+        Persistence.saveMessages(messages, for: currentSession.id)
+        requestStatusSubject.send(.started)
+        imageGenerationStatusSubject.send(
+            .started(
+                sessionID: currentSession.id,
+                loadingMessageID: loadingMessage.id,
+                prompt: trimmedPrompt,
+                startedAt: Date(),
+                referenceCount: imageAttachments.count
+            )
+        )
+        logger.info("生图请求即将发送: session=\(currentSession.id.uuidString)")
+
+        currentRequestSessionID = currentSession.id
+        currentLoadingMessageID = loadingMessage.id
+        currentImageGenerationContext = ImageGenerationContext(
+            sessionID: currentSession.id,
+            loadingMessageID: loadingMessage.id,
+            prompt: trimmedPrompt
+        )
+        let requestToken = UUID()
+        currentRequestToken = requestToken
+
+        let requestTask = Task<Void, Error> { [weak self] in
+            guard let self else { return }
+            var effectiveModel = runnableModel.model
+            if !runtimeOverrideParameters.isEmpty {
+                effectiveModel.overrideParameters = effectiveModel.overrideParameters.merging(runtimeOverrideParameters) { _, runtime in
+                    runtime
+                }
+            }
+            let effectiveRunnableModel = RunnableModel(provider: runnableModel.provider, model: effectiveModel)
+            await self.executeImageGenerationRequest(
+                adapter: adapter,
+                runnableModel: effectiveRunnableModel,
+                prompt: trimmedPrompt,
+                referenceImages: imageAttachments,
+                loadingMessageID: loadingMessage.id,
+                currentSessionID: currentSession.id
+            )
+        }
+        currentRequestTask = requestTask
+
+        defer {
+            if currentRequestToken == requestToken {
+                currentRequestTask = nil
+                currentRequestToken = nil
+                currentRequestSessionID = nil
+                currentLoadingMessageID = nil
+                currentImageGenerationContext = nil
+            }
+        }
+
+        do {
+            try await requestTask.value
+        } catch is CancellationError {
+            logger.info("生图请求已被用户取消。")
+        } catch {
+            if isCancellationError(error) {
+                logger.info("生图请求已被用户取消 (URLError)。")
+            } else {
+                logger.error("生图请求执行过程中出现未预期错误: \(error.localizedDescription)")
             }
         }
     }
@@ -1205,6 +1444,7 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?, // 当前消息的音频附件（用于首次发送，尚未保存到文件）
         currentFileAttachments: [FileAttachment] // 当前消息的文件附件（用于首次发送，尚未保存到文件）
     ) async {
@@ -1338,10 +1578,46 @@ public class ChatService {
             return
         }
         
+        let requestStartedAt = Date()
+
         if enableStreaming {
-            await handleStreamedResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, availableTools: tools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
+            await handleStreamedResponse(
+                request: request,
+                adapter: adapter,
+                loadingMessageID: loadingMessageID,
+                currentSessionID: currentSessionID,
+                userMessage: userMessage,
+                wasTemporarySession: wasTemporarySession,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                availableTools: tools,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                requestStartedAt: requestStartedAt
+            )
         } else {
-            await handleStandardResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: tools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
+            await handleStandardResponse(
+                request: request,
+                adapter: adapter,
+                loadingMessageID: loadingMessageID,
+                currentSessionID: currentSessionID,
+                userMessage: userMessage,
+                wasTemporarySession: wasTemporarySession,
+                availableTools: tools,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                requestStartedAt: requestStartedAt
+            )
         }
     }
 
@@ -1371,7 +1647,8 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
-        includeSystemTime: Bool
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool = true
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
         
@@ -1488,6 +1765,7 @@ public class ChatService {
             loadingAssistant.reasoningContent = nil
             loadingAssistant.toolCalls = nil
             loadingAssistant.tokenUsage = nil
+            loadingAssistant.responseMetrics = nil
             
             persistedMessages.append(loadingAssistant)
             // 记录要添加版本的消息ID
@@ -1559,6 +1837,7 @@ public class ChatService {
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
             includeSystemTime: includeSystemTime,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             currentAudioAttachment: audioAttachment,
             currentFileAttachments: fileAttachments
         )
@@ -1579,6 +1858,7 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
         currentFileAttachments: [FileAttachment]
     ) async {
@@ -1615,6 +1895,7 @@ public class ChatService {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
                 currentFileAttachments: currentFileAttachments
             )
@@ -1654,7 +1935,8 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
-        includeSystemTime: Bool
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool = true
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
         await cancelOngoingRequest()
@@ -1720,10 +2002,248 @@ public class ChatService {
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
             includeSystemTime: includeSystemTime,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             audioAttachment: audioAttachment,
             imageAttachments: imageAttachments,
             fileAttachments: fileAttachments
         )
+    }
+
+    private func likelyImageGenerationModelName(_ modelName: String) -> Bool {
+        let lowered = modelName.lowercased()
+        return lowered.contains("gpt-image")
+            || lowered.contains("imagen")
+            || lowered.contains("image")
+            || lowered.contains("dall")
+    }
+
+    private func executeImageGenerationRequest(
+        adapter: APIAdapter,
+        runnableModel: RunnableModel,
+        prompt: String,
+        referenceImages: [ImageAttachment],
+        loadingMessageID: UUID,
+        currentSessionID: UUID
+    ) async {
+        logger.info(
+            "构建生图请求: session=\(currentSessionID.uuidString), model=\(runnableModel.model.modelName), referenceCount=\(referenceImages.count)"
+        )
+        guard let request = adapter.buildImageGenerationRequest(
+            for: runnableModel,
+            prompt: prompt,
+            referenceImages: referenceImages
+        ) else {
+            logger.error("生图请求构建失败: session=\(currentSessionID.uuidString)")
+            let reason = NSLocalizedString("错误: 无法构建生图请求。", comment: "Failed to build image generation request")
+            addErrorMessage(reason)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSessionID,
+                    loadingMessageID: loadingMessageID,
+                    prompt: prompt,
+                    reason: reason,
+                    finishedAt: Date()
+                )
+            )
+            return
+        }
+
+        logger.info("生图请求构建成功: method=\(request.httpMethod ?? "POST"), url=\(request.url?.absoluteString ?? "unknown")")
+
+        do {
+            logger.info("生图请求发送中: session=\(currentSessionID.uuidString)")
+            let data = try await fetchData(for: request)
+            logger.info("生图响应已返回: session=\(currentSessionID.uuidString), bytes=\(data.count)")
+            let imageResults = try adapter.parseImageGenerationResponse(data: data)
+            logger.info("生图响应解析完成: session=\(currentSessionID.uuidString), results=\(imageResults.count)")
+
+            var generatedImageFileNames: [String] = []
+            var revisedPrompts: [String] = []
+
+            for (index, result) in imageResults.enumerated() {
+                if let revised = result.revisedPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !revised.isEmpty {
+                    revisedPrompts.append(revised)
+                    logger.info("生图结果[\(index)] 包含 revised prompt: length=\(revised.count)")
+                }
+
+                guard let payload = try await resolveGeneratedImagePayload(from: result) else {
+                    logger.warning("生图结果[\(index)] 未解析到有效图片数据，已跳过。")
+                    continue
+                }
+
+                logger.info("生图结果[\(index)] 图片负载就绪: mime=\(payload.mimeType), bytes=\(payload.data.count)")
+
+                let ext = imageFileExtension(for: payload.mimeType)
+                let fileName = "\(UUID().uuidString).\(ext)"
+                if Persistence.saveImage(payload.data, fileName: fileName) != nil {
+                    generatedImageFileNames.append(fileName)
+                    logger.info("生图结果[\(index)] 已保存图片: \(fileName)")
+                } else {
+                    logger.error("生图结果[\(index)] 保存图片失败: \(fileName)")
+                }
+            }
+
+            guard !generatedImageFileNames.isEmpty else {
+                logger.error("生图响应中没有可保存图片: session=\(currentSessionID.uuidString)")
+                let reason = NSLocalizedString("生图响应中没有可保存的图片。", comment: "No generated image could be saved")
+                addErrorMessage(reason)
+                requestStatusSubject.send(.error)
+                imageGenerationStatusSubject.send(
+                    .failed(
+                        sessionID: currentSessionID,
+                        loadingMessageID: loadingMessageID,
+                        prompt: prompt,
+                        reason: reason,
+                        finishedAt: Date()
+                    )
+                )
+                return
+            }
+
+            let revisedPrompt = revisedPrompts.first(where: { !$0.isEmpty })
+            let content = revisedPrompt ?? NSLocalizedString("[图片]", comment: "Image message placeholder")
+
+            var messages = messagesForSessionSubject.value
+            if let loadingIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                messages[loadingIndex] = ChatMessage(
+                    id: messages[loadingIndex].id,
+                    role: .assistant,
+                    content: content,
+                    imageFileNames: generatedImageFileNames
+                )
+                messagesForSessionSubject.send(messages)
+                Persistence.saveMessages(messages, for: currentSessionID)
+                logger.info(
+                    "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
+                )
+            } else {
+                logger.warning("未找到生图占位消息，无法替换: loadingMessageID=\(loadingMessageID.uuidString)")
+            }
+
+            requestStatusSubject.send(.finished)
+            imageGenerationStatusSubject.send(
+                .succeeded(
+                    sessionID: currentSessionID,
+                    loadingMessageID: loadingMessageID,
+                    prompt: prompt,
+                    imageFileNames: generatedImageFileNames,
+                    finishedAt: Date()
+                )
+            )
+            logger.info("生图流程完成: session=\(currentSessionID.uuidString), imageCount=\(generatedImageFileNames.count)")
+        } catch is CancellationError {
+            logger.info("生图请求在处理中被取消。")
+        } catch NetworkError.badStatusCode(let code, let bodyData) {
+            let snippet = responseBodySnippet(from: bodyData)
+            logger.error("生图请求失败(HTTP \(code)): \(snippet)")
+            addErrorMessage(snippet, httpStatusCode: code)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSessionID,
+                    loadingMessageID: loadingMessageID,
+                    prompt: prompt,
+                    reason: snippet,
+                    finishedAt: Date()
+                )
+            )
+        } catch {
+            if isCancellationError(error) {
+                logger.info("生图请求在处理中被取消 (URLError)。")
+            } else {
+                logger.error("生图请求失败: \(error.localizedDescription)")
+                let reason = String(
+                    format: NSLocalizedString("生图请求失败: %@", comment: "Image generation request failed with reason"),
+                    error.localizedDescription
+                )
+                addErrorMessage(reason)
+                requestStatusSubject.send(.error)
+                imageGenerationStatusSubject.send(
+                    .failed(
+                        sessionID: currentSessionID,
+                        loadingMessageID: loadingMessageID,
+                        prompt: prompt,
+                        reason: reason,
+                        finishedAt: Date()
+                    )
+                )
+            }
+        }
+    }
+
+    private func resolveGeneratedImagePayload(from result: GeneratedImageResult) async throws -> (data: Data, mimeType: String)? {
+        if let imageData = result.data, !imageData.isEmpty {
+            let mimeType = (result.mimeType?.isEmpty == false ? result.mimeType! : detectImageMimeType(from: imageData))
+            logger.info("生图结果使用内联图片数据: mime=\(mimeType), bytes=\(imageData.count)")
+            return (imageData, mimeType)
+        }
+
+        guard let remoteURL = result.remoteURL else { return nil }
+        logger.info("生图结果改为下载远端图片: \(remoteURL.absoluteString)")
+
+        let (data, response) = try await urlSession.data(from: remoteURL)
+        if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            logger.error("下载生图结果失败: status=\(httpResponse.statusCode), url=\(remoteURL.absoluteString)")
+            throw NetworkError.badStatusCode(code: httpResponse.statusCode, responseBody: data.isEmpty ? nil : data)
+        }
+        guard !data.isEmpty else {
+            logger.warning("下载生图结果返回空数据: \(remoteURL.absoluteString)")
+            return nil
+        }
+        let mimeType = result.mimeType ?? response.mimeType ?? detectImageMimeType(from: data)
+        logger.info("下载生图结果成功: mime=\(mimeType), bytes=\(data.count)")
+        return (data, mimeType)
+    }
+
+    private func detectImageMimeType(from data: Data) -> String {
+        guard data.count >= 12 else { return "image/png" }
+        let bytes = [UInt8](data.prefix(12))
+        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+            return "image/png"
+        }
+        if bytes.starts(with: [0xFF, 0xD8, 0xFF]) {
+            return "image/jpeg"
+        }
+        if bytes.starts(with: [0x52, 0x49, 0x46, 0x46]),
+           bytes[8...11].elementsEqual([0x57, 0x45, 0x42, 0x50]) {
+            return "image/webp"
+        }
+        if bytes.starts(with: [0x47, 0x49, 0x46, 0x38]) {
+            return "image/gif"
+        }
+        return "image/png"
+    }
+
+    private func imageFileExtension(for mimeType: String) -> String {
+        switch mimeType.lowercased() {
+        case "image/png":
+            return "png"
+        case "image/jpeg", "image/jpg":
+            return "jpg"
+        case "image/webp":
+            return "webp"
+        case "image/gif":
+            return "gif"
+        default:
+            return "png"
+        }
+    }
+
+    private func responseBodySnippet(from bodyData: Data?) -> String {
+        if let bodyData,
+           let text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        if let bodyData, !bodyData.isEmpty {
+            return String(
+                format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                bodyData.count
+            )
+        }
+        return NSLocalizedString("响应体为空。", comment: "Empty response body")
     }
     
     // MARK: - 私有网络层与响应处理 (已重构)
@@ -1772,6 +2292,39 @@ public class ChatService {
             return true
         }
         return false
+    }
+
+    private func estimatedCompletionTokens(from outputText: String) -> Int {
+        let utf8Count = outputText.utf8.count
+        guard utf8Count > 0 else { return 0 }
+        // 粗略估算：兼顾英文与中日韩文本，优先用于流式实时速度展示。
+        let estimated = Int((Double(utf8Count) / 3.2).rounded(.toNearestOrAwayFromZero))
+        return max(1, estimated)
+    }
+
+    private func tokenPerSecond(tokens: Int?, elapsed: TimeInterval) -> Double? {
+        guard let tokens, tokens > 0, elapsed > 0 else { return nil }
+        return Double(tokens) / elapsed
+    }
+
+    private func makeResponseMetrics(
+        requestStartedAt: Date,
+        responseCompletedAt: Date?,
+        totalResponseDuration: TimeInterval?,
+        timeToFirstToken: TimeInterval?,
+        completionTokensForSpeed: Int?,
+        tokenPerSecond: Double?,
+        isEstimated: Bool
+    ) -> MessageResponseMetrics {
+        MessageResponseMetrics(
+            requestStartedAt: requestStartedAt,
+            responseCompletedAt: responseCompletedAt,
+            totalResponseDuration: totalResponseDuration,
+            timeToFirstToken: timeToFirstToken,
+            completionTokensForSpeed: completionTokensForSpeed,
+            tokenPerSecond: tokenPerSecond,
+            isTokenPerSecondEstimated: isEstimated
+        )
     }
 
     private func fetchData(for request: URLRequest) async throws -> Data {
@@ -1906,15 +2459,60 @@ public class ChatService {
         }
     }
     
-    private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
+    private func handleStandardResponse(
+        request: URLRequest,
+        adapter: APIAdapter,
+        loadingMessageID: UUID,
+        currentSessionID: UUID,
+        userMessage: ChatMessage?,
+        wasTemporarySession: Bool,
+        availableTools: [InternalToolDefinition]?,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
+        requestStartedAt: Date
+    ) async {
         do {
             let data = try await fetchData(for: request)
             let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
             logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
             
             do {
-                let parsedMessage = try adapter.parseResponse(data: data)
-                await processResponseMessage(responseMessage: parsedMessage, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
+                var parsedMessage = try adapter.parseResponse(data: data)
+                if enableResponseSpeedMetrics {
+                    let responseCompletedAt = Date()
+                    let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
+                    let completionTokens = parsedMessage.tokenUsage?.completionTokens
+                    parsedMessage.responseMetrics = makeResponseMetrics(
+                        requestStartedAt: requestStartedAt,
+                        responseCompletedAt: responseCompletedAt,
+                        totalResponseDuration: totalDuration,
+                        timeToFirstToken: nil,
+                        completionTokensForSpeed: completionTokens,
+                        tokenPerSecond: tokenPerSecond(tokens: completionTokens, elapsed: totalDuration),
+                        isEstimated: false
+                    )
+                }
+                await processResponseMessage(
+                    responseMessage: parsedMessage,
+                    loadingMessageID: loadingMessageID,
+                    currentSessionID: currentSessionID,
+                    userMessage: userMessage,
+                    wasTemporarySession: wasTemporarySession,
+                    availableTools: availableTools,
+                    aiTemperature: aiTemperature,
+                    aiTopP: aiTopP,
+                    systemPrompt: systemPrompt,
+                    maxChatHistory: maxChatHistory,
+                    enableMemory: enableMemory,
+                    enableMemoryWrite: enableMemoryWrite,
+                    includeSystemTime: includeSystemTime
+                )
             } catch is CancellationError {
                 logger.info("请求在解析阶段被取消，已忽略后续处理。")
             } catch {
@@ -2115,6 +2713,7 @@ public class ChatService {
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
                 enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: false,
                 currentAudioAttachment: nil,
                 currentFileAttachments: []
             )
@@ -2125,7 +2724,24 @@ public class ChatService {
         }
     }
     
-    private func handleStreamedResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, availableTools: [InternalToolDefinition]?, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
+    private func handleStreamedResponse(
+        request: URLRequest,
+        adapter: APIAdapter,
+        loadingMessageID: UUID,
+        currentSessionID: UUID,
+        userMessage: ChatMessage?,
+        wasTemporarySession: Bool,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        availableTools: [InternalToolDefinition]?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
+        requestStartedAt: Date
+    ) async {
         do {
             let bytes = try await streamData(for: request)
 
@@ -2134,6 +2750,9 @@ public class ChatService {
             var toolCallOrder: [Int] = []
             var toolCallIndexByID: [String: Int] = [:]
             var latestTokenUsage: MessageTokenUsage?
+            var latestOfficialCompletionTokens: Int?
+            var accumulatedOutputText = ""
+            var firstTokenAt: Date?
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
@@ -2143,9 +2762,17 @@ public class ChatService {
                     if let usage = part.tokenUsage {
                         latestTokenUsage = usage
                         messages[index].tokenUsage = usage
+                        if let completionTokens = usage.completionTokens, completionTokens > 0 {
+                            latestOfficialCompletionTokens = completionTokens
+                        }
                     }
+                    var didReceiveTextDelta = false
                     if let contentPart = part.content {
                         messages[index].content += contentPart
+                        if !contentPart.isEmpty {
+                            accumulatedOutputText += contentPart
+                            didReceiveTextDelta = true
+                        }
                         if messages[index].role == .tool {
                             let trimmedContent = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
                             if !trimmedContent.isEmpty {
@@ -2156,6 +2783,10 @@ public class ChatService {
                     if let reasoningPart = part.reasoningContent {
                         if messages[index].reasoningContent == nil { messages[index].reasoningContent = "" }
                         messages[index].reasoningContent! += reasoningPart
+                        if !reasoningPart.isEmpty {
+                            accumulatedOutputText += reasoningPart
+                            didReceiveTextDelta = true
+                        }
                         if messages[index].role == .tool {
                             let trimmedReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                             if !trimmedReasoning.isEmpty {
@@ -2203,6 +2834,24 @@ public class ChatService {
                             messages[index].toolCalls = partialToolCalls
                         }
                     }
+                    if enableResponseSpeedMetrics {
+                        let now = Date()
+                        if didReceiveTextDelta, firstTokenAt == nil {
+                            firstTokenAt = now
+                        }
+                        let elapsed = max(0, now.timeIntervalSince(requestStartedAt))
+                        let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
+                        let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                        messages[index].responseMetrics = makeResponseMetrics(
+                            requestStartedAt: requestStartedAt,
+                            responseCompletedAt: nil,
+                            totalResponseDuration: nil,
+                            timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
+                            completionTokensForSpeed: completionTokensForSpeed,
+                            tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: elapsed),
+                            isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                        )
+                    }
                     messagesForSessionSubject.send(messages)
                 }
             }
@@ -2235,6 +2884,24 @@ public class ChatService {
                 }
                 if let latestTokenUsage {
                     messages[index].tokenUsage = latestTokenUsage
+                    if let completionTokens = latestTokenUsage.completionTokens, completionTokens > 0 {
+                        latestOfficialCompletionTokens = completionTokens
+                    }
+                }
+                if enableResponseSpeedMetrics {
+                    let responseCompletedAt = Date()
+                    let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
+                    let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
+                    let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                    messages[index].responseMetrics = makeResponseMetrics(
+                        requestStartedAt: requestStartedAt,
+                        responseCompletedAt: responseCompletedAt,
+                        totalResponseDuration: totalDuration,
+                        timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
+                        completionTokensForSpeed: completionTokensForSpeed,
+                        tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: totalDuration),
+                        isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                    )
                 }
                 finalAssistantMessage = messages[index]
                 messagesForSessionSubject.send(messages)
@@ -2346,6 +3013,9 @@ public class ChatService {
             if let newPlacement = newMessage.toolCallsPlacement {
                 targetMessage.toolCallsPlacement = newPlacement
             }
+            if let newMetrics = newMessage.responseMetrics {
+                targetMessage.responseMetrics = newMetrics
+            }
             
             messages[targetIndex] = targetMessage
             
@@ -2376,7 +3046,8 @@ public class ChatService {
                 reasoningContent: newMessage.reasoningContent,
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
                 toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,
-                tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage
+                tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage,
+                responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
             )
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)

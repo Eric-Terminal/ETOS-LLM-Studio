@@ -40,6 +40,26 @@ private func shouldSendText(_ text: String) -> Bool {
     return true
 }
 
+private func inferredImageMimeType(from data: Data) -> String {
+    guard data.count >= 12 else { return "image/png" }
+    let bytes = [UInt8](data.prefix(12))
+    if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+        return "image/png"
+    }
+    if bytes.starts(with: [0xFF, 0xD8, 0xFF]) {
+        return "image/jpeg"
+    }
+    if bytes.starts(with: [0x52, 0x49, 0x46, 0x46]),
+       bytes.count >= 12,
+       bytes[8...11].elementsEqual([0x57, 0x45, 0x42, 0x50]) {
+        return "image/webp"
+    }
+    if bytes.starts(with: [0x47, 0x49, 0x46, 0x38]) {
+        return "image/gif"
+    }
+    return "image/png"
+}
+
 /// 代表从流式 API 响应中解析出的单个数据片段。
 public struct ChatMessagePart {
     public struct ToolCallDelta {
@@ -53,6 +73,21 @@ public struct ChatMessagePart {
     public var reasoningContent: String?
     public var toolCallDeltas: [ToolCallDelta]?
     public var tokenUsage: MessageTokenUsage?
+}
+
+/// 生图响应中的单张图片结果。
+public struct GeneratedImageResult: Sendable {
+    public let data: Data?
+    public let mimeType: String?
+    public let remoteURL: URL?
+    public let revisedPrompt: String?
+
+    public init(data: Data?, mimeType: String?, remoteURL: URL?, revisedPrompt: String?) {
+        self.data = data
+        self.mimeType = mimeType
+        self.remoteURL = remoteURL
+        self.revisedPrompt = revisedPrompt
+    }
 }
 
 
@@ -104,6 +139,12 @@ public protocol APIAdapter {
     
     /// 解析嵌入响应，返回与输入文本一一对应的向量。
     func parseEmbeddingResponse(data: Data) throws -> [[Float]]
+
+    /// 构建一个用于生图（文生图 / 图生图）的请求。
+    func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest?
+
+    /// 解析生图响应。
+    func parseImageGenerationResponse(data: Data) throws -> [GeneratedImageResult]
 }
 
 public extension APIAdapter {
@@ -121,6 +162,14 @@ public extension APIAdapter {
     
     func parseEmbeddingResponse(data: Data) throws -> [[Float]] {
         throw NSError(domain: "APIAdapter", code: -11, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现嵌入 API。"])
+    }
+
+    func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest? {
+        nil
+    }
+
+    func parseImageGenerationResponse(data: Data) throws -> [GeneratedImageResult] {
+        throw NSError(domain: "APIAdapter", code: -12, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现生图 API。"])
     }
 
     func parseModelListResponse(data: Data) throws -> [Model] {
@@ -153,6 +202,29 @@ public class OpenAIAdapter: APIAdapter {
         let prefixLength = maxLength - 1 - hash.count
         let prefix = name.prefix(prefixLength)
         return "\(prefix)_\(hash)"
+    }
+
+    private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
+        let lowered = modelName.lowercased()
+        var capabilities: [Model.Capability] = [.chat]
+        if lowered.contains("gpt-image") || lowered.contains("image") || lowered.contains("dall") {
+            capabilities.append(.imageGeneration)
+        }
+        return capabilities
+    }
+
+    private func sanitizedImageGenerationOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        let blockedKeys: Set<String> = [
+            "messages",
+            "tools",
+            "tool_choice",
+            "functions",
+            "function_call",
+            "parallel_tool_calls",
+            "stream",
+            "stream_options"
+        ]
+        return overrides.filter { !blockedKeys.contains($0.key) }
     }
 
     // MARK: - 内部解码模型 (实现细节)
@@ -195,6 +267,15 @@ public class OpenAIAdapter: APIAdapter {
     private struct OpenAIEmbeddingResponse: Decodable {
         struct DataEntry: Decodable {
             let embedding: [Double]
+        }
+        let data: [DataEntry]
+    }
+
+    private struct OpenAIImageResponse: Decodable {
+        struct DataEntry: Decodable {
+            let b64_json: String?
+            let url: String?
+            let revised_prompt: String?
         }
         let data: [DataEntry]
     }
@@ -420,6 +501,16 @@ public class OpenAIAdapter: APIAdapter {
         
         return request
     }
+
+    public func parseModelListResponse(data: Data) throws -> [Model] {
+        let modelResponse = try JSONDecoder().decode(ModelListResponse.self, from: data)
+        return modelResponse.data.map { modelInfo in
+            Model(
+                modelName: modelInfo.id,
+                capabilities: inferredCapabilities(for: modelInfo.id)
+            )
+        }
+    }
     
     public func parseResponse(data: Data) throws -> ChatMessage {
         let apiResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
@@ -595,6 +686,133 @@ public class OpenAIAdapter: APIAdapter {
         }
     }
 
+    public func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建生图请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+
+        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建生图请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
+            return nil
+        }
+
+        let overrides = sanitizedImageGenerationOverrides(
+            model.model.overrideParameters.mapValues { $0.toAny() }
+        )
+        if referenceImages.isEmpty {
+            let imagesURL = baseURL.appendingPathComponent("images/generations")
+            var request = URLRequest(url: imagesURL)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 300
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
+
+            var payload = overrides
+            payload["model"] = model.model.modelName
+            payload["prompt"] = prompt
+            if payload["n"] == nil {
+                payload["n"] = 1
+            }
+            if payload["response_format"] == nil {
+                payload["response_format"] = "b64_json"
+            }
+
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+                return request
+            } catch {
+                logger.error("构建生图请求失败: 无法编码 JSON - \(error.localizedDescription)")
+                return nil
+            }
+        }
+
+        let editsURL = baseURL.appendingPathComponent("images/edits")
+        var request = URLRequest(url: editsURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
+
+        var body = Data()
+        body.appendMultipartField(name: "model", value: model.model.modelName, boundary: boundary)
+        body.appendMultipartField(name: "prompt", value: prompt, boundary: boundary)
+
+        let responseFormat = (overrides["response_format"] as? String) ?? "b64_json"
+        body.appendMultipartField(name: "response_format", value: responseFormat, boundary: boundary)
+        if overrides["n"] == nil {
+            body.appendMultipartField(name: "n", value: "1", boundary: boundary)
+        }
+
+        for image in referenceImages {
+            body.appendMultipartFile(
+                name: "image",
+                fileName: image.fileName,
+                mimeType: image.mimeType,
+                data: image.data,
+                boundary: boundary
+            )
+        }
+
+        for (key, value) in overrides {
+            if ["model", "prompt", "response_format"].contains(key) {
+                continue
+            }
+            let valueString: String?
+            switch value {
+            case let v as String:
+                valueString = v
+            case let v as Bool:
+                valueString = v ? "true" : "false"
+            case let v as Int:
+                valueString = String(v)
+            case let v as Double:
+                valueString = String(v)
+            default:
+                valueString = nil
+            }
+            if let valueString {
+                body.appendMultipartField(name: key, value: valueString, boundary: boundary)
+            }
+        }
+
+        body.appendString("--\(boundary)--\r\n")
+        request.httpBody = body
+        return request
+    }
+
+    public func parseImageGenerationResponse(data: Data) throws -> [GeneratedImageResult] {
+        let response = try JSONDecoder().decode(OpenAIImageResponse.self, from: data)
+        let results = response.data.compactMap { entry -> GeneratedImageResult? in
+            if let b64 = entry.b64_json,
+               let imageData = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) {
+                return GeneratedImageResult(
+                    data: imageData,
+                    mimeType: inferredImageMimeType(from: imageData),
+                    remoteURL: nil,
+                    revisedPrompt: entry.revised_prompt
+                )
+            }
+            if let urlString = entry.url, let url = URL(string: urlString) {
+                return GeneratedImageResult(
+                    data: nil,
+                    mimeType: nil,
+                    remoteURL: url,
+                    revisedPrompt: entry.revised_prompt
+                )
+            }
+            return nil
+        }
+
+        if results.isEmpty {
+            throw NSError(domain: "OpenAIImageAdapter", code: 2, userInfo: [NSLocalizedDescriptionKey: "响应中未包含可用图片数据"])
+        }
+        return results
+    }
+
     private func makeTokenUsage(from usage: OpenAIResponse.Usage?) -> MessageTokenUsage? {
         guard let usage = usage else { return nil }
         if usage.prompt_tokens == nil && usage.completion_tokens == nil && usage.total_tokens == nil {
@@ -668,6 +886,15 @@ public class GeminiAdapter: APIAdapter {
         return "\(prefix)_\(hash)"
     }
 
+    private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
+        let lowered = modelName.lowercased()
+        var capabilities: [Model.Capability] = [.chat]
+        if lowered.contains("imagen") || lowered.contains("image") {
+            capabilities.append(.imageGeneration)
+        }
+        return capabilities
+    }
+
     // MARK: - 内部解码模型
     
     private struct GeminiResponse: Decodable {
@@ -680,10 +907,45 @@ public class GeminiAdapter: APIAdapter {
                 let text: String?
                 let thought: Bool?
                 let functionCall: FunctionCall?
+                let inlineData: InlineData?
+
+                enum CodingKeys: String, CodingKey {
+                    case text
+                    case thought
+                    case functionCall
+                    case inlineData
+                    case inline_data
+                }
+
+                init(from decoder: Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    text = try container.decodeIfPresent(String.self, forKey: .text)
+                    thought = try container.decodeIfPresent(Bool.self, forKey: .thought)
+                    functionCall = try container.decodeIfPresent(FunctionCall.self, forKey: .functionCall)
+                    inlineData = try container.decodeIfPresent(InlineData.self, forKey: .inlineData)
+                        ?? (try container.decodeIfPresent(InlineData.self, forKey: .inline_data))
+                }
             }
             struct FunctionCall: Decodable {
                 let name: String
                 let args: [String: AnyCodable]?
+            }
+            struct InlineData: Decodable {
+                let mimeType: String?
+                let data: String?
+
+                enum CodingKeys: String, CodingKey {
+                    case mimeType
+                    case mime_type
+                    case data
+                }
+
+                init(from decoder: Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType)
+                        ?? (try container.decodeIfPresent(String.self, forKey: .mime_type))
+                    data = try container.decodeIfPresent(String.self, forKey: .data)
+                }
             }
             let content: Content?
             let finishReason: String?
@@ -1022,7 +1284,11 @@ public class GeminiAdapter: APIAdapter {
         return supportedModels.map { info in
             let rawName = info.name
             let normalizedName = rawName.hasPrefix("models/") ? String(rawName.dropFirst("models/".count)) : rawName
-            return Model(modelName: normalizedName, displayName: info.displayName)
+            return Model(
+                modelName: normalizedName,
+                displayName: info.displayName,
+                capabilities: inferredCapabilities(for: normalizedName)
+            )
         }
     }
     
@@ -1209,6 +1475,123 @@ public class GeminiAdapter: APIAdapter {
             }
             throw error
         }
+    }
+
+    public func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建 Gemini 生图请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+
+        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+            logger.error("构建 Gemini 生图请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
+            return nil
+        }
+
+        var imageURL = baseURL.appendingPathComponent("models/\(model.model.modelName):generateContent")
+        var urlComponents = URLComponents(url: imageURL, resolvingAgainstBaseURL: false)!
+        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        imageURL = urlComponents.url!
+
+        var request = URLRequest(url: imageURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
+
+        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        var parts: [[String: Any]] = [["text": prompt]]
+        for image in referenceImages {
+            parts.append([
+                "inline_data": [
+                    "mime_type": image.mimeType,
+                    "data": image.data.base64EncodedString()
+                ]
+            ])
+        }
+
+        var payload: [String: Any] = [
+            "contents": [
+                [
+                    "role": "user",
+                    "parts": parts
+                ]
+            ]
+        ]
+
+        var generationConfig: [String: Any] = [:]
+        if let temperature = overrides["temperature"] {
+            generationConfig["temperature"] = temperature
+        }
+        if let topP = overrides["top_p"] {
+            generationConfig["topP"] = topP
+        }
+        if let topK = overrides["top_k"] {
+            generationConfig["topK"] = topK
+        }
+        if let maxTokens = overrides["max_tokens"] {
+            generationConfig["maxOutputTokens"] = maxTokens
+        }
+        if let responseModalities = overrides["response_modalities"] {
+            generationConfig["responseModalities"] = responseModalities
+        } else {
+            generationConfig["responseModalities"] = ["IMAGE"]
+        }
+        payload["generationConfig"] = generationConfig
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            return request
+        } catch {
+            logger.error("构建 Gemini 生图请求失败: JSON 序列化错误 - \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    public func parseImageGenerationResponse(data: Data) throws -> [GeneratedImageResult] {
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+        if let error = response.error {
+            throw NSError(domain: "GeminiImageAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+        }
+
+        var results: [GeneratedImageResult] = []
+        var revisedPrompts: [String] = []
+
+        for candidate in response.candidates ?? [] {
+            for part in candidate.content?.parts ?? [] {
+                if let text = part.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    revisedPrompts.append(text)
+                }
+                if let inlineData = part.inlineData,
+                   let b64 = inlineData.data,
+                   let imageData = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) {
+                    let mimeType = inlineData.mimeType ?? inferredImageMimeType(from: imageData)
+                    results.append(GeneratedImageResult(
+                        data: imageData,
+                        mimeType: mimeType,
+                        remoteURL: nil,
+                        revisedPrompt: nil
+                    ))
+                }
+            }
+        }
+
+        let revisedPrompt = revisedPrompts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !revisedPrompt.isEmpty {
+            results = results.map { result in
+                GeneratedImageResult(
+                    data: result.data,
+                    mimeType: result.mimeType,
+                    remoteURL: result.remoteURL,
+                    revisedPrompt: revisedPrompt
+                )
+            }
+        }
+
+        if results.isEmpty {
+            throw NSError(domain: "GeminiImageAdapter", code: 3, userInfo: [NSLocalizedDescriptionKey: "响应中未包含可用图片数据"])
+        }
+        return results
     }
     
     // MARK: - 辅助方法

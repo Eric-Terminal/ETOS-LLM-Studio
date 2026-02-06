@@ -63,13 +63,11 @@ struct DisplaySettingsView: View {
                     
                     Toggle("背景随机轮换", isOn: $enableAutoRotateBackground)
                     
-                    if !enableAutoRotateBackground {
-                        NavigationLink(destination: BackgroundPickerView(
-                            allBackgrounds: allBackgrounds,
-                            selectedBackground: $currentBackgroundImage
-                        )) {
-                            Text("选择背景")
-                        }
+                    NavigationLink(destination: BackgroundPickerView(
+                        allBackgrounds: allBackgrounds,
+                        selectedBackground: $currentBackgroundImage
+                    )) {
+                        Text("选择背景")
                     }
                 }
             }

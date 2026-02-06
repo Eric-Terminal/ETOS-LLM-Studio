@@ -13,6 +13,7 @@ import MarkdownUI
 import Shared
 import UIKit
 import PhotosUI
+import Photos
 import AVFoundation
 import UniformTypeIdentifiers
 
@@ -65,6 +66,7 @@ struct ChatView: View {
     @State private var sessionInfo: SessionPickerInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
+    @State private var imageDownloadAlertMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @FocusState private var composerFocused: Bool
@@ -122,18 +124,8 @@ struct ChatView: View {
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
-    private var displayMessages: [ChatMessageRenderState] {
-        let representedToolCallIDs = viewModel.toolCallResultIDs
-        return viewModel.messages.filter { state in
-            let message = state.message
-            guard message.role == .tool else { return true }
-            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
-            return toolCalls.allSatisfy { !representedToolCallIDs.contains($0.id) }
-        }
-    }
-    
     var body: some View {
-        let displayedMessages = displayMessages
+        let displayedMessages = viewModel.displayMessages
         NavigationStack {
             ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
@@ -381,6 +373,19 @@ struct ChatView: View {
             } message: {
                 Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
             }
+            .alert(
+                Text(NSLocalizedString("提示", comment: "Notice")),
+                isPresented: Binding(
+                    get: { imageDownloadAlertMessage != nil },
+                    set: { isPresented in
+                        if !isPresented { imageDownloadAlertMessage = nil }
+                    }
+                )
+            ) {
+                Button(NSLocalizedString("确定", comment: "OK"), role: .cancel) {}
+            } message: {
+                Text(imageDownloadAlertMessage ?? "")
+            }
         }
     }
     
@@ -391,10 +396,10 @@ struct ChatView: View {
         GeometryReader { geometry in
             Group {
                 if viewModel.enableBackground,
-                   let image = viewModel.currentBackgroundImageUIImage {
+                   let image = viewModel.currentBackgroundImageBlurredUIImage {
                     ZStack {
                         if viewModel.backgroundContentMode == "fit" {
-                            Color.black
+                            colorScheme == .dark ? Color.black : Color(uiColor: .systemBackground)
                         }
                         
                         Image(uiImage: image)
@@ -405,7 +410,6 @@ struct ChatView: View {
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
                             .clipped()
-                            .blur(radius: viewModel.backgroundBlur)
                             .opacity(viewModel.backgroundOpacity)
                     }
                 } else {
@@ -1102,9 +1106,9 @@ struct ChatView: View {
     /// Telegram 风格历史加载提示
     @ViewBuilder
     private var historyBanner: some View {
-        let remainingCount = viewModel.allMessagesForSession.count - viewModel.messages.count
+        let remainingCount = viewModel.remainingHistoryCount
         if remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
-            let chunk = min(remainingCount, viewModel.historyLoadChunkSize)
+            let chunk = viewModel.historyLoadChunkCount
             Button {
                 suppressAutoScrollOnce = true
                 withAnimation {
@@ -1217,6 +1221,16 @@ struct ChatView: View {
         
         Divider()
         
+        if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+            Button {
+                Task {
+                    await downloadImagesToPhotoLibrary(fileNames: imageFileNames)
+                }
+            } label: {
+                Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
+            }
+        }
+
         Button {
             UIPasteboard.general.string = message.content
         } label: {
@@ -1232,6 +1246,68 @@ struct ChatView: View {
                 )
             } label: {
                 Label("查看消息信息", systemImage: "info.circle")
+            }
+        }
+    }
+
+    private func downloadImagesToPhotoLibrary(fileNames: [String]) async {
+        do {
+            try await saveImagesToPhotoLibrary(fileNames: fileNames)
+            await MainActor.run {
+                imageDownloadAlertMessage = NSLocalizedString("已保存到相册。", comment: "Saved to photo library")
+            }
+        } catch {
+            await MainActor.run {
+                imageDownloadAlertMessage = String(
+                    format: NSLocalizedString("保存失败: %@", comment: "Save generated image failed"),
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func saveImagesToPhotoLibrary(fileNames: [String]) async throws {
+        let fileURLs = fileNames.map { Persistence.getImageDirectory().appendingPathComponent($0) }
+        guard fileURLs.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+            throw NSError(
+                domain: "ChatViewImageDownload",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("图片文件不存在。", comment: "Generated image file missing")]
+            )
+        }
+
+        let status = await requestPhotoLibraryAccessStatus()
+        guard status == .authorized || status == .limited else {
+            throw NSError(
+                domain: "ChatViewImageDownload",
+                code: 403,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("没有相册访问权限。", comment: "Photo library permission denied")]
+            )
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                for fileURL in fileURLs {
+                    PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
+                }
+            }) { success, error in
+                if success {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: error ?? NSError(
+                        domain: "ChatViewImageDownload",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("保存到相册失败。", comment: "Failed to save image to photo library")]
+                    ))
+                }
+            }
+        }
+    }
+
+    private func requestPhotoLibraryAccessStatus() async -> PHAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                continuation.resume(returning: status)
             }
         }
     }
@@ -1876,7 +1952,10 @@ private struct TelegramMessageComposer: View {
         if hasContent {
             return "arrow.up"
         }
-        return viewModel.enableSpeechInput ? "mic.fill" : "arrow.up"
+        if viewModel.enableSpeechInput {
+            return "mic.fill"
+        }
+        return "arrow.up"
     }
     
     private var actionForegroundColor: Color {
@@ -2815,6 +2894,61 @@ private struct MessageInfoSheet: View {
                         .font(.footnote.monospaced())
                         .textSelection(.enabled)
                 }
+
+                if let usage = payload.message.tokenUsage, usage.hasData {
+                    Section(NSLocalizedString("Token 用量", comment: "Token usage section title")) {
+                        if let prompt = usage.promptTokens {
+                            LabeledContent(NSLocalizedString("发送 Tokens", comment: "Prompt tokens label")) {
+                                Text("\(prompt)")
+                            }
+                        }
+                        if let completion = usage.completionTokens {
+                            LabeledContent(NSLocalizedString("接收 Tokens", comment: "Completion tokens label")) {
+                                Text("\(completion)")
+                            }
+                        }
+                        if let total = usage.totalTokens, (usage.promptTokens != total || usage.completionTokens != total) {
+                            LabeledContent(NSLocalizedString("总计", comment: "Total tokens label")) {
+                                Text("\(total)")
+                            }
+                        } else if let totalOnly = usage.totalTokens, usage.promptTokens == nil && usage.completionTokens == nil {
+                            LabeledContent(NSLocalizedString("总计", comment: "Total tokens label")) {
+                                Text("\(totalOnly)")
+                            }
+                        }
+                    }
+                } else if let metrics = payload.message.responseMetrics, metrics.isTokenPerSecondEstimated {
+                    Section(NSLocalizedString("Token 用量", comment: "Token usage section title")) {
+                        Text(NSLocalizedString("当前响应未返回官方 token 用量（仅有估算速度）。", comment: "No official token usage returned hint"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let metrics = payload.message.responseMetrics {
+                    Section(NSLocalizedString("响应测速", comment: "Response speed metrics section title")) {
+                        if let firstToken = metrics.timeToFirstToken {
+                            LabeledContent(NSLocalizedString("首字时间", comment: "Time to first token")) {
+                                Text(formatDuration(firstToken))
+                            }
+                        }
+                        if let totalDuration = metrics.totalResponseDuration {
+                            LabeledContent(NSLocalizedString("总回复时间", comment: "Total response time")) {
+                                Text(formatDuration(totalDuration))
+                            }
+                        }
+                        if let completionTokens = metrics.completionTokensForSpeed {
+                            LabeledContent(NSLocalizedString("测速 Tokens", comment: "Tokens used for speed calculation")) {
+                                Text("\(completionTokens)")
+                            }
+                        }
+                        if let speed = metrics.tokenPerSecond {
+                            LabeledContent(NSLocalizedString("响应速度", comment: "Response speed")) {
+                                Text(formatSpeed(speed, estimated: metrics.isTokenPerSecondEstimated))
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("消息信息")
             .toolbar {
@@ -2836,10 +2970,23 @@ private struct MessageInfoSheet: View {
                 return "助手"
             case .tool:
                 return "工具"
-            case .error:
-                return "错误"
-            @unknown default:
-                return "未知"
-            }
+        case .error:
+            return "错误"
+        @unknown default:
+            return "未知"
         }
     }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let clamped = max(0, duration)
+        return String(format: "%.2fs", clamped)
+    }
+
+    private func formatSpeed(_ speed: Double, estimated: Bool) -> String {
+        let base = String(format: "%.2f %@", max(0, speed), NSLocalizedString("token/s", comment: "Tokens per second unit"))
+        if estimated {
+            return "\(base) (\(NSLocalizedString("估算", comment: "Estimated")))"
+        }
+        return base
+    }
+}

@@ -219,6 +219,38 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decoded.reasoningContent, original.reasoningContent)
         XCTAssertEqual(decoded.tokenUsage?.totalTokens, 30)
     }
+
+    /// 测试响应测速字段的序列化和反序列化
+    func testResponseMetricsRoundTrip() throws {
+        let metrics = MessageResponseMetrics(
+            requestStartedAt: Date(timeIntervalSince1970: 1000),
+            responseCompletedAt: Date(timeIntervalSince1970: 1002),
+            totalResponseDuration: 2.0,
+            timeToFirstToken: 0.45,
+            completionTokensForSpeed: 120,
+            tokenPerSecond: 60.0,
+            isTokenPerSecondEstimated: false
+        )
+        let original = ChatMessage(
+            role: .assistant,
+            content: "测速测试",
+            responseMetrics: metrics
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(original)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ChatMessage.self, from: data)
+
+        let decodedMetrics = try XCTUnwrap(decoded.responseMetrics)
+        XCTAssertEqual(decodedMetrics.schemaVersion, MessageResponseMetrics.currentSchemaVersion)
+        XCTAssertEqual(decodedMetrics.totalResponseDuration, 2.0, accuracy: 0.0001)
+        XCTAssertEqual(decodedMetrics.timeToFirstToken, 0.45, accuracy: 0.0001)
+        XCTAssertEqual(decodedMetrics.completionTokensForSpeed, 120)
+        XCTAssertEqual(decodedMetrics.tokenPerSecond, 60.0, accuracy: 0.0001)
+        XCTAssertEqual(decodedMetrics.isTokenPerSecondEstimated, false)
+    }
     
     /// 测试旧数据升级后的序列化
     func testLegacyUpgradeAndSerialize() throws {

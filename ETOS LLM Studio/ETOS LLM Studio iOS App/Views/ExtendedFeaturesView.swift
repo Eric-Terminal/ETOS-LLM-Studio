@@ -18,7 +18,7 @@ struct ExtendedFeaturesView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            
+
             Section {
                 NavigationLink {
                     MCPIntegrationView()
@@ -50,6 +50,19 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text("管理本地模型、文件与缓存占用。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    ImageGenerationFeatureView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), systemImage: "photo.on.rectangle.angled")
+                }
+            } footer: {
+                Text("生图在独立页面发起，不影响主聊天输入区。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

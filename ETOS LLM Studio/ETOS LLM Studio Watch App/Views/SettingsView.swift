@@ -91,6 +91,7 @@ struct SettingsView: View {
                         maxChatHistory: $viewModel.maxChatHistory,
                         lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
                         enableStreaming: $viewModel.enableStreaming,
+                        enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
                         currentSession: $viewModel.currentSession,
                         enableSpeechInput: $viewModel.enableSpeechInput,
