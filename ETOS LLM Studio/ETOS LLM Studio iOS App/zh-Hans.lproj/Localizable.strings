@@ -788,3 +788,16 @@
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta";
 "使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。";
 "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。";
+"错误: 生图提示词不能为空。" = "错误: 生图提示词不能为空。";
+"当前模型未启用生图能力，请在模型设置中开启“生图”。" = "当前模型未启用生图能力，请在模型设置中开启“生图”。";
+"错误: 无法构建生图请求。" = "错误: 无法构建生图请求。";
+"生图响应中没有可保存的图片。" = "生图响应中没有可保存的图片。";
+"生图请求失败: %@" = "生图请求失败: %@";
+"当前模型不支持生图，请切换模型或在模型设置中开启“生图”能力。" = "当前模型不支持生图，请切换模型或在模型设置中开启“生图”能力。";
+"生图模式仅支持文本提示词和图片参考图。" = "生图模式仅支持文本提示词和图片参考图。";
+"生图模式不支持语音附件。" = "生图模式不支持语音附件。";
+"输入生图提示词" = "输入生图提示词";
+"聊天" = "聊天";
+"生图" = "生图";
+"聊" = "聊";
+"图" = "图";

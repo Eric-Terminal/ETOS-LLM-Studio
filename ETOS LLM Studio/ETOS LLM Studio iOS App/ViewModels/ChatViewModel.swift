@@ -23,6 +23,10 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatVie
 
 @MainActor
 final class ChatViewModel: ObservableObject {
+    enum ComposerMode: String {
+        case chat
+        case imageGeneration
+    }
     
     // MARK: - Published UI State
     
@@ -60,6 +64,7 @@ final class ChatViewModel: ObservableObject {
     @Published var showAudioRecorder: Bool = false
     @Published var showDimensionMismatchAlert: Bool = false
     @Published var dimensionMismatchMessage: String = ""
+    @Published var composerMode: ComposerMode = .chat
     
     // MARK: - User Preferences (AppStorage)
     
@@ -212,7 +217,13 @@ final class ChatViewModel: ObservableObject {
         
         chatService.selectedModelSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.selectedModel, on: self)
+            .sink { [weak self] model in
+                guard let self else { return }
+                selectedModel = model
+                if composerMode == .imageGeneration && !supportsImageGenerationForSelectedModel {
+                    composerMode = .chat
+                }
+            }
             .store(in: &cancellables)
         
         chatService.requestStatusSubject
@@ -270,6 +281,33 @@ final class ChatViewModel: ObservableObject {
         let hasAudio = pendingAudioAttachment != nil
         let hasImages = !pendingImageAttachments.isEmpty
         let hasFiles = !pendingFileAttachments.isEmpty
+
+        if composerMode == .imageGeneration {
+            guard hasText, !isSendingMessage else { return }
+            guard supportsImageGenerationForSelectedModel else {
+                chatService.addErrorMessage(NSLocalizedString("当前模型不支持生图，请切换模型或在模型设置中开启“生图”能力。", comment: "Selected model does not support image generation"))
+                return
+            }
+            if hasAudio || hasFiles {
+                chatService.addErrorMessage(NSLocalizedString("生图模式仅支持文本提示词和图片参考图。", comment: "Image generation mode only supports prompt and image attachments"))
+                return
+            }
+
+            let promptToSend = userMessageContent
+            let imagesToSend = pendingImageAttachments
+            userInput = ""
+            pendingAudioAttachment = nil
+            pendingImageAttachments = []
+            pendingFileAttachments = []
+
+            Task {
+                await chatService.generateImageAndProcessMessage(
+                    prompt: promptToSend,
+                    imageAttachments: imagesToSend
+                )
+            }
+            return
+        }
         
         // 必须有文字或附件才能发送
         guard (hasText || hasAudio || hasImages || hasFiles), !isSendingMessage else { return }
@@ -312,9 +350,37 @@ final class ChatViewModel: ObservableObject {
     
     /// 是否可以发送消息（有文字或附件）
     var canSendMessage: Bool {
+        if composerMode == .imageGeneration {
+            let hasPrompt = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasUnsupported = pendingAudioAttachment != nil || !pendingFileAttachments.isEmpty
+            return hasPrompt && !hasUnsupported && !isSendingMessage
+        }
         let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty || !pendingFileAttachments.isEmpty
         return (hasText || hasAttachments) && !isSendingMessage
+    }
+
+    var supportsImageGenerationForSelectedModel: Bool {
+        guard let selectedModel else { return false }
+        if selectedModel.model.supportsImageGeneration {
+            return true
+        }
+        let lowered = selectedModel.model.modelName.lowercased()
+        return lowered.contains("gpt-image")
+            || lowered.contains("imagen")
+            || lowered.contains("image")
+            || lowered.contains("dall")
+    }
+
+    func setComposerMode(_ mode: ComposerMode) {
+        if mode == .imageGeneration, !supportsImageGenerationForSelectedModel {
+            return
+        }
+        if mode == .imageGeneration {
+            pendingAudioAttachment = nil
+            pendingFileAttachments = []
+        }
+        composerMode = mode
     }
     
     /// 清除音频附件

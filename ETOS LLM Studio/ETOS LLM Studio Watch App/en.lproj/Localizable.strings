@@ -712,3 +712,16 @@
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API base URL example: https://api.anthropic.com/v1";
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API base URL example: https://generativelanguage.googleapis.com/v1beta";
 "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "Use key=value to add request headers, e.g. Authorization=Bearer {token}.\n{token} is replaced with the Bearer API Key input above.";
+"错误: 生图提示词不能为空。" = "Error: Image prompt cannot be empty.";
+"当前模型未启用生图能力，请在模型设置中开启“生图”。" = "This model doesn't have image generation enabled. Turn on \"Image generation\" in Model Settings.";
+"错误: 无法构建生图请求。" = "Error: Failed to build image generation request.";
+"生图响应中没有可保存的图片。" = "No savable image was found in the generation response.";
+"生图请求失败: %@" = "Image generation failed: %@";
+"当前模型不支持生图，请切换模型或在模型设置中开启“生图”能力。" = "The selected model does not support image generation. Switch models or enable \"Image generation\" in Model Settings.";
+"生图模式仅支持文本提示词和图片参考图。" = "Image mode only supports text prompts and reference images.";
+"生图模式不支持语音附件。" = "Image mode does not support audio attachments.";
+"输入生图提示词" = "Enter an image prompt";
+"聊天" = "Chat";
+"生图" = "Image";
+"聊" = "Chat";
+"图" = "Image";

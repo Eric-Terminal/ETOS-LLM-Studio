@@ -333,7 +333,7 @@ struct ContentView: View {
     
     private var transparentInputField: some View {
         ZStack(alignment: .leading) {
-            Text(viewModel.userInput.isEmpty ? "输入..." : viewModel.userInput)
+            Text(viewModel.userInput.isEmpty ? inputPlaceholderText : viewModel.userInput)
                 .foregroundStyle(viewModel.userInput.isEmpty ? .secondary : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -350,13 +350,38 @@ struct ContentView: View {
     }
     
     private var inputBubble: some View {
-        // 是否可以发送：有文字或有音频附件
-        let canSend = !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil
+        let isImageMode = viewModel.composerMode == .imageGeneration
+        let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // 是否可以发送：
+        // - 聊天模式：文字或语音附件
+        // - 生图模式：仅文本提示词
+        let canSend = isImageMode ? hasTrimmedText : (hasTrimmedText || viewModel.pendingAudioAttachment != nil)
         
         let coreBubble = Group {
             VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    modeButton(
+                        title: NSLocalizedString("聊", comment: "Chat composer mode short label on watch"),
+                        systemImage: "bubble.left.and.bubble.right",
+                        isSelected: !isImageMode,
+                        isEnabled: true
+                    ) {
+                        viewModel.setComposerMode(.chat)
+                    }
+
+                    modeButton(
+                        title: NSLocalizedString("图", comment: "Image generation composer mode short label on watch"),
+                        systemImage: "photo.badge.sparkles",
+                        isSelected: isImageMode,
+                        isEnabled: viewModel.supportsImageGenerationForSelectedModel
+                    ) {
+                        viewModel.setComposerMode(.imageGeneration)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
                 // 音频附件预览
-                if let audio = viewModel.pendingAudioAttachment {
+                if !isImageMode, let audio = viewModel.pendingAudioAttachment {
                     HStack(spacing: 6) {
                         Image(systemName: "waveform")
                             .font(.system(size: 12))
@@ -486,7 +511,7 @@ struct ContentView: View {
                 }
             }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                if viewModel.enableSpeechInput {
+                if viewModel.enableSpeechInput && !isImageMode {
                     Button {
                         viewModel.beginSpeechInputFlow()
                     } label: {
@@ -531,6 +556,40 @@ struct ContentView: View {
             .task {
                 await announcementManager.checkAnnouncement()
             }
+    }
+
+    private var inputPlaceholderText: String {
+        if viewModel.composerMode == .imageGeneration {
+            return NSLocalizedString("输入生图提示词", comment: "Image generation prompt placeholder on watch")
+        }
+        return NSLocalizedString("输入...", comment: "Default input placeholder on watch")
+    }
+
+    private func modeButton(
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(isSelected ? Color.white : Color.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(isSelected ? Color.blue.opacity(0.85) : Color(white: 0.25))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
     }
 
 }

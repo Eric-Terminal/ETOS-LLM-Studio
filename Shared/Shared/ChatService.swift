@@ -1017,6 +1017,134 @@ public class ChatService {
             }
         }
     }
+
+    public func generateImageAndProcessMessage(
+        prompt: String,
+        imageAttachments: [ImageAttachment] = []
+    ) async {
+        guard var currentSession = currentSessionSubject.value else {
+            addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
+            requestStatusSubject.send(.error)
+            return
+        }
+
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else {
+            addErrorMessage(NSLocalizedString("错误: 生图提示词不能为空。", comment: "Image generation prompt empty"))
+            requestStatusSubject.send(.error)
+            return
+        }
+
+        guard let runnableModel = selectedModelSubject.value else {
+            addErrorMessage(NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"))
+            requestStatusSubject.send(.error)
+            return
+        }
+
+        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
+            addErrorMessage(String(
+                format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
+                runnableModel.provider.apiFormat
+            ))
+            requestStatusSubject.send(.error)
+            return
+        }
+
+        guard runnableModel.model.supportsImageGeneration || likelyImageGenerationModelName(runnableModel.model.modelName) else {
+            addErrorMessage(NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: "Model has no image generation capability"))
+            requestStatusSubject.send(.error)
+            return
+        }
+
+        var savedImageFileNames: [String] = []
+        for imageAttachment in imageAttachments {
+            var targetName = imageAttachment.fileName
+            if targetName.isEmpty {
+                targetName = "\(UUID().uuidString).jpg"
+            }
+            if Persistence.imageFileExists(fileName: targetName) {
+                let ext = (targetName as NSString).pathExtension
+                let stem = (targetName as NSString).deletingPathExtension
+                let suffix = UUID().uuidString.prefix(8)
+                targetName = ext.isEmpty ? "\(stem)_\(suffix)" : "\(stem)_\(suffix).\(ext)"
+            }
+            if Persistence.saveImage(imageAttachment.data, fileName: targetName) != nil {
+                savedImageFileNames.append(targetName)
+            }
+        }
+
+        let userMessage = ChatMessage(
+            role: .user,
+            content: trimmedPrompt,
+            imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
+        )
+        let loadingMessage = ChatMessage(role: .assistant, content: "")
+
+        var messages = messagesForSessionSubject.value
+        messages.append(userMessage)
+        messages.append(loadingMessage)
+        messagesForSessionSubject.send(messages)
+
+        if currentSession.isTemporary {
+            currentSession.name = String(trimmedPrompt.prefix(20))
+            currentSession.isTemporary = false
+            currentSessionSubject.send(currentSession)
+            var updatedSessions = chatSessionsSubject.value
+            if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
+                updatedSessions[index] = currentSession
+            }
+            chatSessionsSubject.send(updatedSessions)
+            Persistence.saveChatSessions(updatedSessions)
+
+            Task {
+                await self.generateAndApplySessionTitle(for: currentSession.id, firstUserMessage: userMessage)
+            }
+        } else {
+            promoteSessionToTopIfNeeded(sessionID: currentSession.id)
+        }
+
+        Persistence.saveMessages(messages, for: currentSession.id)
+        requestStatusSubject.send(.started)
+
+        currentRequestSessionID = currentSession.id
+        currentLoadingMessageID = loadingMessage.id
+        let requestToken = UUID()
+        currentRequestToken = requestToken
+
+        let requestTask = Task<Void, Error> { [weak self] in
+            guard let self else { return }
+            await self.executeImageGenerationRequest(
+                adapter: adapter,
+                runnableModel: runnableModel,
+                prompt: trimmedPrompt,
+                referenceImages: imageAttachments,
+                loadingMessageID: loadingMessage.id,
+                currentSessionID: currentSession.id
+            )
+        }
+        currentRequestTask = requestTask
+
+        defer {
+            if currentRequestToken == requestToken {
+                currentRequestTask = nil
+                currentRequestToken = nil
+                currentRequestSessionID = nil
+                currentLoadingMessageID = nil
+            }
+        }
+
+        do {
+            try await requestTask.value
+        } catch is CancellationError {
+            logger.info("生图请求已被用户取消。")
+        } catch {
+            if isCancellationError(error) {
+                logger.info("生图请求已被用户取消 (URLError)。")
+            } else {
+                logger.error("生图请求执行过程中出现未预期错误: \(error.localizedDescription)")
+            }
+        }
+    }
     
     // MARK: - Agent & Tooling
     
@@ -1724,6 +1852,163 @@ public class ChatService {
             imageAttachments: imageAttachments,
             fileAttachments: fileAttachments
         )
+    }
+
+    private func likelyImageGenerationModelName(_ modelName: String) -> Bool {
+        let lowered = modelName.lowercased()
+        return lowered.contains("gpt-image")
+            || lowered.contains("imagen")
+            || lowered.contains("image")
+            || lowered.contains("dall")
+    }
+
+    private func executeImageGenerationRequest(
+        adapter: APIAdapter,
+        runnableModel: RunnableModel,
+        prompt: String,
+        referenceImages: [ImageAttachment],
+        loadingMessageID: UUID,
+        currentSessionID: UUID
+    ) async {
+        guard let request = adapter.buildImageGenerationRequest(
+            for: runnableModel,
+            prompt: prompt,
+            referenceImages: referenceImages
+        ) else {
+            addErrorMessage(NSLocalizedString("错误: 无法构建生图请求。", comment: "Failed to build image generation request"))
+            requestStatusSubject.send(.error)
+            return
+        }
+
+        do {
+            let data = try await fetchData(for: request)
+            let imageResults = try adapter.parseImageGenerationResponse(data: data)
+
+            var generatedImageFileNames: [String] = []
+            var revisedPrompts: [String] = []
+
+            for result in imageResults {
+                if let revised = result.revisedPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !revised.isEmpty {
+                    revisedPrompts.append(revised)
+                }
+
+                guard let payload = try await resolveGeneratedImagePayload(from: result) else {
+                    continue
+                }
+
+                let ext = imageFileExtension(for: payload.mimeType)
+                let fileName = "\(UUID().uuidString).\(ext)"
+                if Persistence.saveImage(payload.data, fileName: fileName) != nil {
+                    generatedImageFileNames.append(fileName)
+                }
+            }
+
+            guard !generatedImageFileNames.isEmpty else {
+                addErrorMessage(NSLocalizedString("生图响应中没有可保存的图片。", comment: "No generated image could be saved"))
+                requestStatusSubject.send(.error)
+                return
+            }
+
+            let revisedPrompt = revisedPrompts.first(where: { !$0.isEmpty })
+            let content = revisedPrompt ?? NSLocalizedString("[图片]", comment: "Image message placeholder")
+
+            var messages = messagesForSessionSubject.value
+            if let loadingIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                messages[loadingIndex] = ChatMessage(
+                    id: messages[loadingIndex].id,
+                    role: .assistant,
+                    content: content,
+                    imageFileNames: generatedImageFileNames
+                )
+                messagesForSessionSubject.send(messages)
+                Persistence.saveMessages(messages, for: currentSessionID)
+            }
+
+            requestStatusSubject.send(.finished)
+        } catch is CancellationError {
+            logger.info("生图请求在处理中被取消。")
+        } catch NetworkError.badStatusCode(let code, let bodyData) {
+            let snippet = responseBodySnippet(from: bodyData)
+            addErrorMessage(snippet, httpStatusCode: code)
+            requestStatusSubject.send(.error)
+        } catch {
+            if isCancellationError(error) {
+                logger.info("生图请求在处理中被取消 (URLError)。")
+            } else {
+                addErrorMessage(String(
+                    format: NSLocalizedString("生图请求失败: %@", comment: "Image generation request failed with reason"),
+                    error.localizedDescription
+                ))
+                requestStatusSubject.send(.error)
+            }
+        }
+    }
+
+    private func resolveGeneratedImagePayload(from result: GeneratedImageResult) async throws -> (data: Data, mimeType: String)? {
+        if let imageData = result.data, !imageData.isEmpty {
+            let mimeType = (result.mimeType?.isEmpty == false ? result.mimeType! : detectImageMimeType(from: imageData))
+            return (imageData, mimeType)
+        }
+
+        guard let remoteURL = result.remoteURL else { return nil }
+
+        let (data, response) = try await urlSession.data(from: remoteURL)
+        if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            throw NetworkError.badStatusCode(code: httpResponse.statusCode, responseBody: data.isEmpty ? nil : data)
+        }
+        guard !data.isEmpty else { return nil }
+        let mimeType = result.mimeType ?? response.mimeType ?? detectImageMimeType(from: data)
+        return (data, mimeType)
+    }
+
+    private func detectImageMimeType(from data: Data) -> String {
+        guard data.count >= 12 else { return "image/png" }
+        let bytes = [UInt8](data.prefix(12))
+        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+            return "image/png"
+        }
+        if bytes.starts(with: [0xFF, 0xD8, 0xFF]) {
+            return "image/jpeg"
+        }
+        if bytes.starts(with: [0x52, 0x49, 0x46, 0x46]),
+           bytes[8...11].elementsEqual([0x57, 0x45, 0x42, 0x50]) {
+            return "image/webp"
+        }
+        if bytes.starts(with: [0x47, 0x49, 0x46, 0x38]) {
+            return "image/gif"
+        }
+        return "image/png"
+    }
+
+    private func imageFileExtension(for mimeType: String) -> String {
+        switch mimeType.lowercased() {
+        case "image/png":
+            return "png"
+        case "image/jpeg", "image/jpg":
+            return "jpg"
+        case "image/webp":
+            return "webp"
+        case "image/gif":
+            return "gif"
+        default:
+            return "png"
+        }
+    }
+
+    private func responseBodySnippet(from bodyData: Data?) -> String {
+        if let bodyData,
+           let text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        if let bodyData, !bodyData.isEmpty {
+            return String(
+                format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                bodyData.count
+            )
+        }
+        return NSLocalizedString("响应体为空。", comment: "Empty response body")
     }
     
     // MARK: - 私有网络层与响应处理 (已重构)

@@ -151,6 +151,7 @@ public struct Model: Codable, Identifiable, Hashable {
         case chat
         case speechToText
         case embedding
+        case imageGeneration
     }
     
     public var id: UUID
@@ -215,6 +216,10 @@ public extension Model {
     
     var supportsEmbedding: Bool {
         capabilities.contains(.embedding)
+    }
+
+    var supportsImageGeneration: Bool {
+        capabilities.contains(.imageGeneration)
     }
 }
 

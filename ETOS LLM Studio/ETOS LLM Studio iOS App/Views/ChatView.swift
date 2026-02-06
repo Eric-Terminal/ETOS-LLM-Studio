@@ -1399,6 +1399,9 @@ private struct TelegramMessageComposer: View {
     private let textHorizontalPadding: CGFloat = 10
     private let compactTextVerticalPadding: CGFloat = 4
     private let expandedTextVerticalPadding: CGFloat = 6
+    private var isImageGenerationMode: Bool {
+        viewModel.composerMode == .imageGeneration
+    }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -1414,6 +1417,9 @@ private struct TelegramMessageComposer: View {
     
     var body: some View {
         VStack(spacing: 8) {
+            composerModePicker
+                .padding(.horizontal, 16)
+
             // 附件预览区域
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
                 telegramAttachmentPreview
@@ -1544,22 +1550,24 @@ private struct TelegramMessageComposer: View {
             }
             .disabled(!isCameraAvailable)
 
-            Button {
-                showAudioRecorder = true
-            } label: {
-                Label("录制语音", systemImage: "waveform")
-            }
+            if !isImageGenerationMode {
+                Button {
+                    showAudioRecorder = true
+                } label: {
+                    Label("录制语音", systemImage: "waveform")
+                }
 
-            Button {
-                showAudioImporter = true
-            } label: {
-                Label("从录音备忘录上传", systemImage: "music.note.list")
-            }
+                Button {
+                    showAudioImporter = true
+                } label: {
+                    Label("从录音备忘录上传", systemImage: "music.note.list")
+                }
 
-            Button {
-                showFileImporter = true
-            } label: {
-                Label("选择文件", systemImage: "doc")
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Label("选择文件", systemImage: "doc")
+                }
             }
         } label: {
             Image(systemName: "paperclip")
@@ -1571,13 +1579,63 @@ private struct TelegramMessageComposer: View {
         .buttonStyle(.plain)
     }
 
+    private var composerModePicker: some View {
+        HStack(spacing: 8) {
+            modeButton(
+                title: NSLocalizedString("聊天", comment: "Chat composer mode title"),
+                systemImage: "bubble.left.and.bubble.right",
+                isSelected: !isImageGenerationMode,
+                isEnabled: true
+            ) {
+                viewModel.setComposerMode(.chat)
+            }
+
+            modeButton(
+                title: NSLocalizedString("生图", comment: "Image generation composer mode title"),
+                systemImage: "photo.badge.sparkles",
+                isSelected: isImageGenerationMode,
+                isEnabled: viewModel.supportsImageGenerationForSelectedModel
+            ) {
+                viewModel.setComposerMode(.imageGeneration)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func modeButton(
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(isSelected ? .white : TelegramColors.attachButtonColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(isSelected ? TelegramColors.sendButtonColor : Color(uiColor: .secondarySystemBackground))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
+    }
+
     private func actionControlButton(size: CGFloat) -> some View {
         Button {
             if isSending {
                 stopAction()
             } else if hasContent {
                 sendAction()
-            } else if viewModel.enableSpeechInput {
+            } else if viewModel.enableSpeechInput && !isImageGenerationMode {
                 showAudioRecorder = true
             } else {
                 focus.wrappedValue = true
@@ -1608,7 +1666,10 @@ private struct TelegramMessageComposer: View {
                 .padding(.horizontal, textHorizontalPadding)
 
             if text.isEmpty {
-                Text("Message")
+                Text(isImageGenerationMode
+                    ? NSLocalizedString("输入生图提示词", comment: "Image generation prompt placeholder")
+                    : "Message"
+                )
                     .font(.system(size: inputFont.pointSize))
                     .foregroundColor(.secondary)
                     .padding(.top, verticalPadding + textContainerInset)
@@ -1778,6 +1839,9 @@ private struct TelegramMessageComposer: View {
     }
 
     private var hasContent: Bool {
+        if isImageGenerationMode {
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAttachments = viewModel.pendingAudioAttachment != nil || !viewModel.pendingImageAttachments.isEmpty || !viewModel.pendingFileAttachments.isEmpty
         return hasText || hasAttachments
@@ -1865,12 +1929,18 @@ private struct TelegramMessageComposer: View {
         if hasContent {
             return "arrow.up"
         }
-        return viewModel.enableSpeechInput ? "mic.fill" : "arrow.up"
+        if viewModel.enableSpeechInput && !isImageGenerationMode {
+            return "mic.fill"
+        }
+        return "arrow.up"
     }
     
     private var actionForegroundColor: Color {
         if isSending || hasContent {
             return .white
+        }
+        if isImageGenerationMode {
+            return TelegramColors.attachButtonColor
         }
         return TelegramColors.attachButtonColor
     }
