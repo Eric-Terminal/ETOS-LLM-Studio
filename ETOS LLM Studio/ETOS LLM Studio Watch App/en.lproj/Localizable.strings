@@ -752,3 +752,12 @@
 "图片已删除。" = "Image deleted.";
 "提示" = "Notice";
 "确定" = "OK";
+"启用响应测速" = "Enable response speed metrics";
+"响应测速" = "Response metrics";
+"开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。" = "When enabled, records total time for each API request; streaming also tracks time to first token and token/s.";
+"首字时间" = "Time to first token";
+"总回复时间" = "Total response time";
+"测速 Tokens" = "Speed tokens";
+"响应速度" = "Response speed";
+"token/s" = "token/s";
+"估算" = "Estimated";

@@ -2894,6 +2894,31 @@ private struct MessageInfoSheet: View {
                         .font(.footnote.monospaced())
                         .textSelection(.enabled)
                 }
+
+                if let metrics = payload.message.responseMetrics {
+                    Section(NSLocalizedString("响应测速", comment: "Response speed metrics section title")) {
+                        if let firstToken = metrics.timeToFirstToken {
+                            LabeledContent(NSLocalizedString("首字时间", comment: "Time to first token")) {
+                                Text(formatDuration(firstToken))
+                            }
+                        }
+                        if let totalDuration = metrics.totalResponseDuration {
+                            LabeledContent(NSLocalizedString("总回复时间", comment: "Total response time")) {
+                                Text(formatDuration(totalDuration))
+                            }
+                        }
+                        if let completionTokens = metrics.completionTokensForSpeed {
+                            LabeledContent(NSLocalizedString("测速 Tokens", comment: "Tokens used for speed calculation")) {
+                                Text("\(completionTokens)")
+                            }
+                        }
+                        if let speed = metrics.tokenPerSecond {
+                            LabeledContent(NSLocalizedString("响应速度", comment: "Response speed")) {
+                                Text(formatSpeed(speed, estimated: metrics.isTokenPerSecondEstimated))
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("消息信息")
             .toolbar {
@@ -2915,10 +2940,23 @@ private struct MessageInfoSheet: View {
                 return "助手"
             case .tool:
                 return "工具"
-            case .error:
-                return "错误"
-            @unknown default:
-                return "未知"
-            }
+        case .error:
+            return "错误"
+        @unknown default:
+            return "未知"
         }
     }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let clamped = max(0, duration)
+        return String(format: "%.2fs", clamped)
+    }
+
+    private func formatSpeed(_ speed: Double, estimated: Bool) -> String {
+        let base = String(format: "%.2f %@", max(0, speed), NSLocalizedString("token/s", comment: "Tokens per second unit"))
+        if estimated {
+            return "\(base) (\(NSLocalizedString("估算", comment: "Estimated")))"
+        }
+        return base
+    }
+}

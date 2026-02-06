@@ -922,6 +922,36 @@ fileprivate struct PersistenceTests {
         let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(sessionId.uuidString).json")
         try? FileManager.default.removeItem(at: fileURL)
     }
+
+    @Test("Migrate Legacy Message Array To Envelope")
+    func testMigrateLegacyMessageArrayToEnvelope() throws {
+        struct Envelope: Decodable {
+            let schemaVersion: Int
+            let messages: [ChatMessage]
+        }
+
+        let sessionId = UUID()
+        let legacyMessages = [
+            ChatMessage(role: .user, content: "legacy-user"),
+            ChatMessage(role: .assistant, content: "legacy-assistant")
+        ]
+        let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(sessionId.uuidString).json")
+
+        let legacyData = try JSONEncoder().encode(legacyMessages)
+        try legacyData.write(to: fileURL, options: .atomic)
+
+        let loadedMessages = Persistence.loadMessages(for: sessionId)
+        #expect(loadedMessages.count == 2)
+        #expect(loadedMessages.first?.content == "legacy-user")
+
+        let migratedData = try Data(contentsOf: fileURL)
+        let envelope = try JSONDecoder().decode(Envelope.self, from: migratedData)
+        #expect(envelope.schemaVersion == 2)
+        #expect(envelope.messages.count == 2)
+        #expect(envelope.messages.last?.content == "legacy-assistant")
+
+        try? FileManager.default.removeItem(at: fileURL)
+    }
 }
 
 @Suite("ConfigLoader Tests")

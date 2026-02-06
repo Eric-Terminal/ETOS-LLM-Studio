@@ -15,6 +15,12 @@ import os.log
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persistence")
 
 public enum Persistence {
+    private static let messagesFileSchemaVersion = 2
+
+    private struct ChatMessagesFileEnvelope: Codable {
+        let schemaVersion: Int
+        let messages: [ChatMessage]
+    }
 
     // MARK: - 目录管理
 
@@ -73,7 +79,11 @@ public enum Persistence {
         logger.info("Saving \(messages.count) messages for session \(sessionID.uuidString) to \(fileURL.path)")
 
         do {
-            let data = try JSONEncoder().encode(messages)
+            let envelope = ChatMessagesFileEnvelope(
+                schemaVersion: messagesFileSchemaVersion,
+                messages: messages
+            )
+            let data = try JSONEncoder().encode(envelope)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             logger.info("Messages saved successfully for session \(sessionID.uuidString).")
         } catch {
@@ -88,7 +98,22 @@ public enum Persistence {
 
         do {
             let data = try Data(contentsOf: fileURL)
-            var loadedMessages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            let decoder = JSONDecoder()
+            var loadedMessages: [ChatMessage]
+            var didMigrateFileSchema = false
+
+            if let envelope = try? decoder.decode(ChatMessagesFileEnvelope.self, from: data) {
+                loadedMessages = envelope.messages
+                if envelope.schemaVersion != messagesFileSchemaVersion {
+                    didMigrateFileSchema = true
+                    logger.info("Detected outdated message file schema \(envelope.schemaVersion) for session \(sessionID.uuidString), migrating to \(messagesFileSchemaVersion).")
+                }
+            } else {
+                loadedMessages = try decoder.decode([ChatMessage].self, from: data)
+                didMigrateFileSchema = true
+                logger.info("Detected legacy message array format for session \(sessionID.uuidString), migrating to schema \(messagesFileSchemaVersion).")
+            }
+
             var didMigratePlacement = false
             for index in loadedMessages.indices {
                 guard loadedMessages[index].toolCallsPlacement == nil,
@@ -97,8 +122,10 @@ public enum Persistence {
                 loadedMessages[index].toolCallsPlacement = inferToolCallsPlacement(from: loadedMessages[index].content)
                 didMigratePlacement = true
             }
-            if didMigratePlacement {
-                logger.info("Migrated toolCallsPlacement for session \(sessionID.uuidString).")
+            if didMigrateFileSchema || didMigratePlacement {
+                if didMigratePlacement {
+                    logger.info("Migrated toolCallsPlacement for session \(sessionID.uuidString).")
+                }
                 saveMessages(loadedMessages, for: sessionID)
             }
             logger.info("Successfully loaded \(loadedMessages.count) messages for session \(sessionID.uuidString).")

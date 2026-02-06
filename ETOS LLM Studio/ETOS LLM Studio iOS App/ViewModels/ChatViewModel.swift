@@ -76,6 +76,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("systemPrompt") var systemPrompt: String = ""
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = true
+    @AppStorage("enableResponseSpeedMetrics") var enableResponseSpeedMetrics: Bool = true
     @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 0
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
         didSet { refreshBlurredBackgroundImage() }
@@ -299,6 +300,7 @@ final class ChatViewModel: ObservableObject {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTimeInPrompt,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 audioAttachment: audioToSend,
                 imageAttachments: imagesToSend,
                 fileAttachments: filesToSend
@@ -498,7 +500,8 @@ final class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                includeSystemTime: includeSystemTimeInPrompt
+                includeSystemTime: includeSystemTimeInPrompt,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
         }
     }
@@ -588,7 +591,8 @@ final class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                includeSystemTime: includeSystemTimeInPrompt
+                includeSystemTime: includeSystemTimeInPrompt,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
         }
     }

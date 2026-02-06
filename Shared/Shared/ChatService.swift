@@ -807,6 +807,7 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool = true,
         audioAttachment: AudioAttachment? = nil,
         imageAttachments: [ImageAttachment] = [],
         fileAttachments: [FileAttachment] = []
@@ -989,6 +990,7 @@ public class ChatService {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: audioAttachment,
                 currentFileAttachments: fileAttachments
             )
@@ -1340,6 +1342,7 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?, // 当前消息的音频附件（用于首次发送，尚未保存到文件）
         currentFileAttachments: [FileAttachment] // 当前消息的文件附件（用于首次发送，尚未保存到文件）
     ) async {
@@ -1473,10 +1476,46 @@ public class ChatService {
             return
         }
         
+        let requestStartedAt = Date()
+
         if enableStreaming {
-            await handleStreamedResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, availableTools: tools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
+            await handleStreamedResponse(
+                request: request,
+                adapter: adapter,
+                loadingMessageID: loadingMessageID,
+                currentSessionID: currentSessionID,
+                userMessage: userMessage,
+                wasTemporarySession: wasTemporarySession,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                availableTools: tools,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                requestStartedAt: requestStartedAt
+            )
         } else {
-            await handleStandardResponse(request: request, adapter: adapter, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: tools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
+            await handleStandardResponse(
+                request: request,
+                adapter: adapter,
+                loadingMessageID: loadingMessageID,
+                currentSessionID: currentSessionID,
+                userMessage: userMessage,
+                wasTemporarySession: wasTemporarySession,
+                availableTools: tools,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                requestStartedAt: requestStartedAt
+            )
         }
     }
 
@@ -1506,7 +1545,8 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
-        includeSystemTime: Bool
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool = true
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
         
@@ -1623,6 +1663,7 @@ public class ChatService {
             loadingAssistant.reasoningContent = nil
             loadingAssistant.toolCalls = nil
             loadingAssistant.tokenUsage = nil
+            loadingAssistant.responseMetrics = nil
             
             persistedMessages.append(loadingAssistant)
             // 记录要添加版本的消息ID
@@ -1694,6 +1735,7 @@ public class ChatService {
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
             includeSystemTime: includeSystemTime,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             currentAudioAttachment: audioAttachment,
             currentFileAttachments: fileAttachments
         )
@@ -1714,6 +1756,7 @@ public class ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
         currentFileAttachments: [FileAttachment]
     ) async {
@@ -1750,6 +1793,7 @@ public class ChatService {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
                 currentFileAttachments: currentFileAttachments
             )
@@ -1789,7 +1833,8 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
-        includeSystemTime: Bool
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool = true
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
         await cancelOngoingRequest()
@@ -1855,6 +1900,7 @@ public class ChatService {
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
             includeSystemTime: includeSystemTime,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             audioAttachment: audioAttachment,
             imageAttachments: imageAttachments,
             fileAttachments: fileAttachments
@@ -2098,6 +2144,39 @@ public class ChatService {
         return false
     }
 
+    private func estimatedCompletionTokens(from outputText: String) -> Int {
+        let utf8Count = outputText.utf8.count
+        guard utf8Count > 0 else { return 0 }
+        // 粗略估算：兼顾英文与中日韩文本，优先用于流式实时速度展示。
+        let estimated = Int((Double(utf8Count) / 3.2).rounded(.toNearestOrAwayFromZero))
+        return max(1, estimated)
+    }
+
+    private func tokenPerSecond(tokens: Int?, elapsed: TimeInterval) -> Double? {
+        guard let tokens, tokens > 0, elapsed > 0 else { return nil }
+        return Double(tokens) / elapsed
+    }
+
+    private func makeResponseMetrics(
+        requestStartedAt: Date,
+        responseCompletedAt: Date?,
+        totalResponseDuration: TimeInterval?,
+        timeToFirstToken: TimeInterval?,
+        completionTokensForSpeed: Int?,
+        tokenPerSecond: Double?,
+        isEstimated: Bool
+    ) -> MessageResponseMetrics {
+        MessageResponseMetrics(
+            requestStartedAt: requestStartedAt,
+            responseCompletedAt: responseCompletedAt,
+            totalResponseDuration: totalResponseDuration,
+            timeToFirstToken: timeToFirstToken,
+            completionTokensForSpeed: completionTokensForSpeed,
+            tokenPerSecond: tokenPerSecond,
+            isTokenPerSecondEstimated: isEstimated
+        )
+    }
+
     private func fetchData(for request: URLRequest) async throws -> Data {
         let (data, response) = try await urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
@@ -2230,15 +2309,60 @@ public class ChatService {
         }
     }
     
-    private func handleStandardResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
+    private func handleStandardResponse(
+        request: URLRequest,
+        adapter: APIAdapter,
+        loadingMessageID: UUID,
+        currentSessionID: UUID,
+        userMessage: ChatMessage?,
+        wasTemporarySession: Bool,
+        availableTools: [InternalToolDefinition]?,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
+        requestStartedAt: Date
+    ) async {
         do {
             let data = try await fetchData(for: request)
             let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
             logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
             
             do {
-                let parsedMessage = try adapter.parseResponse(data: data)
-                await processResponseMessage(responseMessage: parsedMessage, loadingMessageID: loadingMessageID, currentSessionID: currentSessionID, userMessage: userMessage, wasTemporarySession: wasTemporarySession, availableTools: availableTools, aiTemperature: aiTemperature, aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite, includeSystemTime: includeSystemTime)
+                var parsedMessage = try adapter.parseResponse(data: data)
+                if enableResponseSpeedMetrics {
+                    let responseCompletedAt = Date()
+                    let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
+                    let completionTokens = parsedMessage.tokenUsage?.completionTokens
+                    parsedMessage.responseMetrics = makeResponseMetrics(
+                        requestStartedAt: requestStartedAt,
+                        responseCompletedAt: responseCompletedAt,
+                        totalResponseDuration: totalDuration,
+                        timeToFirstToken: nil,
+                        completionTokensForSpeed: completionTokens,
+                        tokenPerSecond: tokenPerSecond(tokens: completionTokens, elapsed: totalDuration),
+                        isEstimated: false
+                    )
+                }
+                await processResponseMessage(
+                    responseMessage: parsedMessage,
+                    loadingMessageID: loadingMessageID,
+                    currentSessionID: currentSessionID,
+                    userMessage: userMessage,
+                    wasTemporarySession: wasTemporarySession,
+                    availableTools: availableTools,
+                    aiTemperature: aiTemperature,
+                    aiTopP: aiTopP,
+                    systemPrompt: systemPrompt,
+                    maxChatHistory: maxChatHistory,
+                    enableMemory: enableMemory,
+                    enableMemoryWrite: enableMemoryWrite,
+                    includeSystemTime: includeSystemTime
+                )
             } catch is CancellationError {
                 logger.info("请求在解析阶段被取消，已忽略后续处理。")
             } catch {
@@ -2439,6 +2563,7 @@ public class ChatService {
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
                 enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 includeSystemTime: includeSystemTime,
+                enableResponseSpeedMetrics: false,
                 currentAudioAttachment: nil,
                 currentFileAttachments: []
             )
@@ -2449,7 +2574,24 @@ public class ChatService {
         }
     }
     
-    private func handleStreamedResponse(request: URLRequest, adapter: APIAdapter, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, availableTools: [InternalToolDefinition]?, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
+    private func handleStreamedResponse(
+        request: URLRequest,
+        adapter: APIAdapter,
+        loadingMessageID: UUID,
+        currentSessionID: UUID,
+        userMessage: ChatMessage?,
+        wasTemporarySession: Bool,
+        aiTemperature: Double,
+        aiTopP: Double,
+        systemPrompt: String,
+        maxChatHistory: Int,
+        availableTools: [InternalToolDefinition]?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        includeSystemTime: Bool,
+        enableResponseSpeedMetrics: Bool,
+        requestStartedAt: Date
+    ) async {
         do {
             let bytes = try await streamData(for: request)
 
@@ -2458,6 +2600,9 @@ public class ChatService {
             var toolCallOrder: [Int] = []
             var toolCallIndexByID: [String: Int] = [:]
             var latestTokenUsage: MessageTokenUsage?
+            var latestOfficialCompletionTokens: Int?
+            var accumulatedOutputText = ""
+            var firstTokenAt: Date?
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
@@ -2467,9 +2612,17 @@ public class ChatService {
                     if let usage = part.tokenUsage {
                         latestTokenUsage = usage
                         messages[index].tokenUsage = usage
+                        if let completionTokens = usage.completionTokens, completionTokens > 0 {
+                            latestOfficialCompletionTokens = completionTokens
+                        }
                     }
+                    var didReceiveTextDelta = false
                     if let contentPart = part.content {
                         messages[index].content += contentPart
+                        if !contentPart.isEmpty {
+                            accumulatedOutputText += contentPart
+                            didReceiveTextDelta = true
+                        }
                         if messages[index].role == .tool {
                             let trimmedContent = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
                             if !trimmedContent.isEmpty {
@@ -2480,6 +2633,10 @@ public class ChatService {
                     if let reasoningPart = part.reasoningContent {
                         if messages[index].reasoningContent == nil { messages[index].reasoningContent = "" }
                         messages[index].reasoningContent! += reasoningPart
+                        if !reasoningPart.isEmpty {
+                            accumulatedOutputText += reasoningPart
+                            didReceiveTextDelta = true
+                        }
                         if messages[index].role == .tool {
                             let trimmedReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                             if !trimmedReasoning.isEmpty {
@@ -2527,6 +2684,24 @@ public class ChatService {
                             messages[index].toolCalls = partialToolCalls
                         }
                     }
+                    if enableResponseSpeedMetrics {
+                        let now = Date()
+                        if didReceiveTextDelta, firstTokenAt == nil {
+                            firstTokenAt = now
+                        }
+                        let elapsed = max(0, now.timeIntervalSince(requestStartedAt))
+                        let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
+                        let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                        messages[index].responseMetrics = makeResponseMetrics(
+                            requestStartedAt: requestStartedAt,
+                            responseCompletedAt: nil,
+                            totalResponseDuration: nil,
+                            timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
+                            completionTokensForSpeed: completionTokensForSpeed,
+                            tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: elapsed),
+                            isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                        )
+                    }
                     messagesForSessionSubject.send(messages)
                 }
             }
@@ -2559,6 +2734,24 @@ public class ChatService {
                 }
                 if let latestTokenUsage {
                     messages[index].tokenUsage = latestTokenUsage
+                    if let completionTokens = latestTokenUsage.completionTokens, completionTokens > 0 {
+                        latestOfficialCompletionTokens = completionTokens
+                    }
+                }
+                if enableResponseSpeedMetrics {
+                    let responseCompletedAt = Date()
+                    let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
+                    let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
+                    let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                    messages[index].responseMetrics = makeResponseMetrics(
+                        requestStartedAt: requestStartedAt,
+                        responseCompletedAt: responseCompletedAt,
+                        totalResponseDuration: totalDuration,
+                        timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
+                        completionTokensForSpeed: completionTokensForSpeed,
+                        tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: totalDuration),
+                        isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                    )
                 }
                 finalAssistantMessage = messages[index]
                 messagesForSessionSubject.send(messages)
@@ -2670,6 +2863,9 @@ public class ChatService {
             if let newPlacement = newMessage.toolCallsPlacement {
                 targetMessage.toolCallsPlacement = newPlacement
             }
+            if let newMetrics = newMessage.responseMetrics {
+                targetMessage.responseMetrics = newMetrics
+            }
             
             messages[targetIndex] = targetMessage
             
@@ -2700,7 +2896,8 @@ public class ChatService {
                 reasoningContent: newMessage.reasoningContent,
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
                 toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,
-                tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage
+                tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage,
+                responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
             )
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)

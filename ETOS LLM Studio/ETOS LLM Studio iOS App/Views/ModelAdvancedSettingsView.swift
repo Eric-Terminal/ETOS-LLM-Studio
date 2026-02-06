@@ -8,6 +8,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var maxChatHistory: Int
     @Binding var lazyLoadMessageCount: Int
     @Binding var enableStreaming: Bool
+    @Binding var enableResponseSpeedMetrics: Bool
     @Binding var enableAutoSessionNaming: Bool
     @Binding var currentSession: ChatSession?
     @Binding var enableSpeechInput: Bool
@@ -71,6 +72,16 @@ struct ModelAdvancedSettingsView: View {
             Section("输出样式") {
                 Toggle("自动生成话题标题", isOn: $enableAutoSessionNaming)
                 Toggle("启用流式输出", isOn: $enableStreaming)
+            }
+
+            Section {
+                Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
+            } header: {
+                Text(NSLocalizedString("响应测速", comment: "Response speed metrics section title"))
+            } footer: {
+                Text(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             
             Section("采样参数") {
