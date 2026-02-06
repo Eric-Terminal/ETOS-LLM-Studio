@@ -81,7 +81,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
         didSet { refreshBlurredBackgroundImage() }
     }
-    @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = true
+    @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = false
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
