@@ -783,3 +783,8 @@
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API 地址應為基礎地址，例如: https://generativelanguage.googleapis.com/v1beta";
 "使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "使用 key=value 新增請求標頭，例如: Authorization=Bearer your_token。\nAuthorization 等驗證標頭請手動填寫。";
 "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "使用 key=value 新增請求標頭，例如: Authorization=Bearer {token}。\n{token} 會替換為上方 Bearer API Key 輸入的值。";
+"手机比例" = "手機比例";
+"手表比例" = "手錶比例";
+"裁切背景" = "裁切背景";
+"裁切比例" = "裁切比例";
+"拖动和缩放以调整取景范围" = "拖曳與縮放以調整取景範圍";

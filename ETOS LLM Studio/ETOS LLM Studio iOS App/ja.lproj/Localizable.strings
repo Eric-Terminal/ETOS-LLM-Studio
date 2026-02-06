@@ -783,3 +783,8 @@
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API のベースURL例: https://generativelanguage.googleapis.com/v1beta";
 "使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "key=value でリクエストヘッダーを追加します（例: Authorization=Bearer your_token）。\nAuthorization などの認証ヘッダーは手動で入力してください。";
 "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "key=value でリクエストヘッダーを追加します（例: Authorization=Bearer {token}）。\n{token} は上の Bearer API Key 入力値に置き換えられます。";
+"手机比例" = "iPhone 比率";
+"手表比例" = "Watch 比率";
+"裁切背景" = "背景をトリミング";
+"裁切比例" = "トリミング比率";
+"拖动和缩放以调整取景范围" = "ドラッグと拡大縮小で切り取り範囲を調整";

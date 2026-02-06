@@ -384,7 +384,7 @@ struct ChatView: View {
                    let image = viewModel.currentBackgroundImageBlurredUIImage {
                     ZStack {
                         if viewModel.backgroundContentMode == "fit" {
-                            Color.black
+                            colorScheme == .dark ? Color.black : Color(uiColor: .systemBackground)
                         }
                         
                         Image(uiImage: image)

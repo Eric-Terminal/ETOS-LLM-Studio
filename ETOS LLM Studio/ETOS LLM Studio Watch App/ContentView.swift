@@ -50,7 +50,7 @@ struct ContentView: View {
                     let size = proxy.size
                     ZStack {
                         if viewModel.backgroundContentMode == "fit" {
-                            Color.black
+                            colorScheme == .dark ? Color.black : Color(white: 0.95)
                         }
                         
                         Image(uiImage: bgImage)

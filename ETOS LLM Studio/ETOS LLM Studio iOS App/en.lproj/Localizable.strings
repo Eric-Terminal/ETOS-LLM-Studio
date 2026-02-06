@@ -790,3 +790,8 @@
 "HTTP %d: %@\n\n" = "HTTP %d: %@\n\n";
 "解析响应失败，请查看原始响应:\n%@" = "Failed to parse response. See raw response:\n%@";
 "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "Use key=value to add request headers, e.g. Authorization=Bearer {token}.\n{token} is replaced with the Bearer API Key input above.";
+"手机比例" = "Phone ratio";
+"手表比例" = "Watch ratio";
+"裁切背景" = "Crop background";
+"裁切比例" = "Crop ratio";
+"拖动和缩放以调整取景范围" = "Drag and zoom to adjust framing.";
