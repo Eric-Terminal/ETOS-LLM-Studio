@@ -862,3 +862,9 @@
 "已取消生成" = "Generation cancelled";
 "再次生成" = "Generate again";
 "以此图继续生成" = "Continue with this image";
+
+"生图参数（表达式）" = "Image Parameters (Expressions)";
+"每行一个参数，示例：size = 2048x2048。参数会覆盖模型默认值，仅在生图请求中生效。" = "One parameter per line, e.g. size = 2048x2048. Parameters override model defaults for image generation only.";
+"生图参数解析失败：%@" = "Failed to parse image parameters: %@";
+
+"生图参数表达式，比如 size = 2048x2048" = "Image parameter expression, e.g. size = 2048x2048";

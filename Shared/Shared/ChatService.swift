@@ -1052,7 +1052,8 @@ public class ChatService {
     public func generateImageAndProcessMessage(
         prompt: String,
         imageAttachments: [ImageAttachment] = [],
-        runnableModel: RunnableModel? = nil
+        runnableModel: RunnableModel? = nil,
+        runtimeOverrideParameters: [String: JSONValue] = [:]
     ) async {
         guard var currentSession = currentSessionSubject.value else {
             let reason = NSLocalizedString("错误: 没有当前会话。", comment: "No current session error")
@@ -1104,7 +1105,7 @@ public class ChatService {
         }
 
         logger.info(
-            "开始生图流程: session=\(currentSession.id.uuidString), provider=\(runnableModel.provider.name), model=\(runnableModel.model.displayName), promptLength=\(trimmedPrompt.count), referenceCount=\(imageAttachments.count)"
+            "开始生图流程: session=\(currentSession.id.uuidString), provider=\(runnableModel.provider.name), model=\(runnableModel.model.displayName), promptLength=\(trimmedPrompt.count), referenceCount=\(imageAttachments.count), runtimeOverrideCount=\(runtimeOverrideParameters.count)"
         )
 
         guard let adapter = adapters[runnableModel.provider.apiFormat] else {
@@ -1215,9 +1216,16 @@ public class ChatService {
 
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
+            var effectiveModel = runnableModel.model
+            if !runtimeOverrideParameters.isEmpty {
+                effectiveModel.overrideParameters = effectiveModel.overrideParameters.merging(runtimeOverrideParameters) { _, runtime in
+                    runtime
+                }
+            }
+            let effectiveRunnableModel = RunnableModel(provider: runnableModel.provider, model: effectiveModel)
             await self.executeImageGenerationRequest(
                 adapter: adapter,
-                runnableModel: runnableModel,
+                runnableModel: effectiveRunnableModel,
                 prompt: trimmedPrompt,
                 referenceImages: imageAttachments,
                 loadingMessageID: loadingMessage.id,

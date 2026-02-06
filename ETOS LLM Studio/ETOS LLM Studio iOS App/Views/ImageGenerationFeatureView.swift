@@ -19,10 +19,12 @@ private struct ImagePreviewPayload: Identifiable {
 struct ImageGenerationFeatureView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @AppStorage("imageGenerationModelIdentifier") private var imageGenerationModelIdentifier: String = ""
+    @AppStorage("imageGenerationParameterExpressionsByModel") private var imageGenerationParameterExpressionsByModel: String = "{}"
     @State private var prompt: String = ""
     @State private var referenceImages: [ImageAttachment] = []
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var showGalleryFromStatus: Bool = false
+    @State private var parameterExpressionEntries: [ImageParameterExpressionEntry] = [ImageParameterExpressionEntry(text: "")]
 
     private var availableImageModels: [RunnableModel] {
         viewModel.imageGenerationModelOptions
@@ -43,6 +45,7 @@ struct ImageGenerationFeatureView: View {
         !trimmedPrompt.isEmpty
             && !viewModel.isSendingMessage
             && viewModel.supportsImageGeneration(for: selectedImageModel)
+            && !parameterExpressionEntries.contains(where: { $0.error != nil })
     }
 
     private var generatedImageCount: Int {
@@ -88,6 +91,32 @@ struct ImageGenerationFeatureView: View {
                 Text("提示词")
             } footer: {
                 Text("输入提示词，独立发起生图请求。")
+            }
+
+            Section {
+                ForEach($parameterExpressionEntries) { $entry in
+                    ImageParameterExpressionRow(entry: $entry)
+                        .onChange(of: entry.text) { _, _ in
+                            validateParameterExpressionEntry(withId: entry.id)
+                            saveParameterExpressions(for: imageGenerationModelIdentifier)
+                        }
+                }
+                .onDelete(perform: deleteParameterExpressionEntries)
+
+                Button {
+                    addParameterExpressionEntry()
+                } label: {
+                    Label("添加表达式", systemImage: "plus")
+                }
+            } header: {
+                Text(NSLocalizedString("生图参数（表达式）", comment: "Image generation parameter expression section title"))
+            } footer: {
+                Text(
+                    NSLocalizedString(
+                        "每行一个参数，示例：size = 2048x2048。参数会覆盖模型默认值，仅在生图请求中生效。",
+                        comment: "Image generation runtime parameter expression section footer"
+                    )
+                )
             }
 
             Section {
@@ -179,12 +208,24 @@ struct ImageGenerationFeatureView: View {
         .navigationTitle(NSLocalizedString("图片生成", comment: "Image generation view title"))
         .onAppear {
             syncSelectedImageModel()
+            loadParameterExpressions(for: imageGenerationModelIdentifier)
+            validateParameterExpressions()
         }
         .onChange(of: selectedPhotos) { _, newItems in
             loadSelectedPhotos(newItems)
         }
         .onChange(of: viewModel.activatedModels) { _, _ in
+            let previousIdentifier = imageGenerationModelIdentifier
             syncSelectedImageModel()
+            if previousIdentifier != imageGenerationModelIdentifier {
+                loadParameterExpressions(for: imageGenerationModelIdentifier)
+            }
+            validateParameterExpressions()
+        }
+        .onChange(of: imageGenerationModelIdentifier) { oldValue, newValue in
+            saveParameterExpressions(for: oldValue)
+            loadParameterExpressions(for: newValue)
+            validateParameterExpressions()
         }
         .navigationDestination(isPresented: $showGalleryFromStatus) {
             galleryDestination
@@ -306,7 +347,7 @@ struct ImageGenerationFeatureView: View {
 
                 HStack(spacing: 12) {
                     Button {
-                        viewModel.retryLastImageGeneration(model: selectedImageModel)
+                        retryLastImageGeneration()
                     } label: {
                         Label(NSLocalizedString("重试生成", comment: "Retry image generation"), systemImage: "arrow.clockwise")
                     }
@@ -334,7 +375,7 @@ struct ImageGenerationFeatureView: View {
 
                 HStack(spacing: 12) {
                     Button {
-                        viewModel.retryLastImageGeneration(model: selectedImageModel)
+                        retryLastImageGeneration()
                     } label: {
                         Label(NSLocalizedString("再次生成", comment: "Generate again"), systemImage: "arrow.clockwise")
                     }
@@ -414,13 +455,201 @@ struct ImageGenerationFeatureView: View {
 
         let promptToSend = trimmedPrompt
         guard !promptToSend.isEmpty else { return }
+        guard let runtimeParameters = runtimeOverrideParameters(showErrorMessage: true) else { return }
 
         let imagesToSend = referenceImages
         prompt = ""
         referenceImages = []
         selectedPhotos = []
 
-        viewModel.generateImage(prompt: promptToSend, referenceImages: imagesToSend, model: selectedImageModel)
+        viewModel.generateImage(
+            prompt: promptToSend,
+            referenceImages: imagesToSend,
+            model: selectedImageModel,
+            runtimeOverrideParameters: runtimeParameters
+        )
+    }
+
+    private func retryLastImageGeneration() {
+        guard let runtimeParameters = runtimeOverrideParameters(showErrorMessage: true) else { return }
+        viewModel.retryLastImageGeneration(
+            model: selectedImageModel,
+            runtimeOverrideParameters: runtimeParameters
+        )
+    }
+
+    private func validateParameterExpressions() {
+        _ = parseRuntimeOverrideParameters()
+    }
+
+    private func runtimeOverrideParameters(showErrorMessage: Bool) -> [String: JSONValue]? {
+        switch parseRuntimeOverrideParameters() {
+        case .success(let parameters):
+            return parameters
+        case .failure(let error):
+            if showErrorMessage {
+                viewModel.addErrorMessage(error.localizedDescription)
+            }
+            return nil
+        }
+    }
+
+    private func addParameterExpressionEntry() {
+        parameterExpressionEntries.append(ImageParameterExpressionEntry(text: ""))
+    }
+
+    private func deleteParameterExpressionEntries(at offsets: IndexSet) {
+        parameterExpressionEntries.remove(atOffsets: offsets)
+        if parameterExpressionEntries.isEmpty {
+            addParameterExpressionEntry()
+        }
+        saveParameterExpressions(for: imageGenerationModelIdentifier)
+        validateParameterExpressions()
+    }
+
+    private func validateParameterExpressionEntry(withId id: UUID) {
+        guard let index = parameterExpressionEntries.firstIndex(where: { $0.id == id }) else { return }
+        var entry = parameterExpressionEntries[index]
+        let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            entry.error = nil
+            parameterExpressionEntries[index] = entry
+            return
+        }
+
+        do {
+            _ = try ParameterExpressionParser.parse(trimmed)
+            entry.error = nil
+        } catch {
+            entry.error = error.localizedDescription
+        }
+        parameterExpressionEntries[index] = entry
+    }
+
+    private func parseRuntimeOverrideParameters() -> Result<[String: JSONValue], Error> {
+        var updatedEntries = parameterExpressionEntries
+        var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
+        var firstErrorMessage: String?
+
+        for index in updatedEntries.indices {
+            let trimmed = updatedEntries[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                updatedEntries[index].error = nil
+                continue
+            }
+            do {
+                let parsed = try ParameterExpressionParser.parse(trimmed)
+                parsedExpressions.append(parsed)
+                updatedEntries[index].error = nil
+            } catch {
+                let lineError = "第\(index + 1)行：\(error.localizedDescription)"
+                let message = String(
+                    format: NSLocalizedString("生图参数解析失败：%@", comment: "Image generation parameter expression parse failed"),
+                    lineError
+                )
+                updatedEntries[index].error = message
+                if firstErrorMessage == nil {
+                    firstErrorMessage = message
+                }
+            }
+        }
+
+        parameterExpressionEntries = updatedEntries
+
+        if let firstErrorMessage {
+            return .failure(
+                NSError(
+                    domain: "ImageGenerationFeatureView",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: firstErrorMessage]
+                )
+            )
+        }
+
+        return .success(ParameterExpressionParser.buildParameters(from: parsedExpressions))
+    }
+
+    private func loadParameterExpressions(for modelIdentifier: String) {
+        guard !modelIdentifier.isEmpty else {
+            parameterExpressionEntries = [ImageParameterExpressionEntry(text: "")]
+            return
+        }
+        let map = decodeParameterExpressionStore()
+        let lines = (map[modelIdentifier] ?? "")
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if lines.isEmpty {
+            parameterExpressionEntries = [ImageParameterExpressionEntry(text: "")]
+        } else {
+            parameterExpressionEntries = lines.map { ImageParameterExpressionEntry(text: $0) }
+        }
+    }
+
+    private func saveParameterExpressions(for modelIdentifier: String) {
+        guard !modelIdentifier.isEmpty else { return }
+        var map = decodeParameterExpressionStore()
+        let normalizedLines = parameterExpressionEntries
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if normalizedLines.isEmpty {
+            map.removeValue(forKey: modelIdentifier)
+        } else {
+            map[modelIdentifier] = normalizedLines.joined(separator: "\n")
+        }
+        encodeParameterExpressionStore(map)
+    }
+
+    private func decodeParameterExpressionStore() -> [String: String] {
+        guard let data = imageGenerationParameterExpressionsByModel.data(using: .utf8),
+              let map = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return map
+    }
+
+    private func encodeParameterExpressionStore(_ map: [String: String]) {
+        guard let data = try? JSONEncoder().encode(map),
+              let string = String(data: data, encoding: .utf8) else {
+            imageGenerationParameterExpressionsByModel = "{}"
+            return
+        }
+        imageGenerationParameterExpressionsByModel = string
+    }
+}
+
+private struct ImageParameterExpressionEntry: Identifiable, Equatable {
+    let id: UUID
+    var text: String
+    var error: String?
+
+    init(id: UUID = UUID(), text: String, error: String? = nil) {
+        self.id = id
+        self.text = text
+        self.error = error
+    }
+}
+
+private struct ImageParameterExpressionRow: View {
+    @Binding var entry: ImageParameterExpressionEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField(
+                NSLocalizedString("生图参数表达式，比如 size = 2048x2048", comment: "Image generation parameter expression placeholder"),
+                text: $entry.text
+            )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.body.monospaced())
+
+            if let error = entry.error {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        }
     }
 }
 

@@ -386,13 +386,19 @@ final class ChatViewModel: ObservableObject {
         return imageGenerationModelOptions.first(where: { $0.id == identifier })
     }
 
-    func generateImage(prompt: String, referenceImages: [ImageAttachment] = [], model: RunnableModel? = nil) {
+    func generateImage(
+        prompt: String,
+        referenceImages: [ImageAttachment] = [],
+        model: RunnableModel? = nil,
+        runtimeOverrideParameters: [String: JSONValue] = [:]
+    ) {
         guard !isSendingMessage else { return }
         Task {
             await chatService.generateImageAndProcessMessage(
                 prompt: prompt,
                 imageAttachments: referenceImages,
-                runnableModel: model
+                runnableModel: model,
+                runtimeOverrideParameters: runtimeOverrideParameters
             )
         }
     }
@@ -401,10 +407,19 @@ final class ChatViewModel: ObservableObject {
         imageGenerationFeedback = .idle
     }
 
-    func retryLastImageGeneration(model: RunnableModel? = nil, referenceImages: [ImageAttachment] = []) {
+    func retryLastImageGeneration(
+        model: RunnableModel? = nil,
+        referenceImages: [ImageAttachment] = [],
+        runtimeOverrideParameters: [String: JSONValue] = [:]
+    ) {
         let prompt = imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
-        generateImage(prompt: prompt, referenceImages: referenceImages, model: model)
+        generateImage(
+            prompt: prompt,
+            referenceImages: referenceImages,
+            model: model,
+            runtimeOverrideParameters: runtimeOverrideParameters
+        )
     }
 
     func removeGeneratedImage(fileName: String, fromMessageID messageID: UUID) {
@@ -831,7 +846,7 @@ final class ChatViewModel: ObservableObject {
                 errorMessage: nil,
                 referenceCount: imageGenerationFeedback.referenceCount
             )
-        @unknown default:
+        default:
             imageGenerationFeedback = .idle
         }
     }
