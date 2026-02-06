@@ -2895,6 +2895,36 @@ private struct MessageInfoSheet: View {
                         .textSelection(.enabled)
                 }
 
+                if let usage = payload.message.tokenUsage, usage.hasData {
+                    Section(NSLocalizedString("Token 用量", comment: "Token usage section title")) {
+                        if let prompt = usage.promptTokens {
+                            LabeledContent(NSLocalizedString("发送 Tokens", comment: "Prompt tokens label")) {
+                                Text("\(prompt)")
+                            }
+                        }
+                        if let completion = usage.completionTokens {
+                            LabeledContent(NSLocalizedString("接收 Tokens", comment: "Completion tokens label")) {
+                                Text("\(completion)")
+                            }
+                        }
+                        if let total = usage.totalTokens, (usage.promptTokens != total || usage.completionTokens != total) {
+                            LabeledContent(NSLocalizedString("总计", comment: "Total tokens label")) {
+                                Text("\(total)")
+                            }
+                        } else if let totalOnly = usage.totalTokens, usage.promptTokens == nil && usage.completionTokens == nil {
+                            LabeledContent(NSLocalizedString("总计", comment: "Total tokens label")) {
+                                Text("\(totalOnly)")
+                            }
+                        }
+                    }
+                } else if let metrics = payload.message.responseMetrics, metrics.isTokenPerSecondEstimated {
+                    Section(NSLocalizedString("Token 用量", comment: "Token usage section title")) {
+                        Text(NSLocalizedString("当前响应未返回官方 token 用量（仅有估算速度）。", comment: "No official token usage returned hint"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 if let metrics = payload.message.responseMetrics {
                     Section(NSLocalizedString("响应测速", comment: "Response speed metrics section title")) {
                         if let firstToken = metrics.timeToFirstToken {

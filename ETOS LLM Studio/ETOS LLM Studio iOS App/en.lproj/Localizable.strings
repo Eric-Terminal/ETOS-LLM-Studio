@@ -847,3 +847,4 @@
 "响应速度" = "Response speed";
 "token/s" = "token/s";
 "估算" = "Estimated";
+"当前响应未返回官方 token 用量（仅有估算速度）。" = "This response did not return official token usage (estimated speed only).";
