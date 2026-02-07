@@ -934,7 +934,13 @@ struct ToolCallsInlineView: View, Equatable {
         if toolName == "save_memory" {
             return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
         }
-        return MCPManager.shared.displayLabel(for: toolName) ?? toolName
+        if let label = MCPManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        return toolName
     }
     
     var body: some View {
@@ -1062,7 +1068,13 @@ struct ToolResultsDisclosureView: View, Equatable {
         if toolName == "save_memory" {
             return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
         }
-        return MCPManager.shared.displayLabel(for: toolName) ?? toolName
+        if let label = MCPManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        return toolName
     }
     
     var body: some View {
