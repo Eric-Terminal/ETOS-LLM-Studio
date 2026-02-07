@@ -40,10 +40,12 @@ struct DisplaySettingsView: View {
             
             Section(header: Text("内容显示")) {
                 Toggle("渲染 Markdown", isOn: $enableMarkdown)
-                Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
-                Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if enableMarkdown {
+                    Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
+                    Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             
             Section(header: Text("背景")) {
@@ -78,5 +80,10 @@ struct DisplaySettingsView: View {
             }
         }
         .navigationTitle("显示设置")
+        .onChange(of: enableMarkdown) { _, isEnabled in
+            if !isEnabled, enableAdvancedRenderer {
+                enableAdvancedRenderer = false
+            }
+        }
     }
 }
