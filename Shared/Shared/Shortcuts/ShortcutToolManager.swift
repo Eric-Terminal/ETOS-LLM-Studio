@@ -34,6 +34,7 @@ public final class ShortcutToolManager: ObservableObject {
     @Published public private(set) var lastOfficialTemplateStatusMessage: String?
     @Published public private(set) var lastOfficialTemplateRunSucceeded: Bool?
     @Published public private(set) var isImporting: Bool = false
+    @Published public private(set) var isCancellingImport: Bool = false
     @Published public private(set) var importProgressCompleted: Int = 0
     @Published public private(set) var importProgressTotal: Int = 0
     @Published public private(set) var importCurrentItemName: String?
@@ -148,6 +149,8 @@ public final class ShortcutToolManager: ObservableObject {
     public func cancelOngoingImport() {
         guard isImporting else { return }
         importCancellationRequested = true
+        isCancellingImport = true
+        logger.warning("收到快捷指令导入取消请求。")
     }
 
     @discardableResult
@@ -160,15 +163,18 @@ public final class ShortcutToolManager: ObservableObject {
             return false
         }
 
+        logger.info("尝试运行官方导入快捷指令，name=\(self.officialImportShortcutName, privacy: .public)")
         lastOfficialTemplateRunSucceeded = nil
         lastOfficialTemplateStatusMessage = NSLocalizedString("正在启动官方导入快捷指令…", comment: "")
 
         let opened = await openSystemURL(runURL)
         if opened {
+            logger.info("已成功拉起官方导入快捷指令。")
             lastOfficialTemplateStatusMessage = NSLocalizedString("已拉起快捷指令，请在授权后返回应用继续导入。", comment: "")
             return true
         }
 
+        logger.error("拉起官方导入快捷指令失败。")
         let message = NSLocalizedString("未能运行导入快捷指令。请先下载并添加该快捷指令，或确认名称配置正确。", comment: "")
         lastOfficialTemplateRunSucceeded = false
         lastOfficialTemplateStatusMessage = message
@@ -184,6 +190,7 @@ public final class ShortcutToolManager: ObservableObject {
             let summary = ShortcutImportSummary(importedCount: 0, skippedCount: 0, conflictNames: [], invalidCount: 0)
             lastImportSummary = summary
             lastErrorMessage = NSLocalizedString("当前已有导入任务正在进行。", comment: "")
+            logger.warning("忽略导入请求：已有导入任务在进行中。")
             return summary
         }
 
@@ -198,6 +205,7 @@ public final class ShortcutToolManager: ObservableObject {
             }
 
             let source = queryItem(named: "source", in: triggerURL)?.lowercased() ?? "clipboard"
+            logger.info("开始导入快捷指令，source=\(source, privacy: .public)")
             guard source == "clipboard" else {
                 throw ShortcutToolError.unsupportedImportSource
             }
@@ -211,6 +219,7 @@ public final class ShortcutToolManager: ObservableObject {
             }
 
             let importedPayloads = try decodeImportPayloads(from: data)
+            logger.info("导入清单解析完成，共 \(importedPayloads.count) 项。")
             importProgressTotal = max(importedPayloads.count, 1)
             try ensureImportNotCancelled()
 
@@ -279,6 +288,7 @@ public final class ShortcutToolManager: ObservableObject {
                         metadata: tool.metadata,
                         source: tool.source
                     ) ?? tool.generatedDescription
+                    try ensureImportNotCancelled()
                     tool.generatedDescription = generated
                     tool.updatedAt = Date()
                     nextTools[index] = tool
@@ -298,6 +308,7 @@ public final class ShortcutToolManager: ObservableObject {
             )
             lastImportSummary = summary
             lastErrorMessage = nil
+            logger.info("快捷指令导入完成：新增 \(imported) 条，跳过 \(skipped) 条，无效 \(invalid) 条。")
             if fromOfficialTemplate {
                 lastOfficialTemplateRunSucceeded = true
                 lastOfficialTemplateStatusMessage = NSLocalizedString("官方导入完成：已处理剪贴板数据。", comment: "")
@@ -309,12 +320,14 @@ public final class ShortcutToolManager: ObservableObject {
             let summary = ShortcutImportSummary(importedCount: 0, skippedCount: 0, conflictNames: [], invalidCount: 0)
             lastImportSummary = summary
             lastErrorMessage = NSLocalizedString("导入已取消。", comment: "")
+            logger.warning("快捷指令导入已取消。")
             await notifyImportCallback(summary: summary, triggerURL: triggerURL, success: false, errorMessage: lastErrorMessage)
             return summary
         } catch {
             let summary = ShortcutImportSummary(importedCount: 0, skippedCount: 0, conflictNames: [], invalidCount: 0)
             lastImportSummary = summary
             lastErrorMessage = error.localizedDescription
+            logger.error("快捷指令导入失败：\(error.localizedDescription, privacy: .public)")
             if queryItem(named: "from", in: triggerURL)?.lowercased() == "official_template" {
                 lastOfficialTemplateRunSucceeded = false
                 lastOfficialTemplateStatusMessage = error.localizedDescription
@@ -431,6 +444,7 @@ public final class ShortcutToolManager: ObservableObject {
 
         let status = queryItem(named: "status", in: url)?.lowercased() ?? "error"
         if status == "success" {
+            logger.info("收到官方导入状态回调：success")
             lastOfficialTemplateRunSucceeded = true
             lastOfficialTemplateStatusMessage = queryItem(named: "message", in: url)
                 ?? NSLocalizedString("已拉起快捷指令，请在授权后返回应用继续导入。", comment: "")
@@ -448,6 +462,7 @@ public final class ShortcutToolManager: ObservableObject {
             message = NSLocalizedString("未能运行导入快捷指令。请先下载并添加该快捷指令，或确认名称配置正确。", comment: "")
         }
 
+        logger.warning("收到官方导入状态回调：error，message=\(message, privacy: .public)")
         lastOfficialTemplateRunSucceeded = false
         lastOfficialTemplateStatusMessage = message
         lastErrorMessage = message
@@ -773,6 +788,7 @@ public final class ShortcutToolManager: ObservableObject {
 
     private func beginImportProgress() {
         isImporting = true
+        isCancellingImport = false
         importCancellationRequested = false
         importProgressCompleted = 0
         importProgressTotal = 0
@@ -781,11 +797,15 @@ public final class ShortcutToolManager: ObservableObject {
 
     private func endImportProgress() {
         isImporting = false
+        isCancellingImport = false
         importCancellationRequested = false
+        importProgressCompleted = 0
+        importProgressTotal = 0
         importCurrentItemName = nil
     }
 
     private func updateImportProgress(currentName: String?, increment: Int) {
+        guard !importCancellationRequested else { return }
         if let currentName {
             let trimmed = currentName.trimmingCharacters(in: .whitespacesAndNewlines)
             importCurrentItemName = trimmed.isEmpty ? nil : trimmed
@@ -800,6 +820,7 @@ public final class ShortcutToolManager: ObservableObject {
 
     private func ensureImportNotCancelled() throws {
         if Task.isCancelled || importCancellationRequested {
+            logger.warning("检测到导入取消标记，准备终止当前导入流程。")
             throw CancellationError()
         }
     }
@@ -874,6 +895,10 @@ public final class ShortcutToolManager: ObservableObject {
     }
 
     private func fetchShortcutWorkflowSummary(fromICloudLink link: String) async -> String? {
+        if importCancellationRequested {
+            logger.info("导入已取消，跳过 iCloud 深度解析。")
+            return nil
+        }
         guard let shortcutID = parseShortcutID(fromICloudLink: link) else { return nil }
         guard let recordURL = URL(string: "https://www.icloud.com/shortcuts/api/records/\(shortcutID)") else {
             return nil
@@ -884,6 +909,10 @@ public final class ShortcutToolManager: ObservableObject {
             request.timeoutInterval = 20
             let (recordData, recordResponse) = try await URLSession.shared.data(for: request)
             guard isSuccessStatusCode(recordResponse) else { return nil }
+            if importCancellationRequested {
+                logger.info("导入已取消，停止后续 iCloud 下载解析。")
+                return nil
+            }
 
             let shortcutData = try await extractShortcutDataFromRecordPayload(recordData)
             guard let shortcutData else { return nil }

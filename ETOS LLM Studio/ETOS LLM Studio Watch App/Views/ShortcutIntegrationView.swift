@@ -63,6 +63,11 @@ struct ShortcutIntegrationView: View {
                     Text("导入进行中")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    if manager.isCancellingImport {
+                        Text(NSLocalizedString("正在取消导入，请稍候…", comment: ""))
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
 
                     if manager.importProgressTotal > 0 {
                         ProgressView(
@@ -99,6 +104,7 @@ struct ShortcutIntegrationView: View {
                         Text("取消导入")
                     }
                     .font(.caption2)
+                    .disabled(manager.isCancellingImport)
                 }
             }
 

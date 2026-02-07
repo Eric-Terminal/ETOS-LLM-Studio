@@ -914,3 +914,4 @@
 "未能运行导入快捷指令。请先下载并添加该快捷指令，或确认名称配置正确。" = "Unable to run the import shortcut. Download and add it first, or verify the shortcut name.";
 "在 iPhone 上点击“检测并运行导入快捷指令”，手表端会自动同步结果。" = "Tap \"Check and run import shortcut\" on iPhone. Watch will sync the result automatically.";
 "当前官方导入状态" = "Official import status";
+"正在取消导入，请稍候…" = "Cancelling import, please wait...";
