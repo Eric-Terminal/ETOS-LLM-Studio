@@ -143,6 +143,13 @@ struct ShortcutIntegrationView: View {
                             }
                         }
                         .padding(.vertical, 2)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                manager.deleteTool(id: tool.id)
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
