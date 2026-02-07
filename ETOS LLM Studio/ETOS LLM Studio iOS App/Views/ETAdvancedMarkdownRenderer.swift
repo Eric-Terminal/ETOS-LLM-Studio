@@ -96,11 +96,12 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        let stableWidth = max(1, floor(availableWidth))
         let payload = Payload(
             content: content,
             enableMarkdown: enableMarkdown,
             isOutgoing: isOutgoing,
-            availableWidth: availableWidth
+            availableWidth: stableWidth
         )
 
         guard context.coordinator.lastPayload != payload else { return }
@@ -267,15 +268,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     }
 
     function __notifyHeightNow() {
-      const body = document.body;
-      const doc = document.documentElement;
-      const height = Math.max(
-        body.scrollHeight,
-        body.offsetHeight,
-        doc.clientHeight,
-        doc.scrollHeight,
-        doc.offsetHeight
-      );
+      const content = document.getElementById("content");
+      const rectHeight = content ? content.getBoundingClientRect().height : 0;
+      const scrollHeight = content ? content.scrollHeight : 0;
+      const height = Math.max(rectHeight, scrollHeight, 1);
       if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etMathHeight) {
         window.webkit.messageHandlers.etMathHeight.postMessage(height);
       }
@@ -329,7 +325,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     if (window.ResizeObserver) {
       const observer = new ResizeObserver(() => __notifyHeightNow());
-      observer.observe(document.documentElement);
+      const content = document.getElementById("content");
+      if (content) {
+        observer.observe(content);
+      }
     }
 
     window.addEventListener("load", () => __bootstrap(0));
