@@ -81,6 +81,8 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    let enableAdvancedRenderer: Bool
+    let enableMathRendering: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
     
@@ -91,6 +93,30 @@ struct ChatBubble: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
+
+    init(
+        messageState: ChatMessageRenderState,
+        isReasoningExpanded: Binding<Bool>,
+        isToolCallsExpanded: Binding<Bool>,
+        enableMarkdown: Bool,
+        enableBackground: Bool,
+        enableLiquidGlass: Bool,
+        enableAdvancedRenderer: Bool = false,
+        enableMathRendering: Bool = false,
+        mergeWithPrevious: Bool,
+        mergeWithNext: Bool
+    ) {
+        self.messageState = messageState
+        self._isReasoningExpanded = isReasoningExpanded
+        self._isToolCallsExpanded = isToolCallsExpanded
+        self.enableMarkdown = enableMarkdown
+        self.enableBackground = enableBackground
+        self.enableLiquidGlass = enableLiquidGlass
+        self.enableAdvancedRenderer = enableAdvancedRenderer
+        self.enableMathRendering = enableMathRendering
+        self.mergeWithPrevious = mergeWithPrevious
+        self.mergeWithNext = mergeWithNext
+    }
     
     private var message: ChatMessage {
         messageState.message
@@ -440,12 +466,15 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
-        if enableMarkdown {
-            Markdown(content)
-                .markdownSoftBreakMode(.lineBreak)
-        } else {
-            Text(content)
-        }
+        ETAdvancedMarkdownRenderer(
+            content: content,
+            enableMarkdown: enableMarkdown,
+            isOutgoing: message.role == .user
+                || message.role == .error
+                || (message.role == .assistant && message.content.hasPrefix("重试失败")),
+            enableAdvancedRenderer: enableAdvancedRenderer,
+            enableMathRendering: enableMathRendering
+        )
     }
     
     @ViewBuilder

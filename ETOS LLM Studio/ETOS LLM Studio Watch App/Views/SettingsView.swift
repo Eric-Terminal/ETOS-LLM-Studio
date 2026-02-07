@@ -116,6 +116,7 @@ struct SettingsView: View {
                         currentBackgroundImage: $viewModel.currentBackgroundImage,
                         backgroundContentMode: $viewModel.backgroundContentMode,
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
+                        enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         allBackgrounds: viewModel.backgroundImages
                     )) {
                         Label("显示与外观", systemImage: "photo.on.rectangle")
