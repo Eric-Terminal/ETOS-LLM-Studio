@@ -147,10 +147,11 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
         var htmlDocument: String {
             let sourceJSON = jsonEscaped(content)
-            let textColor = isOutgoing ? "#FFFFFF" : UIColor.label.hexString
-            let secondaryTextColor = isOutgoing ? "rgba(255,255,255,0.85)" : UIColor.secondaryLabel.hexString
+            let textColor = isOutgoing ? "#FFFFFF" : "#1C1C1E"
+            let secondaryTextColor = isOutgoing ? "rgba(255,255,255,0.85)" : "#3C3C43"
             let linkColor = isOutgoing ? "rgba(255,255,255,0.95)" : "#0A84FF"
             let maxContentWidth = max(1, floor(availableWidth))
+            let initialFallbackHTML = htmlEscaped(content).replacingOccurrences(of: "\n", with: "<br/>")
 
             return """
 <!doctype html>
@@ -244,7 +245,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
   </style>
 </head>
 <body>
-  <div id="content"></div>
+  <div id="content">\(initialFallbackHTML)</div>
 
   <script>
     const __raw = \(sourceJSON);
@@ -351,23 +352,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             }
             return String(json.dropFirst().dropLast())
         }
-    }
-}
 
-private extension UIColor {
-    var hexString: String {
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-        guard getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
-            return "#000000"
+        private func htmlEscaped(_ value: String) -> String {
+            value
+                .replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+                .replacingOccurrences(of: "\"", with: "&quot;")
+                .replacingOccurrences(of: "'", with: "&#39;")
         }
-        return String(
-            format: "#%02X%02X%02X",
-            Int(round(red * 255)),
-            Int(round(green * 255)),
-            Int(round(blue * 255))
-        )
     }
 }
