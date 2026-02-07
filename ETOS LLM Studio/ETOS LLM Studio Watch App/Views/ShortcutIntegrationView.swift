@@ -3,6 +3,7 @@ import Foundation
 import Shared
 
 struct ShortcutIntegrationView: View {
+    @Environment(\.openURL) private var openURL
     @StateObject private var manager = ShortcutToolManager.shared
     @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
@@ -15,6 +16,39 @@ struct ShortcutIntegrationView: View {
                 Text("支持轻度导入（仅名称）和深度导入（iCloud 链接解析）；深度解析失败会自动降级为仅链接。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("官方导入快捷指令") {
+                Text("内置官方快捷指令，可一键下载并触发导入流程。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("在 iPhone 上点击“检测并运行导入快捷指令”，手表端会自动同步结果。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    openURL(manager.officialImportShortcutShareURL)
+                } label: {
+                    Label("下载官方导入快捷指令", systemImage: "square.and.arrow.down")
+                }
+
+                Text(
+                    String(
+                        format: NSLocalizedString("默认名称：%@（可按你的快捷指令名称修改）", comment: ""),
+                        manager.officialImportShortcutName
+                    )
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+
+            if let officialStatus = manager.lastOfficialTemplateStatusMessage,
+               !officialStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section("当前官方导入状态") {
+                    Text(officialStatus)
+                        .font(.caption2)
+                        .foregroundStyle((manager.lastOfficialTemplateRunSucceeded == false) ? .orange : .secondary)
+                }
             }
 
             Section("导入") {

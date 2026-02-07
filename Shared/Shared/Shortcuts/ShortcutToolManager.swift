@@ -19,15 +19,20 @@ public final class ShortcutToolManager: ObservableObject {
 
     public nonisolated static var toolNamePrefix: String { "shortcut://" }
     public nonisolated static var toolAliasPrefix: String { ShortcutToolNaming.toolAliasPrefix }
+    public nonisolated static let officialImportShortcutShareURLString = "https://www.icloud.com/shortcuts/22ebff9dcd6a4d3aa096d3f15d34a94e"
+    public nonisolated static let officialImportShortcutDefaultName = "ELS Export"
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ShortcutToolManager")
     private let executionTimeoutSeconds: UInt64 = 45
     private let bridgeShortcutUserDefaultsKey = "shortcut.bridgeShortcutName"
+    private let officialImportShortcutNameUserDefaultsKey = "shortcut.officialImportShortcutName"
 
     @Published public private(set) var tools: [ShortcutToolDefinition] = []
     @Published public private(set) var lastImportSummary: ShortcutImportSummary?
     @Published public private(set) var lastExecutionResult: ShortcutToolExecutionResult?
     @Published public private(set) var lastErrorMessage: String?
+    @Published public private(set) var lastOfficialTemplateStatusMessage: String?
+    @Published public private(set) var lastOfficialTemplateRunSucceeded: Bool?
     @Published public private(set) var isImporting: Bool = false
     @Published public private(set) var importProgressCompleted: Int = 0
     @Published public private(set) var importProgressTotal: Int = 0
@@ -71,6 +76,24 @@ public final class ShortcutToolManager: ObservableObject {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: bridgeShortcutUserDefaultsKey)
+        }
+    }
+
+    public var officialImportShortcutShareURL: URL {
+        URL(string: Self.officialImportShortcutShareURLString)!
+    }
+
+    public var officialImportShortcutName: String {
+        get {
+            let value = UserDefaults.standard.string(forKey: officialImportShortcutNameUserDefaultsKey)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (value?.isEmpty == false ? value! : Self.officialImportShortcutDefaultName)
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let next = trimmed.isEmpty ? Self.officialImportShortcutDefaultName : trimmed
+            UserDefaults.standard.set(next, forKey: officialImportShortcutNameUserDefaultsKey)
+            objectWillChange.send()
         }
     }
 
@@ -127,6 +150,32 @@ public final class ShortcutToolManager: ObservableObject {
         importCancellationRequested = true
     }
 
+    @discardableResult
+    public func runOfficialImportShortcut() async -> Bool {
+        guard let runURL = buildOfficialImportRunShortcutURL() else {
+            let message = NSLocalizedString("未能运行导入快捷指令。请先下载并添加该快捷指令，或确认名称配置正确。", comment: "")
+            lastOfficialTemplateRunSucceeded = false
+            lastOfficialTemplateStatusMessage = message
+            lastErrorMessage = message
+            return false
+        }
+
+        lastOfficialTemplateRunSucceeded = nil
+        lastOfficialTemplateStatusMessage = NSLocalizedString("正在启动官方导入快捷指令…", comment: "")
+
+        let opened = await openSystemURL(runURL)
+        if opened {
+            lastOfficialTemplateStatusMessage = NSLocalizedString("已拉起快捷指令，请在授权后返回应用继续导入。", comment: "")
+            return true
+        }
+
+        let message = NSLocalizedString("未能运行导入快捷指令。请先下载并添加该快捷指令，或确认名称配置正确。", comment: "")
+        lastOfficialTemplateRunSucceeded = false
+        lastOfficialTemplateStatusMessage = message
+        lastErrorMessage = message
+        return false
+    }
+
     // MARK: - Import
 
     @discardableResult
@@ -142,6 +191,12 @@ public final class ShortcutToolManager: ObservableObject {
         defer { endImportProgress() }
 
         do {
+            let fromOfficialTemplate = (queryItem(named: "from", in: triggerURL)?.lowercased() == "official_template")
+            if fromOfficialTemplate {
+                lastOfficialTemplateRunSucceeded = true
+                lastOfficialTemplateStatusMessage = NSLocalizedString("已收到官方导入回调，正在读取剪贴板…", comment: "")
+            }
+
             let source = queryItem(named: "source", in: triggerURL)?.lowercased() ?? "clipboard"
             guard source == "clipboard" else {
                 throw ShortcutToolError.unsupportedImportSource
@@ -243,6 +298,10 @@ public final class ShortcutToolManager: ObservableObject {
             )
             lastImportSummary = summary
             lastErrorMessage = nil
+            if fromOfficialTemplate {
+                lastOfficialTemplateRunSucceeded = true
+                lastOfficialTemplateStatusMessage = NSLocalizedString("官方导入完成：已处理剪贴板数据。", comment: "")
+            }
 
             await notifyImportCallback(summary: summary, triggerURL: triggerURL, success: true, errorMessage: nil)
             return summary
@@ -256,6 +315,10 @@ public final class ShortcutToolManager: ObservableObject {
             let summary = ShortcutImportSummary(importedCount: 0, skippedCount: 0, conflictNames: [], invalidCount: 0)
             lastImportSummary = summary
             lastErrorMessage = error.localizedDescription
+            if queryItem(named: "from", in: triggerURL)?.lowercased() == "official_template" {
+                lastOfficialTemplateRunSucceeded = false
+                lastOfficialTemplateStatusMessage = error.localizedDescription
+            }
             await notifyImportCallback(summary: summary, triggerURL: triggerURL, success: false, errorMessage: error.localizedDescription)
             return summary
         }
@@ -358,6 +421,36 @@ public final class ShortcutToolManager: ObservableObject {
 
         resolvePending(requestID: requestID, result: result)
         lastExecutionResult = result
+        return true
+    }
+
+    @discardableResult
+    public func handleOfficialTemplateStatusURL(_ url: URL) -> Bool {
+        guard url.host?.lowercased() == "shortcuts" else { return false }
+        guard url.path.lowercased() == "/template-status" else { return false }
+
+        let status = queryItem(named: "status", in: url)?.lowercased() ?? "error"
+        if status == "success" {
+            lastOfficialTemplateRunSucceeded = true
+            lastOfficialTemplateStatusMessage = queryItem(named: "message", in: url)
+                ?? NSLocalizedString("已拉起快捷指令，请在授权后返回应用继续导入。", comment: "")
+            return true
+        }
+
+        let callbackError = queryItem(named: "errorMessage", in: url)
+            ?? queryItem(named: "error", in: url)
+            ?? queryItem(named: "message", in: url)
+        let message: String
+        if let callbackError,
+           !callbackError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            message = callbackError
+        } else {
+            message = NSLocalizedString("未能运行导入快捷指令。请先下载并添加该快捷指令，或确认名称配置正确。", comment: "")
+        }
+
+        lastOfficialTemplateRunSucceeded = false
+        lastOfficialTemplateStatusMessage = message
+        lastErrorMessage = message
         return true
     }
 
@@ -584,6 +677,50 @@ public final class ShortcutToolManager: ObservableObject {
             URLQueryItem(name: "name", value: targetShortcutName),
             URLQueryItem(name: "input", value: "text"),
             URLQueryItem(name: "text", value: payloadText),
+            URLQueryItem(name: "x-success", value: successURL),
+            URLQueryItem(name: "x-error", value: errorURL)
+        ]
+        return components.url
+    }
+
+    private func buildOfficialImportRunShortcutURL() -> URL? {
+        var successComponents = URLComponents()
+        successComponents.scheme = ShortcutURLRouter.appScheme
+        successComponents.host = "shortcuts"
+        successComponents.path = "/import"
+        successComponents.queryItems = [
+            URLQueryItem(name: "source", value: "clipboard"),
+            URLQueryItem(name: "from", value: "official_template")
+        ]
+
+        var errorComponents = URLComponents()
+        errorComponents.scheme = ShortcutURLRouter.appScheme
+        errorComponents.host = "shortcuts"
+        errorComponents.path = "/template-status"
+        errorComponents.queryItems = [
+            URLQueryItem(name: "status", value: "error"),
+            URLQueryItem(name: "stage", value: "run")
+        ]
+
+        guard let successURL = successComponents.url?.absoluteString,
+              let errorURL = errorComponents.url?.absoluteString else {
+            return nil
+        }
+
+        let payload: [String: JSONValue] = [
+            "source_app": .string("ETOS LLM Studio"),
+            "action": .string("official_import"),
+            "requested_at": .string(ISO8601DateFormatter().string(from: Date()))
+        ]
+
+        var components = URLComponents()
+        components.scheme = "shortcuts"
+        components.host = "x-callback-url"
+        components.path = "/run-shortcut"
+        components.queryItems = [
+            URLQueryItem(name: "name", value: officialImportShortcutName),
+            URLQueryItem(name: "input", value: "text"),
+            URLQueryItem(name: "text", value: JSONValue.dictionary(payload).prettyPrintedCompact()),
             URLQueryItem(name: "x-success", value: successURL),
             URLQueryItem(name: "x-error", value: errorURL)
         ]

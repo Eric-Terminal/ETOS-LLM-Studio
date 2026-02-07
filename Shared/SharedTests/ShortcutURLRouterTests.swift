@@ -20,4 +20,12 @@ struct ShortcutURLRouterTests {
         let handled = await ShortcutURLRouter.shared.handleIncomingURL(url)
         #expect(handled == false)
     }
+
+    @MainActor
+    @Test("template status route is recognized")
+    func testTemplateStatusRoute() async {
+        let url = URL(string: "etosllmstudio://shortcuts/template-status?status=error&stage=run")!
+        let handled = await ShortcutURLRouter.shared.handleIncomingURL(url)
+        #expect(handled == true)
+    }
 }

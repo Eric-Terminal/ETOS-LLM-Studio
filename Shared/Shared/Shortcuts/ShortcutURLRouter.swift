@@ -29,6 +29,8 @@ public final class ShortcutURLRouter {
             return true
         case "/callback":
             return ShortcutToolManager.shared.handleCallbackURL(url)
+        case "/template-status":
+            return ShortcutToolManager.shared.handleOfficialTemplateStatusURL(url)
         default:
             return false
         }

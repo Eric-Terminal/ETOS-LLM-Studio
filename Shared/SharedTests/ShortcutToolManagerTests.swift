@@ -41,4 +41,16 @@ struct ShortcutToolManagerTests {
         #expect(alias.hasPrefix("shortcut_"))
         #expect(alias.contains("my") || alias.contains("My"))
     }
+
+    @MainActor
+    @Test("official import shortcut has default name and share URL")
+    func testOfficialImportDefaults() {
+        let manager = ShortcutToolManager.shared
+        let originalName = manager.officialImportShortcutName
+        defer { manager.officialImportShortcutName = originalName }
+
+        manager.officialImportShortcutName = ""
+        #expect(manager.officialImportShortcutName == ShortcutToolManager.officialImportShortcutDefaultName)
+        #expect(manager.officialImportShortcutShareURL.absoluteString == ShortcutToolManager.officialImportShortcutShareURLString)
+    }
 }

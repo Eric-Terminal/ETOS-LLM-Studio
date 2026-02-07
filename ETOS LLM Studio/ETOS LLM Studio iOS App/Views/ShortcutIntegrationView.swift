@@ -3,6 +3,7 @@ import Foundation
 import Shared
 
 struct ShortcutIntegrationView: View {
+    @Environment(\.openURL) private var openURL
     @StateObject private var manager = ShortcutToolManager.shared
     @State private var localError: String?
     @State private var editingTool: ShortcutToolDefinition?
@@ -21,6 +22,57 @@ struct ShortcutIntegrationView: View {
                 Text("深度导入：包含 iCloud 分享链接，App 会尝试解析流程并生成描述；失败会自动降级为仅链接，不影响导入。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("官方导入快捷指令") {
+                Text("内置官方快捷指令，可一键下载并触发导入流程。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    openURL(manager.officialImportShortcutShareURL)
+                } label: {
+                    Label("下载官方导入快捷指令", systemImage: "square.and.arrow.down")
+                }
+
+                Button {
+                    Task {
+                        let succeeded = await manager.runOfficialImportShortcut()
+                        if !succeeded {
+                            localError = manager.lastErrorMessage
+                        }
+                    }
+                } label: {
+                    Label("检测并运行导入快捷指令", systemImage: "play.circle")
+                }
+
+                TextField(
+                    NSLocalizedString("导入快捷指令名称", comment: ""),
+                    text: Binding(
+                        get: { manager.officialImportShortcutName },
+                        set: { manager.officialImportShortcutName = $0 }
+                    )
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                Text(
+                    String(
+                        format: NSLocalizedString("默认名称：%@（可按你的快捷指令名称修改）", comment: ""),
+                        ShortcutToolManager.officialImportShortcutDefaultName
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if let officialStatus = manager.lastOfficialTemplateStatusMessage,
+               !officialStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section("当前官方导入状态") {
+                    Text(officialStatus)
+                        .font(.footnote)
+                        .foregroundStyle((manager.lastOfficialTemplateRunSucceeded == false) ? .orange : .secondary)
+                }
             }
 
             Section("导入与执行设置") {
