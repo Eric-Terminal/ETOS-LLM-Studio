@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import MarkdownUI
+import Shared
 
 struct ETAdvancedMarkdownRenderer: View {
     let content: String
@@ -9,325 +10,263 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
 
-    private var processedContent: String {
-        guard enableAdvancedRenderer, enableMathRendering else {
-            return content
-        }
-        return ETMathSegmentParser.renderMath(in: content)
+    private var shouldUseMathEngine: Bool {
+        enableAdvancedRenderer
+            && enableMathRendering
+            && ETMathContentParser.containsMath(in: content)
     }
 
     var body: some View {
+        if shouldUseMathEngine {
+            ETMathAwareMarkdownView(
+                content: content,
+                enableMarkdown: enableMarkdown,
+                isOutgoing: isOutgoing
+            )
+        } else {
+            baseTextView(content)
+        }
+    }
+
+    @ViewBuilder
+    private func baseTextView(_ text: String) -> some View {
         if enableMarkdown {
-            Markdown(processedContent)
+            Markdown(text)
                 .markdownSoftBreakMode(.lineBreak)
                 .markdownTextStyle {
                     ForegroundColor(isOutgoing ? .white : .primary)
                 }
         } else {
-            Text(processedContent)
+            Text(text)
                 .foregroundStyle(isOutgoing ? Color.white : Color.primary)
         }
     }
 }
 
-private enum ETMathSegment {
-    case text(String)
-    case inlineMath(String)
-    case blockMath(String)
+private struct ETMathAwareMarkdownView: View {
+    let content: String
+    let enableMarkdown: Bool
+    let isOutgoing: Bool
+
+    private var textColor: Color {
+        isOutgoing ? .white : .primary
+    }
+
+    private var blocks: [ETMathRenderBlock] {
+        ETMathRenderBlock.build(from: ETMathContentParser.parseSegments(in: content))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .emptyLine:
+                    Color.clear.frame(height: 6)
+                case .blockMath(let latex):
+                    ScrollView(.horizontal) {
+                        ETMathView(
+                            latex: latex,
+                            displayMode: .block,
+                            style: ETMathStyle(fontSize: 20, textColor: textColor)
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 2)
+                    }
+                    .padding(.vertical, 2)
+                case .line(let parts):
+                    renderLine(parts)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func renderLine(_ parts: [ETInlineRenderPart]) -> some View {
+        if parts.contains(where: \.isMath) {
+            let tokens = ETInlineRenderToken.tokens(from: parts)
+            ETInlineMathFlowLayout(itemSpacing: 0, lineSpacing: 4) {
+                ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                    switch token {
+                    case .text(let text):
+                        Text(verbatim: text)
+                            .foregroundStyle(textColor)
+                            .fixedSize(horizontal: true, vertical: true)
+                    case .math(let latex):
+                        ETMathView(
+                            latex: latex,
+                            displayMode: .inline,
+                            style: ETMathStyle(fontSize: 17, textColor: textColor)
+                        )
+                        .fixedSize(horizontal: true, vertical: true)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            let text = parts.compactMap(\.textValue).joined()
+            if enableMarkdown {
+                Markdown(text)
+                    .markdownSoftBreakMode(.lineBreak)
+                    .markdownTextStyle {
+                        ForegroundColor(textColor)
+                    }
+            } else {
+                Text(text)
+                    .foregroundStyle(textColor)
+            }
+        }
+    }
 }
 
-private enum ETMathSegmentParser {
-    static func renderMath(in text: String) -> String {
-        let segments = parse(text)
-        var output = ""
-        output.reserveCapacity(text.count)
+private enum ETMathRenderBlock {
+    case line([ETInlineRenderPart])
+    case blockMath(String)
+    case emptyLine
+
+    static func build(from segments: [ETMathContentSegment]) -> [ETMathRenderBlock] {
+        var blocks: [ETMathRenderBlock] = []
+        var line: [ETInlineRenderPart] = []
+
+        func flushLine() {
+            guard !line.isEmpty else { return }
+            blocks.append(.line(line))
+            line.removeAll(keepingCapacity: true)
+        }
+
+        func appendText(_ text: String) {
+            let parts = text.split(separator: "\n", omittingEmptySubsequences: false)
+            for (index, part) in parts.enumerated() {
+                let value = String(part)
+                if !value.isEmpty {
+                    line.append(.text(value))
+                }
+                if index < parts.count - 1 {
+                    flushLine()
+                    if value.isEmpty {
+                        blocks.append(.emptyLine)
+                    }
+                }
+            }
+        }
 
         for segment in segments {
             switch segment {
-            case .text(let value):
-                output.append(value)
+            case .text(let text):
+                appendText(text)
             case .inlineMath(let latex):
-                output.append(ETLaTeXLiteRenderer.render(latex: latex, isBlock: false))
+                line.append(.math(latex))
             case .blockMath(let latex):
-                output.append("\n\n")
-                output.append(ETLaTeXLiteRenderer.render(latex: latex, isBlock: true))
-                output.append("\n\n")
+                flushLine()
+                blocks.append(.blockMath(latex))
+            @unknown default:
+                break
             }
         }
-        return output
+
+        flushLine()
+        return blocks
+    }
+}
+
+private enum ETInlineRenderPart {
+    case text(String)
+    case math(String)
+
+    var isMath: Bool {
+        if case .math = self { return true }
+        return false
     }
 
-    private static func parse(_ source: String) -> [ETMathSegment] {
-        var segments: [ETMathSegment] = []
-        var textBuffer = ""
-        var index = source.startIndex
-
-        func flushText() {
-            guard !textBuffer.isEmpty else { return }
-            segments.append(.text(textBuffer))
-            textBuffer.removeAll(keepingCapacity: true)
-        }
-
-        while index < source.endIndex {
-            if hasPrefix(source, at: index, prefix: "$$"),
-               let close = findDelimitedEnd(source, from: source.index(index, offsetBy: 2), endDelimiter: "$$") {
-                flushText()
-                let mathStart = source.index(index, offsetBy: 2)
-                let latex = String(source[mathStart..<close])
-                segments.append(.blockMath(latex))
-                index = source.index(close, offsetBy: 2)
-                continue
-            }
-
-            if hasPrefix(source, at: index, prefix: "\\["),
-               let close = findDelimitedEnd(source, from: source.index(index, offsetBy: 2), endDelimiter: "\\]") {
-                flushText()
-                let mathStart = source.index(index, offsetBy: 2)
-                let latex = String(source[mathStart..<close])
-                segments.append(.blockMath(latex))
-                index = source.index(close, offsetBy: 2)
-                continue
-            }
-
-            if hasPrefix(source, at: index, prefix: "\\("),
-               let close = findDelimitedEnd(source, from: source.index(index, offsetBy: 2), endDelimiter: "\\)") {
-                flushText()
-                let mathStart = source.index(index, offsetBy: 2)
-                let latex = String(source[mathStart..<close])
-                segments.append(.inlineMath(latex))
-                index = source.index(close, offsetBy: 2)
-                continue
-            }
-
-            if source[index] == "$",
-               !isEscaped(source, at: index),
-               !hasPrefix(source, at: index, prefix: "$$"),
-               let close = findInlineDollarEnd(source, from: source.index(after: index)) {
-                flushText()
-                let latex = String(source[source.index(after: index)..<close])
-                segments.append(.inlineMath(latex))
-                index = source.index(after: close)
-                continue
-            }
-
-            textBuffer.append(source[index])
-            index = source.index(after: index)
-        }
-
-        flushText()
-        return segments
-    }
-
-    private static func hasPrefix(_ source: String, at index: String.Index, prefix: String) -> Bool {
-        guard let end = source.index(index, offsetBy: prefix.count, limitedBy: source.endIndex) else {
-            return false
-        }
-        return source[index..<end] == prefix
-    }
-
-    private static func isEscaped(_ source: String, at index: String.Index) -> Bool {
-        guard index > source.startIndex else { return false }
-        let previous = source[source.index(before: index)]
-        return previous == "\\"
-    }
-
-    private static func findInlineDollarEnd(_ source: String, from index: String.Index) -> String.Index? {
-        var cursor = index
-        while cursor < source.endIndex {
-            if source[cursor] == "$",
-               !isEscaped(source, at: cursor),
-               !hasPrefix(source, at: cursor, prefix: "$$") {
-                return cursor
-            }
-            cursor = source.index(after: cursor)
-        }
-        return nil
-    }
-
-    private static func findDelimitedEnd(_ source: String, from index: String.Index, endDelimiter: String) -> String.Index? {
-        var cursor = index
-        while cursor < source.endIndex {
-            if hasPrefix(source, at: cursor, prefix: endDelimiter), !isEscaped(source, at: cursor) {
-                return cursor
-            }
-            cursor = source.index(after: cursor)
-        }
+    var textValue: String? {
+        if case .text(let value) = self { return value }
         return nil
     }
 }
 
-private enum ETLaTeXLiteRenderer {
-    private static let commandMap: [String: String] = [
-        "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\delta": "δ", "\\epsilon": "ϵ",
-        "\\varepsilon": "ε", "\\zeta": "ζ", "\\eta": "η", "\\theta": "θ", "\\vartheta": "ϑ",
-        "\\iota": "ι", "\\kappa": "κ", "\\lambda": "λ", "\\mu": "μ", "\\nu": "ν",
-        "\\xi": "ξ", "\\pi": "π", "\\varpi": "ϖ", "\\rho": "ρ", "\\varrho": "ϱ",
-        "\\sigma": "σ", "\\varsigma": "ς", "\\tau": "τ", "\\upsilon": "υ", "\\phi": "ϕ",
-        "\\varphi": "φ", "\\chi": "χ", "\\psi": "ψ", "\\omega": "ω",
-        "\\Gamma": "Γ", "\\Delta": "Δ", "\\Theta": "Θ", "\\Lambda": "Λ", "\\Xi": "Ξ",
-        "\\Pi": "Π", "\\Sigma": "Σ", "\\Phi": "Φ", "\\Psi": "Ψ", "\\Omega": "Ω",
-        "\\cdot": "·", "\\times": "×", "\\div": "÷", "\\pm": "±", "\\mp": "∓",
-        "\\neq": "≠", "\\leq": "≤", "\\geq": "≥", "\\approx": "≈", "\\equiv": "≡",
-        "\\to": "→", "\\leftarrow": "←", "\\rightarrow": "→", "\\leftrightarrow": "↔",
-        "\\infty": "∞", "\\partial": "∂", "\\nabla": "∇", "\\sum": "∑", "\\prod": "∏",
-        "\\int": "∫", "\\oint": "∮", "\\in": "∈", "\\notin": "∉", "\\subset": "⊂",
-        "\\subseteq": "⊆", "\\supset": "⊃", "\\supseteq": "⊇", "\\cup": "∪", "\\cap": "∩",
-        "\\forall": "∀", "\\exists": "∃", "\\neg": "¬", "\\land": "∧", "\\lor": "∨",
-        "\\Rightarrow": "⇒", "\\Leftarrow": "⇐", "\\Leftrightarrow": "⇔"
-    ]
+private enum ETInlineRenderToken {
+    case text(String)
+    case math(String)
 
-    private static let superscriptMap: [Character: String] = [
-        "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
-        "+": "⁺", "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾",
-        "n": "ⁿ", "i": "ⁱ"
-    ]
-
-    private static let subscriptMap: [Character: String] = [
-        "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
-        "+": "₊", "-": "₋", "=": "₌", "(": "₍", ")": "₎",
-        "a": "ₐ", "e": "ₑ", "h": "ₕ", "i": "ᵢ", "j": "ⱼ", "k": "ₖ", "l": "ₗ",
-        "m": "ₘ", "n": "ₙ", "o": "ₒ", "p": "ₚ", "r": "ᵣ", "s": "ₛ", "t": "ₜ", "u": "ᵤ", "v": "ᵥ", "x": "ₓ"
-    ]
-
-    static func render(latex: String, isBlock: Bool) -> String {
-        var output = latex
-            .replacingOccurrences(of: "\r\n", with: " ")
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !output.isEmpty else { return "" }
-
-        output = replaceFractions(in: output)
-        output = replaceSquareRoots(in: output)
-        output = unwrapTextCommands(in: output)
-        output = replaceCommands(in: output)
-        output = replaceScripts(in: output)
-
-        output = output
-            .replacingOccurrences(of: "\\left", with: "")
-            .replacingOccurrences(of: "\\right", with: "")
-            .replacingOccurrences(of: "\\,", with: " ")
-            .replacingOccurrences(of: "\\;", with: " ")
-            .replacingOccurrences(of: "\\:", with: " ")
-            .replacingOccurrences(of: "\\!", with: "")
-            .replacingOccurrences(of: "{", with: "")
-            .replacingOccurrences(of: "}", with: "")
-            .replacingOccurrences(of: "\\", with: "")
-
-        output = collapseWhitespaces(in: output)
-        return isBlock ? output : output
-    }
-
-    private static func replaceFractions(in input: String) -> String {
-        replacePattern(in: input, pattern: #"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}"#) { groups in
-            guard groups.count == 3 else { return groups.first ?? "" }
-            let numerator = render(latex: groups[1], isBlock: false)
-            let denominator = render(latex: groups[2], isBlock: false)
-            return "\(numerator)⁄\(denominator)"
-        }
-    }
-
-    private static func replaceSquareRoots(in input: String) -> String {
-        replacePattern(in: input, pattern: #"\\sqrt\s*\{([^{}]+)\}"#) { groups in
-            guard groups.count == 2 else { return groups.first ?? "" }
-            return "√\(render(latex: groups[1], isBlock: false))"
-        }
-    }
-
-    private static func unwrapTextCommands(in input: String) -> String {
-        replacePattern(in: input, pattern: #"\\(?:text|mathrm|operatorname)\s*\{([^{}]+)\}"#) { groups in
-            guard groups.count == 2 else { return groups.first ?? "" }
-            return groups[1]
-        }
-    }
-
-    private static func replaceScripts(in input: String) -> String {
-        var output = input
-
-        output = replacePattern(in: output, pattern: #"([A-Za-z0-9)\]])\^\{([^{}]+)\}"#) { groups in
-            guard groups.count == 3 else { return groups.first ?? "" }
-            return "\(groups[1])\(toSuperscript(groups[2]))"
-        }
-
-        output = replacePattern(in: output, pattern: #"([A-Za-z0-9)\]])\^([A-Za-z0-9+\-=()])"#) { groups in
-            guard groups.count == 3 else { return groups.first ?? "" }
-            return "\(groups[1])\(toSuperscript(groups[2]))"
-        }
-
-        output = replacePattern(in: output, pattern: #"([A-Za-z0-9)\]])_\{([^{}]+)\}"#) { groups in
-            guard groups.count == 3 else { return groups.first ?? "" }
-            return "\(groups[1])\(toSubscript(groups[2]))"
-        }
-
-        output = replacePattern(in: output, pattern: #"([A-Za-z0-9)\]])_([A-Za-z0-9+\-=()])"#) { groups in
-            guard groups.count == 3 else { return groups.first ?? "" }
-            return "\(groups[1])\(toSubscript(groups[2]))"
-        }
-
-        return output
-    }
-
-    private static func replaceCommands(in input: String) -> String {
-        var output = input
-        for (command, replacement) in commandMap {
-            output = output.replacingOccurrences(of: command, with: replacement)
-        }
-        return output
-    }
-
-    private static func toSuperscript(_ text: String) -> String {
-        var output = ""
-        for character in text {
-            output.append(superscriptMap[character] ?? String(character))
-        }
-        return output
-    }
-
-    private static func toSubscript(_ text: String) -> String {
-        var output = ""
-        for character in text {
-            output.append(subscriptMap[character] ?? String(character))
-        }
-        return output
-    }
-
-    private static func collapseWhitespaces(in input: String) -> String {
-        input.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-    }
-
-    private static func replacePattern(
-        in input: String,
-        pattern: String,
-        transform: ([String]) -> String
-    ) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
-            return input
-        }
-
-        var result = input
-        while true {
-            let nsrange = NSRange(result.startIndex..<result.endIndex, in: result)
-            guard let match = regex.firstMatch(in: result, options: [], range: nsrange) else {
-                break
-            }
-
-            let nsResult = result as NSString
-            var groups: [String] = []
-            for idx in 0..<match.numberOfRanges {
-                let range = match.range(at: idx)
-                if range.location == NSNotFound {
-                    groups.append("")
-                } else {
-                    groups.append(nsResult.substring(with: range))
+    static func tokens(from parts: [ETInlineRenderPart]) -> [ETInlineRenderToken] {
+        var tokens: [ETInlineRenderToken] = []
+        for part in parts {
+            switch part {
+            case .math(let latex):
+                tokens.append(.math(latex))
+            case .text(let text):
+                for character in text {
+                    tokens.append(.text(String(character)))
                 }
             }
-
-            let replacement = transform(groups)
-            guard let swiftRange = Range(match.range, in: result) else {
-                break
-            }
-            result.replaceSubrange(swiftRange, with: replacement)
         }
-        return result
+        return tokens
+    }
+}
+
+private struct ETInlineMathFlowLayout: Layout {
+    let itemSpacing: CGFloat
+    let lineSpacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
+        guard !subviews.isEmpty else { return .zero }
+
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var maxLineWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                maxLineWidth = max(maxLineWidth, x - itemSpacing)
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+
+            x += size.width + itemSpacing
+            lineHeight = max(lineHeight, size.height)
+        }
+
+        maxLineWidth = max(maxLineWidth, x - itemSpacing)
+        y += lineHeight
+
+        let measuredWidth = proposal.width ?? maxLineWidth
+        return CGSize(width: measuredWidth, height: y)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let maxWidth = bounds.width > 0 ? bounds.width : .greatestFiniteMagnitude
+
+        var x = bounds.minX
+        var y = bounds.minY
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.minX + maxWidth {
+                x = bounds.minX
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+            x += size.width + itemSpacing
+            lineHeight = max(lineHeight, size.height)
+        }
     }
 }

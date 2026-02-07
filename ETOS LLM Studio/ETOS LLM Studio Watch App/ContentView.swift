@@ -294,9 +294,7 @@ struct ContentView: View {
     }
 
     private func messageContainsMath(_ text: String) -> Bool {
-        if text.contains("$$") { return true }
-        if text.contains("\\(") || text.contains("\\[") { return true }
-        return text.contains("$")
+        ETMathContentParser.containsMath(in: text)
     }
 
     private func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
