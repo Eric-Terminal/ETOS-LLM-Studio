@@ -24,6 +24,11 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
             ContentView()
                 .environmentObject(viewModel)
                 .environmentObject(syncManager)
+                .onOpenURL { url in
+                    Task {
+                        _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
+                    }
+                }
                 .onAppear {
                     // 启动时自动同步（静默模式）
                     syncManager.performAutoSyncIfEnabled()

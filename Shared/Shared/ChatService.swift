@@ -1002,6 +1002,8 @@ public class ChatService {
         }
         let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
         resolvedTools.append(contentsOf: mcpTools)
+        let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
+        resolvedTools.append(contentsOf: shortcutTools)
         let tools = resolvedTools.isEmpty ? nil : resolvedTools
             await self.executeMessageRequest(
                 messages: messages,
@@ -1352,6 +1354,39 @@ public class ChatService {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
                     displayResult = content
                     logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
+                }
+            }
+
+        case _ where ShortcutToolManager.isShortcutToolName(toolCall.toolName):
+            let toolLabel = await ShortcutToolManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
+            let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
+                toolName: toolCall.toolName,
+                displayName: toolLabel,
+                arguments: toolCall.arguments
+            )
+            switch permissionDecision {
+            case .deny:
+                content = "\(toolLabel) 调用已被用户拒绝。"
+                displayResult = content
+                logger.info("  - 快捷指令工具调用被用户拒绝: \(toolCall.toolName)")
+            case .supplement:
+                content = "\(toolLabel) 调用已被用户拒绝。"
+                displayResult = content
+                shouldAwaitUserSupplement = true
+                logger.info("  - 快捷指令工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
+            case .allowOnce, .allowForTool, .allowAll:
+                do {
+                    let result = try await ShortcutToolManager.shared.executeToolFromChat(
+                        toolName: toolCall.toolName,
+                        argumentsJSON: toolCall.arguments
+                    )
+                    content = result
+                    displayResult = result
+                    logger.info("  - 快捷指令工具调用成功: \(toolCall.toolName)")
+                } catch {
+                    content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                    displayResult = content
+                    logger.error("  - 快捷指令工具调用失败: \(error.localizedDescription)")
                 }
             }
             
@@ -1872,12 +1907,14 @@ public class ChatService {
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
             var resolvedTools: [InternalToolDefinition] = []
-            if enableMemory && enableMemoryWrite {
-                resolvedTools.append(self.saveMemoryTool)
-            }
-            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: mcpTools)
-            let tools = resolvedTools.isEmpty ? nil : resolvedTools
+        if enableMemory && enableMemoryWrite {
+            resolvedTools.append(self.saveMemoryTool)
+        }
+        let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+        resolvedTools.append(contentsOf: mcpTools)
+        let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
+        resolvedTools.append(contentsOf: shortcutTools)
+        let tools = resolvedTools.isEmpty ? nil : resolvedTools
             
             await self.executeMessageRequest(
                 messages: messages,
@@ -3412,6 +3449,67 @@ public class ChatService {
             }
         }
         return collected.reversed()
+    }
+
+    public func generateShortcutToolDescription(
+        toolName: String,
+        metadata: [String: JSONValue],
+        source: String?
+    ) async -> String? {
+        guard let runnableModel = selectedModelSubject.value,
+              let adapter = adapters[runnableModel.provider.apiFormat] else {
+            return nil
+        }
+
+        let metadataText: String = {
+            guard !metadata.isEmpty else { return "{}" }
+            return JSONValue.dictionary(metadata).prettyPrintedCompact()
+        }()
+
+        let sourceText = source?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? (source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+            : NSLocalizedString("无", comment: "")
+
+        let promptTemplate = NSLocalizedString("""
+        你是一个 iOS 自动化分析助手。请根据以下快捷指令信息，生成一段“给 AI 工具调用用”的中文描述。
+
+        要求：
+        - 40~120 字；
+        - 重点说明这个快捷指令能做什么、适合何时调用、输入输出大致是什么；
+        - 避免空话，不要出现免责声明；
+        - 只返回描述正文。
+
+        快捷指令名称：%@
+        元数据：%@
+        源码/流程摘要：%@
+        """, comment: "Prompt for generating shortcut tool description.")
+        let prompt = String(format: promptTemplate, toolName, metadataText, sourceText)
+
+        let requestMessages = [ChatMessage(role: .user, content: prompt)]
+        let payload: [String: Any] = ["temperature": 0.2, "stream": false]
+        guard let request = adapter.buildChatRequest(
+            for: runnableModel,
+            commonPayload: payload,
+            messages: requestMessages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ) else {
+            return nil
+        }
+
+        do {
+            let data = try await fetchData(for: request)
+            let response = try adapter.parseResponse(data: data)
+            let text = response.content
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'”’"))
+            return text.isEmpty ? nil : text
+        } catch {
+            logger.warning("生成快捷指令描述失败: \(error.localizedDescription)")
+            return nil
+        }
     }
     
     private func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage) async {

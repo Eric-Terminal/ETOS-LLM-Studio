@@ -613,6 +613,9 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				"INFOPLIST_KEY_NSBonjourServices[sdk=*]" = "_http._tcp _ws._tcp";
@@ -657,6 +660,9 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				"INFOPLIST_KEY_NSBonjourServices[sdk=*]" = "_http._tcp _ws._tcp";
@@ -743,6 +749,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -783,6 +792,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
 				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
