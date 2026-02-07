@@ -208,6 +208,8 @@ struct ContentView: View {
             enableMarkdown: viewModel.enableMarkdown,
             enableBackground: viewModel.enableBackground,
             enableLiquidGlass: isLiquidGlassEnabled,
+            enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
+            enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
             mergeWithPrevious: mergeWithPrevious,
             mergeWithNext: mergeWithNext
         )
@@ -241,6 +243,11 @@ struct ContentView: View {
                     },
                     onShowFullError: { content in
                         fullErrorContent = content
+                    },
+                    supportsMathRenderToggle: viewModel.enableAdvancedRenderer && messageContainsMath(message.content),
+                    isMathRenderingEnabled: viewModel.isMathRenderingEnabled(for: message.id),
+                    onToggleMathRendering: {
+                        viewModel.toggleMathRendering(for: message.id)
                     },
                     messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                     totalMessages: viewModel.allMessagesForSession.count
@@ -284,6 +291,10 @@ struct ContentView: View {
     private func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+    }
+
+    private func messageContainsMath(_ text: String) -> Bool {
+        ETMathContentParser.containsMath(in: text)
     }
 
     private func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {

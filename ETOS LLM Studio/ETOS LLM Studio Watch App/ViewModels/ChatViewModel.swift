@@ -64,10 +64,18 @@ class ChatViewModel: ObservableObject {
     @Published private(set) var latestAssistantMessageID: UUID?
     @Published private(set) var toolCallResultIDs: Set<String> = []
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
+    @Published var mathRenderOverrides: Set<UUID> = []
     
     // MARK: - 用户偏好设置 (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
+    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false {
+        didSet {
+            if !enableAdvancedRenderer {
+                mathRenderOverrides.removeAll()
+            }
+        }
+    }
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }
@@ -117,6 +125,19 @@ class ChatViewModel: ObservableObject {
         providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0) }
         }
+    }
+
+    func toggleMathRendering(for messageID: UUID) {
+        if mathRenderOverrides.contains(messageID) {
+            mathRenderOverrides.remove(messageID)
+        } else {
+            mathRenderOverrides.insert(messageID)
+        }
+    }
+
+    func isMathRenderingEnabled(for messageID: UUID) -> Bool {
+        guard enableAdvancedRenderer else { return false }
+        return mathRenderOverrides.contains(messageID)
     }
     
     var historyLoadChunkSize: Int {

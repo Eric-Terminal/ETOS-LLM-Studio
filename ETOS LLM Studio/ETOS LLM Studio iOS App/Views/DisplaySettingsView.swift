@@ -10,6 +10,7 @@ struct DisplaySettingsView: View {
     @Binding var currentBackgroundImage: String
     @Binding var backgroundContentMode: String
     @Binding var enableLiquidGlass: Bool
+    @Binding var enableAdvancedRenderer: Bool
     
     let allBackgrounds: [String]
     
@@ -17,6 +18,12 @@ struct DisplaySettingsView: View {
         Form {
             Section("内容表现") {
                 Toggle("渲染 Markdown", isOn: $enableMarkdown)
+                if enableMarkdown {
+                    Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
+                    Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if #available(iOS 26.0, *) {
                     Toggle("液态玻璃效果", isOn: $enableLiquidGlass)
                 }
@@ -52,5 +59,10 @@ struct DisplaySettingsView: View {
             }
         }
         .navigationTitle("显示设置")
+        .onChange(of: enableMarkdown) { _, isEnabled in
+            if !isEnabled, enableAdvancedRenderer {
+                enableAdvancedRenderer = false
+            }
+        }
     }
 }

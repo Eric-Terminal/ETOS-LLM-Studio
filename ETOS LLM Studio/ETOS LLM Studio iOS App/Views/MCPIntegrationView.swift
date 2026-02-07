@@ -228,7 +228,7 @@ struct MCPIntegrationView: View {
                         .bold()
                     Picker("目标服务器", selection: $selectedToolServerID) {
                         Text("请选择").tag(Optional<UUID>.none)
-                        ForEach(manager.connectedServers()) { server in
+                        ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
                             Text(server.displayName).tag(Optional(server.id))
                         }
                     }
@@ -253,7 +253,7 @@ struct MCPIntegrationView: View {
                         .bold()
                     Picker("目标服务器", selection: $selectedResourceServerID) {
                         Text("请选择").tag(Optional<UUID>.none)
-                        ForEach(manager.connectedServers()) { server in
+                        ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
                             Text(server.displayName).tag(Optional(server.id))
                         }
                     }

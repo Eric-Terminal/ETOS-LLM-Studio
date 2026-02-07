@@ -126,6 +126,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if UserDefaults.standard.bool(forKey: "sync.options.memories") { options.insert(.memories) }
         if UserDefaults.standard.bool(forKey: "sync.options.mcpServers") { options.insert(.mcpServers) }
         if UserDefaults.standard.bool(forKey: "sync.options.imageFiles") { options.insert(.imageFiles) }
+        if UserDefaults.standard.bool(forKey: "sync.options.shortcutTools") { options.insert(.shortcutTools) }
         return options
     }
     
@@ -161,6 +162,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedMemories > 0 { parts.append("记忆 +\(summary.importedMemories)") }
         if summary.importedMCPServers > 0 { parts.append("MCP +\(summary.importedMCPServers)") }
         if summary.importedImageFiles > 0 { parts.append("图片 +\(summary.importedImageFiles)") }
+        if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }
         return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
     }
     
@@ -301,6 +303,11 @@ extension WatchSyncManager: WCSessionDelegate {
         didReceiveMessage message: [String : Any],
         replyHandler: @escaping ([String : Any]) -> Void
     ) {
+        #if canImport(WatchConnectivity)
+        if ShortcutExecutionRelay.shared.handleIncomingMessage(message, replyHandler: replyHandler) {
+            return
+        }
+        #endif
         // 保留消息处理以兼容旧版本
         replyHandler([:])
     }

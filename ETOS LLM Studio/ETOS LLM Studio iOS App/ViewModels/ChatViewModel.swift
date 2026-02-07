@@ -64,6 +64,7 @@ final class ChatViewModel: ObservableObject {
     // MARK: - User Preferences (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
+    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }

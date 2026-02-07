@@ -121,6 +121,7 @@ public final class MCPManager: ObservableObject {
     private var routedTools: [String: RoutedTool] = [:]
     private var routedPrompts: [String: RoutedPrompt] = [:]
     private var debugBusyCount = 0
+    private var inFlightConnections: [UUID: Task<MCPClient, Error>] = [:]
     private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     private var autoConnectRetryAttempts: [UUID: Int] = [:]
     private let autoConnectMaxRetries = 5
@@ -139,6 +140,11 @@ public final class MCPManager: ObservableObject {
         let removedIDs = Set(autoConnectRetryTasks.keys).subtracting(serverIDs)
         for serverID in removedIDs {
             cancelAutoConnectRetry(for: serverID, resetAttempts: true)
+        }
+        let removedConnectionTaskIDs = Set(inFlightConnections.keys).subtracting(serverIDs)
+        for serverID in removedConnectionTaskIDs {
+            inFlightConnections[serverID]?.cancel()
+            inFlightConnections[serverID] = nil
         }
 
         var newStatuses: [UUID: MCPServerStatus] = serverStatuses.filter { serverIDs.contains($0.key) }
@@ -160,6 +166,7 @@ public final class MCPManager: ObservableObject {
         }
         serverStatuses = newStatuses
         clients = clients.filter { serverIDs.contains($0.key) }
+        streamingTransports = streamingTransports.filter { serverIDs.contains($0.key) }
 
         rebuildAggregates()
         updateBusyFlag()
@@ -172,8 +179,12 @@ public final class MCPManager: ObservableObject {
 
     public func delete(server: MCPServerConfiguration) {
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+        inFlightConnections[server.id]?.cancel()
+        inFlightConnections[server.id] = nil
         MCPServerStore.delete(server)
         clients[server.id] = nil
+        streamingTransports[server.id]?.disconnect()
+        streamingTransports[server.id] = nil
         serverStatuses[server.id] = nil
         reloadServers()
     }
@@ -193,84 +204,17 @@ public final class MCPManager: ObservableObject {
     }
 
     public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false, retryOnFailure: Bool = false) {
-        if retryOnFailure {
-            cancelAutoConnectRetry(for: server.id, resetAttempts: false)
-        } else {
-            cancelAutoConnectRetry(for: server.id, resetAttempts: true)
-        }
-        mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
-        let cachedMetadata = MCPServerStore.loadMetadata(for: server.id)
-        let shouldRefreshMetadata = cachedMetadata == nil
-        updateStatus(for: server.id) {
-            $0.connectionState = .connecting
-            $0.isBusy = true
-        }
-
-        let transport = server.makeTransport()
-        let client = MCPClient(transport: transport)
-        clients[server.id] = client
-
-        // 设置流式传输（如果支持）
-        if let streamingTransport = transport as? MCPStreamingTransportProtocol {
-            streamingTransport.notificationDelegate = self
-            streamingTransport.samplingHandler = samplingHandler
-            streamingTransports[server.id] = streamingTransport
-        }
-
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             do {
-                let info = try await client.initialize()
-                mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
-                await MainActor.run {
-                    let shouldSelectForChat = !preserveSelection && !self.status(for: server).isSelectedForChat
-                    self.updateStatus(for: server.id) {
-                        $0.connectionState = .ready
-                        $0.info = info
-                        $0.isBusy = shouldRefreshMetadata
-                        if shouldSelectForChat {
-                            $0.isSelectedForChat = true
-                        }
-                        if let cache = cachedMetadata,
-                           $0.tools.isEmpty && $0.resources.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
-                            $0.tools = cache.tools
-                            $0.resources = cache.resources
-                            $0.prompts = cache.prompts
-                            $0.roots = cache.roots
-                        }
-                    }
-                    if shouldSelectForChat {
-                        self.persistSelection(for: server.id, isSelected: true)
-                    }
-                }
-                if let cache = cachedMetadata, cache.info != info {
-                    var updatedCache = cache
-                    updatedCache.info = info
-                    MCPServerStore.saveMetadata(updatedCache, for: server.id)
-                }
-                await MainActor.run {
-                    self.cancelAutoConnectRetry(for: server.id, resetAttempts: true)
-                }
-                if shouldRefreshMetadata {
-                    await refreshMetadata(for: server.id, client: client, serverInfo: info)
-                }
+                _ = try await self.ensureClientReady(
+                    for: server,
+                    preserveSelection: preserveSelection,
+                    retryOnFailure: retryOnFailure,
+                    refreshMetadataIfCacheMissing: true
+                )
             } catch {
-                mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
-                await MainActor.run {
-                    self.updateStatus(for: server.id) {
-                        $0.connectionState = .failed(reason: error.localizedDescription)
-                        $0.isBusy = false
-                    }
-                    self.lastOperationError = error.localizedDescription
-                    self.lastOperationOutput = nil
-                    self.clients[server.id] = nil
-                    self.streamingTransports[server.id]?.disconnect()
-                    self.streamingTransports[server.id] = nil
-                }
-                await MainActor.run {
-                    if retryOnFailure, server.isSelectedForChat {
-                        self.scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
-                    }
-                }
+                // 连接失败状态已在 ensureClientReady 内统一处理
             }
         }
     }
@@ -278,6 +222,8 @@ public final class MCPManager: ObservableObject {
     public func disconnect(server: MCPServerConfiguration) {
         mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+        inFlightConnections[server.id]?.cancel()
+        inFlightConnections[server.id] = nil
         clients[server.id] = nil
         streamingTransports[server.id]?.disconnect()
         streamingTransports[server.id] = nil
@@ -289,6 +235,136 @@ public final class MCPManager: ObservableObject {
             $0.prompts = []
             $0.roots = []
             $0.isBusy = false
+        }
+    }
+
+    private func ensureClientReady(
+        for server: MCPServerConfiguration,
+        preserveSelection: Bool = true,
+        retryOnFailure: Bool = false,
+        refreshMetadataIfCacheMissing: Bool = false
+    ) async throws -> MCPClient {
+        if let client = clients[server.id], case .ready = status(for: server).connectionState {
+            return client
+        }
+
+        if let task = inFlightConnections[server.id] {
+            return try await task.value
+        }
+
+        let task = Task<MCPClient, Error> { [weak self] in
+            guard let self else { throw CancellationError() }
+            return try await self.performConnection(
+                to: server,
+                preserveSelection: preserveSelection,
+                retryOnFailure: retryOnFailure,
+                refreshMetadataIfCacheMissing: refreshMetadataIfCacheMissing
+            )
+        }
+        inFlightConnections[server.id] = task
+
+        do {
+            let client = try await task.value
+            inFlightConnections[server.id] = nil
+            return client
+        } catch {
+            inFlightConnections[server.id] = nil
+            throw error
+        }
+    }
+
+    private func ensureClientReady(serverID: UUID, refreshMetadataIfCacheMissing: Bool = false) async throws -> MCPClient {
+        guard let server = servers.first(where: { $0.id == serverID }) else {
+            throw MCPClientError.notConnected
+        }
+        return try await ensureClientReady(
+            for: server,
+            preserveSelection: true,
+            retryOnFailure: false,
+            refreshMetadataIfCacheMissing: refreshMetadataIfCacheMissing
+        )
+    }
+
+    private func performConnection(
+        to server: MCPServerConfiguration,
+        preserveSelection: Bool,
+        retryOnFailure: Bool,
+        refreshMetadataIfCacheMissing: Bool
+    ) async throws -> MCPClient {
+        if retryOnFailure {
+            cancelAutoConnectRetry(for: server.id, resetAttempts: false)
+        } else {
+            cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+        }
+        mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
+        let cachedMetadata = MCPServerStore.loadMetadata(for: server.id)
+        let shouldRefreshMetadata = refreshMetadataIfCacheMissing && cachedMetadata == nil
+        updateStatus(for: server.id) {
+            $0.connectionState = .connecting
+            $0.isBusy = true
+        }
+
+        let transport = server.makeTransport()
+        let client = MCPClient(transport: transport)
+        clients[server.id] = client
+
+        if let streamingTransport = transport as? MCPStreamingTransportProtocol {
+            streamingTransport.notificationDelegate = self
+            streamingTransport.samplingHandler = samplingHandler
+            streamingTransports[server.id] = streamingTransport
+        }
+
+        do {
+            let info = try await client.initialize()
+            mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
+
+            let shouldSelectForChat = !preserveSelection && !status(for: server).isSelectedForChat
+            updateStatus(for: server.id) {
+                $0.connectionState = .ready
+                $0.info = info
+                $0.isBusy = shouldRefreshMetadata
+                if shouldSelectForChat {
+                    $0.isSelectedForChat = true
+                }
+                if let cache = cachedMetadata,
+                   $0.tools.isEmpty && $0.resources.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
+                    $0.tools = cache.tools
+                    $0.resources = cache.resources
+                    $0.prompts = cache.prompts
+                    $0.roots = cache.roots
+                }
+            }
+            if shouldSelectForChat {
+                persistSelection(for: server.id, isSelected: true)
+            }
+
+            if let cache = cachedMetadata, cache.info != info {
+                var updatedCache = cache
+                updatedCache.info = info
+                MCPServerStore.saveMetadata(updatedCache, for: server.id)
+            }
+            cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+
+            if shouldRefreshMetadata {
+                await refreshMetadata(for: server.id, client: client, serverInfo: info)
+            }
+
+            return client
+        } catch {
+            mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            updateStatus(for: server.id) {
+                $0.connectionState = .failed(reason: error.localizedDescription)
+                $0.isBusy = false
+            }
+            lastOperationError = error.localizedDescription
+            lastOperationOutput = nil
+            clients[server.id] = nil
+            streamingTransports[server.id]?.disconnect()
+            streamingTransports[server.id] = nil
+            if retryOnFailure, server.isSelectedForChat {
+                scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
+            }
+            throw error
         }
     }
 
@@ -462,17 +538,13 @@ public final class MCPManager: ObservableObject {
     // MARK: - Debug Helpers
 
     public func executeTool(on serverID: UUID, toolId: String, inputs: [String: JSONValue]) {
-        guard let client = clients[serverID] else {
-            lastOperationError = "服务器未连接。"
-            lastOperationOutput = nil
-            return
-        }
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
 
         Task {
             do {
+                let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 let result = try await client.executeTool(toolId: toolId, inputs: inputs)
                 await MainActor.run {
                     self.lastOperationOutput = result.prettyPrinted()
@@ -488,17 +560,13 @@ public final class MCPManager: ObservableObject {
     }
 
     public func readResource(on serverID: UUID, resourceId: String, query: [String: JSONValue]?) {
-        guard let client = clients[serverID] else {
-            lastOperationError = "服务器未连接。"
-            lastOperationOutput = nil
-            return
-        }
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
 
         Task {
             do {
+                let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 let result = try await client.readResource(resourceId: resourceId, query: query)
                 await MainActor.run {
                     self.lastOperationOutput = result.prettyPrinted()
@@ -516,17 +584,13 @@ public final class MCPManager: ObservableObject {
     // MARK: - Prompts
 
     public func getPrompt(on serverID: UUID, name: String, arguments: [String: String]?) {
-        guard let client = clients[serverID] else {
-            lastOperationError = "服务器未连接。"
-            lastOperationOutput = nil
-            return
-        }
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
 
         Task {
             do {
+                let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 let result = try await client.getPrompt(name: name, arguments: arguments)
                 await MainActor.run {
                     self.lastOperationOutput = self.formatPromptResult(result)
@@ -545,9 +609,7 @@ public final class MCPManager: ObservableObject {
         guard let routed = routedPrompts[promptName] else {
             throw MCPChatBridgeError.unknownPrompt
         }
-        guard let client = clients[routed.server.id], case .ready = status(for: routed.server).connectionState else {
-            throw MCPClientError.notConnected
-        }
+        let client = try await ensureClientReady(serverID: routed.server.id, refreshMetadataIfCacheMissing: false)
         return try await client.getPrompt(name: routed.prompt.name, arguments: arguments)
     }
 
@@ -577,13 +639,9 @@ public final class MCPManager: ObservableObject {
     // MARK: - Logging
 
     public func setLogLevel(on serverID: UUID, level: MCPLogLevel) {
-        guard let client = clients[serverID] else {
-            lastOperationError = "服务器未连接。"
-            return
-        }
-        
         Task {
             do {
+                let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 try await client.setLogLevel(level)
                 await MainActor.run {
                     self.updateStatus(for: serverID) {
@@ -624,9 +682,7 @@ public final class MCPManager: ObservableObject {
         guard let routed = routedTools[toolName] else {
             throw MCPChatBridgeError.unknownTool
         }
-        guard let client = clients[routed.server.id], case .ready = status(for: routed.server).connectionState else {
-            throw MCPClientError.notConnected
-        }
+        let client = try await ensureClientReady(serverID: routed.server.id, refreshMetadataIfCacheMissing: false)
         let inputs = try decodeJSONDictionary(from: argumentsJSON)
         let result = try await client.executeTool(toolId: routed.tool.toolId, inputs: inputs)
         return result.prettyPrinted()
@@ -666,8 +722,7 @@ public final class MCPManager: ObservableObject {
     public func selectedServers() -> [MCPServerConfiguration] {
         servers.filter {
             guard let status = serverStatuses[$0.id], status.isSelectedForChat else { return false }
-            if case .ready = status.connectionState { return true }
-            return false
+            return true
         }
     }
 
@@ -695,9 +750,16 @@ public final class MCPManager: ObservableObject {
         var newPromptRouting: [String: RoutedPrompt] = [:]
 
         for server in servers {
-            guard let status = serverStatuses[server.id],
-                  status.isSelectedForChat,
-                  case .ready = status.connectionState else { continue }
+            guard let status = serverStatuses[server.id], status.isSelectedForChat else { continue }
+            let hasMetadataCache = !status.tools.isEmpty || !status.resources.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty
+            switch status.connectionState {
+            case .ready:
+                break
+            case .idle, .connecting, .failed:
+                guard hasMetadataCache else { continue }
+            @unknown default:
+                continue
+            }
 
             for tool in status.tools {
                 guard server.isToolEnabled(tool.toolId) else { continue }

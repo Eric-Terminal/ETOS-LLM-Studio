@@ -28,6 +28,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let mcpServers = SyncOptions(rawValue: 1 << 4)
     public static let audioFiles = SyncOptions(rawValue: 1 << 5)  // 音频文件同步选项
     public static let imageFiles = SyncOptions(rawValue: 1 << 6)  // 图片文件同步选项
+    public static let shortcutTools = SyncOptions(rawValue: 1 << 7) // 快捷指令工具同步选项
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -102,9 +103,10 @@ public struct SyncPackage: Codable {
     public var mcpServers: [MCPServerConfiguration]
     public var audioFiles: [SyncedAudio]
     public var imageFiles: [SyncedImage]
+    public var shortcutTools: [ShortcutToolDefinition]
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools
     }
     
     public init(
@@ -115,7 +117,8 @@ public struct SyncPackage: Codable {
         memories: [MemoryItem] = [],
         mcpServers: [MCPServerConfiguration] = [],
         audioFiles: [SyncedAudio] = [],
-        imageFiles: [SyncedImage] = []
+        imageFiles: [SyncedImage] = [],
+        shortcutTools: [ShortcutToolDefinition] = []
     ) {
         self.options = options
         self.providers = providers
@@ -125,6 +128,7 @@ public struct SyncPackage: Codable {
         self.mcpServers = mcpServers
         self.audioFiles = audioFiles
         self.imageFiles = imageFiles
+        self.shortcutTools = shortcutTools
     }
     
     public init(from decoder: Decoder) throws {
@@ -137,6 +141,7 @@ public struct SyncPackage: Codable {
         mcpServers = try container.decodeIfPresent([MCPServerConfiguration].self, forKey: .mcpServers) ?? []
         audioFiles = try container.decodeIfPresent([SyncedAudio].self, forKey: .audioFiles) ?? []
         imageFiles = try container.decodeIfPresent([SyncedImage].self, forKey: .imageFiles) ?? []
+        shortcutTools = try container.decodeIfPresent([ShortcutToolDefinition].self, forKey: .shortcutTools) ?? []
     }
 }
 
@@ -156,6 +161,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedAudioFiles: Int
     public var importedImageFiles: Int
     public var skippedImageFiles: Int
+    public var importedShortcutTools: Int
+    public var skippedShortcutTools: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -171,7 +178,9 @@ public struct SyncMergeSummary: Equatable {
         importedAudioFiles: 0,
         skippedAudioFiles: 0,
         importedImageFiles: 0,
-        skippedImageFiles: 0
+        skippedImageFiles: 0,
+        importedShortcutTools: 0,
+        skippedShortcutTools: 0
     )
 }
 
@@ -261,6 +270,20 @@ extension MCPServerConfiguration {
     /// 去除所有同步后缀的基础名称
     var baseNameWithoutSyncSuffix: String {
         removeSyncSuffixes(from: displayName)
+    }
+}
+
+extension ShortcutToolDefinition {
+    /// 判断两个快捷指令工具配置是否逻辑等价（忽略 ID）
+    func isEquivalent(to other: ShortcutToolDefinition) -> Bool {
+        ShortcutToolNaming.normalizeExecutableName(name) == ShortcutToolNaming.normalizeExecutableName(other.name) &&
+        externalID == other.externalID &&
+        metadata == other.metadata &&
+        source == other.source &&
+        runModeHint == other.runModeHint &&
+        isEnabled == other.isEnabled &&
+        userDescription == other.userDescription &&
+        generatedDescription == other.generatedDescription
     }
 }
 

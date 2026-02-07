@@ -22,6 +22,7 @@ struct DisplaySettingsView: View {
     @Binding var currentBackgroundImage: String
     @Binding var backgroundContentMode: String // "fill" 或 "fit"
     @Binding var enableLiquidGlass: Bool // 新增绑定
+    @Binding var enableAdvancedRenderer: Bool
     
     // MARK: - 属性
     
@@ -39,6 +40,12 @@ struct DisplaySettingsView: View {
             
             Section(header: Text("内容显示")) {
                 Toggle("渲染 Markdown", isOn: $enableMarkdown)
+                if enableMarkdown {
+                    Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
+                    Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             
             Section(header: Text("背景")) {
@@ -73,5 +80,10 @@ struct DisplaySettingsView: View {
             }
         }
         .navigationTitle("显示设置")
+        .onChange(of: enableMarkdown) { _, isEnabled in
+            if !isEnabled, enableAdvancedRenderer {
+                enableAdvancedRenderer = false
+            }
+        }
     }
 }

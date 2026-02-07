@@ -17,7 +17,6 @@ import os.log
 @main
 struct ETOS_LLM_Studio_Watch_AppApp: App {
     @StateObject private var syncManager = WatchSyncManager.shared
-    @State private var didAutoConnectMCP = false
     
     init() {
         // 在 App 启动时预先触发本地网络权限
@@ -33,13 +32,14 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(syncManager)
+                .onOpenURL { url in
+                    Task {
+                        _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
+                    }
+                }
                 .onAppear {
                     // 启动时自动同步（静默模式）
                     syncManager.performAutoSyncIfEnabled()
-                    if !didAutoConnectMCP {
-                        didAutoConnectMCP = true
-                        MCPManager.shared.connectSelectedServersIfNeeded()
-                    }
                 }
         }
     }

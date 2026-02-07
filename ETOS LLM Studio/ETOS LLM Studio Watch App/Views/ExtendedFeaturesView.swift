@@ -44,7 +44,22 @@ public struct ExtendedFeaturesView: View {
                 Text("配置 MCP 工具服务器，让助手调用外部能力。")
                     .font(.footnote)
                     .foregroundColor(.secondary)
-            }            
+            }
+
+            Section {
+                NavigationLink {
+                    ShortcutIntegrationView()
+                } label: {
+                    Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("导入快捷指令工具并控制 AI 的调用权限。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
             Section {
                 NavigationLink {
                     LocalDebugView()

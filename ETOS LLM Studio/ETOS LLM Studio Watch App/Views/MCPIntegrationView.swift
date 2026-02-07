@@ -383,7 +383,7 @@ private struct MCPToolDebuggerView: View {
             Section("工具标识") {
                 Picker("目标服务器", selection: $selectedServerID) {
                     Text("请选择").tag(Optional<UUID>.none)
-                    ForEach(manager.connectedServers()) { server in
+                    ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
                         Text(server.displayName).tag(Optional(server.id))
                     }
                 }
@@ -448,7 +448,7 @@ private struct MCPResourceDebuggerView: View {
             Section("资源标识") {
                 Picker("目标服务器", selection: $selectedServerID) {
                     Text("请选择").tag(Optional<UUID>.none)
-                    ForEach(manager.connectedServers()) { server in
+                    ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
                         Text(server.displayName).tag(Optional(server.id))
                     }
                 }

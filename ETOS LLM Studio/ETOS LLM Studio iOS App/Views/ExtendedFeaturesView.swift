@@ -29,7 +29,20 @@ struct ExtendedFeaturesView: View {
                 Text("配置 MCP 工具服务器，让助手调用外部能力。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            }            
+            }
+
+            Section {
+                NavigationLink {
+                    ShortcutIntegrationView()
+                } label: {
+                    Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")
+                }
+            } footer: {
+                Text("把快捷指令作为可调用工具导入，支持权限确认与回调。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 NavigationLink {
                     LocalDebugView()

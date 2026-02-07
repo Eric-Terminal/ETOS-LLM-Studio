@@ -24,9 +24,44 @@ struct MessageActionsView: View {
     let onSwitchVersion: (Int) -> Void
     let onBranch: (Bool) -> Void
     let onShowFullError: ((String) -> Void)?
+    let supportsMathRenderToggle: Bool
+    let isMathRenderingEnabled: Bool
+    let onToggleMathRendering: () -> Void
     
     let messageIndex: Int?
     let totalMessages: Int
+
+    init(
+        message: ChatMessage,
+        canRetry: Bool,
+        onEdit: @escaping () -> Void,
+        onRetry: @escaping (ChatMessage) -> Void,
+        onDelete: @escaping () -> Void,
+        onDeleteCurrentVersion: @escaping () -> Void,
+        onSwitchVersion: @escaping (Int) -> Void,
+        onBranch: @escaping (Bool) -> Void,
+        onShowFullError: ((String) -> Void)?,
+        supportsMathRenderToggle: Bool = false,
+        isMathRenderingEnabled: Bool = false,
+        onToggleMathRendering: @escaping () -> Void = {},
+        messageIndex: Int?,
+        totalMessages: Int
+    ) {
+        self.message = message
+        self.canRetry = canRetry
+        self.onEdit = onEdit
+        self.onRetry = onRetry
+        self.onDelete = onDelete
+        self.onDeleteCurrentVersion = onDeleteCurrentVersion
+        self.onSwitchVersion = onSwitchVersion
+        self.onBranch = onBranch
+        self.onShowFullError = onShowFullError
+        self.supportsMathRenderToggle = supportsMathRenderToggle
+        self.isMathRenderingEnabled = isMathRenderingEnabled
+        self.onToggleMathRendering = onToggleMathRendering
+        self.messageIndex = messageIndex
+        self.totalMessages = totalMessages
+    }
     
     // MARK: - 环境
     
@@ -75,6 +110,18 @@ struct MessageActionsView: View {
                     showBranchOptions = true
                 } label: {
                     Label("从此处创建分支", systemImage: "arrow.triangle.branch")
+                }
+
+                if supportsMathRenderToggle {
+                    Button {
+                        onToggleMathRendering()
+                        dismiss()
+                    } label: {
+                        Label(
+                            isMathRenderingEnabled ? "取消渲染公式" : "渲染公式",
+                            systemImage: isMathRenderingEnabled ? "xmark.circle" : "function"
+                        )
+                    }
                 }
             }
             

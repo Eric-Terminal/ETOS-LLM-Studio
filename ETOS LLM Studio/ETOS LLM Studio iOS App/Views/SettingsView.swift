@@ -76,6 +76,9 @@ struct SettingsView: View {
             
             Section("显示与体验") {
                 Toggle("渲染 Markdown", isOn: $viewModel.enableMarkdown)
+                if viewModel.enableMarkdown {
+                    Toggle("使用高级渲染器", isOn: $viewModel.enableAdvancedRenderer)
+                }
                 if #available(iOS 26.0, *) {
                     Toggle("液态玻璃效果", isOn: $viewModel.enableLiquidGlass)
                 }
@@ -90,6 +93,7 @@ struct SettingsView: View {
                         currentBackgroundImage: $viewModel.currentBackgroundImage,
                         backgroundContentMode: $viewModel.backgroundContentMode,
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
+                        enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         allBackgrounds: viewModel.backgroundImages
                     )
                 } label: {
@@ -130,6 +134,11 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("设置")
+        .onChange(of: viewModel.enableMarkdown) { _, isEnabled in
+            if !isEnabled, viewModel.enableAdvancedRenderer {
+                viewModel.enableAdvancedRenderer = false
+            }
+        }
     }
     
     // MARK: - 辅助方法

@@ -16,7 +16,7 @@ import SwiftUI
 // MARK: - 提供商与模型配置
 
 /// 可编码的通用 JSON 值，用于处理 [String: Any] 类型的字典
-public enum JSONValue: Codable, Hashable {
+public enum JSONValue: Codable, Hashable, Sendable {
     case string(String), int(Int), double(Double), bool(Bool)
     case dictionary([String: JSONValue])
     case array([JSONValue])

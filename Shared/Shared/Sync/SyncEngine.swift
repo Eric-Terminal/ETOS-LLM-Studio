@@ -25,6 +25,7 @@ public enum SyncEngine {
         var mcpServers: [MCPServerConfiguration] = []
         var audioFiles: [SyncedAudio] = []
         var imageFiles: [SyncedImage] = []
+        var shortcutTools: [ShortcutToolDefinition] = []
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
         
@@ -67,6 +68,10 @@ public enum SyncEngine {
         
         if options.contains(.mcpServers) {
             mcpServers = MCPServerStore.loadServers()
+        }
+
+        if options.contains(.shortcutTools) {
+            shortcutTools = ShortcutToolStore.loadTools()
         }
         
         // 音频文件同步：会话引用的音频 + 可选全量音频文件
@@ -113,7 +118,8 @@ public enum SyncEngine {
             memories: memories,
             mcpServers: mcpServers,
             audioFiles: audioFiles,
-            imageFiles: imageFiles
+            imageFiles: imageFiles,
+            shortcutTools: shortcutTools
         )
     }
     
@@ -160,6 +166,12 @@ public enum SyncEngine {
             let result = mergeMCPServers(package.mcpServers)
             summary.importedMCPServers = result.imported
             summary.skippedMCPServers = result.skipped
+        }
+
+        if package.options.contains(.shortcutTools) {
+            let result = mergeShortcutTools(package.shortcutTools)
+            summary.importedShortcutTools = result.imported
+            summary.skippedShortcutTools = result.skipped
         }
         
         // 音频文件同步
@@ -508,6 +520,48 @@ public enum SyncEngine {
                 existingChecksums.insert(image.checksum)
             } else {
                 skipped += 1
+            }
+        }
+
+        return (imported, skipped)
+    }
+
+    // MARK: - Shortcut Tools
+
+    private static func mergeShortcutTools(
+        _ incoming: [ShortcutToolDefinition]
+    ) -> (imported: Int, skipped: Int) {
+        guard !incoming.isEmpty else { return (0, 0) }
+
+        var local = ShortcutToolStore.loadTools()
+        var imported = 0
+        var skipped = 0
+
+        for incomingTool in incoming {
+            if local.contains(where: { $0.isEquivalent(to: incomingTool) }) {
+                skipped += 1
+                continue
+            }
+
+            let incomingName = ShortcutToolNaming.normalizeExecutableName(incomingTool.name)
+            if local.contains(where: { ShortcutToolNaming.normalizeExecutableName($0.name) == incomingName }) {
+                skipped += 1
+                continue
+            }
+
+            var copied = incomingTool
+            copied.id = UUID()
+            copied.createdAt = Date()
+            copied.updatedAt = Date()
+            copied.lastImportedAt = Date()
+            local.append(copied)
+            imported += 1
+        }
+
+        if imported > 0 {
+            ShortcutToolStore.saveTools(local)
+            Task { @MainActor in
+                ShortcutToolManager.shared.reloadFromDisk()
             }
         }
 

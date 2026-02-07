@@ -162,6 +162,8 @@ struct ChatView: View {
                                     enableMarkdown: viewModel.enableMarkdown,
                                     enableBackground: viewModel.enableBackground,
                                     enableLiquidGlass: isLiquidGlassEnabled,
+                                    enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
+                                    enableMathRendering: viewModel.enableAdvancedRenderer,
                                     mergeWithPrevious: mergeWithPrevious,
                                     mergeWithNext: mergeWithNext
                                 )

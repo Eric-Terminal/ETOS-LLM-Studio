@@ -93,6 +93,8 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    let enableAdvancedRenderer: Bool
+    let enableMathRendering: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
     
@@ -102,6 +104,30 @@ struct ChatBubble: View {
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
+
+    init(
+        messageState: ChatMessageRenderState,
+        isReasoningExpanded: Binding<Bool>,
+        isToolCallsExpanded: Binding<Bool>,
+        enableMarkdown: Bool,
+        enableBackground: Bool,
+        enableLiquidGlass: Bool,
+        enableAdvancedRenderer: Bool = false,
+        enableMathRendering: Bool = false,
+        mergeWithPrevious: Bool,
+        mergeWithNext: Bool
+    ) {
+        self.messageState = messageState
+        self._isReasoningExpanded = isReasoningExpanded
+        self._isToolCallsExpanded = isToolCallsExpanded
+        self.enableMarkdown = enableMarkdown
+        self.enableBackground = enableBackground
+        self.enableLiquidGlass = enableLiquidGlass
+        self.enableAdvancedRenderer = enableAdvancedRenderer
+        self.enableMathRendering = enableMathRendering
+        self.mergeWithPrevious = mergeWithPrevious
+        self.mergeWithNext = mergeWithNext
+    }
     
     private var message: ChatMessage {
         messageState.message
@@ -607,15 +633,13 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
-        if enableMarkdown {
-            Markdown(content)
-                .markdownSoftBreakMode(.lineBreak)
-                .markdownTextStyle {
-                    ForegroundColor(isOutgoing ? .white : .primary)
-                }
-        } else {
-            Text(content)
-        }
+        ETAdvancedMarkdownRenderer(
+            content: content,
+            enableMarkdown: enableMarkdown,
+            isOutgoing: isOutgoing || isError,
+            enableAdvancedRenderer: enableAdvancedRenderer,
+            enableMathRendering: enableMathRendering
+        )
     }
     
     @ViewBuilder
@@ -910,7 +934,13 @@ struct ToolCallsInlineView: View, Equatable {
         if toolName == "save_memory" {
             return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
         }
-        return MCPManager.shared.displayLabel(for: toolName) ?? toolName
+        if let label = MCPManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        return toolName
     }
     
     var body: some View {
@@ -1038,7 +1068,13 @@ struct ToolResultsDisclosureView: View, Equatable {
         if toolName == "save_memory" {
             return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
         }
-        return MCPManager.shared.displayLabel(for: toolName) ?? toolName
+        if let label = MCPManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        return toolName
     }
     
     var body: some View {
