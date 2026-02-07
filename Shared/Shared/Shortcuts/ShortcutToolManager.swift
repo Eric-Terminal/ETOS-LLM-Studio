@@ -261,7 +261,7 @@ public final class ShortcutToolManager: ObservableObject {
                     metadata: payload.metadata,
                     source: payload.source,
                     runModeHint: payload.runModeHint ?? .direct,
-                    isEnabled: false,
+                    isEnabled: true,
                     userDescription: nil,
                     generatedDescription: makeGeneratedDescription(from: payload),
                     createdAt: now,
