@@ -2574,6 +2574,13 @@ public class ChatService {
                 }
             }
         }
+
+        let inlineImageExtraction = await extractInlineImagesFromMarkdown(responseMessage.content)
+        if !inlineImageExtraction.imageFileNames.isEmpty {
+            responseMessage.content = inlineImageExtraction.cleanedContent
+            responseMessage.imageFileNames = (responseMessage.imageFileNames ?? []) + inlineImageExtraction.imageFileNames
+        }
+
         if let toolCalls = responseMessage.toolCalls {
             let resolvedCalls = resolveToolCalls(toolCalls, availableTools: availableTools ?? [])
             let filteredCalls = resolvedCalls.filter { !sanitizedToolName($0.toolName).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -3000,6 +3007,9 @@ public class ChatService {
             if let newReasoning = newMessage.reasoningContent, !newReasoning.isEmpty {
                 targetMessage.reasoningContent = newReasoning
             }
+            targetMessage.audioFileName = newMessage.audioFileName
+            targetMessage.imageFileNames = newMessage.imageFileNames
+            targetMessage.fileFileNames = newMessage.fileFileNames
             
             // 更新 token 使用情况
             if let newUsage = newMessage.tokenUsage {
@@ -3047,11 +3057,172 @@ public class ChatService {
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
                 toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,
                 tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage,
+                audioFileName: newMessage.audioFileName ?? messages[index].audioFileName,
+                imageFileNames: newMessage.imageFileNames ?? messages[index].imageFileNames,
+                fileFileNames: newMessage.fileFileNames ?? messages[index].fileFileNames,
+                fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
                 responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
             )
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)
         }
+    }
+
+    private struct InlineImageExtractionResult {
+        let cleanedContent: String
+        let imageFileNames: [String]
+    }
+
+    private struct InlineImagePayload {
+        let data: Data
+        let mimeType: String
+    }
+
+    private func extractInlineImagesFromMarkdown(_ content: String) async -> InlineImageExtractionResult {
+        guard !content.isEmpty else {
+            return InlineImageExtractionResult(cleanedContent: content, imageFileNames: [])
+        }
+
+        let regex: NSRegularExpression
+        do {
+            regex = try NSRegularExpression(pattern: "!\\[[^\\]]*\\]\\(([^)]+)\\)", options: [])
+        } catch {
+            logger.error("解析 markdown 图片正则失败: \(error.localizedDescription)")
+            return InlineImageExtractionResult(cleanedContent: content, imageFileNames: [])
+        }
+
+        let nsRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        let matches = regex.matches(in: content, options: [], range: nsRange)
+        guard !matches.isEmpty else {
+            return InlineImageExtractionResult(cleanedContent: content, imageFileNames: [])
+        }
+
+        var workingContent = content
+        var savedFileNamesInReverse: [String] = []
+        var extractedCount = 0
+
+        for match in matches.reversed() {
+            guard let fullRange = Range(match.range(at: 0), in: content),
+                  let sourceRange = Range(match.range(at: 1), in: content) else { continue }
+
+            let rawSource = String(content[sourceRange])
+            guard let normalizedSource = normalizeMarkdownImageSource(rawSource) else { continue }
+            guard let payload = await resolveInlineImagePayload(from: normalizedSource) else { continue }
+            guard let savedFileName = saveInlineImage(payload) else { continue }
+
+            if let replaceRange = Range(match.range(at: 0), in: workingContent) {
+                workingContent.replaceSubrange(replaceRange, with: "")
+            } else {
+                // 退化处理：范围映射失败时保持原文，避免误删
+                logger.warning("图片标记替换失败，已跳过该标记: \(String(content[fullRange]))")
+            }
+
+            savedFileNamesInReverse.append(savedFileName)
+            extractedCount += 1
+        }
+
+        if extractedCount > 0 {
+            logger.info("已从 markdown 正文提取并保存 \(extractedCount) 张图片附件。")
+        }
+
+        return InlineImageExtractionResult(
+            cleanedContent: normalizeContentAfterImageExtraction(workingContent),
+            imageFileNames: savedFileNamesInReverse.reversed()
+        )
+    }
+
+    private func normalizeMarkdownImageSource(_ rawSource: String) -> String? {
+        var source = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
+        if source.hasPrefix("<"), source.hasSuffix(">"), source.count >= 2 {
+            source.removeFirst()
+            source.removeLast()
+        }
+        if let firstWhitespace = source.firstIndex(where: { $0.isWhitespace }) {
+            source = String(source[..<firstWhitespace])
+        }
+        if source.hasPrefix("\""), source.hasSuffix("\""), source.count >= 2 {
+            source.removeFirst()
+            source.removeLast()
+        }
+        if source.hasPrefix("'"), source.hasSuffix("'"), source.count >= 2 {
+            source.removeFirst()
+            source.removeLast()
+        }
+        return source.isEmpty ? nil : source
+    }
+
+    private func resolveInlineImagePayload(from source: String) async -> InlineImagePayload? {
+        if let payload = decodeInlineDataURL(source) {
+            return payload
+        }
+
+        guard let url = URL(string: source),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 20
+            let (data, response) = try await urlSession.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                return nil
+            }
+            let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?
+                .split(separator: ";")
+                .first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let contentType, !contentType.lowercased().hasPrefix("image/") {
+                return nil
+            }
+            let mimeType = contentType ?? detectImageMimeType(from: data)
+            return InlineImagePayload(data: data, mimeType: mimeType)
+        } catch {
+            logger.warning("下载 markdown 图片失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func decodeInlineDataURL(_ source: String) -> InlineImagePayload? {
+        let lowercased = source.lowercased()
+        guard lowercased.hasPrefix("data:image/"),
+              let commaIndex = source.firstIndex(of: ",") else {
+            return nil
+        }
+
+        let header = String(source[source.index(source.startIndex, offsetBy: 5)..<commaIndex])
+        guard header.lowercased().contains(";base64") else {
+            return nil
+        }
+
+        let mimeType = header.split(separator: ";").first.map(String.init) ?? "image/png"
+        let encoded = String(source[source.index(after: commaIndex)...])
+        guard let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters) else {
+            return nil
+        }
+        return InlineImagePayload(data: data, mimeType: mimeType)
+    }
+
+    private func saveInlineImage(_ payload: InlineImagePayload) -> String? {
+        let ext = imageFileExtension(for: payload.mimeType)
+        let fileName = "\(UUID().uuidString).\(ext)"
+        guard Persistence.saveImage(payload.data, fileName: fileName) != nil else {
+            logger.error("保存 markdown 提取图片失败: \(fileName)")
+            return nil
+        }
+        return fileName
+    }
+
+    private func normalizeContentAfterImageExtraction(_ content: String) -> String {
+        let normalizedLineBreaks = content.replacingOccurrences(of: "\r\n", with: "\n")
+        let collapsed = normalizedLineBreaks.replacingOccurrences(
+            of: "\n{3,}",
+            with: "\n\n",
+            options: .regularExpression
+        )
+        return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
     /// 从字符串中解析并移除 <thought> 标签内容
