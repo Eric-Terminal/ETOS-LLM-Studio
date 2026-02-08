@@ -281,6 +281,10 @@ struct ChatBubble: View {
             return hasReasoning || hasContent
         }
     }
+
+    private var shouldPlaceImagesAfterText: Bool {
+        !isOutgoing && shouldShowTextBubble
+    }
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
@@ -291,7 +295,9 @@ struct ChatBubble: View {
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 // 图片附件 - 作为气泡显示
-                if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+                if !shouldPlaceImagesAfterText,
+                   let imageFileNames = message.imageFileNames,
+                   !imageFileNames.isEmpty {
                     imageAttachmentsView(fileNames: imageFileNames)
                 }
 
@@ -318,6 +324,12 @@ struct ChatBubble: View {
                     .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
                     .background(bubbleDecoratedBackground)
                     .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
+                }
+
+                if shouldPlaceImagesAfterText,
+                   let imageFileNames = message.imageFileNames,
+                   !imageFileNames.isEmpty {
+                    imageAttachmentsView(fileNames: imageFileNames)
                 }
             }
             .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
@@ -556,6 +568,9 @@ struct ChatBubble: View {
             let columns: [GridItem] = fileNames.count == 1
                 ? [GridItem(.flexible(minimum: 150, maximum: 220))]
                 : [GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 4)]
+            let minWidth = fileNames.count == 1 ? 150.0 : 80.0
+            let maxWidth = fileNames.count == 1 ? 220.0 : 140.0
+            let itemHeight = fileNames.count == 1 ? 180.0 : 100.0
             
             LazyVGrid(columns: columns, alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 ForEach(fileNames, id: \.self) { fileName in
@@ -567,10 +582,10 @@ struct ChatBubble: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                                 .frame(
-                                    minWidth: fileNames.count == 1 ? 150 : 80,
-                                    maxWidth: fileNames.count == 1 ? 220 : 140
+                                    minWidth: minWidth,
+                                    maxWidth: maxWidth
                                 )
-                                .frame(height: fileNames.count == 1 ? 180 : 100)
+                                .frame(height: itemHeight)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .shadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
                         }
@@ -578,7 +593,11 @@ struct ChatBubble: View {
                     } else {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(Color.secondary.opacity(0.15))
-                            .frame(height: fileNames.count == 1 ? 180 : 100)
+                            .frame(
+                                minWidth: minWidth,
+                                maxWidth: maxWidth
+                            )
+                            .frame(height: itemHeight)
                             .overlay(
                                 VStack(spacing: 4) {
                                     Image(systemName: "photo")
@@ -627,6 +646,10 @@ struct ChatBubble: View {
     }
     
     private func loadImage(fileName: String) -> UIImage? {
+        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+        if let image = UIImage(contentsOfFile: fileURL.path) {
+            return image
+        }
         guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
         return UIImage(data: data)
     }

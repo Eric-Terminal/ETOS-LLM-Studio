@@ -319,12 +319,20 @@ struct ChatBubble: View {
     @ViewBuilder
     private var assistantBubble: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+            if !shouldPlaceAssistantImagesAfterText,
+               let imageFileNames = message.imageFileNames,
+               !imageFileNames.isEmpty {
                 imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
             }
 
             if shouldShowAssistantBubble {
                 assistantTextBubble
+            }
+
+            if shouldPlaceAssistantImagesAfterText,
+               let imageFileNames = message.imageFileNames,
+               !imageFileNames.isEmpty {
+                imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
             }
         }
     }
@@ -460,6 +468,10 @@ struct ChatBubble: View {
             return hasToolCalls || hasNonPlaceholderText
         }
         return hasToolCalls || hasReasoning || hasNonPlaceholderText || shouldShowThinkingIndicator
+    }
+
+    private var shouldPlaceAssistantImagesAfterText: Bool {
+        message.role != .user && message.role != .error && shouldShowAssistantBubble
     }
     
     // MARK: - 辅助视图
@@ -989,10 +1001,10 @@ private struct AttachmentImageView: View {
     }
 
     private func loadImage() async {
-        guard let data = Persistence.loadImage(fileName: fileName),
-              let uiImage = UIImage(data: data) else {
-            return
-        }
+        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+        let uiImage = UIImage(contentsOfFile: fileURL.path)
+            ?? Persistence.loadImage(fileName: fileName).flatMap { UIImage(data: $0) }
+        guard let uiImage else { return }
         await MainActor.run {
             image = uiImage
         }
