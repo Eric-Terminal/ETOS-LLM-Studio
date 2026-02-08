@@ -96,14 +96,59 @@ public struct ConfigLoader {
         logger.info("正在从 \(providersDirectory.path) 加载所有提供商...")
         let fileManager = FileManager.default
         var providers: [Provider] = []
+        var seenProviderIndexByID: [UUID: Int] = [:]
+        var seenProviderSourceByID: [UUID: URL] = [:]
 
         do {
             let fileURLs = try fileManager.contentsOfDirectory(at: providersDirectory, includingPropertiesForKeys: nil)
             for url in fileURLs.filter({ $0.pathExtension == "json" }) {
                 do {
                     let data = try Data(contentsOf: url)
-                    let provider = try JSONDecoder().decode(Provider.self, from: data)
+                    var provider = try JSONDecoder().decode(Provider.self, from: data)
+                    var didRepair = false
+
+                    // 修复同一个 Provider 内部重复的模型 ID，避免 SwiftUI 列表 diff 异常。
+                    if deduplicateModelIDs(for: &provider) {
+                        didRepair = true
+                        logger.warning("  - 检测到重复模型 ID，已自动修复: \(url.lastPathComponent)")
+                    }
+
+                    if let existingIndex = seenProviderIndexByID[provider.id] {
+                        let existingProvider = providers[existingIndex]
+                        let existingSource = seenProviderSourceByID[provider.id]
+                        let canonicalURL = canonicalProviderFileURL(for: provider.id)
+                        let currentIsCanonical = isSameFileURL(url, canonicalURL)
+                        let existingIsCanonical = existingSource.map { isSameFileURL($0, canonicalURL) } ?? false
+
+                        // 完全重复配置：保留规范文件，清理非规范重复文件。
+                        if existingProvider == provider {
+                            if !currentIsCanonical {
+                                removeFileIfExists(at: url)
+                                logger.warning("  - 发现重复配置并已清理冗余文件: \(url.lastPathComponent)")
+                            } else if !existingIsCanonical, let existingSource {
+                                removeFileIfExists(at: existingSource)
+                                seenProviderSourceByID[provider.id] = url
+                                logger.warning("  - 发现重复配置，已保留规范文件并清理旧文件。")
+                            }
+                            continue
+                        }
+
+                        // ID 冲突但内容不同：重新分配新 ID，避免列表出现重复标识导致崩溃。
+                        let oldID = provider.id
+                        provider.id = UUID()
+                        didRepair = true
+                        logger.warning("  - 提供商 ID 冲突，已重建 ID: \(oldID.uuidString) -> \(provider.id.uuidString)")
+                    }
+
                     providers.append(provider)
+                    seenProviderIndexByID[provider.id] = providers.count - 1
+                    seenProviderSourceByID[provider.id] = url
+
+                    let canonicalURL = canonicalProviderFileURL(for: provider.id)
+                    if didRepair || !isSameFileURL(url, canonicalURL) {
+                        persistNormalizedProvider(provider, sourceURL: url)
+                    }
+
                     logger.info("  - 成功加载: \(url.lastPathComponent)")
                 } catch {
                     logger.error("  - 解析文件失败 \(url.lastPathComponent): \(error.localizedDescription)")
@@ -115,6 +160,43 @@ public struct ConfigLoader {
         
         logger.info("总共加载了 \(providers.count) 个提供商。")
         return providers
+    }
+
+    // 将提供商配置统一保存到 <provider.id>.json，并在必要时清理旧文件。
+    private static func persistNormalizedProvider(_ provider: Provider, sourceURL: URL) {
+        saveProvider(provider)
+        let canonicalURL = canonicalProviderFileURL(for: provider.id)
+        if !isSameFileURL(sourceURL, canonicalURL) {
+            removeFileIfExists(at: sourceURL)
+        }
+    }
+
+    private static func canonicalProviderFileURL(for providerID: UUID) -> URL {
+        providersDirectory.appendingPathComponent("\(providerID.uuidString).json")
+    }
+
+    private static func isSameFileURL(_ lhs: URL, _ rhs: URL) -> Bool {
+        lhs.standardizedFileURL.path == rhs.standardizedFileURL.path
+    }
+
+    private static func removeFileIfExists(at url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// 返回是否发生了修复。
+    private static func deduplicateModelIDs(for provider: inout Provider) -> Bool {
+        var seenModelIDs = Set<UUID>()
+        var didRepair = false
+        for index in provider.models.indices {
+            let modelID = provider.models[index].id
+            if seenModelIDs.contains(modelID) {
+                provider.models[index].id = UUID()
+                didRepair = true
+            }
+            seenModelIDs.insert(provider.models[index].id)
+        }
+        return didRepair
     }
     
     /// 将单个提供商的配置保存（或更新）到其对应的 JSON 文件。

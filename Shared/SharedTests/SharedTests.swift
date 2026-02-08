@@ -964,6 +964,20 @@ fileprivate struct ConfigLoaderTests {
         }
     }
 
+    private var providersDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Providers")
+    }
+
+    private func writeRawProviderFile(_ provider: Provider, fileName: String) throws {
+        ConfigLoader.setupInitialProviderConfigs()
+        let fileURL = providersDirectory.appendingPathComponent(fileName)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        let data = try encoder.encode(provider)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
     @Test("Save and Load Provider")
     func testSaveAndLoadProvider() {
         // 1. Arrange
@@ -989,6 +1003,56 @@ fileprivate struct ConfigLoaderTests {
         
         // Teardown
         cleanup(providers: [provider])
+    }
+
+    @Test("Load Providers Should Repair Duplicate IDs And Normalize Files")
+    func testLoadProvidersRepairDuplicateIDsAndNormalizeFiles() throws {
+        let token = "repair-\(UUID().uuidString)"
+        let duplicateProviderID = UUID()
+        let duplicateModelID = UUID()
+
+        let providerA = Provider(
+            id: duplicateProviderID,
+            name: "\(token)-A",
+            baseURL: "https://example-a.com",
+            apiKeys: ["key-a"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(id: duplicateModelID, modelName: "a-1", isActivated: true),
+                Model(id: duplicateModelID, modelName: "a-2", isActivated: false)
+            ]
+        )
+        let providerB = Provider(
+            id: duplicateProviderID,
+            name: "\(token)-B",
+            baseURL: "https://example-b.com",
+            apiKeys: ["key-b"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "b-1", isActivated: true)]
+        )
+
+        let rawFileA = "\(token)-manual-a.json"
+        let rawFileB = "\(token)-manual-b.json"
+
+        try writeRawProviderFile(providerA, fileName: rawFileA)
+        try writeRawProviderFile(providerB, fileName: rawFileB)
+
+        let firstLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
+        #expect(firstLoad.count == 2)
+        #expect(Set(firstLoad.map(\.id)).count == 2)
+        if let repairedA = firstLoad.first(where: { $0.name == "\(token)-A" }) {
+            #expect(Set(repairedA.models.map(\.id)).count == repairedA.models.count)
+        } else {
+            Issue.record("未找到 \(token)-A")
+        }
+
+        let secondLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
+        #expect(secondLoad.count == 2)
+        #expect(Set(secondLoad.map(\.id)).count == 2)
+
+        cleanup(providers: secondLoad)
+        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileA))
+        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileB))
     }
 }
 
