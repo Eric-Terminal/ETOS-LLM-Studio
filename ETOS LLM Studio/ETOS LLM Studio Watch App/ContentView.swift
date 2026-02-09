@@ -525,6 +525,14 @@ struct ContentView: View {
             } message: {
                 Text(viewModel.dimensionMismatchMessage)
             }
+            .alert(
+                Text(NSLocalizedString("记忆嵌入失败", comment: "Memory embedding failure alert title")),
+                isPresented: $viewModel.showMemoryEmbeddingErrorAlert
+            ) {
+                Button(NSLocalizedString("好的", comment: "OK"), role: .cancel) { }
+            } message: {
+                Text(viewModel.memoryEmbeddingErrorMessage)
+            }
             // MARK: - 公告弹窗
             .sheet(isPresented: $announcementManager.shouldShowAlert) {
                 if let announcement = announcementManager.currentAnnouncement {

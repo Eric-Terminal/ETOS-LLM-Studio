@@ -915,3 +915,11 @@
 "在 iPhone 上点击“检测并运行导入快捷指令”，手表端会自动同步结果。" = "Tap \"Check and run import shortcut\" on iPhone. Watch will sync the result automatically.";
 "当前官方导入状态" = "Official import status";
 "正在取消导入，请稍候…" = "Cancelling import, please wait...";
+
+"记忆嵌入失败" = "Memory embedding failed";
+"记忆已保存，但向量嵌入失败：%@" = "Memory text was saved, but embedding generation failed: %@";
+"正在重新生成嵌入…" = "Regenerating embeddings…";
+"正在补偿缺失嵌入…" = "Backfilling missing embeddings…";
+"部分记忆嵌入失败，系统将自动重试。" = "Some memory embeddings failed and will be retried automatically.";
+"补偿嵌入已完成" = "Embedding backfill completed";
+"补偿嵌入部分失败" = "Embedding backfill partially failed";

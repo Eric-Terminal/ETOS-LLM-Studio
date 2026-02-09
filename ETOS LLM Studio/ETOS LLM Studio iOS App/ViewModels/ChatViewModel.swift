@@ -60,6 +60,9 @@ final class ChatViewModel: ObservableObject {
     @Published var showAudioRecorder: Bool = false
     @Published var showDimensionMismatchAlert: Bool = false
     @Published var dimensionMismatchMessage: String = ""
+    @Published var showMemoryEmbeddingErrorAlert: Bool = false
+    @Published var memoryEmbeddingErrorMessage: String = ""
+    @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
     
     // MARK: - User Preferences (AppStorage)
     
@@ -112,6 +115,10 @@ final class ChatViewModel: ObservableObject {
     
     var historyLoadChunkSize: Int {
         incrementalHistoryBatchSize
+    }
+
+    var isMemoryEmbeddingInProgress: Bool {
+        memoryEmbeddingProgress?.phase == .running
     }
 
     var remainingHistoryCount: Int {
@@ -288,6 +295,29 @@ final class ChatViewModel: ObservableObject {
                 self?.showDimensionMismatchAlert = true
             }
             .store(in: &cancellables)        
+        
+        MemoryManager.shared.embeddingProgressPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] progress in
+                self?.memoryEmbeddingProgress = progress
+            }
+            .store(in: &cancellables)
+        
+        MemoryManager.shared.embeddingErrorPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] error in
+                guard let self else { return }
+                self.memoryEmbeddingErrorMessage = String(
+                    format: NSLocalizedString(
+                        "记忆已保存，但向量嵌入失败：%@",
+                        comment: "Message shown when memory text is stored but embedding generation failed."
+                    ),
+                    error.localizedDescription
+                )
+                self.showMemoryEmbeddingErrorAlert = true
+            }
+            .store(in: &cancellables)
+        
         NotificationCenter.default.publisher(for: .syncBackgroundsUpdated)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in

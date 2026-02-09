@@ -32,6 +32,48 @@ public struct MemoryReembeddingSummary {
     public let chunkCount: Int
 }
 
+public enum MemoryEmbeddingJobKind: Equatable {
+    case reembedAll
+    case reconcilePending
+}
+
+public enum MemoryEmbeddingJobPhase: Equatable {
+    case running
+    case completed
+    case failed
+}
+
+public struct MemoryEmbeddingProgress: Equatable {
+    public let jobID: UUID
+    public let kind: MemoryEmbeddingJobKind
+    public let phase: MemoryEmbeddingJobPhase
+    public let processedMemories: Int
+    public let totalMemories: Int
+    public let failedMemories: Int
+    public let currentMemoryPreview: String?
+    public let errorMessage: String?
+    
+    public init(
+        jobID: UUID,
+        kind: MemoryEmbeddingJobKind,
+        phase: MemoryEmbeddingJobPhase,
+        processedMemories: Int,
+        totalMemories: Int,
+        failedMemories: Int,
+        currentMemoryPreview: String?,
+        errorMessage: String?
+    ) {
+        self.jobID = jobID
+        self.kind = kind
+        self.phase = phase
+        self.processedMemories = processedMemories
+        self.totalMemories = totalMemories
+        self.failedMemories = failedMemories
+        self.currentMemoryPreview = currentMemoryPreview
+        self.errorMessage = errorMessage
+    }
+}
+
 public class MemoryManager {
 
     // MARK: - 单例
@@ -54,6 +96,11 @@ public class MemoryManager {
     public var dimensionMismatchPublisher: AnyPublisher<(query: Int, index: Int), Never> {
         internalDimensionMismatchPublisher.eraseToAnyPublisher()
     }
+    
+    /// 嵌入进度发布者，用于 UI 展示全量重嵌入与自动补偿进度。
+    public var embeddingProgressPublisher: AnyPublisher<MemoryEmbeddingProgress, Never> {
+        internalEmbeddingProgressPublisher.eraseToAnyPublisher()
+    }
 
     // MARK: - 私有属性
 
@@ -63,6 +110,7 @@ public class MemoryManager {
     private let internalMemoriesPublisher = CurrentValueSubject<[MemoryItem], Never>([])
     private let internalEmbeddingErrorPublisher = PassthroughSubject<MemoryEmbeddingError, Never>()
     private let internalDimensionMismatchPublisher = PassthroughSubject<(query: Int, index: Int), Never>()
+    private let internalEmbeddingProgressPublisher = PassthroughSubject<MemoryEmbeddingProgress, Never>()
     private let persistenceQueue = DispatchQueue(label: "com.etos.memory.persistence.queue")
     private var initializationTask: Task<Void, Never>!
     private var cachedMemories: [MemoryItem] = []
@@ -314,26 +362,78 @@ public class MemoryManager {
         }
         logger.info("正在重新生成全部记忆嵌入...")
         let memories = cachedMemories
+        let totalMemories = memories.count
+        let jobID = UUID()
+        publishEmbeddingProgress(
+            jobID: jobID,
+            kind: .reembedAll,
+            phase: .running,
+            processedMemories: 0,
+            totalMemories: totalMemories,
+            failedMemories: 0,
+            currentMemoryPreview: nil,
+            errorMessage: nil
+        )
+        
         similarityIndex.removeAll()
         purgePersistedVectorStores()
         
         guard !memories.isEmpty else {
             saveIndex()
+            publishEmbeddingProgress(
+                jobID: jobID,
+                kind: .reembedAll,
+                phase: .completed,
+                processedMemories: 0,
+                totalMemories: 0,
+                failedMemories: 0,
+                currentMemoryPreview: nil,
+                errorMessage: nil
+            )
             logger.info(" 记忆列表为空，已写入空索引。")
             return MemoryReembeddingSummary(processedMemories: 0, chunkCount: 0)
         }
         
         var processedMemories = 0
+        var progressProcessed = 0
         var chunkCount = 0
         
         for memory in memories {
+            let memoryPreview = embeddingProgressPreview(for: memory)
             let chunkTexts = chunker.chunk(text: memory.content)
             guard !chunkTexts.isEmpty else {
                 logger.error("记忆 \(memory.id.uuidString) 无有效分块，跳过。")
+                progressProcessed += 1
+                publishEmbeddingProgress(
+                    jobID: jobID,
+                    kind: .reembedAll,
+                    phase: .running,
+                    processedMemories: progressProcessed,
+                    totalMemories: totalMemories,
+                    failedMemories: 0,
+                    currentMemoryPreview: memoryPreview,
+                    errorMessage: nil
+                )
                 continue
             }
             
-            let embeddings = try await embeddingsWithRetry(for: chunkTexts)
+            let embeddings: [[Float]]
+            do {
+                embeddings = try await embeddingsWithRetry(for: chunkTexts)
+            } catch {
+                publishEmbeddingProgress(
+                    jobID: jobID,
+                    kind: .reembedAll,
+                    phase: .failed,
+                    processedMemories: progressProcessed,
+                    totalMemories: totalMemories,
+                    failedMemories: 1,
+                    currentMemoryPreview: memoryPreview,
+                    errorMessage: error.localizedDescription
+                )
+                throw error
+            }
+            
             for (index, chunkText) in chunkTexts.enumerated() {
                 let chunkID = UUID().uuidString
                 let metadata = chunkMetadata(for: memory, chunkIndex: index, chunkId: chunkID)
@@ -347,9 +447,30 @@ public class MemoryManager {
             }
             
             processedMemories += 1
+            progressProcessed += 1
+            publishEmbeddingProgress(
+                jobID: jobID,
+                kind: .reembedAll,
+                phase: .running,
+                processedMemories: progressProcessed,
+                totalMemories: totalMemories,
+                failedMemories: 0,
+                currentMemoryPreview: memoryPreview,
+                errorMessage: nil
+            )
         }
         
         saveIndex()
+        publishEmbeddingProgress(
+            jobID: jobID,
+            kind: .reembedAll,
+            phase: .completed,
+            processedMemories: totalMemories,
+            totalMemories: totalMemories,
+            failedMemories: 0,
+            currentMemoryPreview: nil,
+            errorMessage: nil
+        )
         logger.info("记忆重嵌入完成：\(processedMemories) 条记忆 -> \(chunkCount) 个分块。")
         return MemoryReembeddingSummary(processedMemories: processedMemories, chunkCount: chunkCount)
     }
@@ -587,9 +708,66 @@ public class MemoryManager {
         guard !missingMemories.isEmpty else { return 0 }
         
         logger.info("检测到 \(missingMemories.count) 条记忆缺少嵌入，尝试自动补偿。")
+        let jobID = UUID()
+        let totalMemories = missingMemories.count
+        var processedMemories = 0
+        var failedMemories = 0
+        publishEmbeddingProgress(
+            jobID: jobID,
+            kind: .reconcilePending,
+            phase: .running,
+            processedMemories: 0,
+            totalMemories: totalMemories,
+            failedMemories: 0,
+            currentMemoryPreview: nil,
+            errorMessage: nil
+        )
+        
         for memory in missingMemories {
-            await backfillEmbedding(for: memory)
+            let succeeded = await backfillEmbedding(for: memory)
+            processedMemories += 1
+            if !succeeded {
+                failedMemories += 1
+            }
+            publishEmbeddingProgress(
+                jobID: jobID,
+                kind: .reconcilePending,
+                phase: .running,
+                processedMemories: processedMemories,
+                totalMemories: totalMemories,
+                failedMemories: failedMemories,
+                currentMemoryPreview: embeddingProgressPreview(for: memory),
+                errorMessage: nil
+            )
         }
+        
+        if failedMemories == 0 {
+            publishEmbeddingProgress(
+                jobID: jobID,
+                kind: .reconcilePending,
+                phase: .completed,
+                processedMemories: processedMemories,
+                totalMemories: totalMemories,
+                failedMemories: failedMemories,
+                currentMemoryPreview: nil,
+                errorMessage: nil
+            )
+        } else {
+            publishEmbeddingProgress(
+                jobID: jobID,
+                kind: .reconcilePending,
+                phase: .failed,
+                processedMemories: processedMemories,
+                totalMemories: totalMemories,
+                failedMemories: failedMemories,
+                currentMemoryPreview: nil,
+                errorMessage: NSLocalizedString(
+                    "部分记忆嵌入失败，系统将自动重试。",
+                    comment: "Memory reconcile embedding progress failed message."
+                )
+            )
+        }
+        
         return missingMemories.count
     }
     
@@ -608,22 +786,58 @@ public class MemoryManager {
         return cachedMemories.filter { validMemoryIDs.contains($0.id) && !indexedParentIDs.contains($0.id) }
     }
     
-    private func backfillEmbedding(for memory: MemoryItem) async {
+    private func backfillEmbedding(for memory: MemoryItem) async -> Bool {
         let chunkTexts = chunker.chunk(text: memory.content)
         guard !chunkTexts.isEmpty else {
             logger.error("记忆 \(memory.id.uuidString) 内容无法分块，跳过补偿。")
-            return
+            return false
         }
         
         do {
             let embeddings = try await embeddingsWithRetry(for: chunkTexts)
             await ingest(memory: memory, chunkTexts: chunkTexts, embeddings: embeddings)
             logger.info("已补齐记忆嵌入：\(memory.id.uuidString)。")
+            return true
         } catch {
             logger.error("补写记忆嵌入失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
             scheduleConsistencyCheck(after: max(consistencyCheckDefaultDelay, embeddingRetryPolicy.initialDelay))
+            return false
         }
+    }
+
+    private func publishEmbeddingProgress(
+        jobID: UUID,
+        kind: MemoryEmbeddingJobKind,
+        phase: MemoryEmbeddingJobPhase,
+        processedMemories: Int,
+        totalMemories: Int,
+        failedMemories: Int,
+        currentMemoryPreview: String?,
+        errorMessage: String?
+    ) {
+        internalEmbeddingProgressPublisher.send(
+            MemoryEmbeddingProgress(
+                jobID: jobID,
+                kind: kind,
+                phase: phase,
+                processedMemories: processedMemories,
+                totalMemories: totalMemories,
+                failedMemories: failedMemories,
+                currentMemoryPreview: currentMemoryPreview,
+                errorMessage: errorMessage
+            )
+        )
+    }
+    
+    private func embeddingProgressPreview(for memory: MemoryItem, maxLength: Int = 24) -> String {
+        let trimmed = memory.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if trimmed.count <= maxLength {
+            return trimmed
+        }
+        let endIndex = trimmed.index(trimmed.startIndex, offsetBy: maxLength)
+        return String(trimmed[..<endIndex]) + "…"
     }
     
     private func removeOrphanedVectorEntries(validMemoryIDs: Set<UUID>) {

@@ -388,6 +388,14 @@ struct ChatView: View {
             } message: {
                 Text(imageDownloadAlertMessage ?? "")
             }
+            .alert(
+                Text(NSLocalizedString("记忆嵌入失败", comment: "Memory embedding failure alert title")),
+                isPresented: $viewModel.showMemoryEmbeddingErrorAlert
+            ) {
+                Button(NSLocalizedString("好的", comment: "OK"), role: .cancel) {}
+            } message: {
+                Text(viewModel.memoryEmbeddingErrorMessage)
+            }
         }
     }
     

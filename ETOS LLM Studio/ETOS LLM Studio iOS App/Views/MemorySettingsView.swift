@@ -25,6 +25,42 @@ struct MemorySettingsView: View {
         return formatter
     }
     
+    private var activeEmbeddingProgress: MemoryEmbeddingProgress? {
+        viewModel.memoryEmbeddingProgress
+    }
+    
+    private var isEmbeddingBusy: Bool {
+        isReembeddingMemories || viewModel.isMemoryEmbeddingInProgress
+    }
+    
+    private func embeddingProgressTitle(for progress: MemoryEmbeddingProgress) -> String {
+        switch (progress.kind, progress.phase) {
+        case (.reembedAll, .running):
+            return NSLocalizedString("正在重新生成嵌入…", comment: "Memory re-embedding in progress title")
+        case (.reembedAll, .completed):
+            return NSLocalizedString("重新嵌入完成", comment: "Memory re-embedding completed title")
+        case (.reembedAll, .failed):
+            return NSLocalizedString("重新嵌入失败", comment: "Memory re-embedding failed title")
+        case (.reconcilePending, .running):
+            return NSLocalizedString("正在补偿缺失嵌入…", comment: "Memory embedding reconcile in progress title")
+        case (.reconcilePending, .completed):
+            return NSLocalizedString("补偿嵌入已完成", comment: "Memory embedding reconcile completed title")
+        case (.reconcilePending, .failed):
+            return NSLocalizedString("补偿嵌入部分失败", comment: "Memory embedding reconcile partially failed title")
+        }
+    }
+    
+    private func embeddingProgressColor(for progress: MemoryEmbeddingProgress) -> Color {
+        switch progress.phase {
+        case .running:
+            return .secondary
+        case .completed:
+            return .green
+        case .failed:
+            return .orange
+        }
+    }
+    
     var body: some View {
         Form {
             Section {
@@ -73,15 +109,54 @@ struct MemorySettingsView: View {
                 Button(role: .destructive) {
                     showReembedConfirmation = true
                 } label: {
-                    HStack {
-                        Label("重新生成全部嵌入", systemImage: "arrow.triangle.2.circlepath")
-                        if isReembeddingMemories {
-                            Spacer()
-                            ProgressView()
+                    Label("重新生成全部嵌入", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(isEmbeddingBusy)
+                
+                if let progress = activeEmbeddingProgress {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(embeddingProgressTitle(for: progress))
+                            .font(.caption)
+                            .foregroundStyle(embeddingProgressColor(for: progress))
+                        
+                        ProgressView(
+                            value: Double(progress.processedMemories),
+                            total: Double(max(progress.totalMemories, 1))
+                        )
+                        
+                        Text(
+                            String(
+                                format: NSLocalizedString("解析进度 %d / %d", comment: ""),
+                                progress.processedMemories,
+                                progress.totalMemories
+                            )
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        
+                        if progress.phase == .running,
+                           let preview = progress.currentMemoryPreview,
+                           !preview.isEmpty {
+                            Text(
+                                String(
+                                    format: NSLocalizedString("正在处理：%@", comment: ""),
+                                    preview
+                                )
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        }
+                        
+                        if progress.phase == .failed,
+                           let message = progress.errorMessage,
+                           !message.isEmpty {
+                            Text(message)
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
                         }
                     }
                 }
-                .disabled(isReembeddingMemories)
             } header: {
                 Text("数据维护")
             } footer: {

@@ -96,6 +96,28 @@ struct MemoryManagerTests {
             attempts
         }
     }
+    
+    actor AlwaysFailEmbeddingGenerator: MemoryEmbeddingGenerating {
+        enum TestError: Error {
+            case forced
+        }
+        
+        func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]] {
+            throw TestError.forced
+        }
+    }
+    
+    actor ProgressEventRecorder {
+        private var events: [MemoryEmbeddingProgress] = []
+        
+        func append(_ event: MemoryEmbeddingProgress) {
+            events.append(event)
+        }
+        
+        func snapshot() -> [MemoryEmbeddingProgress] {
+            events
+        }
+    }
 
     // Helper now accepts a specific manager instance to clean up.
     private func cleanup(memoryManager: MemoryManager) async {
@@ -170,6 +192,150 @@ struct MemoryManagerTests {
         
         let attemptsAfterReconcile = await generator.attemptsCount()
         #expect(attemptsAfterReconcile == 2, "补偿时应再次调用嵌入并最终成功。")
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Reembed Progress Emits Running To Completed")
+    func testReembedProgressEmitsRunningToCompleted() async throws {
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "用户喜欢手冲咖啡。")
+        await memoryManager.addMemory(content: "用户偏好简洁回答。")
+        await memoryManager.addMemory(content: "用户常用语言是中文。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        _ = try await memoryManager.reembedAllMemories()
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reembedAll }
+        #expect(!events.isEmpty)
+        #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 3 })
+        #expect(events.contains { $0.phase == .running && $0.processedMemories > 0 && $0.processedMemories <= 3 })
+        
+        if let last = events.last {
+            #expect(last.phase == .completed)
+            #expect(last.processedMemories == 3)
+            #expect(last.totalMemories == 3)
+        } else {
+            Issue.record("未捕获到重嵌入进度事件。")
+        }
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Reembed Progress Emits Failed On Error")
+    func testReembedProgressEmitsFailedOnError() async throws {
+        let retryPolicy = MemoryEmbeddingRetryPolicy(maxAttempts: 1, initialDelay: 0, backoffMultiplier: 1)
+        let memoryManager = MemoryManager(
+            embeddingGenerator: AlwaysFailEmbeddingGenerator(),
+            retryPolicy: retryPolicy
+        )
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "这条记忆会导致重嵌入失败。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        do {
+            _ = try await memoryManager.reembedAllMemories()
+            Issue.record("预期重嵌入抛错，但未抛错。")
+        } catch {
+            // expected
+        }
+        
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reembedAll }
+        #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 1 })
+        
+        if let last = events.last {
+            #expect(last.phase == .failed)
+            #expect(last.processedMemories < last.totalMemories)
+        } else {
+            Issue.record("未捕获到重嵌入失败进度事件。")
+        }
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Reconcile Progress Emits For Missing Embeddings")
+    func testReconcileProgressEmitsForMissingEmbeddings() async throws {
+        let generator = FlakyEmbeddingGenerator(failuresBeforeSuccess: 1)
+        let retryPolicy = MemoryEmbeddingRetryPolicy(maxAttempts: 1, initialDelay: 0, backoffMultiplier: 1)
+        let memoryManager = MemoryManager(
+            embeddingGenerator: generator,
+            retryPolicy: retryPolicy
+        )
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "这条记忆首次嵌入会失败，随后由补偿补齐。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        let reconciled = await memoryManager.reconcilePendingEmbeddings()
+        #expect(reconciled == 1)
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reconcilePending }
+        #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 1 })
+        
+        if let last = events.last {
+            #expect(last.phase == .completed)
+            #expect(last.processedMemories == 1)
+            #expect(last.totalMemories == 1)
+        } else {
+            Issue.record("未捕获到补偿进度事件。")
+        }
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("No Reconcile Progress Event When Nothing To Reconcile")
+    func testNoReconcileProgressEventWhenNothingToReconcile() async throws {
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "这条记忆已经具备嵌入。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        let reconciled = await memoryManager.reconcilePendingEmbeddings()
+        #expect(reconciled == 0)
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reconcilePending }
+        #expect(events.isEmpty)
         
         await cleanup(memoryManager: memoryManager)
     }
