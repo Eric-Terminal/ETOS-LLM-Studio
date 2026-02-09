@@ -33,11 +33,9 @@ struct ETAdvancedMarkdownRenderer: View {
     @ViewBuilder
     private func baseTextView(_ text: String) -> some View {
         if enableMarkdown {
+            let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
-                .markdownSoftBreakMode(.lineBreak)
-                .markdownTextStyle {
-                    ForegroundColor(isOutgoing ? .white : .primary)
-                }
+                .etChatMarkdownBaseStyle(textColor: textColor)
         } else {
             Text(text)
                 .foregroundStyle(isOutgoing ? Color.white : Color.primary)
@@ -222,6 +220,27 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       word-break: normal;
     }
 
+    .et-table-scroll {
+      margin: 0.3em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+    .et-table-scroll table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      table-layout: auto;
+    }
+    .et-table-scroll th,
+    .et-table-scroll td {
+      white-space: nowrap;
+      padding: 0.25em 0.55em;
+      border: 1px solid rgba(127,127,127,0.3);
+      vertical-align: top;
+    }
+
     .katex {
       color: var(--text);
       font-size: 1em;
@@ -279,6 +298,20 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     window.__etNotifyHeight = __notifyHeightNow;
 
+    function __wrapTables(container) {
+      const tables = container.querySelectorAll("table");
+      tables.forEach((table) => {
+        const parent = table.parentElement;
+        if (parent && parent.classList.contains("et-table-scroll")) {
+          return;
+        }
+        const wrapper = document.createElement("div");
+        wrapper.className = "et-table-scroll";
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+      });
+    }
+
     function __render() {
       const container = document.getElementById("content");
 
@@ -289,6 +322,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       } else {
         __setFallbackContent();
       }
+
+      __wrapTables(container);
 
       if (window.renderMathInElement) {
         window.renderMathInElement(container, {
@@ -360,5 +395,23 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
                 .replacingOccurrences(of: "\"", with: "&quot;")
                 .replacingOccurrences(of: "'", with: "&#39;")
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func etChatMarkdownBaseStyle(textColor: Color) -> some View {
+        self
+            .markdownSoftBreakMode(.lineBreak)
+            .markdownTextStyle {
+                ForegroundColor(textColor)
+            }
+            .markdownBlockStyle(\.table) { configuration in
+                ScrollView(.horizontal) {
+                    configuration.label
+                        .fixedSize(horizontal: true, vertical: true)
+                }
+                .markdownMargin(top: .zero, bottom: .em(1))
+            }
     }
 }
