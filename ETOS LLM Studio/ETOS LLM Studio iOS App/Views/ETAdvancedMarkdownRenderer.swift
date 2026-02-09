@@ -158,7 +158,11 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+    onerror="this.onerror=null;this.href='https://unpkg.com/katex@0.16.11/dist/katex.min.css';"
+  >
   <style>
     :root {
       color-scheme: light dark;
@@ -262,6 +266,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
       font-size: 0.9em;
     }
+    .et-math-block {
+      margin: 0.3em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -270,6 +281,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
   <script>
     const __raw = \(sourceJSON);
     const __enableMarkdown = \(enableMarkdown ? "true" : "false");
+    const __rawHasMath = __raw.includes("$$") || __raw.includes("\\\\(") || __raw.includes("\\\\[");
 
     function __escapeHTML(input) {
       return input
@@ -312,11 +324,76 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       });
     }
 
+    function __tokenizeDisplayMath(source) {
+      const blocks = [];
+
+      let rewritten = source.replace(/\\$\\$([\\s\\S]+?)\\$\\$/g, (_, latex) => {
+        const index = blocks.length;
+        blocks.push(latex.trim());
+        return `\n\n<div class="et-math-block" data-et-math-index="${index}"></div>\n\n`;
+      });
+
+      let cursor = 0;
+      let bracketRewritten = "";
+      while (cursor < rewritten.length) {
+        const start = rewritten.indexOf("\\\\[", cursor);
+        if (start < 0) {
+          bracketRewritten += rewritten.slice(cursor);
+          break;
+        }
+        const end = rewritten.indexOf("\\\\]", start + 2);
+        if (end < 0) {
+          bracketRewritten += rewritten.slice(cursor);
+          break;
+        }
+        const latex = rewritten.slice(start + 2, end).trim();
+        const index = blocks.length;
+        blocks.push(latex);
+        bracketRewritten += rewritten.slice(cursor, start);
+        bracketRewritten += `\n\n<div class="et-math-block" data-et-math-index="${index}"></div>\n\n`;
+        cursor = end + 2;
+      }
+      rewritten = bracketRewritten;
+
+      return { markdown: rewritten, blocks };
+    }
+
+    function __renderMathBlocks(container, blocks) {
+      if (!window.katex || !Array.isArray(blocks) || blocks.length === 0) {
+        return;
+      }
+      const nodes = container.querySelectorAll(".et-math-block[data-et-math-index]");
+      nodes.forEach((node) => {
+        const index = Number(node.getAttribute("data-et-math-index"));
+        if (!Number.isFinite(index) || index < 0 || index >= blocks.length) {
+          return;
+        }
+        const latex = (blocks[index] || "").trim();
+        if (!latex) {
+          return;
+        }
+        try {
+          window.katex.render(latex, node, {
+            displayMode: true,
+            throwOnError: false,
+            strict: "ignore"
+          });
+        } catch (_) {
+          node.textContent = `$$\n${latex}\n$$`;
+        }
+      });
+    }
+
     function __render() {
       const container = document.getElementById("content");
 
       if (__enableMarkdown && window.marked) {
-        container.innerHTML = window.marked.parse(__raw, { breaks: true, gfm: true });
+        const tokenized = __tokenizeDisplayMath(__raw);
+        container.innerHTML = window.marked.parse(tokenized.markdown, {
+          breaks: !__rawHasMath,
+          gfm: true
+        });
+        __renderMathBlocks(container, tokenized.blocks);
       } else if (!__enableMarkdown) {
         __setFallbackContent();
       } else {
@@ -326,32 +403,27 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       __wrapTables(container);
 
       if (window.renderMathInElement) {
-        window.renderMathInElement(container, {
-          delimiters: [
-            { left: "$$", right: "$$", display: true },
-            { left: "\\\\[", right: "\\\\]", display: true },
-            { left: "\\\\(", right: "\\\\)", display: false },
-            { left: "$", right: "$", display: false }
-          ],
-          throwOnError: false,
-          strict: "ignore"
-        });
+        try {
+          window.renderMathInElement(container, {
+            delimiters: [
+              { left: "\\\\(", right: "\\\\)", display: false },
+              { left: "$", right: "$", display: false }
+            ],
+            throwOnError: false,
+            strict: "ignore"
+          });
+        } catch (_) {}
       }
 
       __notifyHeightNow();
     }
 
     function __bootstrap(retryCount = 0) {
-      const markdownReady = !__enableMarkdown || !!window.marked;
-      const mathReady = !!window.renderMathInElement;
-      if (markdownReady && mathReady) {
-        __render();
-        return;
-      }
+      __render();
 
-      if (retryCount >= 80) {
-        __setFallbackContent();
-        __notifyHeightNow();
+      const markdownReady = !__enableMarkdown || !!window.marked;
+      const mathReady = !!window.renderMathInElement && !!window.katex;
+      if ((markdownReady && mathReady) || retryCount >= 80) {
         return;
       }
 
@@ -370,9 +442,18 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     window.addEventListener("resize", () => __notifyHeightNow());
   </script>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
+    onerror="this.onerror=null;this.src='https://unpkg.com/marked/marked.min.js';"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+    onerror="this.onerror=null;this.src='https://unpkg.com/katex@0.16.11/dist/katex.min.js';"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onerror="this.onerror=null;this.src='https://unpkg.com/katex@0.16.11/dist/contrib/auto-render.min.js';"
+  ></script>
 </body>
 </html>
 """

@@ -47,6 +47,8 @@ struct MemorySettingsView: View {
             return NSLocalizedString("补偿嵌入已完成", comment: "Memory embedding reconcile completed title")
         case (.reconcilePending, .failed):
             return NSLocalizedString("补偿嵌入部分失败", comment: "Memory embedding reconcile partially failed title")
+        @unknown default:
+            return NSLocalizedString("记忆嵌入状态更新中", comment: "Fallback memory embedding status title")
         }
     }
     
@@ -58,6 +60,8 @@ struct MemorySettingsView: View {
             return .green
         case .failed:
             return .orange
+        @unknown default:
+            return .secondary
         }
     }
     
