@@ -3,6 +3,8 @@
 */**/.DS_Store
 *.swp
 *~.nib
+*.xcodeproj/project.xcworkspace/
+ETOS LLM Studio/ETOS LLM Studio.xcodeproj/project.xcworkspace/
 
 # Build products
 build/
