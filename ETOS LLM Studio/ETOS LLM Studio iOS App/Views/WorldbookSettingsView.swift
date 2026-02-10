@@ -1002,7 +1002,11 @@ private struct WorldbookSessionBindingView: View {
                             }
                             Spacer()
                             Image(systemName: selected.contains(book.id) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selected.contains(book.id) ? .tint : .tertiary)
+                                .foregroundStyle(
+                                    selected.contains(book.id)
+                                    ? AnyShapeStyle(.tint)
+                                    : AnyShapeStyle(.tertiary)
+                                )
                         }
                     }
                     .buttonStyle(.plain)
@@ -1049,6 +1053,8 @@ private func worldbookPositionLabel(_ position: WorldbookPosition) -> String {
         return NSLocalizedString("消息底部", comment: "Worldbook position emBottom")
     case .outlet:
         return NSLocalizedString("Outlet", comment: "Worldbook position outlet")
+    @unknown default:
+        return NSLocalizedString("系统后置", comment: "Worldbook position fallback")
     }
 }
 
@@ -1062,6 +1068,8 @@ private func worldbookSelectiveLogicLabel(_ logic: WorldbookSelectiveLogic) -> S
         return NSLocalizedString("NOT_ANY（全部不命中）", comment: "Selective logic notAny")
     case .notAll:
         return NSLocalizedString("NOT_ALL（并非全部命中）", comment: "Selective logic notAll")
+    @unknown default:
+        return NSLocalizedString("AND_ANY（任一命中）", comment: "Selective logic fallback")
     }
 }
 

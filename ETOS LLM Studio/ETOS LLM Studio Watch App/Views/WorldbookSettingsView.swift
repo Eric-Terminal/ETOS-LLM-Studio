@@ -260,7 +260,11 @@ private struct WatchWorldbookSessionBindingView: View {
                             }
                             Spacer()
                             Image(systemName: selected.contains(book.id) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selected.contains(book.id) ? .tint : .tertiary)
+                                .foregroundStyle(
+                                    selected.contains(book.id)
+                                    ? AnyShapeStyle(.tint)
+                                    : AnyShapeStyle(.tertiary)
+                                )
                         }
                     }
                     .buttonStyle(.plain)
@@ -307,5 +311,7 @@ private func worldbookPositionLabel(_ position: WorldbookPosition) -> String {
         return NSLocalizedString("消息底部", comment: "Worldbook position emBottom")
     case .outlet:
         return NSLocalizedString("Outlet", comment: "Worldbook position outlet")
+    @unknown default:
+        return NSLocalizedString("系统后置", comment: "Worldbook position fallback")
     }
 }
