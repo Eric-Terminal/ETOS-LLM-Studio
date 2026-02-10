@@ -88,6 +88,9 @@ public class ChatService {
     private var providers: [Provider]
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
+    private let worldbookStore: WorldbookStore
+    private let worldbookImportService: WorldbookImportService
+    private let worldbookEngine: WorldbookEngine
     private let urlSession: URLSession
 
     private struct ImageGenerationContext {
@@ -164,10 +167,20 @@ public class ChatService {
 
     // MARK: - 初始化
     
-    public init(adapters: [String: APIAdapter]? = nil, memoryManager: MemoryManager = .shared, urlSession: URLSession = .shared) {
+    public init(
+        adapters: [String: APIAdapter]? = nil,
+        memoryManager: MemoryManager = .shared,
+        worldbookStore: WorldbookStore = .shared,
+        worldbookImportService: WorldbookImportService = WorldbookImportService(),
+        worldbookEngine: WorldbookEngine = WorldbookEngine(),
+        urlSession: URLSession = .shared
+    ) {
         logger.info("ChatService 正在初始化 (v2.1 重构版)...")
         
         self.memoryManager = memoryManager
+        self.worldbookStore = worldbookStore
+        self.worldbookImportService = worldbookImportService
+        self.worldbookEngine = worldbookEngine
         self.urlSession = urlSession
         ConfigLoader.setupInitialProviderConfigs()
         ConfigLoader.setupBackgroundsDirectory()
@@ -238,6 +251,63 @@ public class ChatService {
         selectedModelSubject.send(model)
         UserDefaults.standard.set(model?.id, forKey: "selectedRunnableModelID")
         logger.info("已将模型切换为: \(model?.model.displayName ?? "无")")
+    }
+
+    // MARK: - 世界书管理
+
+    public func loadWorldbooks() -> [Worldbook] {
+        worldbookStore.loadWorldbooks()
+    }
+
+    public func saveWorldbook(_ worldbook: Worldbook) {
+        worldbookStore.upsertWorldbook(worldbook)
+    }
+
+    public func deleteWorldbook(id: UUID) {
+        worldbookStore.deleteWorldbook(id: id)
+
+        // 清理会话绑定中的孤立引用
+        var sessions = chatSessionsSubject.value
+        var didChange = false
+        for index in sessions.indices {
+            if sessions[index].worldbookIDs.contains(id) {
+                sessions[index].worldbookIDs.removeAll { $0 == id }
+                didChange = true
+            }
+        }
+        if didChange {
+            chatSessionsSubject.send(sessions)
+            if let current = currentSessionSubject.value,
+               let updated = sessions.first(where: { $0.id == current.id }) {
+                currentSessionSubject.send(updated)
+            }
+            Persistence.saveChatSessions(sessions)
+        }
+    }
+
+    @discardableResult
+    public func importWorldbook(data: Data, fileName: String) throws -> WorldbookImportReport {
+        let imported = try worldbookImportService.importWorldbookWithReport(from: data, fileName: fileName)
+        return worldbookStore.mergeImportedWorldbook(
+            imported.worldbook,
+            dedupeByContent: true,
+            diagnostics: imported.diagnostics
+        )
+    }
+
+    public func assignWorldbooks(to sessionID: UUID, worldbookIDs: [UUID]) {
+        var sessions = chatSessionsSubject.value
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let uniqueIDs = deduplicatedWorldbookIDs(worldbookIDs)
+        sessions[index].worldbookIDs = uniqueIDs
+
+        chatSessionsSubject.send(sessions)
+        if let current = currentSessionSubject.value, current.id == sessionID {
+            var updated = current
+            updated.worldbookIDs = uniqueIDs
+            currentSessionSubject.send(updated)
+        }
+        Persistence.saveChatSessions(sessions)
     }
     
     public func fetchModels(for provider: Provider) async throws -> [Model] {
@@ -406,7 +476,14 @@ public class ChatService {
     
     @discardableResult
     public func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
-        let newSession = ChatSession(id: UUID(), name: "分支: \(sourceSession.name)", topicPrompt: sourceSession.topicPrompt, enhancedPrompt: sourceSession.enhancedPrompt, isTemporary: false)
+        let newSession = ChatSession(
+            id: UUID(),
+            name: "分支: \(sourceSession.name)",
+            topicPrompt: sourceSession.topicPrompt,
+            enhancedPrompt: sourceSession.enhancedPrompt,
+            worldbookIDs: sourceSession.worldbookIDs,
+            isTemporary: false
+        )
         logger.info("创建了分支会话: \(newSession.name)")
         if copyMessages {
             var sourceMessages = Persistence.loadMessages(for: sourceSession.id)
@@ -465,6 +542,7 @@ public class ChatService {
             name: "分支: \(sourceSession.name)",
             topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
+            worldbookIDs: sourceSession.worldbookIDs,
             isTemporary: false
         )
         logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
@@ -1516,20 +1594,35 @@ public class ChatService {
             return
         }
 
+        let sessionForRequest = chatSessionsSubject.value.first(where: { $0.id == currentSessionID }) ?? currentSessionSubject.value
+        let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.worldbookIDs ?? [])
+        let worldbookResult = worldbookEngine.evaluate(
+            .init(
+                sessionID: currentSessionID,
+                worldbooks: boundWorldbooks,
+                messages: messages.filter { $0.role != .error && $0.id != loadingMessageID },
+                topicPrompt: sessionForRequest?.topicPrompt,
+                enhancedPrompt: enhancedPrompt
+            )
+        )
+
         var messagesToSend: [ChatMessage] = []
-        
-        // 使用新的XML格式构建最终的系统提示词
         let finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
-            topic: currentSessionSubject.value?.topicPrompt,
+            topic: sessionForRequest?.topicPrompt,
             memories: memories,
-            includeSystemTime: includeSystemTime
+            includeSystemTime: includeSystemTime,
+            worldbookBefore: worldbookResult.before,
+            worldbookAfter: worldbookResult.after,
+            worldbookANTop: worldbookResult.anTop,
+            worldbookANBottom: worldbookResult.anBottom,
+            worldbookOutlet: worldbookResult.outlet
         )
-        
+
         if !finalSystemPrompt.isEmpty {
             messagesToSend.append(ChatMessage(role: .system, content: finalSystemPrompt))
         }
-        
+
         var chatHistory = messages.filter { $0.role != .error && $0.id != loadingMessageID }
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
             chatHistory = Array(chatHistory.suffix(maxChatHistory))
@@ -1544,7 +1637,17 @@ public class ChatService {
             let metaInstruction = NSLocalizedString("这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。", comment: "Meta instruction appended with enhanced prompt.")
             chatHistory[lastUserMsgIndex].content += "\n\n---\n\n<instruction>\n\(metaInstruction)\n\n\(enhanced)\n</instruction>"
         }
+
+        if !worldbookResult.atDepth.isEmpty {
+            chatHistory = injectAtDepthMessages(worldbookResult.atDepth, into: chatHistory)
+        }
+
+        let emTopMessages = makeWorldbookSystemMessages(worldbookResult.emTop, tag: "worldbook_em_top")
+        let emBottomMessages = makeWorldbookSystemMessages(worldbookResult.emBottom, tag: "worldbook_em_bottom")
+
+        messagesToSend.append(contentsOf: emTopMessages)
         messagesToSend.append(contentsOf: chatHistory)
+        messagesToSend.append(contentsOf: emBottomMessages)
         
         // 构建音频附件字典：从历史消息中加载已保存的音频文件
         var audioAttachments: [UUID: AudioAttachment] = [:]
@@ -3326,7 +3429,17 @@ public class ChatService {
     }
     
     /// 构建最终的、使用 XML 标签包裹的系统提示词。
-    private func buildFinalSystemPrompt(global: String?, topic: String?, memories: [MemoryItem], includeSystemTime: Bool) -> String {
+    private func buildFinalSystemPrompt(
+        global: String?,
+        topic: String?,
+        memories: [MemoryItem],
+        includeSystemTime: Bool,
+        worldbookBefore: [WorldbookInjection] = [],
+        worldbookAfter: [WorldbookInjection] = [],
+        worldbookANTop: [WorldbookInjection] = [],
+        worldbookANBottom: [WorldbookInjection] = [],
+        worldbookOutlet: [WorldbookInjection] = []
+    ) -> String {
         var parts: [String] = []
 
         if let global, !global.isEmpty {
@@ -3361,7 +3474,109 @@ public class ChatService {
 """)
         }
 
+        if !worldbookBefore.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_before", entries: worldbookBefore))
+        }
+        if !worldbookAfter.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_after", entries: worldbookAfter))
+        }
+        if !worldbookANTop.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_an_top", entries: worldbookANTop))
+        }
+        if !worldbookANBottom.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_an_bottom", entries: worldbookANBottom))
+        }
+        if !worldbookOutlet.isEmpty {
+            parts.append(contentsOf: makeWorldbookOutletBlocks(entries: worldbookOutlet))
+        }
+
         return parts.joined(separator: "\n\n")
+    }
+
+    private func makeWorldbookPromptBlock(
+        tag: String,
+        entries: [WorldbookInjection],
+        attributes: [String: String] = [:]
+    ) -> String {
+        let lines = entries.map { injection in
+            let comment = injection.entryComment.trimmingCharacters(in: .whitespacesAndNewlines)
+            if comment.isEmpty {
+                return "- [\(injection.worldbookName)] \(injection.content)"
+            }
+            return "- [\(injection.worldbookName) / \(comment)] \(injection.content)"
+        }.joined(separator: "\n")
+        let attrs: String
+        if attributes.isEmpty {
+            attrs = ""
+        } else {
+            let rendered = attributes
+                .sorted(by: { $0.key < $1.key })
+                .map { key, value in
+                    "\(key)=\"\(xmlEscapedAttribute(value))\""
+                }
+                .joined(separator: " ")
+            attrs = rendered.isEmpty ? "" : " \(rendered)"
+        }
+        return "<\(tag)\(attrs)>\n\(lines)\n</\(tag)>"
+    }
+
+    private func makeWorldbookOutletBlocks(entries: [WorldbookInjection]) -> [String] {
+        let grouped = Dictionary(grouping: entries) { injection -> String in
+            let trimmed = injection.outletName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? "default" : trimmed
+        }
+        return grouped.keys.sorted().compactMap { outletName in
+            guard let outletEntries = grouped[outletName], !outletEntries.isEmpty else { return nil }
+            return makeWorldbookPromptBlock(
+                tag: "worldbook_outlet",
+                entries: outletEntries,
+                attributes: ["name": outletName]
+            )
+        }
+    }
+
+    private func xmlEscapedAttribute(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private func makeWorldbookSystemMessages(_ entries: [WorldbookInjection], tag: String) -> [ChatMessage] {
+        guard !entries.isEmpty else { return [] }
+        let content = makeWorldbookPromptBlock(tag: tag, entries: entries)
+        return [ChatMessage(role: .system, content: content)]
+    }
+
+    private func injectAtDepthMessages(_ depthEntries: [WorldbookDepthInsertion], into chatHistory: [ChatMessage]) -> [ChatMessage] {
+        guard !depthEntries.isEmpty else { return chatHistory }
+        var updated = chatHistory
+        for insertion in depthEntries.sorted(by: { $0.depth < $1.depth }) {
+            let tag = "worldbook_at_depth_\(max(0, insertion.depth))"
+            let message = ChatMessage(
+                role: .system,
+                content: makeWorldbookPromptBlock(tag: tag, entries: insertion.items)
+            )
+            let resolvedDepth = max(0, insertion.depth)
+            let targetIndex = max(0, updated.count - resolvedDepth)
+            if targetIndex >= updated.count {
+                updated.append(message)
+            } else {
+                updated.insert(message, at: targetIndex)
+            }
+        }
+        return updated
+    }
+
+    private func deduplicatedWorldbookIDs(_ ids: [UUID]) -> [UUID] {
+        var seen = Set<UUID>()
+        var ordered: [UUID] = []
+        for id in ids where !seen.contains(id) {
+            seen.insert(id)
+            ordered.append(id)
+        }
+        return ordered
     }
     
     private func formattedSystemTimeDescription() -> String {

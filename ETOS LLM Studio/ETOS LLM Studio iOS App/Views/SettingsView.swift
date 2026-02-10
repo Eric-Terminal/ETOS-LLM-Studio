@@ -72,6 +72,12 @@ struct SettingsView: View {
                 } label: {
                     Label("拓展功能", systemImage: "puzzlepiece.extension")
                 }
+
+                NavigationLink {
+                    WorldbookSettingsView().environmentObject(viewModel)
+                } label: {
+                    Label("世界书", systemImage: "book.pages")
+                }
             }
             
             Section("显示与体验") {

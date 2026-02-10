@@ -846,7 +846,8 @@ fileprivate struct ChatServiceTests {
             systemPrompt: "",
             maxChatHistory: 0,
             enableMemory: true,
-            enableMemoryWrite: true
+            enableMemoryWrite: true,
+            includeSystemTime: false
         )
         
         // 关键修复：等待后台的 addMemory 操作完成，它会触发 publisher 发出新值。
@@ -858,6 +859,96 @@ fileprivate struct ChatServiceTests {
         #expect(memories.first?.content == "The user lives in London.")
         
         // 4. Teardown
+        await cleanup()
+    }
+
+    @Test("Worldbook prompt injection order and depth insertion")
+    func testWorldbookInjectionOrderAndDepth() async throws {
+        await cleanup()
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        defer { store.saveWorldbooks(originalBooks) }
+
+        let book = Worldbook(
+            name: "注入测试书",
+            entries: [
+                WorldbookEntry(content: "before", keys: ["hero"], position: .before, order: 1),
+                WorldbookEntry(content: "after", keys: ["hero"], position: .after, order: 2),
+                WorldbookEntry(content: "an-top", keys: ["hero"], position: .anTop, order: 3),
+                WorldbookEntry(content: "an-bottom", keys: ["hero"], position: .anBottom, order: 4),
+                WorldbookEntry(content: "em-top", keys: ["hero"], position: .emTop, order: 5),
+                WorldbookEntry(content: "em-bottom", keys: ["hero"], position: .emBottom, order: 6),
+                WorldbookEntry(content: "depth", keys: ["hero"], position: .atDepth, order: 7, depth: 1)
+            ]
+        )
+        store.saveWorldbooks([book])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "测试会话")
+        session.worldbookIDs = [book.id]
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let allMessages = mockAdapter.receivedMessages ?? []
+        let systemPrompt = allMessages.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("<worldbook_before>"))
+        #expect(systemPrompt.contains("<worldbook_after>"))
+        #expect(systemPrompt.contains("<worldbook_an_top>"))
+        #expect(systemPrompt.contains("<worldbook_an_bottom>"))
+
+        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_em_top>") }))
+        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_em_bottom>") }))
+        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_at_depth_1>") }))
+
+        await cleanup()
+    }
+
+    @Test("Worldbook coexists with memory block")
+    func testWorldbookAndMemoryCoexist() async throws {
+        await cleanup()
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        defer { store.saveWorldbooks(originalBooks) }
+
+        await memoryManager.addMemory(content: "memory-hit")
+        let book = Worldbook(
+            name: "共存书",
+            entries: [WorldbookEntry(content: "wb-hit", keys: ["hero"], position: .after)]
+        )
+        store.saveWorldbooks([book])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "共存会话")
+        session.worldbookIDs = [book.id]
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            includeSystemTime: false
+        )
+
+        let systemPrompt = mockAdapter.receivedMessages?.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("<memory>"))
+        #expect(systemPrompt.contains("<worldbook_after>"))
+
         await cleanup()
     }
     

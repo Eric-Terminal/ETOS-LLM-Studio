@@ -127,6 +127,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if UserDefaults.standard.bool(forKey: "sync.options.mcpServers") { options.insert(.mcpServers) }
         if UserDefaults.standard.bool(forKey: "sync.options.imageFiles") { options.insert(.imageFiles) }
         if UserDefaults.standard.bool(forKey: "sync.options.shortcutTools") { options.insert(.shortcutTools) }
+        if UserDefaults.standard.bool(forKey: "sync.options.worldbooks") { options.insert(.worldbooks) }
         return options
     }
     
@@ -163,6 +164,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedMCPServers > 0 { parts.append("MCP +\(summary.importedMCPServers)") }
         if summary.importedImageFiles > 0 { parts.append("图片 +\(summary.importedImageFiles)") }
         if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }
+        if summary.importedWorldbooks > 0 { parts.append("世界书 +\(summary.importedWorldbooks)") }
         return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
     }
     

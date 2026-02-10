@@ -26,6 +26,7 @@ public enum SyncEngine {
         var audioFiles: [SyncedAudio] = []
         var imageFiles: [SyncedImage] = []
         var shortcutTools: [ShortcutToolDefinition] = []
+        var worldbooks: [Worldbook] = []
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
         
@@ -73,6 +74,10 @@ public enum SyncEngine {
         if options.contains(.shortcutTools) {
             shortcutTools = ShortcutToolStore.loadTools()
         }
+
+        if options.contains(.worldbooks) {
+            worldbooks = WorldbookStore.shared.loadWorldbooks()
+        }
         
         // 音频文件同步：会话引用的音频 + 可选全量音频文件
         var audioFileNamesToInclude = referencedAudioFileNames
@@ -119,7 +124,8 @@ public enum SyncEngine {
             mcpServers: mcpServers,
             audioFiles: audioFiles,
             imageFiles: imageFiles,
-            shortcutTools: shortcutTools
+            shortcutTools: shortcutTools,
+            worldbooks: worldbooks
         )
     }
     
@@ -172,6 +178,15 @@ public enum SyncEngine {
             let result = mergeShortcutTools(package.shortcutTools)
             summary.importedShortcutTools = result.imported
             summary.skippedShortcutTools = result.skipped
+        }
+
+        if package.options.contains(.worldbooks) {
+            let result = mergeWorldbooks(package.worldbooks)
+            summary.importedWorldbooks = result.imported
+            summary.skippedWorldbooks = result.skipped
+            if !result.idMapping.isEmpty {
+                remapWorldbookIDsInSessions(result.idMapping, chatService: chatService)
+            }
         }
         
         // 音频文件同步
@@ -568,6 +583,82 @@ public enum SyncEngine {
         return (imported, skipped)
     }
 
+    // MARK: - Worldbooks
+
+    private static func mergeWorldbooks(
+        _ incoming: [Worldbook]
+    ) -> (imported: Int, skipped: Int, idMapping: [UUID: UUID]) {
+        guard !incoming.isEmpty else { return (0, 0, [:]) }
+
+        let store = WorldbookStore.shared
+        var local = store.loadWorldbooks()
+        var imported = 0
+        var skipped = 0
+        var idMapping: [UUID: UUID] = [:]
+
+        var localHashes = Set(local.map(\.contentHash))
+        var globalEntrySignatures = Set(
+            local.flatMap { book in
+                book.entries.map { worldbookEntrySignature($0) }
+            }
+        )
+
+        for var incomingBook in incoming {
+            let originalIncomingID = incomingBook.id
+            if localHashes.contains(incomingBook.contentHash) {
+                if let existing = local.first(where: { $0.contentHash == incomingBook.contentHash }) {
+                    idMapping[originalIncomingID] = existing.id
+                }
+                skipped += 1
+                continue
+            }
+
+            if local.contains(where: { $0.id == incomingBook.id }) {
+                incomingBook.id = UUID()
+            }
+
+            var dedupedEntries = deduplicateWorldbookEntries(incomingBook.entries)
+            dedupedEntries = dedupedEntries.filter { entry in
+                let signature = worldbookEntrySignature(entry)
+                if globalEntrySignatures.contains(signature) {
+                    return false
+                }
+                globalEntrySignatures.insert(signature)
+                return true
+            }
+            incomingBook.entries = dedupedEntries
+            guard !incomingBook.entries.isEmpty else {
+                if let sameName = local.first(where: {
+                    $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .localizedCaseInsensitiveCompare(incomingBook.name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+                }) {
+                    idMapping[originalIncomingID] = sameName.id
+                }
+                skipped += 1
+                continue
+            }
+
+            let hasSameName = local.contains(where: {
+                $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .localizedCaseInsensitiveCompare(incomingBook.name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+            })
+            if hasSameName {
+                incomingBook.name = WorldbookStore.uniqueSyncName(baseName: incomingBook.name, existing: local.map(\.name))
+            }
+
+            incomingBook.updatedAt = Date()
+            local.append(incomingBook)
+            localHashes.insert(incomingBook.contentHash)
+            idMapping[originalIncomingID] = incomingBook.id
+            imported += 1
+        }
+
+        if imported > 0 {
+            store.saveWorldbooks(local)
+        }
+        return (imported, skipped, idMapping)
+    }
+
     // MARK: - Helpers
 
     /// 创建带有新 UUID 的会话副本（保留原名称，不添加后缀）
@@ -577,6 +668,7 @@ public enum SyncEngine {
             name: session.name,
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt,
+            worldbookIDs: session.worldbookIDs,
             isTemporary: false
         )
     }
@@ -589,6 +681,9 @@ public enum SyncEngine {
         hasher.combine(session.baseNameWithoutSyncSuffix)
         hasher.combine(session.topicPrompt ?? "")
         hasher.combine(session.enhancedPrompt ?? "")
+        for worldbookID in session.worldbookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+            hasher.combine(worldbookID.uuidString)
+        }
         // 对消息进行哈希
         for message in messages {
             hasher.combine(message.role.rawValue)
@@ -656,5 +751,61 @@ public enum SyncEngine {
             hasher.combine(scope ?? "")
         }
         return String(hasher.finalize())
+    }
+
+    private static func worldbookEntrySignature(_ entry: WorldbookEntry) -> String {
+        let normalizedContent = WorldbookStore.normalizedContent(entry.content)
+        let keys = entry.keys.map { $0.lowercased() }.sorted().joined(separator: "|")
+        return "\(normalizedContent)::\(keys)"
+    }
+
+    private static func deduplicateWorldbookEntries(_ entries: [WorldbookEntry]) -> [WorldbookEntry] {
+        var result: [WorldbookEntry] = []
+        var seen = Set<String>()
+        for var entry in entries {
+            let signature = worldbookEntrySignature(entry)
+            if seen.contains(signature) {
+                continue
+            }
+            if result.contains(where: { $0.id == entry.id }) {
+                entry.id = UUID()
+            }
+            seen.insert(signature)
+            result.append(entry)
+        }
+        return result
+    }
+
+    private static func remapWorldbookIDsInSessions(
+        _ idMapping: [UUID: UUID],
+        chatService: ChatService
+    ) {
+        guard !idMapping.isEmpty else { return }
+        var sessions = chatService.chatSessionsSubject.value
+        var changed = false
+
+        for index in sessions.indices {
+            let oldIDs = sessions[index].worldbookIDs
+            guard !oldIDs.isEmpty else { continue }
+            let mapped = oldIDs.map { idMapping[$0] ?? $0 }
+            var deduped: [UUID] = []
+            var seen = Set<UUID>()
+            for id in mapped where !seen.contains(id) {
+                seen.insert(id)
+                deduped.append(id)
+            }
+            if deduped != oldIDs {
+                sessions[index].worldbookIDs = deduped
+                changed = true
+            }
+        }
+
+        guard changed else { return }
+        Persistence.saveChatSessions(sessions)
+        chatService.chatSessionsSubject.send(sessions)
+        if let current = chatService.currentSessionSubject.value,
+           let mappedCurrent = sessions.first(where: { $0.id == current.id }) {
+            chatService.currentSessionSubject.send(mappedCurrent)
+        }
     }
 }
