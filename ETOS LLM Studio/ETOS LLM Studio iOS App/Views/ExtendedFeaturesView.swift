@@ -2,47 +2,8 @@ import SwiftUI
 import Shared
 
 struct ExtendedFeaturesView: View {
-    @EnvironmentObject var viewModel: ChatViewModel
-    
     var body: some View {
         List {
-            Section {
-                NavigationLink {
-                    LongTermMemoryFeatureView()
-                        .environmentObject(viewModel)
-                } label: {
-                    Label("长期记忆系统", systemImage: "brain.head.profile")
-                }
-            } footer: {
-                Text("让 AI 根据历史偏好与事件持续优化回答。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                NavigationLink {
-                    MCPIntegrationView()
-                } label: {
-                    Label("MCP 工具集成", systemImage: "network")
-                }
-            } footer: {
-                Text("配置 MCP 工具服务器，让助手调用外部能力。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                NavigationLink {
-                    ShortcutIntegrationView()
-                } label: {
-                    Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")
-                }
-            } footer: {
-                Text("把快捷指令作为可调用工具导入，支持权限确认与回调。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
             Section {
                 NavigationLink {
                     LocalDebugView()
@@ -66,19 +27,6 @@ struct ExtendedFeaturesView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-
-            Section {
-                NavigationLink {
-                    ImageGenerationFeatureView()
-                        .environmentObject(viewModel)
-                } label: {
-                    Label(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), systemImage: "photo.on.rectangle.angled")
-                }
-            } footer: {
-                Text("生图在独立页面发起，不影响主聊天输入区。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
         .navigationTitle("拓展功能")
         .listStyle(.insetGrouped)
@@ -87,7 +35,7 @@ struct ExtendedFeaturesView: View {
 
 // MARK: - 长期记忆设置
 
-private struct LongTermMemoryFeatureView: View {
+struct LongTermMemoryFeatureView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     
     @AppStorage("enableMemory") private var enableMemory: Bool = true

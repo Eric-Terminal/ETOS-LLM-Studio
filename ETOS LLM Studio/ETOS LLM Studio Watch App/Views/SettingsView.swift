@@ -107,6 +107,7 @@ struct SettingsView: View {
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
                         Label("拓展功能", systemImage: "puzzlepiece.extension")
                     }
+
                     NavigationLink(destination: DisplaySettingsView(
                         enableMarkdown: $viewModel.enableMarkdown,
                         enableBackground: $viewModel.enableBackground,

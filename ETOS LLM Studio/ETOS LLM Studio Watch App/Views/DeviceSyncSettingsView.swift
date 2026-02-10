@@ -11,6 +11,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.mcpServers") private var syncMCPServers = true
     @AppStorage("sync.options.imageFiles") private var syncImageFiles = true
     @AppStorage("sync.options.shortcutTools") private var syncShortcutTools = true
+    @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     
     var body: some View {
@@ -27,6 +28,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("MCP", isOn: $syncMCPServers)
                 Toggle("图片", isOn: $syncImageFiles)
                 Toggle("快捷指令", isOn: $syncShortcutTools)
+                Toggle("世界书", isOn: $syncWorldbooks)
             }
             
             Section {
@@ -62,6 +64,7 @@ struct DeviceSyncSettingsView: View {
         if syncMCPServers { option.insert(.mcpServers) }
         if syncImageFiles { option.insert(.imageFiles) }
         if syncShortcutTools { option.insert(.shortcutTools) }
+        if syncWorldbooks { option.insert(.worldbooks) }
         return option
     }
     
@@ -127,6 +130,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedShortcutTools > 0 {
             parts.append(String(format: NSLocalizedString("快捷指令工具 +%d", comment: ""), summary.importedShortcutTools))
+        }
+        if summary.importedWorldbooks > 0 {
+            parts.append(String(format: NSLocalizedString("世界书 +%d", comment: ""), summary.importedWorldbooks))
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)

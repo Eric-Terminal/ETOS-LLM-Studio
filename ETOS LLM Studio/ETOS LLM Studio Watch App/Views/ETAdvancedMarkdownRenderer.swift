@@ -31,11 +31,9 @@ struct ETAdvancedMarkdownRenderer: View {
     @ViewBuilder
     private func baseTextView(_ text: String) -> some View {
         if enableMarkdown {
+            let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
-                .markdownSoftBreakMode(.lineBreak)
-                .markdownTextStyle {
-                    ForegroundColor(isOutgoing ? .white : .primary)
-                }
+                .etChatMarkdownBaseStyle(textColor: textColor)
         } else {
             Text(text)
                 .foregroundStyle(isOutgoing ? Color.white : Color.primary)
@@ -107,15 +105,30 @@ private struct ETMathAwareMarkdownView: View {
             let text = parts.compactMap(\.textValue).joined()
             if enableMarkdown {
                 Markdown(text)
-                    .markdownSoftBreakMode(.lineBreak)
-                    .markdownTextStyle {
-                        ForegroundColor(textColor)
-                    }
+                    .etChatMarkdownBaseStyle(textColor: textColor)
             } else {
                 Text(text)
                     .foregroundStyle(textColor)
             }
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func etChatMarkdownBaseStyle(textColor: Color) -> some View {
+        self
+            .markdownSoftBreakMode(.lineBreak)
+            .markdownTextStyle {
+                ForegroundColor(textColor)
+            }
+            .markdownBlockStyle(\.table) { configuration in
+                ScrollView(.horizontal) {
+                    configuration.label
+                        .fixedSize(horizontal: true, vertical: true)
+                }
+                .markdownMargin(top: .zero, bottom: .em(1))
+            }
     }
 }
 

@@ -29,6 +29,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let audioFiles = SyncOptions(rawValue: 1 << 5)  // 音频文件同步选项
     public static let imageFiles = SyncOptions(rawValue: 1 << 6)  // 图片文件同步选项
     public static let shortcutTools = SyncOptions(rawValue: 1 << 7) // 快捷指令工具同步选项
+    public static let worldbooks = SyncOptions(rawValue: 1 << 8) // 世界书同步选项
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -104,9 +105,10 @@ public struct SyncPackage: Codable {
     public var audioFiles: [SyncedAudio]
     public var imageFiles: [SyncedImage]
     public var shortcutTools: [ShortcutToolDefinition]
+    public var worldbooks: [Worldbook]
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks
     }
     
     public init(
@@ -118,7 +120,8 @@ public struct SyncPackage: Codable {
         mcpServers: [MCPServerConfiguration] = [],
         audioFiles: [SyncedAudio] = [],
         imageFiles: [SyncedImage] = [],
-        shortcutTools: [ShortcutToolDefinition] = []
+        shortcutTools: [ShortcutToolDefinition] = [],
+        worldbooks: [Worldbook] = []
     ) {
         self.options = options
         self.providers = providers
@@ -129,6 +132,7 @@ public struct SyncPackage: Codable {
         self.audioFiles = audioFiles
         self.imageFiles = imageFiles
         self.shortcutTools = shortcutTools
+        self.worldbooks = worldbooks
     }
     
     public init(from decoder: Decoder) throws {
@@ -142,6 +146,7 @@ public struct SyncPackage: Codable {
         audioFiles = try container.decodeIfPresent([SyncedAudio].self, forKey: .audioFiles) ?? []
         imageFiles = try container.decodeIfPresent([SyncedImage].self, forKey: .imageFiles) ?? []
         shortcutTools = try container.decodeIfPresent([ShortcutToolDefinition].self, forKey: .shortcutTools) ?? []
+        worldbooks = try container.decodeIfPresent([Worldbook].self, forKey: .worldbooks) ?? []
     }
 }
 
@@ -163,6 +168,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedImageFiles: Int
     public var importedShortcutTools: Int
     public var skippedShortcutTools: Int
+    public var importedWorldbooks: Int
+    public var skippedWorldbooks: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -180,7 +187,9 @@ public struct SyncMergeSummary: Equatable {
         importedImageFiles: 0,
         skippedImageFiles: 0,
         importedShortcutTools: 0,
-        skippedShortcutTools: 0
+        skippedShortcutTools: 0,
+        importedWorldbooks: 0,
+        skippedWorldbooks: 0
     )
 }
 
@@ -240,7 +249,8 @@ extension ChatSession {
     func isEquivalent(to other: ChatSession) -> Bool {
         name == other.name &&
         topicPrompt == other.topicPrompt &&
-        enhancedPrompt == other.enhancedPrompt
+        enhancedPrompt == other.enhancedPrompt &&
+        Set(worldbookIDs) == Set(other.worldbookIDs)
     }
     
     /// 去除所有同步后缀的基础名称
@@ -253,7 +263,8 @@ extension ChatSession {
     func isEquivalentIgnoringSyncSuffix(to other: ChatSession) -> Bool {
         baseNameWithoutSyncSuffix == other.baseNameWithoutSyncSuffix &&
         topicPrompt == other.topicPrompt &&
-        enhancedPrompt == other.enhancedPrompt
+        enhancedPrompt == other.enhancedPrompt &&
+        Set(worldbookIDs) == Set(other.worldbookIDs)
     }
 }
 

@@ -62,6 +62,20 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    WorldbookSettingsView(viewModel: viewModel)
+                } label: {
+                    Label("世界书", systemImage: "book.pages")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("管理世界书并绑定到当前会话。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     LocalDebugView()
                 } label: {
                     Label("远程文件访问", systemImage: "terminal")

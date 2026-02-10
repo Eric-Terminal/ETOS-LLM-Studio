@@ -96,6 +96,28 @@ struct MemoryManagerTests {
             attempts
         }
     }
+    
+    actor AlwaysFailEmbeddingGenerator: MemoryEmbeddingGenerating {
+        enum TestError: Error {
+            case forced
+        }
+        
+        func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]] {
+            throw TestError.forced
+        }
+    }
+    
+    actor ProgressEventRecorder {
+        private var events: [MemoryEmbeddingProgress] = []
+        
+        func append(_ event: MemoryEmbeddingProgress) {
+            events.append(event)
+        }
+        
+        func snapshot() -> [MemoryEmbeddingProgress] {
+            events
+        }
+    }
 
     // Helper now accepts a specific manager instance to clean up.
     private func cleanup(memoryManager: MemoryManager) async {
@@ -170,6 +192,150 @@ struct MemoryManagerTests {
         
         let attemptsAfterReconcile = await generator.attemptsCount()
         #expect(attemptsAfterReconcile == 2, "补偿时应再次调用嵌入并最终成功。")
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Reembed Progress Emits Running To Completed")
+    func testReembedProgressEmitsRunningToCompleted() async throws {
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "用户喜欢手冲咖啡。")
+        await memoryManager.addMemory(content: "用户偏好简洁回答。")
+        await memoryManager.addMemory(content: "用户常用语言是中文。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        _ = try await memoryManager.reembedAllMemories()
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reembedAll }
+        #expect(!events.isEmpty)
+        #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 3 })
+        #expect(events.contains { $0.phase == .running && $0.processedMemories > 0 && $0.processedMemories <= 3 })
+        
+        if let last = events.last {
+            #expect(last.phase == .completed)
+            #expect(last.processedMemories == 3)
+            #expect(last.totalMemories == 3)
+        } else {
+            Issue.record("未捕获到重嵌入进度事件。")
+        }
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Reembed Progress Emits Failed On Error")
+    func testReembedProgressEmitsFailedOnError() async throws {
+        let retryPolicy = MemoryEmbeddingRetryPolicy(maxAttempts: 1, initialDelay: 0, backoffMultiplier: 1)
+        let memoryManager = MemoryManager(
+            embeddingGenerator: AlwaysFailEmbeddingGenerator(),
+            retryPolicy: retryPolicy
+        )
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "这条记忆会导致重嵌入失败。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        do {
+            _ = try await memoryManager.reembedAllMemories()
+            Issue.record("预期重嵌入抛错，但未抛错。")
+        } catch {
+            // expected
+        }
+        
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reembedAll }
+        #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 1 })
+        
+        if let last = events.last {
+            #expect(last.phase == .failed)
+            #expect(last.processedMemories < last.totalMemories)
+        } else {
+            Issue.record("未捕获到重嵌入失败进度事件。")
+        }
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("Reconcile Progress Emits For Missing Embeddings")
+    func testReconcileProgressEmitsForMissingEmbeddings() async throws {
+        let generator = FlakyEmbeddingGenerator(failuresBeforeSuccess: 1)
+        let retryPolicy = MemoryEmbeddingRetryPolicy(maxAttempts: 1, initialDelay: 0, backoffMultiplier: 1)
+        let memoryManager = MemoryManager(
+            embeddingGenerator: generator,
+            retryPolicy: retryPolicy
+        )
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "这条记忆首次嵌入会失败，随后由补偿补齐。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        let reconciled = await memoryManager.reconcilePendingEmbeddings()
+        #expect(reconciled == 1)
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reconcilePending }
+        #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 1 })
+        
+        if let last = events.last {
+            #expect(last.phase == .completed)
+            #expect(last.processedMemories == 1)
+            #expect(last.totalMemories == 1)
+        } else {
+            Issue.record("未捕获到补偿进度事件。")
+        }
+        
+        await cleanup(memoryManager: memoryManager)
+    }
+    
+    @Test("No Reconcile Progress Event When Nothing To Reconcile")
+    func testNoReconcileProgressEventWhenNothingToReconcile() async throws {
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+        
+        await memoryManager.addMemory(content: "这条记忆已经具备嵌入。")
+        
+        let recorder = ProgressEventRecorder()
+        let cancellable = memoryManager.embeddingProgressPublisher.sink { event in
+            Task {
+                await recorder.append(event)
+            }
+        }
+        defer { cancellable.cancel() }
+        
+        let reconciled = await memoryManager.reconcilePendingEmbeddings()
+        #expect(reconciled == 0)
+        try await Task.sleep(for: .milliseconds(100))
+        
+        let events = await recorder.snapshot().filter { $0.kind == .reconcilePending }
+        #expect(events.isEmpty)
         
         await cleanup(memoryManager: memoryManager)
     }
@@ -680,7 +846,8 @@ fileprivate struct ChatServiceTests {
             systemPrompt: "",
             maxChatHistory: 0,
             enableMemory: true,
-            enableMemoryWrite: true
+            enableMemoryWrite: true,
+            includeSystemTime: false
         )
         
         // 关键修复：等待后台的 addMemory 操作完成，它会触发 publisher 发出新值。
@@ -692,6 +859,96 @@ fileprivate struct ChatServiceTests {
         #expect(memories.first?.content == "The user lives in London.")
         
         // 4. Teardown
+        await cleanup()
+    }
+
+    @Test("Worldbook prompt injection order and depth insertion")
+    func testWorldbookInjectionOrderAndDepth() async throws {
+        await cleanup()
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        defer { store.saveWorldbooks(originalBooks) }
+
+        let book = Worldbook(
+            name: "注入测试书",
+            entries: [
+                WorldbookEntry(content: "before", keys: ["hero"], position: .before, order: 1),
+                WorldbookEntry(content: "after", keys: ["hero"], position: .after, order: 2),
+                WorldbookEntry(content: "an-top", keys: ["hero"], position: .anTop, order: 3),
+                WorldbookEntry(content: "an-bottom", keys: ["hero"], position: .anBottom, order: 4),
+                WorldbookEntry(content: "em-top", keys: ["hero"], position: .emTop, order: 5),
+                WorldbookEntry(content: "em-bottom", keys: ["hero"], position: .emBottom, order: 6),
+                WorldbookEntry(content: "depth", keys: ["hero"], position: .atDepth, order: 7, depth: 1)
+            ]
+        )
+        store.saveWorldbooks([book])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "测试会话")
+        session.worldbookIDs = [book.id]
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let allMessages = mockAdapter.receivedMessages ?? []
+        let systemPrompt = allMessages.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("<worldbook_before>"))
+        #expect(systemPrompt.contains("<worldbook_after>"))
+        #expect(systemPrompt.contains("<worldbook_an_top>"))
+        #expect(systemPrompt.contains("<worldbook_an_bottom>"))
+
+        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_em_top>") }))
+        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_em_bottom>") }))
+        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_at_depth_1>") }))
+
+        await cleanup()
+    }
+
+    @Test("Worldbook coexists with memory block")
+    func testWorldbookAndMemoryCoexist() async throws {
+        await cleanup()
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        defer { store.saveWorldbooks(originalBooks) }
+
+        await memoryManager.addMemory(content: "memory-hit")
+        let book = Worldbook(
+            name: "共存书",
+            entries: [WorldbookEntry(content: "wb-hit", keys: ["hero"], position: .after)]
+        )
+        store.saveWorldbooks([book])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "共存会话")
+        session.worldbookIDs = [book.id]
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            includeSystemTime: false
+        )
+
+        let systemPrompt = mockAdapter.receivedMessages?.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("<memory>"))
+        #expect(systemPrompt.contains("<worldbook_after>"))
+
         await cleanup()
     }
     
@@ -964,6 +1221,20 @@ fileprivate struct ConfigLoaderTests {
         }
     }
 
+    private var providersDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Providers")
+    }
+
+    private func writeRawProviderFile(_ provider: Provider, fileName: String) throws {
+        ConfigLoader.setupInitialProviderConfigs()
+        let fileURL = providersDirectory.appendingPathComponent(fileName)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        let data = try encoder.encode(provider)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
     @Test("Save and Load Provider")
     func testSaveAndLoadProvider() {
         // 1. Arrange
@@ -989,6 +1260,56 @@ fileprivate struct ConfigLoaderTests {
         
         // Teardown
         cleanup(providers: [provider])
+    }
+
+    @Test("Load Providers Should Repair Duplicate IDs And Normalize Files")
+    func testLoadProvidersRepairDuplicateIDsAndNormalizeFiles() throws {
+        let token = "repair-\(UUID().uuidString)"
+        let duplicateProviderID = UUID()
+        let duplicateModelID = UUID()
+
+        let providerA = Provider(
+            id: duplicateProviderID,
+            name: "\(token)-A",
+            baseURL: "https://example-a.com",
+            apiKeys: ["key-a"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(id: duplicateModelID, modelName: "a-1", isActivated: true),
+                Model(id: duplicateModelID, modelName: "a-2", isActivated: false)
+            ]
+        )
+        let providerB = Provider(
+            id: duplicateProviderID,
+            name: "\(token)-B",
+            baseURL: "https://example-b.com",
+            apiKeys: ["key-b"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "b-1", isActivated: true)]
+        )
+
+        let rawFileA = "\(token)-manual-a.json"
+        let rawFileB = "\(token)-manual-b.json"
+
+        try writeRawProviderFile(providerA, fileName: rawFileA)
+        try writeRawProviderFile(providerB, fileName: rawFileB)
+
+        let firstLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
+        #expect(firstLoad.count == 2)
+        #expect(Set(firstLoad.map(\.id)).count == 2)
+        if let repairedA = firstLoad.first(where: { $0.name == "\(token)-A" }) {
+            #expect(Set(repairedA.models.map(\.id)).count == repairedA.models.count)
+        } else {
+            Issue.record("未找到 \(token)-A")
+        }
+
+        let secondLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
+        #expect(secondLoad.count == 2)
+        #expect(Set(secondLoad.map(\.id)).count == 2)
+
+        cleanup(providers: secondLoad)
+        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileA))
+        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileB))
     }
 }
 

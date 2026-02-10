@@ -46,6 +46,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
     case providers = "Providers"
     case mcpServers = "MCPServers"
     case shortcutTools = "ShortcutTools"
+    case worldbooks = "Worldbooks"
     
     public var id: String { rawValue }
     
@@ -59,6 +60,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .providers: return NSLocalizedString("提供商配置", comment: "")
         case .mcpServers: return NSLocalizedString("MCP 服务器", comment: "")
         case .shortcutTools: return NSLocalizedString("快捷指令工具", comment: "")
+        case .worldbooks: return NSLocalizedString("世界书", comment: "")
         }
     }
     
@@ -72,6 +74,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .providers: return "server.rack"
         case .mcpServers: return "point.3.connected.trianglepath.dotted"
         case .shortcutTools: return "bolt.horizontal.circle"
+        case .worldbooks: return "book.pages"
         }
     }
     
@@ -85,6 +88,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .providers: return .indigo
         case .mcpServers: return .teal
         case .shortcutTools: return .mint
+        case .worldbooks: return .brown
         }
     }
 }
