@@ -50,9 +50,6 @@ struct WorldbookSettingsView: View {
                                         .font(.caption2)
                                         .foregroundStyle(book.isEnabled ? .green : .secondary)
                                 }
-                                Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
 
                                 if selected.contains(book.id) {
                                     Text(NSLocalizedString("已绑定当前会话", comment: "Bound current session"))
@@ -111,15 +108,12 @@ struct WorldbookSettingsView: View {
 
     private func bindingSummary(for session: ChatSession) -> String {
         let boundSet = Set(session.worldbookIDs)
-        let boundBooks = worldbooks.filter { boundSet.contains($0.id) }
-        let boundBookCount = boundBooks.count
+        let boundBookCount = worldbooks.filter { boundSet.contains($0.id) }.count
         let totalBookCount = worldbooks.count
-        let boundEntryCount = boundBooks.reduce(0) { $0 + $1.entries.count }
         return String(
-            format: NSLocalizedString("%d/%d 本 · %d 条", comment: "Bound worldbook summary"),
+            format: NSLocalizedString("%d/%d 本", comment: "Bound worldbook count summary"),
             boundBookCount,
-            totalBookCount,
-            boundEntryCount
+            totalBookCount
         )
     }
 
@@ -133,7 +127,6 @@ struct WorldbookSettingsView: View {
         worldbookToDelete = nil
         load()
     }
-
 }
 
 private struct WatchWorldbookDetailView: View {
@@ -145,8 +138,11 @@ private struct WatchWorldbookDetailView: View {
     var body: some View {
         List {
             if let worldbook {
-                Section(NSLocalizedString("基本信息", comment: "Basic info")) {
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
                     Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: enabledBinding)
+                }
+
+                Section(NSLocalizedString("基本信息", comment: "Basic info")) {
                     Text(String(format: NSLocalizedString("条目数量：%d", comment: "Entry count"), worldbook.entries.count))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -157,14 +153,27 @@ private struct WatchWorldbookDetailView: View {
                         Text(NSLocalizedString("暂无条目", comment: "No entries"))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(worldbook.entries) { entry in
+                        ForEach(worldbook.entries.sorted(by: { lhs, rhs in
+                            if lhs.order == rhs.order {
+                                return lhs.id.uuidString < rhs.id.uuidString
+                            }
+                            return lhs.order < rhs.order
+                        })) { entry in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.comment.isEmpty ? NSLocalizedString("(无注释)", comment: "No comment") : entry.comment)
-                                    .font(.footnote)
+                                HStack {
+                                    Text(entry.comment.isEmpty ? NSLocalizedString("(无注释)", comment: "No comment") : entry.comment)
+                                        .font(.footnote)
+                                    Spacer()
+                                    Text(worldbookPositionLabel(entry.position))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+
                                 Text(entry.content)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(expandedEntryIDs.contains(entry.id) ? nil : 3)
+
                                 Text(
                                     expandedEntryIDs.contains(entry.id)
                                     ? NSLocalizedString("点击收起", comment: "Tap to collapse")
@@ -228,7 +237,7 @@ private struct WatchWorldbookSessionBindingView: View {
     var body: some View {
         List {
             Section {
-                Text(NSLocalizedString("打开开关即可绑定到当前会话。", comment: "Binding hint"))
+                Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -238,12 +247,23 @@ private struct WatchWorldbookSessionBindingView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(worldbooks) { book in
-                    Toggle(isOn: bindingForSelection(book.id)) {
+                    Button {
+                        toggle(book.id)
+                    } label: {
                         HStack {
-                            Text(book.name)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(book.name)
+                                    .font(.footnote)
+                                Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             Spacer()
+                            Image(systemName: selected.contains(book.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selected.contains(book.id) ? .tint : .tertiary)
                         }
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -267,15 +287,25 @@ private struct WatchWorldbookSessionBindingView: View {
         session = current
         ChatService.shared.assignWorldbooks(to: current.id, worldbookIDs: current.worldbookIDs)
     }
+}
 
-    private func bindingForSelection(_ id: UUID) -> Binding<Bool> {
-        Binding(
-            get: { selected.contains(id) },
-            set: { isBound in
-                let currentlyBound = selected.contains(id)
-                guard isBound != currentlyBound else { return }
-                toggle(id)
-            }
-        )
+private func worldbookPositionLabel(_ position: WorldbookPosition) -> String {
+    switch position {
+    case .before:
+        return NSLocalizedString("系统前置", comment: "Worldbook position before")
+    case .after:
+        return NSLocalizedString("系统后置", comment: "Worldbook position after")
+    case .anTop:
+        return NSLocalizedString("AN 顶部", comment: "Worldbook position anTop")
+    case .anBottom:
+        return NSLocalizedString("AN 底部", comment: "Worldbook position anBottom")
+    case .atDepth:
+        return NSLocalizedString("按深度插入", comment: "Worldbook position atDepth")
+    case .emTop:
+        return NSLocalizedString("消息顶部", comment: "Worldbook position emTop")
+    case .emBottom:
+        return NSLocalizedString("消息底部", comment: "Worldbook position emBottom")
+    case .outlet:
+        return NSLocalizedString("Outlet", comment: "Worldbook position outlet")
     }
 }
