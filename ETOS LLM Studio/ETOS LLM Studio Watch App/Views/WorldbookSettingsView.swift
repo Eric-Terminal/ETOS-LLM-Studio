@@ -140,6 +140,7 @@ private struct WatchWorldbookDetailView: View {
     let worldbookID: UUID
 
     @State private var worldbook: Worldbook?
+    @State private var expandedEntryIDs = Set<UUID>()
 
     var body: some View {
         List {
@@ -163,9 +164,20 @@ private struct WatchWorldbookDetailView: View {
                                 Text(entry.content)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(3)
+                                    .lineLimit(expandedEntryIDs.contains(entry.id) ? nil : 3)
+                                Text(
+                                    expandedEntryIDs.contains(entry.id)
+                                    ? NSLocalizedString("点击收起", comment: "Tap to collapse")
+                                    : NSLocalizedString("点击展开全文", comment: "Tap to expand full text")
+                                )
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
                             }
                             .padding(.vertical, 2)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                toggleEntryExpansion(entry.id)
+                            }
                         }
                     }
                 }
@@ -197,6 +209,14 @@ private struct WatchWorldbookDetailView: View {
         worldbook.updatedAt = Date()
         ChatService.shared.saveWorldbook(worldbook)
         self.worldbook = worldbook
+    }
+
+    private func toggleEntryExpansion(_ entryID: UUID) {
+        if expandedEntryIDs.contains(entryID) {
+            expandedEntryIDs.remove(entryID)
+        } else {
+            expandedEntryIDs.insert(entryID)
+        }
     }
 }
 

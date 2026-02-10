@@ -263,6 +263,7 @@ private struct WorldbookDetailView: View {
 
     @State private var worldbook: Worldbook?
     @State private var nameDraft: String = ""
+    @State private var expandedEntryIDs = Set<UUID>()
 
     var body: some View {
         List {
@@ -289,12 +290,23 @@ private struct WorldbookDetailView: View {
                                 Text(entry.content)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(4)
+                                    .lineLimit(expandedEntryIDs.contains(entry.id) ? nil : 4)
+                                Text(
+                                    expandedEntryIDs.contains(entry.id)
+                                    ? NSLocalizedString("点击收起", comment: "Tap to collapse")
+                                    : NSLocalizedString("点击展开全文", comment: "Tap to expand full text")
+                                )
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
                                 Text(String(format: NSLocalizedString("关键词：%@", comment: "Keywords"), entry.keys.joined(separator: "，")))
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
                             .padding(.vertical, 2)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                toggleEntryExpansion(entry.id)
+                            }
                         }
                     }
                 }
@@ -341,6 +353,14 @@ private struct WorldbookDetailView: View {
         worldbook.updatedAt = Date()
         ChatService.shared.saveWorldbook(worldbook)
         self.worldbook = worldbook
+    }
+
+    private func toggleEntryExpansion(_ entryID: UUID) {
+        if expandedEntryIDs.contains(entryID) {
+            expandedEntryIDs.remove(entryID)
+        } else {
+            expandedEntryIDs.insert(entryID)
+        }
     }
 }
 
