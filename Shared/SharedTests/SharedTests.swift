@@ -878,13 +878,14 @@ fileprivate struct ChatServiceTests {
                 WorldbookEntry(content: "an-bottom", keys: ["hero"], position: .anBottom, order: 4),
                 WorldbookEntry(content: "em-top", keys: ["hero"], position: .emTop, order: 5),
                 WorldbookEntry(content: "em-bottom", keys: ["hero"], position: .emBottom, order: 6),
-                WorldbookEntry(content: "depth", keys: ["hero"], position: .atDepth, order: 7, depth: 1)
+                WorldbookEntry(content: "depth-user", keys: ["hero"], position: .atDepth, order: 7, depth: 1, role: .user),
+                WorldbookEntry(content: "depth-assistant", keys: ["hero"], position: .atDepth, order: 8, depth: 1, role: .assistant)
             ]
         )
         store.saveWorldbooks([book])
 
         var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "测试会话")
-        session.worldbookIDs = [book.id]
+        session.lorebookIDs = [book.id]
         chatService.setCurrentSession(session)
 
         await chatService.sendAndProcessMessage(
@@ -907,9 +908,10 @@ fileprivate struct ChatServiceTests {
         #expect(systemPrompt.contains("<worldbook_an_top>"))
         #expect(systemPrompt.contains("<worldbook_an_bottom>"))
 
-        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_em_top>") }))
-        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_em_bottom>") }))
-        #expect(allMessages.contains(where: { $0.role == .system && $0.content.contains("<worldbook_at_depth_1>") }))
+        #expect(allMessages.contains(where: { $0.content.contains("<worldbook_em_top>") }))
+        #expect(allMessages.contains(where: { $0.content.contains("<worldbook_em_bottom>") }))
+        #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .assistant }))
+        #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .user }))
 
         await cleanup()
     }
@@ -929,7 +931,7 @@ fileprivate struct ChatServiceTests {
         store.saveWorldbooks([book])
 
         var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "共存会话")
-        session.worldbookIDs = [book.id]
+        session.lorebookIDs = [book.id]
         chatService.setCurrentSession(session)
 
         await chatService.sendAndProcessMessage(

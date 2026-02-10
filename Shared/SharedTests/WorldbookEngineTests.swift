@@ -308,4 +308,31 @@ struct WorldbookEngineTests {
         #expect(second.after.contains(where: { $0.content == "delayed" }))
         #expect(!second.after.contains(where: { $0.content == "cooldown" }))
     }
+
+    @Test("engine sorts matched entries by priority descending")
+    func testEnginePriorityDescending() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-priority-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+
+        let high = WorldbookEntry(content: "high", keys: ["trigger"], position: .after, order: 999)
+        let low = WorldbookEntry(content: "low", keys: ["trigger"], position: .after, order: 1)
+        let book = Worldbook(name: "优先级", entries: [low, high])
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [book],
+                messages: [ChatMessage(role: .user, content: "trigger")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.count == 2)
+        #expect(result.after.first?.content == "high")
+        #expect(result.after.last?.content == "low")
+    }
 }

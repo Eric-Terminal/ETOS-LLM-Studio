@@ -126,7 +126,7 @@ public final class WorldbookStore {
     public func assignWorldbooks(sessionID: UUID, worldbookIDs: [UUID]) {
         var sessions = Persistence.loadChatSessions()
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        sessions[index].worldbookIDs = deduplicateUUIDs(worldbookIDs)
+        sessions[index].lorebookIDs = deduplicateUUIDs(worldbookIDs)
         Persistence.saveChatSessions(sessions)
     }
 

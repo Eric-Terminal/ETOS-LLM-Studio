@@ -70,6 +70,17 @@ public class ChatService {
         case cancelled(sessionID: UUID?, loadingMessageID: UUID?, prompt: String, finishedAt: Date)
     }
 
+    public enum WorldbookExportRequestError: LocalizedError {
+        case bookNotFound
+
+        public var errorDescription: String? {
+            switch self {
+            case .bookNotFound:
+                return NSLocalizedString("导出失败：未找到对应世界书。", comment: "Worldbook export book missing")
+            }
+        }
+    }
+
     // MARK: - 私有状态
     
     private var cancellables = Set<AnyCancellable>()
@@ -90,6 +101,7 @@ public class ChatService {
     private let memoryManager: MemoryManager
     private let worldbookStore: WorldbookStore
     private let worldbookImportService: WorldbookImportService
+    private let worldbookExportService: WorldbookExportService
     private let worldbookEngine: WorldbookEngine
     private let urlSession: URLSession
 
@@ -172,6 +184,7 @@ public class ChatService {
         memoryManager: MemoryManager = .shared,
         worldbookStore: WorldbookStore = .shared,
         worldbookImportService: WorldbookImportService = WorldbookImportService(),
+        worldbookExportService: WorldbookExportService = WorldbookExportService(),
         worldbookEngine: WorldbookEngine = WorldbookEngine(),
         urlSession: URLSession = .shared
     ) {
@@ -180,6 +193,7 @@ public class ChatService {
         self.memoryManager = memoryManager
         self.worldbookStore = worldbookStore
         self.worldbookImportService = worldbookImportService
+        self.worldbookExportService = worldbookExportService
         self.worldbookEngine = worldbookEngine
         self.urlSession = urlSession
         ConfigLoader.setupInitialProviderConfigs()
@@ -270,8 +284,8 @@ public class ChatService {
         var sessions = chatSessionsSubject.value
         var didChange = false
         for index in sessions.indices {
-            if sessions[index].worldbookIDs.contains(id) {
-                sessions[index].worldbookIDs.removeAll { $0 == id }
+            if sessions[index].lorebookIDs.contains(id) {
+                sessions[index].lorebookIDs.removeAll { $0 == id }
                 didChange = true
             }
         }
@@ -299,15 +313,23 @@ public class ChatService {
         var sessions = chatSessionsSubject.value
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         let uniqueIDs = deduplicatedWorldbookIDs(worldbookIDs)
-        sessions[index].worldbookIDs = uniqueIDs
+        sessions[index].lorebookIDs = uniqueIDs
 
         chatSessionsSubject.send(sessions)
         if let current = currentSessionSubject.value, current.id == sessionID {
             var updated = current
-            updated.worldbookIDs = uniqueIDs
+            updated.lorebookIDs = uniqueIDs
             currentSessionSubject.send(updated)
         }
         Persistence.saveChatSessions(sessions)
+    }
+
+    public func exportWorldbook(id: UUID) throws -> (data: Data, suggestedFileName: String) {
+        guard let book = worldbookStore.loadWorldbooks().first(where: { $0.id == id }) else {
+            throw WorldbookExportRequestError.bookNotFound
+        }
+        let data = try worldbookExportService.exportWorldbook(book)
+        return (data: data, suggestedFileName: worldbookExportService.suggestedFileName(for: book))
     }
     
     public func fetchModels(for provider: Provider) async throws -> [Model] {
@@ -481,7 +503,7 @@ public class ChatService {
             name: "分支: \(sourceSession.name)",
             topicPrompt: sourceSession.topicPrompt,
             enhancedPrompt: sourceSession.enhancedPrompt,
-            worldbookIDs: sourceSession.worldbookIDs,
+            lorebookIDs: sourceSession.lorebookIDs,
             isTemporary: false
         )
         logger.info("创建了分支会话: \(newSession.name)")
@@ -542,7 +564,7 @@ public class ChatService {
             name: "分支: \(sourceSession.name)",
             topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
-            worldbookIDs: sourceSession.worldbookIDs,
+            lorebookIDs: sourceSession.lorebookIDs,
             isTemporary: false
         )
         logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
@@ -1595,7 +1617,7 @@ public class ChatService {
         }
 
         let sessionForRequest = chatSessionsSubject.value.first(where: { $0.id == currentSessionID }) ?? currentSessionSubject.value
-        let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.worldbookIDs ?? [])
+        let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.lorebookIDs ?? [])
         let worldbookResult = worldbookEngine.evaluate(
             .init(
                 sessionID: currentSessionID,
@@ -1642,8 +1664,8 @@ public class ChatService {
             chatHistory = injectAtDepthMessages(worldbookResult.atDepth, into: chatHistory)
         }
 
-        let emTopMessages = makeWorldbookSystemMessages(worldbookResult.emTop, tag: "worldbook_em_top")
-        let emBottomMessages = makeWorldbookSystemMessages(worldbookResult.emBottom, tag: "worldbook_em_bottom")
+        let emTopMessages = makeWorldbookRoleMessages(worldbookResult.emTop, tag: "worldbook_em_top")
+        let emBottomMessages = makeWorldbookRoleMessages(worldbookResult.emBottom, tag: "worldbook_em_bottom")
 
         messagesToSend.append(contentsOf: emTopMessages)
         messagesToSend.append(contentsOf: chatHistory)
@@ -3543,30 +3565,72 @@ public class ChatService {
             .replacingOccurrences(of: ">", with: "&gt;")
     }
 
-    private func makeWorldbookSystemMessages(_ entries: [WorldbookInjection], tag: String) -> [ChatMessage] {
+    private func makeWorldbookRoleMessages(_ entries: [WorldbookInjection], tag: String) -> [ChatMessage] {
         guard !entries.isEmpty else { return [] }
-        let content = makeWorldbookPromptBlock(tag: tag, entries: entries)
-        return [ChatMessage(role: .system, content: content)]
+        let grouped = Dictionary(grouping: entries, by: \.role)
+        var messages: [ChatMessage] = []
+
+        if let assistantEntries = grouped[.assistant], !assistantEntries.isEmpty {
+            let content = makeWorldbookPromptBlock(tag: tag, entries: assistantEntries)
+            messages.append(ChatMessage(role: .assistant, content: content))
+        }
+
+        if let userEntries = grouped[.user], !userEntries.isEmpty {
+            let block = makeWorldbookPromptBlock(tag: tag, entries: userEntries)
+            let wrapped = "<system>\n\(block)\n</system>"
+            messages.append(ChatMessage(role: .user, content: wrapped))
+        }
+
+        return messages
     }
 
     private func injectAtDepthMessages(_ depthEntries: [WorldbookDepthInsertion], into chatHistory: [ChatMessage]) -> [ChatMessage] {
         guard !depthEntries.isEmpty else { return chatHistory }
         var updated = chatHistory
-        for insertion in depthEntries.sorted(by: { $0.depth < $1.depth }) {
+        for insertion in depthEntries.sorted(by: { $0.depth > $1.depth }) {
             let tag = "worldbook_at_depth_\(max(0, insertion.depth))"
-            let message = ChatMessage(
-                role: .system,
-                content: makeWorldbookPromptBlock(tag: tag, entries: insertion.items)
-            )
+            let messages = makeWorldbookRoleMessages(insertion.items, tag: tag)
+            guard !messages.isEmpty else { continue }
             let resolvedDepth = max(0, insertion.depth)
             let targetIndex = max(0, updated.count - resolvedDepth)
-            if targetIndex >= updated.count {
-                updated.append(message)
+            let safeInsertIndex = findSafeInsertIndex(targetIndex, in: updated)
+            if safeInsertIndex >= updated.count {
+                updated.append(contentsOf: messages)
             } else {
-                updated.insert(message, at: targetIndex)
+                updated.insert(contentsOf: messages, at: safeInsertIndex)
             }
         }
         return updated
+    }
+
+    private func findSafeInsertIndex(_ preferredIndex: Int, in messages: [ChatMessage]) -> Int {
+        guard !messages.isEmpty else { return max(0, preferredIndex) }
+        var index = max(0, min(preferredIndex, messages.count))
+        guard index > 0, index < messages.count else { return index }
+
+        var cursor = 0
+        while cursor < messages.count {
+            let message = messages[cursor]
+            let hasToolCalls = message.role == .assistant && !(message.toolCalls?.isEmpty ?? true)
+            guard hasToolCalls else {
+                cursor += 1
+                continue
+            }
+
+            let rangeStart = cursor + 1
+            var rangeEnd = rangeStart
+            while rangeEnd < messages.count, messages[rangeEnd].role == .tool {
+                rangeEnd += 1
+            }
+
+            if rangeStart < rangeEnd && index >= rangeStart && index < rangeEnd {
+                index = cursor
+                break
+            }
+            cursor = max(cursor + 1, rangeEnd)
+        }
+
+        return index
     }
 
     private func deduplicatedWorldbookIDs(_ ids: [UUID]) -> [UUID] {

@@ -668,7 +668,7 @@ public enum SyncEngine {
             name: session.name,
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt,
-            worldbookIDs: session.worldbookIDs,
+            lorebookIDs: session.lorebookIDs,
             isTemporary: false
         )
     }
@@ -681,7 +681,7 @@ public enum SyncEngine {
         hasher.combine(session.baseNameWithoutSyncSuffix)
         hasher.combine(session.topicPrompt ?? "")
         hasher.combine(session.enhancedPrompt ?? "")
-        for worldbookID in session.worldbookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+        for worldbookID in session.lorebookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
             hasher.combine(worldbookID.uuidString)
         }
         // 对消息进行哈希
@@ -785,7 +785,7 @@ public enum SyncEngine {
         var changed = false
 
         for index in sessions.indices {
-            let oldIDs = sessions[index].worldbookIDs
+            let oldIDs = sessions[index].lorebookIDs
             guard !oldIDs.isEmpty else { continue }
             let mapped = oldIDs.map { idMapping[$0] ?? $0 }
             var deduped: [UUID] = []
@@ -795,7 +795,7 @@ public enum SyncEngine {
                 deduped.append(id)
             }
             if deduped != oldIDs {
-                sessions[index].worldbookIDs = deduped
+                sessions[index].lorebookIDs = deduped
                 changed = true
             }
         }

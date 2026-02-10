@@ -250,7 +250,7 @@ extension ChatSession {
         name == other.name &&
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
-        Set(worldbookIDs) == Set(other.worldbookIDs)
+        Set(lorebookIDs) == Set(other.lorebookIDs)
     }
     
     /// 去除所有同步后缀的基础名称
@@ -264,7 +264,7 @@ extension ChatSession {
         baseNameWithoutSyncSuffix == other.baseNameWithoutSyncSuffix &&
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
-        Set(worldbookIDs) == Set(other.worldbookIDs)
+        Set(lorebookIDs) == Set(other.lorebookIDs)
     }
 }
 

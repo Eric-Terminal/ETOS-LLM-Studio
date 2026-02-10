@@ -268,6 +268,44 @@ struct WorldbookImportTests {
         #expect(worldbook.entries.first?.keys == ["rikka"])
     }
 
+    @Test("import native lorebook export envelope")
+    func testImportNativeLorebookEnvelope() throws {
+        let json = """
+        {
+          "version": 1,
+          "type": "lorebook",
+          "data": {
+            "name": "导出世界书",
+            "description": "用于验证导入兼容。",
+            "entries": [
+              {
+                "uid": 10,
+                "comment": "角色设定",
+                "key": ["alpha"],
+                "content": "alpha 内容",
+                "constantActive": true,
+                "priority": 888,
+                "injectDepth": 2,
+                "position": "atDepth",
+                "role": "ASSISTANT"
+              }
+            ]
+          }
+        }
+        """
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "native-lorebook.json")
+
+        #expect(worldbook.name == "导出世界书")
+        #expect(worldbook.description == "用于验证导入兼容。")
+        #expect(worldbook.entries.count == 1)
+        #expect(worldbook.entries.first?.constant == true)
+        #expect(worldbook.entries.first?.order == 888)
+        #expect(worldbook.entries.first?.depth == 2)
+        #expect(worldbook.entries.first?.role == .assistant)
+    }
+
     @Test("import top-level entries array JSON")
     func testImportTopLevelArrayJSON() throws {
         let json = """

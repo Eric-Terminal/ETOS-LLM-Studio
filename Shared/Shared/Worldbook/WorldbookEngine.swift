@@ -20,6 +20,7 @@ public struct WorldbookInjection: Hashable, Sendable {
     public var outletName: String?
     public var order: Int
     public var depth: Int?
+    public var role: WorldbookEntryRole
     public var triggerScore: Double
 
     public init(
@@ -32,6 +33,7 @@ public struct WorldbookInjection: Hashable, Sendable {
         outletName: String?,
         order: Int,
         depth: Int?,
+        role: WorldbookEntryRole,
         triggerScore: Double
     ) {
         self.worldbookID = worldbookID
@@ -43,6 +45,7 @@ public struct WorldbookInjection: Hashable, Sendable {
         self.outletName = outletName
         self.order = order
         self.depth = depth
+        self.role = role
         self.triggerScore = triggerScore
     }
 
@@ -323,6 +326,7 @@ public struct WorldbookEngine {
                     outletName: entry.outletName,
                     order: entry.order,
                     depth: entry.depth,
+                    role: entry.role,
                     triggerScore: max(
                         0,
                         matchResult.score + (entry.constant ? 1 : 0) + (stickyActive ? 0.5 : 0)
@@ -363,7 +367,7 @@ public struct WorldbookEngine {
                 }
                 return $0.book.id.uuidString < $1.book.id.uuidString
             }
-            return $0.entry.order < $1.entry.order
+            return $0.entry.order > $1.entry.order
         }
         return result
     }
@@ -505,7 +509,7 @@ public struct WorldbookEngine {
                 if $0.order == $1.order {
                     return $0.entryID.uuidString < $1.entryID.uuidString
                 }
-                return $0.order < $1.order
+                return $0.order > $1.order
             }
 
             let overrideItems = sorted.filter { candidate in
@@ -527,7 +531,7 @@ public struct WorldbookEngine {
                 }
                 let weight = entry.groupWeight
                 let triggerScore = entry.useGroupScoring ? candidate.triggerScore : 0
-                let score = triggerScore * 100 + weight * 10 - Double(candidate.order) * 0.01
+                let score = triggerScore * 100 + weight * 10 + Double(candidate.order) * 0.01
                 return (candidate, score)
             }
             if let winner = scored.max(by: { lhs, rhs in
@@ -544,7 +548,7 @@ public struct WorldbookEngine {
             if $0.order == $1.order {
                 return $0.entryID.uuidString < $1.entryID.uuidString
             }
-            return $0.order < $1.order
+            return $0.order > $1.order
         }
     }
 
@@ -554,7 +558,7 @@ public struct WorldbookEngine {
 
         let sortedItems = items.sorted {
             if $0.order != $1.order {
-                return $0.order < $1.order
+                return $0.order > $1.order
             }
             if $0.triggerScore != $1.triggerScore {
                 return $0.triggerScore > $1.triggerScore
@@ -596,11 +600,11 @@ public struct WorldbookEngine {
                         if $0.order == $1.order {
                             return $0.entryID.uuidString < $1.entryID.uuidString
                         }
-                        return $0.order < $1.order
+                        return $0.order > $1.order
                     }
                 )
             }
-            .sorted { $0.depth < $1.depth }
+            .sorted { $0.depth > $1.depth }
 
         return WorldbookEvaluationResult(
             before: before,
