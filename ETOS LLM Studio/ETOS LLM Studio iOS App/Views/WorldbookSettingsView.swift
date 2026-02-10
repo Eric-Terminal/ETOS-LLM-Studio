@@ -10,6 +10,7 @@ struct WorldbookSettingsView: View {
     @State private var importError: String?
     @State private var importReport: WorldbookImportReport?
     @State private var showImportReportAlert = false
+    @State private var worldbookToDelete: Worldbook?
 
     var body: some View {
         List {
@@ -102,10 +103,9 @@ struct WorldbookSettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .contextMenu {
                             Button(role: .destructive) {
-                                ChatService.shared.deleteWorldbook(id: book.id)
-                                reloadWorldbooks()
+                                worldbookToDelete = book
                             } label: {
                                 Label(NSLocalizedString("删除", comment: "Delete"), systemImage: "trash")
                             }
@@ -132,6 +132,35 @@ struct WorldbookSettingsView: View {
             message: {
                 if let importReport {
                     Text(importReportAlertMessage(importReport))
+                }
+            }
+        )
+        .alert(
+            NSLocalizedString("确认删除世界书", comment: "Confirm deleting worldbook title"),
+            isPresented: Binding(
+                get: { worldbookToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        worldbookToDelete = nil
+                    }
+                }
+            ),
+            actions: {
+                Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
+                    confirmDeleteWorldbook()
+                }
+                Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {
+                    worldbookToDelete = nil
+                }
+            },
+            message: {
+                if let worldbookToDelete {
+                    Text(
+                        String(
+                            format: NSLocalizedString("将删除“%@”，此操作不可恢复。", comment: "Delete worldbook confirmation message"),
+                            worldbookToDelete.name
+                        )
+                    )
                 }
             }
         )
@@ -167,6 +196,17 @@ struct WorldbookSettingsView: View {
 
     private func reloadWorldbooks() {
         worldbooks = ChatService.shared.loadWorldbooks().sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func confirmDeleteWorldbook() {
+        guard let target = worldbookToDelete else { return }
+        ChatService.shared.deleteWorldbook(id: target.id)
+        if var session = viewModel.currentSession {
+            session.worldbookIDs.removeAll { $0 == target.id }
+            viewModel.currentSession = session
+        }
+        worldbookToDelete = nil
+        reloadWorldbooks()
     }
 
     private func handleImportResult(_ result: Result<[URL], Error>) {

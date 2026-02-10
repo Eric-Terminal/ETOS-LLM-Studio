@@ -6,6 +6,7 @@ struct WorldbookSettingsView: View {
 
     @State private var worldbooks: [Worldbook] = []
     @State private var selected = Set<UUID>()
+    @State private var worldbookToDelete: Worldbook?
 
     var body: some View {
         List {
@@ -53,17 +54,63 @@ struct WorldbookSettingsView: View {
                                     .foregroundStyle(.tint)
                             }
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                worldbookToDelete = book
+                            } label: {
+                                Label(NSLocalizedString("删除", comment: "Delete"), systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
         }
         .navigationTitle(NSLocalizedString("世界书", comment: "Worldbook nav title"))
         .onAppear(perform: load)
+        .confirmationDialog(
+            NSLocalizedString("确认删除世界书", comment: "Confirm deleting worldbook title"),
+            isPresented: Binding(
+                get: { worldbookToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        worldbookToDelete = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
+                confirmDeleteWorldbook()
+            }
+            Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {
+                worldbookToDelete = nil
+            }
+        } message: {
+            if let worldbookToDelete {
+                Text(
+                    String(
+                        format: NSLocalizedString("将删除“%@”，此操作不可恢复。", comment: "Delete worldbook confirmation message"),
+                        worldbookToDelete.name
+                    )
+                )
+            }
+        }
     }
 
     private func load() {
         worldbooks = ChatService.shared.loadWorldbooks().sorted { $0.updatedAt > $1.updatedAt }
         selected = Set(viewModel.currentSession?.worldbookIDs ?? [])
+    }
+
+    private func confirmDeleteWorldbook() {
+        guard let target = worldbookToDelete else { return }
+        ChatService.shared.deleteWorldbook(id: target.id)
+        if var session = viewModel.currentSession {
+            session.worldbookIDs.removeAll { $0 == target.id }
+            viewModel.currentSession = session
+        }
+        worldbookToDelete = nil
+        load()
     }
 
     private func bindingForEnable(_ id: UUID) -> Binding<Bool> {
