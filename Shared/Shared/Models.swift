@@ -480,7 +480,12 @@ public struct ChatSession: Identifiable, Codable, Hashable {
     public var name: String
     public var topicPrompt: String?
     public var enhancedPrompt: String?
-    public var worldbookIDs: [UUID]
+    public var lorebookIDs: [UUID]
+    @available(*, deprecated, message: "请改用 lorebookIDs；worldbookIDs 为兼容旧代码保留。")
+    public var worldbookIDs: [UUID] {
+        get { lorebookIDs }
+        set { lorebookIDs = newValue }
+    }
     public var isTemporary: Bool = false
 
     public init(
@@ -489,18 +494,25 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         topicPrompt: String? = nil,
         enhancedPrompt: String? = nil,
         worldbookIDs: [UUID] = [],
+        lorebookIDs: [UUID]? = nil,
         isTemporary: Bool = false
     ) {
         self.id = id
         self.name = name
         self.topicPrompt = topicPrompt
         self.enhancedPrompt = enhancedPrompt
-        self.worldbookIDs = worldbookIDs
+        self.lorebookIDs = lorebookIDs ?? worldbookIDs
         self.isTemporary = isTemporary
     }
     
     enum CodingKeys: String, CodingKey {
-        case id, name, topicPrompt, enhancedPrompt, worldbookIDs
+        case id
+        case name
+        case topicPrompt
+        case enhancedPrompt
+        case worldbookIDs
+        case lorebookIDs
+        case lorebookIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -509,7 +521,15 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         self.name = try container.decode(String.self, forKey: .name)
         self.topicPrompt = try container.decodeIfPresent(String.self, forKey: .topicPrompt)
         self.enhancedPrompt = try container.decodeIfPresent(String.self, forKey: .enhancedPrompt)
-        self.worldbookIDs = try container.decodeIfPresent([UUID].self, forKey: .worldbookIDs) ?? []
+        if let ids = try container.decodeIfPresent([UUID].self, forKey: .lorebookIDs) {
+            self.lorebookIDs = ids
+        } else if let ids = try container.decodeIfPresent([UUID].self, forKey: .lorebookIds) {
+            self.lorebookIDs = ids
+        } else if let ids = try container.decodeIfPresent([UUID].self, forKey: .worldbookIDs) {
+            self.lorebookIDs = ids
+        } else {
+            self.lorebookIDs = []
+        }
         self.isTemporary = false
     }
 
@@ -519,8 +539,10 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         try container.encode(name, forKey: .name)
         try container.encodeIfPresent(topicPrompt, forKey: .topicPrompt)
         try container.encodeIfPresent(enhancedPrompt, forKey: .enhancedPrompt)
-        if !worldbookIDs.isEmpty {
-            try container.encode(worldbookIDs, forKey: .worldbookIDs)
+        if !lorebookIDs.isEmpty {
+            try container.encode(lorebookIDs, forKey: .lorebookIDs)
+            // 兼容旧版本持久化字段，避免多端混用时丢失绑定。
+            try container.encode(lorebookIDs, forKey: .worldbookIDs)
         }
     }
 }
@@ -679,6 +701,20 @@ public enum WorldbookSelectiveLogic: String, Codable, CaseIterable, Hashable, Se
     }
 }
 
+public enum WorldbookEntryRole: String, Codable, CaseIterable, Hashable, Sendable {
+    case user = "USER"
+    case assistant = "ASSISTANT"
+
+    public init(rawOrLegacyValue: String?) {
+        switch rawOrLegacyValue?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "ASSISTANT":
+            self = .assistant
+        default:
+            self = .user
+        }
+    }
+}
+
 public struct WorldbookTimedEffectState: Codable, Hashable, Sendable {
     public var stickyUntilTurn: Int?
     public var cooldownUntilTurn: Int?
@@ -744,6 +780,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
     public var groupOverride: Bool
     public var groupWeight: Double
     public var useGroupScoring: Bool
+    public var role: WorldbookEntryRole
     public var sticky: Int?
     public var cooldown: Int?
     public var delay: Int?
@@ -776,6 +813,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         groupOverride: Bool = false,
         groupWeight: Double = 1,
         useGroupScoring: Bool = false,
+        role: WorldbookEntryRole = .user,
         sticky: Int? = nil,
         cooldown: Int? = nil,
         delay: Int? = nil,
@@ -807,6 +845,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         self.groupOverride = groupOverride
         self.groupWeight = groupWeight
         self.useGroupScoring = useGroupScoring
+        self.role = role
         self.sticky = sticky
         self.cooldown = cooldown
         self.delay = delay
@@ -844,6 +883,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         case groupOverride
         case groupWeight
         case useGroupScoring
+        case role
         case sticky
         case cooldown
         case delay
@@ -893,6 +933,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         self.groupOverride = try container.decodeIfPresent(Bool.self, forKey: .groupOverride) ?? false
         self.groupWeight = try container.decodeIfPresent(Double.self, forKey: .groupWeight) ?? 1
         self.useGroupScoring = try container.decodeIfPresent(Bool.self, forKey: .useGroupScoring) ?? false
+        self.role = WorldbookEntryRole(rawOrLegacyValue: try container.decodeIfPresent(String.self, forKey: .role))
         self.sticky = try container.decodeIfPresent(Int.self, forKey: .sticky)
         self.cooldown = try container.decodeIfPresent(Int.self, forKey: .cooldown)
         self.delay = try container.decodeIfPresent(Int.self, forKey: .delay)
@@ -931,6 +972,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         try container.encode(groupOverride, forKey: .groupOverride)
         try container.encode(groupWeight, forKey: .groupWeight)
         try container.encode(useGroupScoring, forKey: .useGroupScoring)
+        try container.encode(role.rawValue, forKey: .role)
         try container.encodeIfPresent(sticky, forKey: .sticky)
         try container.encodeIfPresent(cooldown, forKey: .cooldown)
         try container.encodeIfPresent(delay, forKey: .delay)
@@ -946,6 +988,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
 public struct Worldbook: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var name: String
+    public var description: String
     public var isEnabled: Bool
     public var createdAt: Date
     public var updatedAt: Date
@@ -957,6 +1000,7 @@ public struct Worldbook: Codable, Identifiable, Hashable, Sendable {
     public init(
         id: UUID = UUID(),
         name: String,
+        description: String = "",
         isEnabled: Bool = true,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -967,6 +1011,7 @@ public struct Worldbook: Codable, Identifiable, Hashable, Sendable {
     ) {
         self.id = id
         self.name = name
+        self.description = description
         self.isEnabled = isEnabled
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -974,6 +1019,51 @@ public struct Worldbook: Codable, Identifiable, Hashable, Sendable {
         self.settings = settings
         self.sourceFileName = sourceFileName
         self.metadata = metadata
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case isEnabled
+        case createdAt
+        case updatedAt
+        case entries
+        case settings
+        case sourceFileName
+        case metadata
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.name = try container.decode(String.self, forKey: .name)
+        self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+        self.entries = try container.decodeIfPresent([WorldbookEntry].self, forKey: .entries) ?? []
+        self.settings = try container.decodeIfPresent(WorldbookSettings.self, forKey: .settings) ?? WorldbookSettings()
+        self.sourceFileName = try container.decodeIfPresent(String.self, forKey: .sourceFileName)
+        self.metadata = try container.decodeIfPresent([String: JSONValue].self, forKey: .metadata) ?? [:]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        if !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try container.encode(description, forKey: .description)
+        }
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(entries, forKey: .entries)
+        try container.encode(settings, forKey: .settings)
+        try container.encodeIfPresent(sourceFileName, forKey: .sourceFileName)
+        if !metadata.isEmpty {
+            try container.encode(metadata, forKey: .metadata)
+        }
     }
 }
 
@@ -993,16 +1083,17 @@ public extension Worldbook {
                     entry.secondaryKeys.map { $0.lowercased() }.sorted().joined(separator: "|"),
                     entry.position.rawValue,
                     String(entry.order),
-                    String(entry.depth ?? -1)
+                    String(entry.depth ?? -1),
+                    entry.role.rawValue
                 ].joined(separator: "||")
             }
             .joined(separator: "\n")
-        let payload = "\(name.lowercased())\n\(canonicalEntries)"
+        let enrichedPayload = "\(name.lowercased())\n\(description.lowercased())\n\(canonicalEntries)"
 #if canImport(CryptoKit)
-        let digest = SHA256.hash(data: Data(payload.utf8))
+        let digest = SHA256.hash(data: Data(enrichedPayload.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
 #else
-        return String(payload.hashValue)
+        return String(enrichedPayload.hashValue)
 #endif
     }
 

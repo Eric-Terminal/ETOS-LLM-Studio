@@ -69,6 +69,7 @@ public struct WorldbookImportService {
         let worldbook = Worldbook(
             id: UUID(),
             name: parsed.name,
+            description: parsed.description,
             isEnabled: true,
             createdAt: Date(),
             updatedAt: Date(),
@@ -100,6 +101,17 @@ public struct WorldbookImportService {
     }
 
     private func parseRoot(_ root: [String: Any], fileName: String) throws -> ParsedBook {
+        if let type = stringValue(root["type"])?.lowercased(), type == "lorebook" {
+            if let nested = root["data"] as? [String: Any] {
+                return try parseRoot(nested, fileName: fileName)
+            }
+            if let nestedText = stringValue(root["data"]),
+               let nestedData = decodeJSONStringPayload(nestedText) {
+                let nestedPayload = try JSONSerialization.jsonObject(with: nestedData)
+                return try parseJSONPayload(nestedPayload, fileName: fileName)
+            }
+        }
+
         if let characterBook = root["character_book"] as? [String: Any] {
             return try parseCharacterBook(characterBook, root: root, fileName: fileName)
         }
@@ -339,6 +351,7 @@ public struct WorldbookImportService {
     ) -> ParsedBook {
         let defaultName = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
         let name = stringValue(root["name"]) ?? stringValue(root["title"]) ?? (defaultName.isEmpty ? "导入世界书" : defaultName)
+        let description = stringValue(root["description"]) ?? stringValue(root["desc"]) ?? ""
 
         let settings = WorldbookSettings(
             scanDepth: intValue(root["scanDepth"]) ?? intValue(root["scan_depth"]) ?? 4,
@@ -351,6 +364,7 @@ public struct WorldbookImportService {
         let metadata = jsonDictionary(from: root)
         return ParsedBook(
             name: name,
+            description: description,
             entries: entries,
             settings: settings,
             metadata: metadata,
@@ -377,7 +391,7 @@ public struct WorldbookImportService {
             dict["insertPosition"] ??
             "after"
 
-        let order = intValue(dict["order"]) ?? 100
+        let order = intValue(dict["priority"]) ?? intValue(dict["order"]) ?? 100
         let probabilityRaw = doubleValue(dict["probability"]) ?? 100
         let probability = probabilityRaw <= 1 ? probabilityRaw * 100 : probabilityRaw
         let outletName =
@@ -421,11 +435,11 @@ public struct WorldbookImportService {
             secondaryKeys: dedupSecondary,
             selectiveLogic: logic,
             isEnabled: enabled,
-            constant: boolValue(dict["constant"]) ?? false,
+            constant: boolValue(dict["constant"]) ?? boolValue(dict["constantActive"]) ?? false,
             position: positionFromRaw(rawPositionValue),
             outletName: outletName,
             order: order,
-            depth: intValue(dict["depth"]) ?? intValue(extensionDict?["depth"]),
+            depth: intValue(dict["injectDepth"]) ?? intValue(dict["depth"]) ?? intValue(extensionDict?["depth"]),
             scanDepth: intValue(dict["scanDepth"]) ?? intValue(dict["scan_depth"]) ?? intValue(extensionDict?["scan_depth"]) ?? intValue(extensionDict?["scanDepth"]),
             caseSensitive: boolValue(dict["caseSensitive"]) ?? boolValue(dict["case_sensitive"]) ?? boolValue(extensionDict?["case_sensitive"]) ?? false,
             matchWholeWords: boolValue(dict["matchWholeWords"]) ?? boolValue(dict["wholeWords"]) ?? boolValue(dict["match_whole_words"]) ?? boolValue(extensionDict?["match_whole_words"]) ?? false,
@@ -436,6 +450,11 @@ public struct WorldbookImportService {
             groupOverride: boolValue(dict["groupOverride"]) ?? boolValue(extensionDict?["group_override"]) ?? false,
             groupWeight: doubleValue(dict["groupWeight"]) ?? doubleValue(extensionDict?["group_weight"]) ?? 1,
             useGroupScoring: boolValue(dict["useGroupScoring"]) ?? boolValue(extensionDict?["use_group_scoring"]) ?? false,
+            role: WorldbookEntryRole(
+                rawOrLegacyValue:
+                    stringValue(dict["role"]) ??
+                    stringValue(extensionDict?["role"])
+            ),
             sticky: intValue(dict["sticky"]) ?? intValue(extensionDict?["sticky"]),
             cooldown: intValue(dict["cooldown"]) ?? intValue(extensionDict?["cooldown"]),
             delay: intValue(dict["delay"]) ?? intValue(extensionDict?["delay"]),
@@ -601,7 +620,7 @@ public struct WorldbookImportService {
             case 0: return .before
             case 1: return .after
             case 2: return .anTop
-            case 3: return .anBottom
+            case 3: return .anTop
             case 4: return .atDepth
             case 5: return .emTop
             case 6: return .emBottom
@@ -759,6 +778,7 @@ public struct WorldbookImportService {
 
 private struct ParsedBook {
     var name: String
+    var description: String
     var entries: [WorldbookEntry]
     var settings: WorldbookSettings
     var metadata: [String: JSONValue]
