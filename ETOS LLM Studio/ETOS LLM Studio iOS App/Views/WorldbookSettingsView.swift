@@ -352,29 +352,25 @@ private struct WorldbookSessionBindingView: View {
 
     var body: some View {
         List {
+            Section {
+                Text(NSLocalizedString("打开开关即可绑定到当前会话。", comment: "Binding hint"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             if worldbooks.isEmpty {
                 Text(NSLocalizedString("暂无可绑定的世界书。", comment: "No bindable worldbook"))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(worldbooks) { book in
-                    Button {
-                        toggle(book.id)
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(book.name)
-                                Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if selected.contains(book.id) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.tint)
-                            }
+                    Toggle(isOn: bindingForSelection(book.id)) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(book.name)
+                            Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -397,5 +393,16 @@ private struct WorldbookSessionBindingView: View {
         session.worldbookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
         currentSession = session
         ChatService.shared.assignWorldbooks(to: session.id, worldbookIDs: session.worldbookIDs)
+    }
+
+    private func bindingForSelection(_ id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { selected.contains(id) },
+            set: { isBound in
+                let currentlyBound = selected.contains(id)
+                guard isBound != currentlyBound else { return }
+                toggle(id)
+            }
+        )
     }
 }

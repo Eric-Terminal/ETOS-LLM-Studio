@@ -959,3 +959,4 @@
 "已启用" = "Enabled";
 "已停用" = "Disabled";
 "%d/%d 本 · %d 条" = "Bound %d/%d books · %d entries";
+"打开开关即可绑定到当前会话。" = "Turn on the switch to bind it to the current session.";

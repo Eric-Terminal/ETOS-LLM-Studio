@@ -207,24 +207,23 @@ private struct WatchWorldbookSessionBindingView: View {
 
     var body: some View {
         List {
+            Section {
+                Text(NSLocalizedString("打开开关即可绑定到当前会话。", comment: "Binding hint"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             if worldbooks.isEmpty {
                 Text(NSLocalizedString("暂无可绑定世界书", comment: "No bindable worldbook on watch"))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(worldbooks) { book in
-                    Button {
-                        toggle(book.id)
-                    } label: {
+                    Toggle(isOn: bindingForSelection(book.id)) {
                         HStack {
                             Text(book.name)
                             Spacer()
-                            if selected.contains(book.id) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
                         }
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -247,5 +246,16 @@ private struct WatchWorldbookSessionBindingView: View {
         current.worldbookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
         session = current
         ChatService.shared.assignWorldbooks(to: current.id, worldbookIDs: current.worldbookIDs)
+    }
+
+    private func bindingForSelection(_ id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { selected.contains(id) },
+            set: { isBound in
+                let currentlyBound = selected.contains(id)
+                guard isBound != currentlyBound else { return }
+                toggle(id)
+            }
+        )
     }
 }
