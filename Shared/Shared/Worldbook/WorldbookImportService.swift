@@ -60,11 +60,8 @@ public struct WorldbookImportService {
             jsonData = data
         }
 
-        guard let root = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-            throw WorldbookImportError.invalidPayload
-        }
-
-        let parsed = try parseRoot(root, fileName: fileName)
+        let payload = try JSONSerialization.jsonObject(with: jsonData)
+        let parsed = try parseJSONPayload(payload, fileName: fileName)
         guard !parsed.entries.isEmpty else {
             throw WorldbookImportError.missingEntries
         }
@@ -87,7 +84,30 @@ public struct WorldbookImportService {
         return WorldbookImportResult(worldbook: worldbook, diagnostics: diagnostics)
     }
 
+    private func parseJSONPayload(_ payload: Any, fileName: String) throws -> ParsedBook {
+        if let root = payload as? [String: Any] {
+            return try parseRoot(root, fileName: fileName)
+        }
+        if let entries = payload as? [Any] {
+            return try parseSillyTavernArray(entries: entries, root: [:], fileName: fileName)
+        }
+        if let text = payload as? String,
+           let nestedData = decodeJSONStringPayload(text) {
+            let nestedPayload = try JSONSerialization.jsonObject(with: nestedData)
+            return try parseJSONPayload(nestedPayload, fileName: fileName)
+        }
+        throw WorldbookImportError.invalidPayload
+    }
+
     private func parseRoot(_ root: [String: Any], fileName: String) throws -> ParsedBook {
+        if let characterBook = root["character_book"] as? [String: Any] {
+            return try parseCharacterBook(characterBook, root: root, fileName: fileName)
+        }
+        if let nestedData = root["data"] as? [String: Any],
+           let characterBook = nestedData["character_book"] as? [String: Any] {
+            return try parseCharacterBook(characterBook, root: nestedData, fileName: fileName)
+        }
+
         if let entries = root["entries"] as? [String: Any] {
             return try parseSillyTavernLike(entriesContainer: entries, root: root, fileName: fileName)
         }
@@ -114,6 +134,62 @@ public struct WorldbookImportService {
         }
 
         throw WorldbookImportError.invalidPayload
+    }
+
+    private func parseCharacterBook(_ characterBook: [String: Any], root: [String: Any], fileName: String) throws -> ParsedBook {
+        guard let entries = characterBook["entries"] as? [Any] else {
+            throw WorldbookImportError.missingEntries
+        }
+
+        var parsed: [WorldbookEntry] = []
+        var failedEntries = 0
+        var failureReasons: [String] = []
+
+        for (index, item) in entries.enumerated() {
+            guard var dict = item as? [String: Any] else {
+                failedEntries += 1
+                appendFailureReason("角色卡条目 #\(index) 结构无效，已跳过。", to: &failureReasons)
+                continue
+            }
+
+            if dict["key"] == nil, let keys = dict["keys"] {
+                dict["key"] = keys
+            }
+            if dict["keysecondary"] == nil, let secondary = dict["secondary_keys"] {
+                dict["keysecondary"] = secondary
+            }
+            if dict["order"] == nil, let insertionOrder = dict["insertion_order"] {
+                dict["order"] = insertionOrder
+            }
+            if let enabled = boolValue(dict["enabled"]) {
+                dict["isEnabled"] = enabled
+                dict["disable"] = !enabled
+            }
+
+            let uid = intValue(dict["uid"]) ?? intValue(dict["id"]) ?? index
+            if let entry = parseEntry(dict, uidHint: uid) {
+                parsed.append(entry)
+            } else {
+                failedEntries += 1
+                appendFailureReason("角色卡条目 \(uid) 缺少有效 content，已跳过。", to: &failureReasons)
+            }
+        }
+
+        var normalizedRoot = root
+        if normalizedRoot["name"] == nil {
+            normalizedRoot["name"] = stringValue(characterBook["name"]) ?? stringValue(root["name"])
+        }
+        if normalizedRoot["entries"] == nil {
+            normalizedRoot["entries"] = entries
+        }
+
+        return buildParsedBook(
+            entries: parsed,
+            root: normalizedRoot,
+            fileName: fileName,
+            failedEntries: failedEntries,
+            failureReasons: failureReasons
+        )
     }
 
     private func parseSillyTavernLike(entriesContainer: [String: Any], root: [String: Any], fileName: String) throws -> ParsedBook {
@@ -284,6 +360,7 @@ public struct WorldbookImportService {
     }
 
     private func parseEntry(_ dict: [String: Any], uidHint: Int?) -> WorldbookEntry? {
+        let extensionDict = dict["extensions"] as? [String: Any]
         let content = stringValue(dict["content"]) ?? stringValue(dict["text"]) ?? stringValue(dict["value"]) ?? ""
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return nil }
@@ -294,18 +371,28 @@ public struct WorldbookImportService {
         let secondaryKeys = stringArrayValue(dict["secondaryKeys"]) + stringArrayValue(dict["keysecondary"]) + stringArrayValue(dict["secondary_keys"])
         let dedupSecondary = deduplicateStrings(secondaryKeys)
 
-        let positionRaw = stringValue(dict["position"]) ?? stringValue(dict["insertPosition"]) ?? "after"
+        let rawPositionValue: Any? =
+            dict["position"] ??
+            extensionDict?["position"] ??
+            dict["insertPosition"] ??
+            "after"
+
         let order = intValue(dict["order"]) ?? 100
         let probabilityRaw = doubleValue(dict["probability"]) ?? 100
         let probability = probabilityRaw <= 1 ? probabilityRaw * 100 : probabilityRaw
-        let extensionDict = dict["extensions"] as? [String: Any]
         let outletName =
             stringValue(dict["outletName"]) ??
             stringValue(dict["outlet"]) ??
-            stringValue(extensionDict?["outlet"])
+            stringValue(extensionDict?["outlet"]) ??
+            stringValue(extensionDict?["outlet_name"])
 
-        var logic = WorldbookSelectiveLogic(rawOrLegacyValue: stringValue(dict["selectiveLogic"]))
-        if let legacyLogic = intValue(dict["selectiveLogic"]) {
+        var logic = WorldbookSelectiveLogic(
+            rawOrLegacyValue:
+                stringValue(dict["selectiveLogic"]) ??
+                stringValue(extensionDict?["selectiveLogic"]) ??
+                stringValue(extensionDict?["selective_logic"])
+        )
+        if let legacyLogic = intValue(dict["selectiveLogic"]) ?? intValue(extensionDict?["selectiveLogic"]) ?? intValue(extensionDict?["selective_logic"]) {
             switch legacyLogic {
             case 1: logic = .notAll
             case 2: logic = .notAny
@@ -319,6 +406,8 @@ public struct WorldbookImportService {
             enabled = !disable
         } else if let directEnabled = boolValue(dict["isEnabled"]) {
             enabled = directEnabled
+        } else if let legacyEnabled = boolValue(dict["enabled"]) {
+            enabled = legacyEnabled
         } else {
             enabled = true
         }
@@ -333,26 +422,26 @@ public struct WorldbookImportService {
             selectiveLogic: logic,
             isEnabled: enabled,
             constant: boolValue(dict["constant"]) ?? false,
-            position: positionFromRaw(dict["position"] ?? positionRaw),
+            position: positionFromRaw(rawPositionValue),
             outletName: outletName,
             order: order,
-            depth: intValue(dict["depth"]),
-            scanDepth: intValue(dict["scanDepth"]) ?? intValue(dict["scan_depth"]),
-            caseSensitive: boolValue(dict["caseSensitive"]) ?? boolValue(dict["case_sensitive"]) ?? false,
-            matchWholeWords: boolValue(dict["matchWholeWords"]) ?? boolValue(dict["wholeWords"]) ?? false,
+            depth: intValue(dict["depth"]) ?? intValue(extensionDict?["depth"]),
+            scanDepth: intValue(dict["scanDepth"]) ?? intValue(dict["scan_depth"]) ?? intValue(extensionDict?["scan_depth"]) ?? intValue(extensionDict?["scanDepth"]),
+            caseSensitive: boolValue(dict["caseSensitive"]) ?? boolValue(dict["case_sensitive"]) ?? boolValue(extensionDict?["case_sensitive"]) ?? false,
+            matchWholeWords: boolValue(dict["matchWholeWords"]) ?? boolValue(dict["wholeWords"]) ?? boolValue(dict["match_whole_words"]) ?? boolValue(extensionDict?["match_whole_words"]) ?? false,
             useRegex: boolValue(dict["useRegex"]) ?? boolValue(dict["keyRegex"]) ?? boolValue(dict["regex"]) ?? false,
-            useProbability: boolValue(dict["useProbability"]) ?? (probability < 100),
+            useProbability: boolValue(dict["useProbability"]) ?? boolValue(extensionDict?["useProbability"]) ?? (probability < 100),
             probability: max(0, min(100, probability)),
-            group: stringValue(dict["group"]),
-            groupOverride: boolValue(dict["groupOverride"]) ?? false,
-            groupWeight: doubleValue(dict["groupWeight"]) ?? 1,
-            useGroupScoring: boolValue(dict["useGroupScoring"]) ?? false,
-            sticky: intValue(dict["sticky"]),
-            cooldown: intValue(dict["cooldown"]),
-            delay: intValue(dict["delay"]),
-            excludeRecursion: boolValue(dict["excludeRecursion"]) ?? false,
-            preventRecursion: boolValue(dict["preventRecursion"]) ?? false,
-            delayUntilRecursion: boolValue(dict["delayUntilRecursion"]) ?? false,
+            group: stringValue(dict["group"]) ?? stringValue(extensionDict?["group"]),
+            groupOverride: boolValue(dict["groupOverride"]) ?? boolValue(extensionDict?["group_override"]) ?? false,
+            groupWeight: doubleValue(dict["groupWeight"]) ?? doubleValue(extensionDict?["group_weight"]) ?? 1,
+            useGroupScoring: boolValue(dict["useGroupScoring"]) ?? boolValue(extensionDict?["use_group_scoring"]) ?? false,
+            sticky: intValue(dict["sticky"]) ?? intValue(extensionDict?["sticky"]),
+            cooldown: intValue(dict["cooldown"]) ?? intValue(extensionDict?["cooldown"]),
+            delay: intValue(dict["delay"]) ?? intValue(extensionDict?["delay"]),
+            excludeRecursion: boolValue(dict["excludeRecursion"]) ?? boolValue(extensionDict?["exclude_recursion"]) ?? false,
+            preventRecursion: boolValue(dict["preventRecursion"]) ?? boolValue(extensionDict?["prevent_recursion"]) ?? false,
+            delayUntilRecursion: boolValue(dict["delayUntilRecursion"]) ?? boolValue(extensionDict?["delay_until_recursion"]) ?? false,
             metadata: jsonDictionary(from: dict)
         )
     }
@@ -388,13 +477,34 @@ public struct WorldbookImportService {
 
             if let text = decodePNGTextChunk(type: type, data: chunkData),
                let payload = text["naidata"],
-               let payloadData = payload.data(using: .utf8) {
+               let payloadData = decodeNaiDataPayload(payload) {
                 return payloadData
             }
 
             if type == "IEND" { break }
             offset = crcEnd
         }
+        return nil
+    }
+
+    private static func decodeNaiDataPayload(_ payload: String) -> Data? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let direct = trimmed.data(using: .utf8),
+           (try? JSONSerialization.jsonObject(with: direct)) != nil {
+            return direct
+        }
+
+        let normalizedBase64 = trimmed
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        if let decoded = Data(base64Encoded: normalizedBase64),
+           (try? JSONSerialization.jsonObject(with: decoded)) != nil {
+            return decoded
+        }
+
         return nil
     }
 
@@ -500,6 +610,13 @@ public struct WorldbookImportService {
             }
         }
         if let text = stringValue(raw) {
+            let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalized == "before_char" {
+                return .before
+            }
+            if normalized == "after_char" {
+                return .after
+            }
             return WorldbookPosition(stRawValue: text)
         }
         return .after
@@ -647,4 +764,25 @@ private struct ParsedBook {
     var metadata: [String: JSONValue]
     var failedEntries: Int
     var failureReasons: [String]
+}
+
+private func decodeJSONStringPayload(_ raw: String) -> Data? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    if let direct = trimmed.data(using: .utf8),
+       (try? JSONSerialization.jsonObject(with: direct)) != nil {
+        return direct
+    }
+
+    let normalizedBase64 = trimmed
+        .replacingOccurrences(of: "\n", with: "")
+        .replacingOccurrences(of: "\r", with: "")
+        .replacingOccurrences(of: " ", with: "")
+    if let decoded = Data(base64Encoded: normalizedBase64),
+       (try? JSONSerialization.jsonObject(with: decoded)) != nil {
+        return decoded
+    }
+
+    return nil
 }

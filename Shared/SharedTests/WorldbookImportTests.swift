@@ -75,6 +75,31 @@ struct WorldbookImportTests {
         #expect(worldbook.entries.first?.content.contains("钟表匠") == true)
     }
 
+    @Test("import worldbook from PNG naidata text chunk with base64 payload (SillyTavern style)")
+    func testImportPNGWithBase64NaiData() throws {
+        let json = """
+        {
+          "name": "PNG-BASE64世界书",
+          "entries": {
+            "12": {
+              "uid": 12,
+              "key": ["Eva"],
+              "content": "这是 base64 naidata。",
+              "position": "after"
+            }
+          }
+        }
+        """
+        let png = makePNGWithBase64NaiData(json)
+        let service = WorldbookImportService()
+
+        let worldbook = try service.importWorldbook(from: png, fileName: "world-base64.png")
+
+        #expect(worldbook.name == "PNG-BASE64世界书")
+        #expect(worldbook.entries.count == 1)
+        #expect(worldbook.entries.first?.content == "这是 base64 naidata。")
+    }
+
     @Test("import worldbook from PNG naidata zTXt chunk")
     func testImportPNGWithNaiDataZTXt() throws {
         let json = """
@@ -243,6 +268,61 @@ struct WorldbookImportTests {
         #expect(worldbook.entries.first?.keys == ["rikka"])
     }
 
+    @Test("import top-level entries array JSON")
+    func testImportTopLevelArrayJSON() throws {
+        let json = """
+        [
+          {
+            "uid": 31,
+            "comment": "TopLevel",
+            "key": ["array-key"],
+            "content": "顶层数组条目。",
+            "position": "EMTop"
+          }
+        ]
+        """
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "top-array.json")
+        #expect(worldbook.entries.count == 1)
+        #expect(worldbook.entries.first?.position == .emTop)
+        #expect(worldbook.entries.first?.keys == ["array-key"])
+    }
+
+    @Test("import character card book JSON with character_book entries")
+    func testImportCharacterBookJSON() throws {
+        let json = """
+        {
+          "name": "角色卡",
+          "character_book": {
+            "name": "角色卡世界书",
+            "entries": [
+              {
+                "id": 7,
+                "enabled": true,
+                "keys": ["hero"],
+                "secondary_keys": ["ruby"],
+                "content": "角色卡条目内容",
+                "insertion_order": 5,
+                "position": "before_char",
+                "extensions": {
+                  "scan_depth": 8,
+                  "group_override": true
+                }
+              }
+            ]
+          }
+        }
+        """
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "character-card.json")
+        #expect(worldbook.entries.count == 1)
+        #expect(worldbook.entries.first?.position == .before)
+        #expect(worldbook.entries.first?.scanDepth == 8)
+        #expect(worldbook.entries.first?.groupOverride == true)
+    }
+
     private func makePNGWithNaiData(_ json: String) -> Data {
         var data = Data([137, 80, 78, 71, 13, 10, 26, 10]) // PNG signature
 
@@ -265,6 +345,26 @@ struct WorldbookImportTests {
         data.append(makeChunk(type: "tEXt", body: textBody))
 
         // IEND
+        data.append(makeChunk(type: "IEND", body: Data()))
+        return data
+    }
+
+    private func makePNGWithBase64NaiData(_ json: String) -> Data {
+        var data = Data([137, 80, 78, 71, 13, 10, 26, 10]) // PNG signature
+
+        let ihdrBody = Data([
+            0, 0, 0, 1,
+            0, 0, 0, 1,
+            8, 2, 0, 0, 0
+        ])
+        data.append(makeChunk(type: "IHDR", body: ihdrBody))
+
+        let base64 = Data(json.utf8).base64EncodedString()
+        var textBody = Data("naidata".utf8)
+        textBody.append(0)
+        textBody.append(contentsOf: base64.utf8)
+        data.append(makeChunk(type: "tEXt", body: textBody))
+
         data.append(makeChunk(type: "IEND", body: Data()))
         return data
     }
