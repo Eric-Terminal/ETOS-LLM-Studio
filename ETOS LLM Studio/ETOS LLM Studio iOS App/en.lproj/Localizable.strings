@@ -956,3 +956,6 @@
 "已绑定当前会话" = "Bound to current session";
 "暂无可绑定世界书" = "No worldbooks available to bind";
 "会话绑定" = "Session binding";
+"已启用" = "Enabled";
+"已停用" = "Disabled";
+"%d/%d 本 · %d 条" = "Bound %d/%d books · %d entries";

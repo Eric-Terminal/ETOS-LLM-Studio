@@ -20,7 +20,7 @@ struct WorldbookSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if viewModel.currentSession != nil {
+            if let session = viewModel.currentSession {
                 Section(NSLocalizedString("当前会话", comment: "Current session section")) {
                     NavigationLink {
                         WorldbookSessionBindingView(
@@ -33,7 +33,7 @@ struct WorldbookSettingsView: View {
                         HStack {
                             Label(NSLocalizedString("绑定世界书", comment: "Bind worldbooks"), systemImage: "link.badge.plus")
                             Spacer()
-                            Text("\((viewModel.currentSession?.worldbookIDs.count ?? 0))")
+                            Text(bindingSummary(for: session))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -90,8 +90,11 @@ struct WorldbookSettingsView: View {
                                             .background(.thinMaterial, in: Capsule())
                                     }
                                     Spacer()
-                                    Toggle("启用", isOn: bindingForBookEnabled(book.id))
-                                        .labelsHidden()
+                                    Text(book.isEnabled
+                                         ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
+                                         : NSLocalizedString("已停用", comment: "Worldbook disabled status"))
+                                        .font(.caption)
+                                        .foregroundStyle(book.isEnabled ? .green : .secondary)
                                 }
 
                                 Text(String(
@@ -179,18 +182,17 @@ struct WorldbookSettingsView: View {
         viewModel.currentSession?.worldbookIDs.contains(worldbook.id) ?? false
     }
 
-    private func bindingForBookEnabled(_ id: UUID) -> Binding<Bool> {
-        Binding(
-            get: {
-                worldbooks.first(where: { $0.id == id })?.isEnabled ?? false
-            },
-            set: { enabled in
-                guard var target = worldbooks.first(where: { $0.id == id }) else { return }
-                target.isEnabled = enabled
-                target.updatedAt = Date()
-                ChatService.shared.saveWorldbook(target)
-                reloadWorldbooks()
-            }
+    private func bindingSummary(for session: ChatSession) -> String {
+        let boundSet = Set(session.worldbookIDs)
+        let boundBooks = worldbooks.filter { boundSet.contains($0.id) }
+        let boundBookCount = boundBooks.count
+        let totalBookCount = worldbooks.count
+        let boundEntryCount = boundBooks.reduce(0) { $0 + $1.entries.count }
+        return String(
+            format: NSLocalizedString("%d/%d 本 · %d 条", comment: "Bound worldbook summary"),
+            boundBookCount,
+            totalBookCount,
+            boundEntryCount
         )
     }
 
@@ -270,6 +272,7 @@ private struct WorldbookDetailView: View {
                         .onSubmit {
                             saveName()
                         }
+                    Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: enabledBinding)
                     Text(String(format: NSLocalizedString("条目数量：%d", comment: "Entry count"), worldbook.entries.count))
                         .foregroundStyle(.secondary)
                 }
@@ -320,6 +323,21 @@ private struct WorldbookDetailView: View {
             return
         }
         worldbook.name = trimmed
+        worldbook.updatedAt = Date()
+        ChatService.shared.saveWorldbook(worldbook)
+        self.worldbook = worldbook
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { worldbook?.isEnabled ?? false },
+            set: { setEnabled($0) }
+        )
+    }
+
+    private func setEnabled(_ enabled: Bool) {
+        guard var worldbook else { return }
+        worldbook.isEnabled = enabled
         worldbook.updatedAt = Date()
         ChatService.shared.saveWorldbook(worldbook)
         self.worldbook = worldbook
