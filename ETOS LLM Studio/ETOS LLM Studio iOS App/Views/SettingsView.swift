@@ -66,17 +66,45 @@ struct SettingsView: View {
                 } label: {
                     Label("高级模型设置", systemImage: "slider.vertical.3")
                 }
-                
+            }
+
+            Section("拓展能力") {
                 NavigationLink {
-                    ExtendedFeaturesView().environmentObject(viewModel)
+                    LongTermMemoryFeatureView()
+                        .environmentObject(viewModel)
                 } label: {
-                    Label("拓展功能", systemImage: "puzzlepiece.extension")
+                    Label("长期记忆系统", systemImage: "brain.head.profile")
+                }
+
+                NavigationLink {
+                    MCPIntegrationView()
+                } label: {
+                    Label("MCP 工具集成", systemImage: "network")
+                }
+
+                NavigationLink {
+                    ShortcutIntegrationView()
+                } label: {
+                    Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")
+                }
+
+                NavigationLink {
+                    ImageGenerationFeatureView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), systemImage: "photo.on.rectangle.angled")
                 }
 
                 NavigationLink {
                     WorldbookSettingsView().environmentObject(viewModel)
                 } label: {
                     Label("世界书", systemImage: "book.pages")
+                }
+
+                NavigationLink {
+                    ExtendedFeaturesView()
+                } label: {
+                    Label("拓展功能", systemImage: "puzzlepiece.extension")
                 }
             }
             
