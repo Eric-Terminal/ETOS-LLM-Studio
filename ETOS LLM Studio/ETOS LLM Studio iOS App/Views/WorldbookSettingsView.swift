@@ -14,6 +14,9 @@ struct WorldbookSettingsView: View {
     @State private var worldbookToDelete: Worldbook?
     @State private var exportDocument: WorldbookExportDocument?
     @State private var exportFileName: String = "worldbook.lorebook.json"
+    @State private var isURLImportSheetPresented = false
+    @State private var importURLText: String = ""
+    @State private var isImportingFromURL = false
 
     var body: some View {
         List {
@@ -48,6 +51,21 @@ struct WorldbookSettingsView: View {
                     isImporting = true
                 } label: {
                     Label(NSLocalizedString("导入酒馆世界书 (JSON/PNG)", comment: "Import worldbook button"), systemImage: "square.and.arrow.down")
+                }
+
+                Button {
+                    isURLImportSheetPresented = true
+                } label: {
+                    Label(NSLocalizedString("从 URL 导入世界书", comment: "Import worldbook from URL button"), systemImage: "link.badge.plus")
+                }
+
+                if isImportingFromURL {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -161,6 +179,45 @@ struct WorldbookSettingsView: View {
             }
         }
         .onAppear(perform: reloadWorldbooks)
+        .sheet(isPresented: $isURLImportSheetPresented) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField(NSLocalizedString("世界书链接", comment: "Worldbook URL field"), text: $importURLText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .keyboardType(.URL)
+                    }
+
+                    Section {
+                        Text(NSLocalizedString("输入可直接访问的 JSON 或 PNG 世界书链接。", comment: "URL import hint"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if isImportingFromURL {
+                        Section {
+                            ProgressView(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
+                        }
+                    }
+                }
+                .navigationTitle(NSLocalizedString("从链接导入", comment: "Import from link title"))
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(NSLocalizedString("取消", comment: "Cancel")) {
+                            isURLImportSheetPresented = false
+                        }
+                        .disabled(isImportingFromURL)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(NSLocalizedString("开始导入", comment: "Start import")) {
+                            startURLImport()
+                        }
+                        .disabled(isImportingFromURL || importURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+        }
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [UTType.json, .png],
@@ -338,6 +395,83 @@ struct WorldbookSettingsView: View {
                 }
             }
         }
+    }
+
+    private func startURLImport() {
+        let trimmed = importURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            importError = NSLocalizedString("链接不能为空。", comment: "URL cannot be empty")
+            return
+        }
+        guard let url = URL(string: trimmed) else {
+            importError = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "Invalid URL format")
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            importError = NSLocalizedString("仅支持 http/https 链接。", comment: "Only http or https is supported")
+            return
+        }
+
+        importError = nil
+        isImportingFromURL = true
+
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 45
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    await MainActor.run {
+                        importError = String(
+                            format: NSLocalizedString("下载失败：HTTP %d", comment: "HTTP status code failure"),
+                            httpResponse.statusCode
+                        )
+                        isImportingFromURL = false
+                    }
+                    return
+                }
+
+                let fileName = suggestedRemoteImportFileName(from: url, response: response)
+                let report = try ChatService.shared.importWorldbook(data: data, fileName: fileName)
+                await MainActor.run {
+                    importReport = report
+                    importError = report.failureReasons.isEmpty ? nil : report.failureReasons.joined(separator: "\n")
+                    showImportReportAlert = true
+                    reloadWorldbooks()
+                    importURLText = ""
+                    isImportingFromURL = false
+                    isURLImportSheetPresented = false
+                }
+            } catch {
+                await MainActor.run {
+                    importError = error.localizedDescription
+                    isImportingFromURL = false
+                }
+            }
+        }
+    }
+
+    private func suggestedRemoteImportFileName(from url: URL, response: URLResponse) -> String {
+        var fileName = response.suggestedFilename?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if fileName.isEmpty {
+            fileName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if fileName.isEmpty || fileName == "/" {
+            fileName = "worldbook-from-url"
+        }
+
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".json") || lowercased.hasSuffix(".png") {
+            return fileName
+        }
+
+        if let httpResponse = response as? HTTPURLResponse,
+           let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased(),
+           contentType.contains("png") {
+            return "\(fileName).png"
+        }
+        return "\(fileName).json"
     }
 
     private func importReportAlertMessage(_ report: WorldbookImportReport) -> String {

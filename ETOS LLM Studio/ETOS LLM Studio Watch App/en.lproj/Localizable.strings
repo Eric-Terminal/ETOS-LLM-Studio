@@ -938,3 +938,16 @@
 "AND_ALL（全部命中）" = "AND_ALL (all hit)";
 "NOT_ANY（全部不命中）" = "NOT_ANY (none hit)";
 "NOT_ALL（并非全部命中）" = "NOT_ALL (not all hit)";
+
+"从 URL 导入世界书" = "Import worldbook from URL";
+"从链接导入" = "Import from link";
+"开始导入" = "Start import";
+"世界书链接" = "Worldbook URL";
+"输入可直接访问的 JSON 或 PNG 世界书链接。" = "Enter a directly accessible JSON or PNG worldbook URL.";
+"正在下载并导入..." = "Downloading and importing...";
+"链接不能为空。" = "URL cannot be empty.";
+"链接格式无效，请输入完整 URL。" = "Invalid URL format. Please enter a full URL.";
+"仅支持 http/https 链接。" = "Only http/https URLs are supported.";
+"下载失败：HTTP %d" = "Download failed: HTTP %d";
+"暂无世界书，可在本机通过链接导入，或在 iPhone 导入后同步。" = "No worldbooks yet. Import via URL on this watch, or import on iPhone and sync.";
+"支持 http/https 的 JSON 或 PNG 链接。" = "Supports http/https JSON or PNG URLs.";
