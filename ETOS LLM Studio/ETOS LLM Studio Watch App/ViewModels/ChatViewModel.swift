@@ -101,6 +101,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
+    @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
@@ -405,6 +406,7 @@ class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 audioAttachment: audioToSend
@@ -523,6 +525,7 @@ class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
@@ -542,6 +545,7 @@ class ChatViewModel: ObservableObject {
                 enhancedPrompt: currentSession?.enhancedPrompt,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )

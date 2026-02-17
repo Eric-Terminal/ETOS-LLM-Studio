@@ -18,6 +18,7 @@ public struct MemorySettingsView: View {
     @State private var showReembedConfirmation = false
     @State private var reembedAlert: MemoryReembedAlert?
     @AppStorage("memoryTopK") var memoryTopK: Int = 3
+    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
 
     private var embeddingModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -142,6 +143,23 @@ public struct MemorySettingsView: View {
                     TextField("数量", value: $memoryTopK, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
+                        .onChange(of: memoryTopK) { _, newValue in
+                            memoryTopK = max(0, newValue)
+                        }
+                }
+                if memoryTopK > 0 {
+                    Toggle(
+                        NSLocalizedString("主动检索", comment: "Active retrieval toggle title"),
+                        isOn: $enableMemoryActiveRetrieval
+                    )
+                    Text(
+                        NSLocalizedString(
+                            "开启后会向 AI 暴露记忆检索工具，AI 可按向量或关键词主动检索，并指定返回数量。",
+                            comment: "Active retrieval toggle description"
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
             } header: {
                 Text("检索设置")

@@ -524,6 +524,50 @@ public class MemoryManager {
             return []
         }
     }
+
+    /// 根据关键词检索相关记忆（不依赖向量）。
+    public func searchMemoriesByKeyword(query: String, topK: Int) async -> [MemoryItem] {
+        await initializationTask.value
+        guard topK > 0 else { return [] }
+
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let tokens = keywordTokens(from: trimmed)
+        guard !tokens.isEmpty else { return [] }
+
+        let normalizedQuery = normalizedKeywordSearchText(trimmed)
+        let activeMemories = cachedMemories.filter { !$0.isArchived }
+        guard !activeMemories.isEmpty else { return [] }
+
+        let scoredMemories: [(memory: MemoryItem, score: Int)] = activeMemories.compactMap { memory in
+            let normalizedContent = normalizedKeywordSearchText(memory.content)
+            guard !normalizedContent.isEmpty else { return nil }
+
+            var score = 0
+            if !normalizedQuery.isEmpty, normalizedContent.contains(normalizedQuery) {
+                score += max(5, normalizedQuery.count) * 3
+            }
+
+            for token in tokens {
+                let hits = occurrenceCount(of: token, in: normalizedContent)
+                guard hits > 0 else { continue }
+                score += hits * max(1, token.count)
+            }
+
+            guard score > 0 else { return nil }
+            return (memory: memory, score: score)
+        }
+
+        let sorted = scoredMemories.sorted { lhs, rhs in
+            if lhs.score == rhs.score {
+                return lhs.memory.createdAt > rhs.memory.createdAt
+            }
+            return lhs.score > rhs.score
+        }
+
+        return Array(sorted.prefix(topK).map(\.memory))
+    }
     
     // MARK: - 私有方法
     
@@ -565,6 +609,68 @@ public class MemoryManager {
         }
         
         throw MemoryEmbeddingError.invalidResponse
+    }
+
+    private func keywordTokens(from query: String) -> [String] {
+        let normalized = normalizedKeywordSearchText(query)
+        guard !normalized.isEmpty else { return [] }
+
+        var tokens: [String] = []
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = normalized
+        tokenizer.enumerateTokens(in: normalized.startIndex..<normalized.endIndex) { range, _ in
+            let token = String(normalized[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !token.isEmpty {
+                tokens.append(token)
+            }
+            return true
+        }
+
+        if tokens.isEmpty {
+            let parts = normalized
+                .split(whereSeparator: { character in
+                    character.unicodeScalars.allSatisfy { scalar in
+                        CharacterSet.whitespacesAndNewlines.contains(scalar)
+                            || CharacterSet.punctuationCharacters.contains(scalar)
+                            || CharacterSet.symbols.contains(scalar)
+                    }
+                })
+                .map(String.init)
+            tokens.append(contentsOf: parts)
+        }
+
+        if tokens.isEmpty {
+            tokens.append(normalized)
+        }
+
+        var seen = Set<String>()
+        var deduplicated: [String] = []
+        for token in tokens {
+            let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                deduplicated.append(trimmed)
+            }
+        }
+        return deduplicated
+    }
+
+    private func normalizedKeywordSearchText(_ text: String) -> String {
+        text
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func occurrenceCount(of token: String, in text: String) -> Int {
+        guard !token.isEmpty, !text.isEmpty else { return 0 }
+        var count = 0
+        var searchRange = text.startIndex..<text.endIndex
+        while let range = text.range(of: token, options: [], range: searchRange) {
+            count += 1
+            searchRange = range.upperBound..<text.endIndex
+        }
+        return count
     }
     
     private func validateEmbeddings(_ embeddings: [[Float]], matches texts: [String]) throws {

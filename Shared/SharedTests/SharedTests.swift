@@ -436,6 +436,23 @@ struct MemoryManagerTests {
         
         await cleanup(memoryManager: memoryManager)
     }
+
+    @Test("Search Memories By Keyword")
+    func testSearchMemoriesByKeyword() async throws {
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator(), chunkSize: 50)
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+
+        await memoryManager.addMemory(content: "用户喜欢喝抹茶拿铁。")
+        await memoryManager.addMemory(content: "用户最喜欢的编辑器是 Xcode。")
+        await memoryManager.addMemory(content: "用户每周都会去爬山。")
+
+        let results = await memoryManager.searchMemoriesByKeyword(query: "抹茶 拿铁", topK: 2)
+        #expect(!results.isEmpty)
+        #expect(results.first?.content.contains("抹茶") == true)
+
+        await cleanup(memoryManager: memoryManager)
+    }
 }
 
 // MARK: - OpenAIAdapter Tests
@@ -816,6 +833,70 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("search_memory tool is provided when active retrieval is enabled and topK > 0")
+    func testSearchMemoryToolProvision_Enabled() async throws {
+        await cleanup()
+        let defaults = UserDefaults.standard
+        let originalTopK = defaults.object(forKey: "memoryTopK")
+        defer {
+            if let originalTopK {
+                defaults.set(originalTopK, forKey: "memoryTopK")
+            } else {
+                defaults.removeObject(forKey: "memoryTopK")
+            }
+        }
+        defaults.set(3, forKey: "memoryTopK")
+
+        await chatService.sendAndProcessMessage(
+            content: "hello",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            enableMemoryActiveRetrieval: true,
+            includeSystemTime: false
+        )
+
+        #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "search_memory" }) == true)
+        await cleanup()
+    }
+
+    @Test("search_memory tool is NOT provided when topK is 0")
+    func testSearchMemoryToolProvision_TopKZero() async throws {
+        await cleanup()
+        let defaults = UserDefaults.standard
+        let originalTopK = defaults.object(forKey: "memoryTopK")
+        defer {
+            if let originalTopK {
+                defaults.set(originalTopK, forKey: "memoryTopK")
+            } else {
+                defaults.removeObject(forKey: "memoryTopK")
+            }
+        }
+        defaults.set(0, forKey: "memoryTopK")
+
+        await chatService.sendAndProcessMessage(
+            content: "hello",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            enableMemoryActiveRetrieval: true,
+            includeSystemTime: false
+        )
+
+        #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "search_memory" }) != true)
+        await cleanup()
+    }
+
     @Test("save_memory tool call correctly saves memory")
     func testSaveMemoryTool_Execution() async throws {
         await cleanup()
@@ -859,6 +940,55 @@ fileprivate struct ChatServiceTests {
         #expect(memories.first?.content == "The user lives in London.")
         
         // 4. Teardown
+        await cleanup()
+    }
+
+    @Test("search_memory tool call returns keyword retrieval result")
+    func testSearchMemoryTool_Execution() async throws {
+        await cleanup()
+        await memoryManager.addMemory(content: "用户喜欢喝抹茶拿铁。")
+        await memoryManager.addMemory(content: "用户使用 Swift 做 iOS 开发。")
+
+        let defaults = UserDefaults.standard
+        let originalTopK = defaults.object(forKey: "memoryTopK")
+        defer {
+            if let originalTopK {
+                defaults.set(originalTopK, forKey: "memoryTopK")
+            } else {
+                defaults.removeObject(forKey: "memoryTopK")
+            }
+        }
+        defaults.set(3, forKey: "memoryTopK")
+
+        let toolCall = InternalToolCall(
+            id: "call_search_1",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"抹茶","count":1}"#
+        )
+        let responseMessage = ChatMessage(role: .assistant, content: "", toolCalls: [toolCall])
+
+        await chatService.processResponseMessage(
+            responseMessage: responseMessage,
+            loadingMessageID: UUID(),
+            currentSessionID: chatService.currentSessionSubject.value?.id ?? UUID(),
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: [chatService.searchMemoryTool],
+            aiTemperature: 0,
+            aiTopP: 0,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            enableMemoryActiveRetrieval: true,
+            includeSystemTime: false
+        )
+
+        let toolMessages = chatService.messagesForSessionSubject.value.filter { $0.role == .tool }
+        let latestToolContent = toolMessages.last?.content ?? ""
+        #expect(latestToolContent.contains("\"mode\" : \"keyword\""))
+        #expect(latestToolContent.contains("抹茶"))
+
         await cleanup()
     }
 
