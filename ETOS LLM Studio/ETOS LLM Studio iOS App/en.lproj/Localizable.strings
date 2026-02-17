@@ -1025,3 +1025,25 @@
 "AND_ALL（全部命中）" = "AND_ALL (all hit)";
 "NOT_ANY（全部不命中）" = "NOT_ANY (none hit)";
 "NOT_ALL（并非全部命中）" = "NOT_ALL (not all hit)";
+
+"从 URL 导入世界书" = "Import worldbook from URL";
+"从链接导入" = "Import from link";
+"开始导入" = "Start import";
+"世界书链接" = "Worldbook URL";
+"输入可直接访问的 JSON 或 PNG 世界书链接。" = "Enter a directly accessible JSON or PNG worldbook URL.";
+"正在下载并导入..." = "Downloading and importing...";
+"链接不能为空。" = "URL cannot be empty.";
+"链接格式无效，请输入完整 URL。" = "Invalid URL format. Please enter a full URL.";
+"仅支持 http/https 链接。" = "Only http/https URLs are supported.";
+"下载失败：HTTP %d" = "Download failed: HTTP %d";
+"暂无世界书，可在本机通过链接导入，或在 iPhone 导入后同步。" = "No worldbooks yet. Import via URL on this watch, or import on iPhone and sync.";
+"支持 http/https 的 JSON 或 PNG 链接。" = "Supports http/https JSON or PNG URLs.";
+"主动检索" = "Active retrieval";
+"开启后会向 AI 暴露记忆检索工具，AI 可按向量或关键词主动检索，并指定返回数量。" = "When enabled, AI can use a memory retrieval tool with vector/keyword modes and a custom result count.";
+"检索模式：vector 或 keyword。" = "Retrieval mode: vector or keyword.";
+"检索查询文本，不能为空。" = "Retrieval query text, cannot be empty.";
+"返回条数；不填则使用系统默认 Top K。" = "Result count; uses default Top K when omitted.";
+"错误：无法解析 search_memory 的参数。请提供 mode、query，并可选 count。" = "Error: cannot parse search_memory arguments. Provide mode, query, and optional count.";
+"错误：search_memory 的 query 不能为空。" = "Error: search_memory query cannot be empty.";
+"错误：search_memory 的 mode 仅支持 vector 或 keyword。" = "Error: search_memory mode must be vector or keyword.";
+"错误：检索结果序列化失败。" = "Error: failed to serialize retrieval results.";

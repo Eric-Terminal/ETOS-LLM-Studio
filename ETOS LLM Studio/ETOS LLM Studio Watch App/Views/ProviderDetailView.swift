@@ -19,6 +19,9 @@ struct ProviderDetailView: View {
     @State private var fetchError: String?
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
+    @State private var searchText = ""
+    @State private var isSearchPresented = false
+    @FocusState private var isSearchFieldFocused: Bool
     
     var body: some View {
         let activeIndices = activeModelIndices()
@@ -26,9 +29,29 @@ struct ProviderDetailView: View {
 
         ZStack {
             List {
+                if isSearchPresented {
+                    Section {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.secondary)
+                            TextField("输入关键词", text: $searchText.watchKeyboardNewlineBinding())
+                                .focused($isSearchFieldFocused)
+                            if !searchText.isEmpty {
+                                Button {
+                                    searchText = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
                 Section("已添加") {
                     if activeIndices.isEmpty {
-                        Text("暂无已添加模型")
+                        Text(isSearching ? "没有匹配的已添加模型" : "暂无已添加模型")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     } else {
@@ -43,7 +66,7 @@ struct ProviderDetailView: View {
 
                 Section("未添加") {
                     if inactiveIndices.isEmpty {
-                        Text("暂无未添加模型")
+                        Text(isSearching ? "没有匹配的未添加模型" : "暂无未添加模型")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     } else {
@@ -81,6 +104,10 @@ struct ProviderDetailView: View {
                     }
                     .disabled(isFetchingModels)
                     Spacer()
+                    Button(action: { toggleSearch() }) {
+                        Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
+                    }
+                    .accessibilityLabel(isSearchPresented ? "取消搜索" : "搜索模型")
                 }
             }
         }
@@ -133,12 +160,44 @@ struct ProviderDetailView: View {
         ChatService.shared.reloadProviders()
     }
 
+    private var normalizedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isSearching: Bool {
+        !normalizedSearchText.isEmpty
+    }
+
+    private func modelMatchesSearch(_ model: Model) -> Bool {
+        guard isSearching else { return true }
+        let keyword = normalizedSearchText.lowercased()
+        return model.displayName.lowercased().contains(keyword)
+            || model.modelName.lowercased().contains(keyword)
+    }
+
     private func activeModelIndices() -> [Int] {
-        provider.models.indices.filter { provider.models[$0].isActivated }
+        provider.models.indices.filter {
+            provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
+        }
     }
 
     private func inactiveModelIndices() -> [Int] {
-        provider.models.indices.filter { !provider.models[$0].isActivated }
+        provider.models.indices.filter {
+            !provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
+        }
+    }
+
+    private func toggleSearch() {
+        if isSearchPresented {
+            isSearchPresented = false
+            searchText = ""
+            isSearchFieldFocused = false
+        } else {
+            isSearchPresented = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                isSearchFieldFocused = true
+            }
+        }
     }
 
     @ViewBuilder

@@ -935,6 +935,7 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool = true,
         audioAttachment: AudioAttachment? = nil,
@@ -1096,15 +1097,18 @@ public class ChatService {
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
-        var resolvedTools: [InternalToolDefinition] = []
-        if enableMemory && enableMemoryWrite {
-            resolvedTools.append(self.saveMemoryTool)
-        }
-        let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-        resolvedTools.append(contentsOf: mcpTools)
-        let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
-        resolvedTools.append(contentsOf: shortcutTools)
-        let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            var resolvedTools: [InternalToolDefinition] = []
+            if enableMemory && enableMemoryWrite {
+                resolvedTools.append(self.saveMemoryTool)
+            }
+            if enableMemory && enableMemoryActiveRetrieval && self.resolvedMemoryTopK() > 0 {
+                resolvedTools.append(self.searchMemoryTool)
+            }
+            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: mcpTools)
+            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: shortcutTools)
+            let tools = resolvedTools.isEmpty ? nil : resolvedTools
             await self.executeMessageRequest(
                 messages: messages,
                 loadingMessageID: loadingMessage.id,
@@ -1120,6 +1124,7 @@ public class ChatService {
                 tools: tools,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: audioAttachment,
@@ -1394,6 +1399,42 @@ public class ChatService {
         return InternalToolDefinition(name: "save_memory", description: toolDescription, parameters: parameters, isBlocking: false)
     }
 
+    /// 定义 `search_memory` 工具
+    internal var searchMemoryTool: InternalToolDefinition {
+        let toolDescription = NSLocalizedString("""
+        主动检索长期记忆，用于在回答前补充用户历史偏好、长期背景和已记录事实。
+
+        用法：
+        1. mode=vector：语义相似检索，适合自然语言问题。
+        2. mode=keyword：关键词命中检索，适合名称、术语、短语定位。
+        3. count：希望返回的条数；未传时使用系统默认检索数量（Top K）。
+
+        返回结果包含完整原文 content。若结果为空，表示当前记忆库无匹配项。
+        """, comment: "System tool description for search_memory.")
+
+        let parameters = JSONValue.dictionary([
+            "type": .string("object"),
+            "properties": .dictionary([
+                "mode": .dictionary([
+                    "type": .string("string"),
+                    "description": .string(NSLocalizedString("检索模式：vector 或 keyword。", comment: "Search memory mode description")),
+                    "enum": .array([.string("vector"), .string("keyword")])
+                ]),
+                "query": .dictionary([
+                    "type": .string("string"),
+                    "description": .string(NSLocalizedString("检索查询文本，不能为空。", comment: "Search memory query description"))
+                ]),
+                "count": .dictionary([
+                    "type": .string("integer"),
+                    "description": .string(NSLocalizedString("返回条数；不填则使用系统默认 Top K。", comment: "Search memory count description"))
+                ])
+            ]),
+            "required": .array([.string("mode"), .string("query")])
+        ])
+
+        return InternalToolDefinition(name: "search_memory", description: toolDescription, parameters: parameters)
+    }
+
     private struct ToolCallOutcome {
         let message: ChatMessage
         let toolResult: String?
@@ -1424,6 +1465,57 @@ public class ChatService {
                 displayResult = content
                 logger.error("  - 无法解析 save_memory 的参数: \(toolCall.arguments)")
             }
+
+        case "search_memory":
+            struct SearchMemoryArgs: Decodable {
+                let mode: String
+                let query: String
+                let count: Int?
+            }
+
+            guard let argsData = toolCall.arguments.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(SearchMemoryArgs.self, from: argsData) else {
+                content = NSLocalizedString("错误：无法解析 search_memory 的参数。请提供 mode、query，并可选 count。", comment: "Search memory args parse error")
+                displayResult = content
+                logger.error("  - 无法解析 search_memory 的参数: \(toolCall.arguments)")
+                break
+            }
+
+            let mode = args.mode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let query = args.query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else {
+                content = NSLocalizedString("错误：search_memory 的 query 不能为空。", comment: "Search memory empty query error")
+                displayResult = content
+                logger.error("  - search_memory query 为空。")
+                break
+            }
+
+            let requestedCount = max(1, args.count ?? resolvedMemoryTopK())
+            var resolvedMemories: [MemoryItem] = []
+            switch mode {
+            case "vector":
+                resolvedMemories = await memoryManager.searchMemories(query: query, topK: requestedCount)
+            case "keyword":
+                resolvedMemories = await memoryManager.searchMemoriesByKeyword(query: query, topK: requestedCount)
+            default:
+                content = NSLocalizedString("错误：search_memory 的 mode 仅支持 vector 或 keyword。", comment: "Search memory unsupported mode error")
+                displayResult = content
+                logger.error("  - search_memory mode 不支持: \(mode)")
+                break
+            }
+
+            if !content.isEmpty {
+                break
+            }
+
+            content = serializeMemorySearchResult(
+                mode: mode,
+                query: query,
+                requestedCount: requestedCount,
+                memories: resolvedMemories
+            )
+            displayResult = content
+            logger.info("  - search_memory 检索完成: mode=\(mode), queryLength=\(query.count), resultCount=\(resolvedMemories.count)")
             
         case _ where MCPManager.isMCPToolName(toolCall.toolName):
             let toolLabel = await MainActor.run {
@@ -1505,6 +1597,37 @@ public class ChatService {
         return ToolCallOutcome(message: message, toolResult: displayResult, shouldAwaitUserSupplement: shouldAwaitUserSupplement)
     }
 
+    private func serializeMemorySearchResult(
+        mode: String,
+        query: String,
+        requestedCount: Int,
+        memories: [MemoryItem]
+    ) -> String {
+        let formatter = ISO8601DateFormatter()
+        let items: [[String: Any]] = memories.map { memory in
+            [
+                "id": memory.id.uuidString,
+                "createdAt": formatter.string(from: memory.createdAt),
+                "content": memory.content
+            ]
+        }
+        let payload: [String: Any] = [
+            "mode": mode,
+            "query": query,
+            "requestedCount": requestedCount,
+            "returnedCount": memories.count,
+            "items": items
+        ]
+
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
+            return String(data: data, encoding: .utf8) ?? NSLocalizedString("错误：检索结果序列化失败。", comment: "Search memory serialize fallback")
+        } catch {
+            logger.error("search_memory 结果序列化失败：\(error.localizedDescription)")
+            return NSLocalizedString("错误：检索结果序列化失败。", comment: "Search memory serialize error")
+        }
+    }
+
     @MainActor
     private func attachToolResult(_ result: String, to toolCallID: String, toolName: String, loadingMessageID: UUID, sessionID: UUID) {
         var messages = messagesForSessionSubject.value
@@ -1578,6 +1701,7 @@ public class ChatService {
         tools: [InternalToolDefinition]?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?, // 当前消息的音频附件（用于首次发送，尚未保存到文件）
@@ -1755,6 +1879,7 @@ public class ChatService {
                 availableTools: tools,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt
@@ -1774,6 +1899,7 @@ public class ChatService {
                 maxChatHistory: maxChatHistory,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt
@@ -1807,6 +1933,7 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool = true
     ) async {
@@ -1996,6 +2123,7 @@ public class ChatService {
             enhancedPrompt: enhancedPrompt,
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             includeSystemTime: includeSystemTime,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             currentAudioAttachment: audioAttachment,
@@ -2017,6 +2145,7 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
@@ -2032,14 +2161,17 @@ public class ChatService {
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
             var resolvedTools: [InternalToolDefinition] = []
-        if enableMemory && enableMemoryWrite {
-            resolvedTools.append(self.saveMemoryTool)
-        }
-        let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-        resolvedTools.append(contentsOf: mcpTools)
-        let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
-        resolvedTools.append(contentsOf: shortcutTools)
-        let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            if enableMemory && enableMemoryWrite {
+                resolvedTools.append(self.saveMemoryTool)
+            }
+            if enableMemory && enableMemoryActiveRetrieval && self.resolvedMemoryTopK() > 0 {
+                resolvedTools.append(self.searchMemoryTool)
+            }
+            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: mcpTools)
+            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: shortcutTools)
+            let tools = resolvedTools.isEmpty ? nil : resolvedTools
             
             await self.executeMessageRequest(
                 messages: messages,
@@ -2056,6 +2188,7 @@ public class ChatService {
                 tools: tools,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
@@ -2097,6 +2230,7 @@ public class ChatService {
         enhancedPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool = true
     ) async {
@@ -2163,6 +2297,7 @@ public class ChatService {
             enhancedPrompt: enhancedPrompt,
             enableMemory: enableMemory,
             enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             includeSystemTime: includeSystemTime,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             audioAttachment: audioAttachment,
@@ -2635,6 +2770,7 @@ public class ChatService {
         maxChatHistory: Int,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date
@@ -2673,6 +2809,7 @@ public class ChatService {
                     maxChatHistory: maxChatHistory,
                     enableMemory: enableMemory,
                     enableMemoryWrite: enableMemoryWrite,
+                    enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                     includeSystemTime: includeSystemTime
                 )
             } catch is CancellationError {
@@ -2716,7 +2853,7 @@ public class ChatService {
     }
     
     /// 处理已解析的聊天消息，包含所有工具调用和UI更新的核心逻辑 (可测试)
-    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, includeSystemTime: Bool) async {
+    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, enableMemoryActiveRetrieval: Bool = false, includeSystemTime: Bool) async {
         var responseMessage = responseMessage // Make mutable
         if let reasoning = responseMessage.reasoningContent {
             let normalized = normalizeEscapedNewlinesIfNeeded(reasoning)
@@ -2881,6 +3018,7 @@ public class ChatService {
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
                 enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: false,
                 currentAudioAttachment: nil,
@@ -2907,6 +3045,7 @@ public class ChatService {
         availableTools: [InternalToolDefinition]?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date
@@ -3091,6 +3230,7 @@ public class ChatService {
                     maxChatHistory: maxChatHistory,
                     enableMemory: enableMemory,
                     enableMemoryWrite: enableMemoryWrite,
+                    enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                     includeSystemTime: includeSystemTime
                 )
             } else {

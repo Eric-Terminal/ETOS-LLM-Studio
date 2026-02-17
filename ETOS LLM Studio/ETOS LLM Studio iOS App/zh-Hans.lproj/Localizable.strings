@@ -1018,3 +1018,25 @@
 "AND_ALL（全部命中）" = "AND_ALL（全部命中）";
 "NOT_ANY（全部不命中）" = "NOT_ANY（全部不命中）";
 "NOT_ALL（并非全部命中）" = "NOT_ALL（并非全部命中）";
+
+"从 URL 导入世界书" = "从 URL 导入世界书";
+"从链接导入" = "从链接导入";
+"开始导入" = "开始导入";
+"世界书链接" = "世界书链接";
+"输入可直接访问的 JSON 或 PNG 世界书链接。" = "输入可直接访问的 JSON 或 PNG 世界书链接。";
+"正在下载并导入..." = "正在下载并导入...";
+"链接不能为空。" = "链接不能为空。";
+"链接格式无效，请输入完整 URL。" = "链接格式无效，请输入完整 URL。";
+"仅支持 http/https 链接。" = "仅支持 http/https 链接。";
+"下载失败：HTTP %d" = "下载失败：HTTP %d";
+"暂无世界书，可在本机通过链接导入，或在 iPhone 导入后同步。" = "暂无世界书，可在本机通过链接导入，或在 iPhone 导入后同步。";
+"支持 http/https 的 JSON 或 PNG 链接。" = "支持 http/https 的 JSON 或 PNG 链接。";
+"主动检索" = "主动检索";
+"开启后会向 AI 暴露记忆检索工具，AI 可按向量或关键词主动检索，并指定返回数量。" = "开启后会向 AI 暴露记忆检索工具，AI 可按向量或关键词主动检索，并指定返回数量。";
+"检索模式：vector 或 keyword。" = "检索模式：vector 或 keyword。";
+"检索查询文本，不能为空。" = "检索查询文本，不能为空。";
+"返回条数；不填则使用系统默认 Top K。" = "返回条数；不填则使用系统默认 Top K。";
+"错误：无法解析 search_memory 的参数。请提供 mode、query，并可选 count。" = "错误：无法解析 search_memory 的参数。请提供 mode、query，并可选 count。";
+"错误：search_memory 的 query 不能为空。" = "错误：search_memory 的 query 不能为空。";
+"错误：search_memory 的 mode 仅支持 vector 或 keyword。" = "错误：search_memory 的 mode 仅支持 vector 或 keyword。";
+"错误：检索结果序列化失败。" = "错误：检索结果序列化失败。";

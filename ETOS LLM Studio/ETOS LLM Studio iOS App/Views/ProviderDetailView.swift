@@ -9,6 +9,7 @@ struct ProviderDetailView: View {
     @State private var fetchError: String?
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
+    @State private var searchText = ""
     
     var body: some View {
         let activeIndices = activeModelIndices()
@@ -17,7 +18,7 @@ struct ProviderDetailView: View {
         List {
             Section("已添加") {
                 if activeIndices.isEmpty {
-                    Text("暂无已添加模型")
+                    Text(isSearching ? "没有匹配的已添加模型" : "暂无已添加模型")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -32,7 +33,7 @@ struct ProviderDetailView: View {
 
             Section("未添加") {
                 if inactiveIndices.isEmpty {
-                    Text("暂无未添加模型")
+                    Text(isSearching ? "没有匹配的未添加模型" : "暂无未添加模型")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -46,6 +47,9 @@ struct ProviderDetailView: View {
             if isFetchingModels {
                 progressOverlay
             }
+        }
+        .safeAreaInset(edge: .top) {
+            searchPill
         }
         .navigationTitle(provider.name)
         .task {
@@ -127,11 +131,62 @@ struct ProviderDetailView: View {
     }
 
     private func activeModelIndices() -> [Int] {
-        provider.models.indices.filter { provider.models[$0].isActivated }
+        provider.models.indices.filter {
+            provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
+        }
     }
 
     private func inactiveModelIndices() -> [Int] {
-        provider.models.indices.filter { !provider.models[$0].isActivated }
+        provider.models.indices.filter {
+            !provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
+        }
+    }
+
+    private var normalizedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isSearching: Bool {
+        !normalizedSearchText.isEmpty
+    }
+
+    private func modelMatchesSearch(_ model: Model) -> Bool {
+        guard isSearching else { return true }
+        let keyword = normalizedSearchText.lowercased()
+        return model.displayName.lowercased().contains(keyword)
+            || model.modelName.lowercased().contains(keyword)
+    }
+
+    private var searchPill: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField("搜索模型（名称或ID）", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清空搜索关键词")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 0.6)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder
