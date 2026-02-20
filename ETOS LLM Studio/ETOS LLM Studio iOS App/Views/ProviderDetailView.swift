@@ -10,39 +10,55 @@ struct ProviderDetailView: View {
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
     @State private var searchText = ""
-    
-    var body: some View {
-        let activeIndices = activeModelIndices()
-        let inactiveIndices = inactiveModelIndices()
+    @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
 
+    var body: some View {
         List {
-            Section("已添加") {
-                if activeIndices.isEmpty {
-                    Text(isSearching ? "没有匹配的已添加模型" : "暂无已添加模型")
+            Section("列表设置") {
+                Toggle("按模型家族分组", isOn: $groupByFamilySection)
+                if groupByFamilySection {
+                    Text("将按模型家族拆分显示。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(activeIndices, id: \.self) { index in
-                        modelRow(for: index, isActive: true)
-                    }
-                    .onDelete { offsets in
-                        deleteModels(at: offsets, in: activeIndices)
-                    }
+                    Text("将按已添加/未添加展示。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
+            if groupByFamilySection {
+                let activeSections = sections(forActive: true)
+                let inactiveSections = sections(forActive: false)
 
-            Section("未添加") {
-                if inactiveIndices.isEmpty {
-                    Text(isSearching ? "没有匹配的未添加模型" : "暂无未添加模型")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(inactiveIndices, id: \.self) { index in
-                        modelRow(for: index, isActive: false)
-                    }
+                ForEach(activeSections) { section in
+                    modelSection(
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
+                    )
                 }
+
+                ForEach(inactiveSections) { section in
+                    modelSection(
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
+                    )
+                }
+            } else {
+                modelSection(
+                    title: "已添加",
+                    indices: filteredIndices(forActive: true),
+                    isActive: true
+                )
+                modelSection(
+                    title: "未添加",
+                    indices: filteredIndices(forActive: false),
+                    isActive: false
+                )
             }
         }
+        .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
         .overlay {
             if isFetchingModels {
                 progressOverlay
@@ -66,7 +82,7 @@ struct ProviderDetailView: View {
                 }
                 .disabled(isFetchingModels)
                 .accessibilityLabel("从云端获取")
-                
+
                 Button {
                     isAddingModel = true
                 } label: {
@@ -89,11 +105,11 @@ struct ProviderDetailView: View {
             Text(fetchError ?? "发生未知错误。")
         }
     }
-    
+
     private func fetchAndMergeModels() async {
         isFetchingModels = true
         defer { isFetchingModels = false }
-        
+
         do {
             let fetchedModels = try await ChatService.shared.fetchModels(for: provider)
             let existingNames = Set(provider.models.map { $0.modelName })
@@ -105,21 +121,21 @@ struct ProviderDetailView: View {
             showErrorAlert = true
         }
     }
-    
+
     private func saveChanges() {
         var providerToSave = provider
         providerToSave.models = provider.models.filter { $0.isActivated }
         ConfigLoader.saveProvider(providerToSave)
         ChatService.shared.reloadProviders()
     }
-    
+
     private func deleteModels(at offsets: IndexSet, in indices: [Int]) {
         let mappedOffsets = IndexSet(offsets.compactMap { offset in
             indices.indices.contains(offset) ? indices[offset] : nil
         })
         provider.models.remove(atOffsets: mappedOffsets)
     }
-    
+
     @ViewBuilder
     private var progressOverlay: some View {
         ZStack {
@@ -127,18 +143,6 @@ struct ProviderDetailView: View {
             ProgressView("正在获取…")
                 .padding()
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        }
-    }
-
-    private func activeModelIndices() -> [Int] {
-        provider.models.indices.filter {
-            provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
-        }
-    }
-
-    private func inactiveModelIndices() -> [Int] {
-        provider.models.indices.filter {
-            !provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
         }
     }
 
@@ -155,6 +159,60 @@ struct ProviderDetailView: View {
         let keyword = normalizedSearchText.lowercased()
         return model.displayName.lowercased().contains(keyword)
             || model.modelName.lowercased().contains(keyword)
+    }
+
+    private func filteredIndices(forActive isActive: Bool) -> [Int] {
+        provider.models.indices.filter { index in
+            let model = provider.models[index]
+            return model.isActivated == isActive
+                && modelMatchesSearch(model)
+        }
+    }
+
+    private func sections(forActive isActive: Bool) -> [ModelListSection] {
+        let indices = filteredIndices(forActive: isActive)
+        let sectionPrefix = isActive ? "已添加" : "未添加"
+
+        guard groupByFamilySection else {
+            return [ModelListSection(title: sectionPrefix, indices: indices, isActive: isActive)]
+        }
+
+        var indicesByFamily: [MainstreamModelFamily: [Int]] = [:]
+        var otherIndices: [Int] = []
+        for index in indices {
+            if let family = provider.models[index].mainstreamFamily {
+                indicesByFamily[family, default: []].append(index)
+            } else {
+                otherIndices.append(index)
+            }
+        }
+
+        var result: [ModelListSection] = []
+        for family in MainstreamModelFamily.allCases {
+            guard let familyIndices = indicesByFamily[family], !familyIndices.isEmpty else { continue }
+            result.append(
+                ModelListSection(
+                    title: "\(sectionPrefix) · \(family.displayName)",
+                    indices: familyIndices,
+                    isActive: isActive
+                )
+            )
+        }
+
+        if !otherIndices.isEmpty {
+            result.append(
+                ModelListSection(
+                    title: "\(sectionPrefix) · 其他",
+                    indices: otherIndices,
+                    isActive: isActive
+                )
+            )
+        }
+
+        if result.isEmpty {
+            return [ModelListSection(title: sectionPrefix, indices: [], isActive: isActive)]
+        }
+        return result
     }
 
     private var searchPill: some View {
@@ -190,30 +248,78 @@ struct ProviderDetailView: View {
     }
 
     @ViewBuilder
+    private func modelSection(title: String, indices: [Int], isActive: Bool) -> some View {
+        Section(title) {
+            if indices.isEmpty {
+                Text(emptyStateText(forActiveSection: isActive))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if isActive {
+                ForEach(indices, id: \.self) { index in
+                    modelRow(for: index, isActive: true)
+                }
+                .onDelete { offsets in
+                    deleteModels(at: offsets, in: indices)
+                }
+            } else {
+                ForEach(indices, id: \.self) { index in
+                    modelRow(for: index, isActive: false)
+                }
+            }
+        }
+    }
+
+    private func emptyStateText(forActiveSection isActive: Bool) -> String {
+        if isSearching {
+            return isActive ? "没有匹配的已添加模型" : "没有匹配的未添加模型"
+        }
+        return isActive ? "暂无已添加模型" : "暂无未添加模型"
+    }
+
+    @ViewBuilder
     private func modelRow(for index: Int, isActive: Bool) -> some View {
+        let model = provider.models[index]
+
         if isActive {
             NavigationLink {
                 ModelSettingsView(model: $provider.models[index], provider: provider)
             } label: {
-                Text(provider.models[index].displayName)
+                modelLabel(for: model)
             }
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(provider.models[index].displayName)
-                    Spacer()
-                    if !isActive {
-                        Button {
-                            provider.models[index].isActivated = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("激活模型")
-                    }
+            HStack(spacing: 10) {
+                modelLabel(for: model)
+                Spacer()
+                Button {
+                    provider.models[index].isActivated = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
                 }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("激活模型")
             }
         }
+    }
+
+    private func modelLabel(for model: Model) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(model.displayName)
+                .lineLimit(1)
+            Text(model.modelName)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+private struct ModelListSection: Identifiable {
+    let title: String
+    let indices: [Int]
+    let isActive: Bool
+
+    var id: String {
+        "\(isActive ? "active" : "inactive")-\(title)"
     }
 }
 
@@ -222,7 +328,7 @@ private struct ModelAddView: View {
     @Binding var provider: Provider
     @State private var modelName: String = ""
     @State private var displayName: String = ""
-    
+
     var body: some View {
         Form {
             Section("新模型信息") {
@@ -243,7 +349,7 @@ private struct ModelAddView: View {
             }
         }
     }
-    
+
     private func addModel() {
         let newModel = Model(
             modelName: modelName,

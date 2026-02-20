@@ -36,10 +36,27 @@ public struct RunnableModel: Identifiable, Hashable {
     }
 }
 
+private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {
+    let sortedOffsets = offsets.sorted()
+    guard !sortedOffsets.isEmpty else { return }
+    guard sortedOffsets.allSatisfy({ $0 >= 0 && $0 < array.count }) else { return }
+    guard destination >= 0 && destination <= array.count else { return }
+
+    let movedItems = sortedOffsets.map { array[$0] }
+    for index in sortedOffsets.reversed() {
+        array.remove(at: index)
+    }
+
+    let removedBeforeDestination = sortedOffsets.filter { $0 < destination }.count
+    let insertionIndex = max(0, min(destination - removedBeforeDestination, array.count))
+    array.insert(contentsOf: movedItems, at: insertionIndex)
+}
+
 public class ChatService {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    private static let modelOrderStorageKey = "modelOrder.runnableModels"
 
     // MARK: - 单例
     public static let shared = ChatService()
@@ -153,14 +170,15 @@ public class ChatService {
 
     // MARK: - 计算属性
     
-    public var activatedRunnableModels: [RunnableModel] {
-        var models: [RunnableModel] = []
-        for provider in providers {
-            for model in provider.models where model.isActivated {
-                models.append(RunnableModel(provider: provider, model: model))
-            }
+    public var configuredRunnableModels: [RunnableModel] {
+        let allModels = providers.flatMap { provider in
+            provider.models.map { RunnableModel(provider: provider, model: $0) }
         }
-        return models
+        return orderedRunnableModels(from: allModels)
+    }
+    
+    public var activatedRunnableModels: [RunnableModel] {
+        configuredRunnableModels.filter { $0.model.isActivated }
     }
     
     public var activatedSpeechModels: [RunnableModel] {
@@ -175,6 +193,46 @@ public class ChatService {
             return match
         }
         return activatedSpeechModels.first
+    }
+
+    private func orderedRunnableModels(from models: [RunnableModel]) -> [RunnableModel] {
+        guard !models.isEmpty else { return [] }
+        let currentIDs = models.map(\.id)
+        let storedIDs = UserDefaults.standard.stringArray(forKey: Self.modelOrderStorageKey) ?? []
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
+        let rankByID = Dictionary(uniqueKeysWithValues: mergedIDs.enumerated().map { ($1, $0) })
+
+        return models.enumerated()
+            .sorted { lhs, rhs in
+                let leftRank = rankByID[lhs.element.id] ?? Int.max
+                let rightRank = rankByID[rhs.element.id] ?? Int.max
+                if leftRank != rightRank {
+                    return leftRank < rightRank
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
+    private func reconcileStoredModelOrder() {
+        let currentIDs = providers.flatMap { provider in
+            provider.models.map { RunnableModel(provider: provider, model: $0).id }
+        }
+        let storedIDs = UserDefaults.standard.stringArray(forKey: Self.modelOrderStorageKey) ?? []
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
+        guard mergedIDs != storedIDs else { return }
+        UserDefaults.standard.set(mergedIDs, forKey: Self.modelOrderStorageKey)
+    }
+
+    public func setConfiguredModelOrder(_ orderedModelIDs: [String], notifyChange: Bool = true) {
+        let currentIDs = providers.flatMap { provider in
+            provider.models.map { RunnableModel(provider: provider, model: $0).id }
+        }
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: orderedModelIDs, currentIDs: currentIDs)
+        UserDefaults.standard.set(mergedIDs, forKey: Self.modelOrderStorageKey)
+        if notifyChange {
+            providersSubject.send(providers)
+        }
     }
 
     // MARK: - 初始化
@@ -214,6 +272,7 @@ public class ChatService {
         self.chatSessionsSubject = CurrentValueSubject(loadedSessions)
         self.currentSessionSubject = CurrentValueSubject(newTemporarySession)
         self.messagesForSessionSubject = CurrentValueSubject([])
+        self.reconcileStoredModelOrder()
         
         let savedModelID = UserDefaults.standard.string(forKey: "selectedRunnableModelID")
         let allRunnable = activatedRunnableModels
@@ -238,6 +297,7 @@ public class ChatService {
         let currentSelectedID = selectedModelSubject.value?.id // 1. 记住当前选中模型的 ID
 
         self.providers = ConfigLoader.loadProviders() // 2. 从磁盘重载
+        self.reconcileStoredModelOrder()
         providersSubject.send(self.providers)
 
         let allRunnable = activatedRunnableModels // 3. 获取新的模型列表
@@ -450,6 +510,34 @@ public class ChatService {
             ConfigLoader.saveProvider(provider)
         }
         self.reloadProviders()
+    }
+
+    public func moveConfiguredModel(fromPosition source: Int, toPosition destination: Int) {
+        let orderedModels = configuredRunnableModels
+        let modelCount = orderedModels.count
+        guard modelCount > 1 else { return }
+        guard source >= 0 && source < modelCount else { return }
+        guard destination >= 0 && destination < modelCount else { return }
+        guard source != destination else { return }
+
+        let reorderedIDs = ModelOrderIndex.move(
+            ids: orderedModels.map(\.id),
+            fromPosition: source,
+            toPosition: destination
+        )
+        setConfiguredModelOrder(reorderedIDs)
+    }
+
+    public func moveConfiguredModels(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        var orderedModels = configuredRunnableModels
+        let modelCount = orderedModels.count
+        guard modelCount > 1 else { return }
+        guard destination >= 0 && destination <= modelCount else { return }
+        guard offsets.allSatisfy({ $0 >= 0 && $0 < modelCount }) else { return }
+        guard !offsets.isEmpty else { return }
+
+        moveElements(in: &orderedModels, fromOffsets: offsets, toOffset: destination)
+        setConfiguredModelOrder(orderedModels.map(\.id))
     }
 
     // MARK: - 公开方法 (会话管理)

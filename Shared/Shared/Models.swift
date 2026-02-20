@@ -212,6 +212,95 @@ public struct Model: Codable, Identifiable, Hashable {
     }
 }
 
+public enum ModelOrderIndex {
+    public static func merge(storedIDs: [String], currentIDs: [String]) -> [String] {
+        let currentSet = Set(currentIDs)
+        var result: [String] = []
+        result.reserveCapacity(currentIDs.count)
+        var seen = Set<String>()
+
+        for id in storedIDs where currentSet.contains(id) {
+            guard seen.insert(id).inserted else { continue }
+            result.append(id)
+        }
+        for id in currentIDs {
+            guard seen.insert(id).inserted else { continue }
+            result.append(id)
+        }
+        return result
+    }
+
+    public static func move(ids: [String], fromPosition source: Int, toPosition destination: Int) -> [String] {
+        var orderedIDs = ids
+        guard source >= 0 && source < orderedIDs.count else { return ids }
+        guard destination >= 0 && destination < orderedIDs.count else { return ids }
+        guard source != destination else { return ids }
+
+        let moved = orderedIDs.remove(at: source)
+        orderedIDs.insert(moved, at: destination)
+        return orderedIDs
+    }
+}
+
+public extension Provider {
+    /// 仅重排已添加模型（isActivated = true）的相对顺序，不影响未添加模型的相对顺序。
+    /// - Parameters:
+    ///   - offsets: 拖拽源索引（基于“已添加模型”子列表）
+    ///   - destination: 拖拽目标索引（基于“已添加模型”子列表）
+    mutating func moveActivatedModels(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        let activatedIndices = models.indices.filter { models[$0].isActivated }
+        let activatedCount = activatedIndices.count
+        guard activatedCount > 1 else { return }
+        guard destination >= 0 && destination <= activatedCount else { return }
+        guard offsets.allSatisfy({ $0 >= 0 && $0 < activatedCount }) else { return }
+        guard !offsets.isEmpty else { return }
+
+        var activatedModels = activatedIndices.map { models[$0] }
+        moveElements(in: &activatedModels, fromOffsets: offsets, toOffset: destination)
+
+        for (position, modelIndex) in activatedIndices.enumerated() {
+            models[modelIndex] = activatedModels[position]
+        }
+    }
+
+    /// 将已添加模型子列表中的某一项移动到目标位置。
+    /// - Parameters:
+    ///   - source: 源位置（基于“已添加模型”子列表）
+    ///   - destination: 目标位置（基于“已添加模型”子列表）
+    mutating func moveActivatedModel(fromPosition source: Int, toPosition destination: Int) {
+        let activatedIndices = models.indices.filter { models[$0].isActivated }
+        let activatedCount = activatedIndices.count
+        guard activatedCount > 1 else { return }
+        guard source >= 0 && source < activatedCount else { return }
+        guard destination >= 0 && destination < activatedCount else { return }
+        guard source != destination else { return }
+
+        var activatedModels = activatedIndices.map { models[$0] }
+        let moved = activatedModels.remove(at: source)
+        activatedModels.insert(moved, at: destination)
+
+        for (position, modelIndex) in activatedIndices.enumerated() {
+            models[modelIndex] = activatedModels[position]
+        }
+    }
+}
+
+private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {
+    let sortedOffsets = offsets.sorted()
+    guard !sortedOffsets.isEmpty else { return }
+    guard sortedOffsets.allSatisfy({ $0 >= 0 && $0 < array.count }) else { return }
+    guard destination >= 0 && destination <= array.count else { return }
+
+    let movedItems = sortedOffsets.map { array[$0] }
+    for index in sortedOffsets.reversed() {
+        array.remove(at: index)
+    }
+
+    let removedBeforeDestination = sortedOffsets.filter { $0 < destination }.count
+    let insertionIndex = max(0, min(destination - removedBeforeDestination, array.count))
+    array.insert(contentsOf: movedItems, at: insertionIndex)
+}
+
 public extension Model {
     var supportsSpeechToText: Bool {
         capabilities.contains(.speechToText)
@@ -223,6 +312,121 @@ public extension Model {
 
     var supportsImageGeneration: Bool {
         capabilities.contains(.imageGeneration)
+    }
+
+    /// 识别是否属于主流模型家族（用于模型列表分组与筛选）
+    var mainstreamFamily: MainstreamModelFamily? {
+        MainstreamModelFamily.detect(
+            modelName: modelName,
+            displayName: displayName
+        )
+    }
+
+    var isMainstreamModel: Bool {
+        mainstreamFamily != nil
+    }
+}
+
+/// 常见主流模型家族（用于“主流/其他”分组）
+public enum MainstreamModelFamily: String, Codable, Hashable, CaseIterable, Sendable {
+    case chatgpt
+    case gemini
+    case claude
+    case deepseek
+    case qwen
+    case kimi
+    case doubao
+    case grok
+    case llama
+    case mistral
+    case glm
+
+    public var displayName: String {
+        switch self {
+        case .chatgpt:
+            return "ChatGPT"
+        case .gemini:
+            return "Gemini"
+        case .claude:
+            return "Claude"
+        case .deepseek:
+            return "DeepSeek"
+        case .qwen:
+            return "Qwen"
+        case .kimi:
+            return "Kimi"
+        case .doubao:
+            return "Doubao"
+        case .grok:
+            return "Grok"
+        case .llama:
+            return "Llama"
+        case .mistral:
+            return "Mistral"
+        case .glm:
+            return "GLM"
+        }
+    }
+
+    public static func detect(modelName: String, displayName: String? = nil) -> MainstreamModelFamily? {
+        let normalizedModelName = modelName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedDisplayName = (displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let searchableText = "\(normalizedModelName) \(normalizedDisplayName)"
+
+        if let matched = detectByKeyword(in: searchableText, modelName: normalizedModelName) {
+            return matched
+        }
+        if isChatGPTFamily(modelName: normalizedModelName, displayName: normalizedDisplayName) {
+            return .chatgpt
+        }
+        return nil
+    }
+
+    private static let keywordRules: [(family: MainstreamModelFamily, keywords: [String])] = [
+        (.gemini, ["gemini"]),
+        (.claude, ["claude"]),
+        (.deepseek, ["deepseek"]),
+        (.qwen, ["qwen"]),
+        (.kimi, ["kimi", "moonshot"]),
+        (.doubao, ["doubao", "豆包"]),
+        (.grok, ["grok"]),
+        (.llama, ["llama", "meta-llama"]),
+        (.mistral, ["mistral", "mixtral"]),
+        (.glm, ["chatglm", "glm-"])
+    ]
+
+    private static func detectByKeyword(in searchableText: String, modelName: String) -> MainstreamModelFamily? {
+        for rule in keywordRules {
+            if rule.keywords.contains(where: { searchableText.contains($0) }) {
+                return rule.family
+            }
+        }
+        if modelName.hasPrefix("glm") {
+            return .glm
+        }
+        return nil
+    }
+
+    private static func isChatGPTFamily(modelName: String, displayName: String) -> Bool {
+        if displayName.contains("chatgpt") || displayName.contains("openai") {
+            return true
+        }
+        if modelName.contains("chatgpt") || modelName.contains("openai") {
+            return true
+        }
+        if modelName.hasPrefix("gpt-") || modelName.contains("/gpt-") {
+            return true
+        }
+        if modelName.hasPrefix("o1") || modelName.hasPrefix("o3") || modelName.hasPrefix("o4") {
+            return true
+        }
+        if modelName.contains("gpt-4")
+            || modelName.contains("gpt-5")
+            || modelName.contains("gpt-3.5")
+            || modelName.contains("gpt4o") {
+            return true
+        }
+        return false
     }
 }
 

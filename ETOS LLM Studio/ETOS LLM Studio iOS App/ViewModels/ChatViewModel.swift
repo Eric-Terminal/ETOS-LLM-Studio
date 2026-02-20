@@ -35,6 +35,7 @@ final class ChatViewModel: ObservableObject {
     @Published var chatSessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
     @Published var providers: [Provider] = []
+    @Published var configuredModels: [RunnableModel] = []
     @Published var selectedModel: RunnableModel?
     @Published var activatedModels: [RunnableModel] = []
     @Published var memories: [MemoryItem] = []
@@ -131,9 +132,7 @@ final class ChatViewModel: ObservableObject {
     }
     
     var embeddingModelOptions: [RunnableModel] {
-        providers.flatMap { provider in
-            provider.models.map { RunnableModel(provider: provider, model: $0) }
-        }
+        configuredModels
     }
     
     // MARK: - Private Properties
@@ -245,6 +244,7 @@ final class ChatViewModel: ObservableObject {
             .sink { [weak self] providers in
                 guard let self else { return }
                 self.providers = providers
+                self.configuredModels = chatService.configuredRunnableModels
                 self.activatedModels = chatService.activatedRunnableModels
                 self.speechModels = chatService.activatedSpeechModels
                 self.syncSpeechModelSelection()

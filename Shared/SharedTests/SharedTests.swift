@@ -57,6 +57,127 @@ fileprivate class MockURLProtocol: URLProtocol {
     }
 }
 
+@Suite("MainstreamModelFamily Tests")
+struct MainstreamModelFamilyTests {
+    @Test("按模型ID识别主流模型家族")
+    func testDetectByModelName() {
+        #expect(MainstreamModelFamily.detect(modelName: "gpt-4o") == .chatgpt)
+        #expect(MainstreamModelFamily.detect(modelName: "gemini-2.5-pro") == .gemini)
+        #expect(MainstreamModelFamily.detect(modelName: "claude-3-7-sonnet") == .claude)
+        #expect(MainstreamModelFamily.detect(modelName: "deepseek-chat") == .deepseek)
+        #expect(MainstreamModelFamily.detect(modelName: "qwen-max") == .qwen)
+        #expect(MainstreamModelFamily.detect(modelName: "moonshot-v1-8k") == .kimi)
+        #expect(MainstreamModelFamily.detect(modelName: "doubao-seed-1.6") == .doubao)
+        #expect(MainstreamModelFamily.detect(modelName: "grok-3") == .grok)
+        #expect(MainstreamModelFamily.detect(modelName: "meta-llama/llama-3.1-8b-instruct") == .llama)
+        #expect(MainstreamModelFamily.detect(modelName: "mixtral-8x7b-instruct") == .mistral)
+        #expect(MainstreamModelFamily.detect(modelName: "glm-4-plus") == .glm)
+    }
+
+    @Test("按显示名识别主流模型家族")
+    func testDetectByDisplayName() {
+        #expect(MainstreamModelFamily.detect(modelName: "custom-model", displayName: "ChatGPT 企业版") == .chatgpt)
+        #expect(MainstreamModelFamily.detect(modelName: "custom-model", displayName: "豆包 Pro") == .doubao)
+    }
+
+    @Test("未知模型识别为其他")
+    func testUnknownModelReturnsNil() {
+        #expect(MainstreamModelFamily.detect(modelName: "my-private-model") == nil)
+    }
+}
+
+@Suite("Provider Active Model Order Tests")
+struct ProviderActiveModelOrderTests {
+    private func makeModel(_ name: String, active: Bool) -> Model {
+        Model(modelName: name, displayName: name, isActivated: active)
+    }
+
+    @Test("仅重排已添加模型，未添加模型位置保持不变")
+    func testMoveActivatedModelsKeepsInactiveOrder() {
+        var provider = Provider(
+            name: "Test",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                makeModel("a", active: true),
+                makeModel("x", active: false),
+                makeModel("b", active: true),
+                makeModel("c", active: true),
+                makeModel("y", active: false)
+            ]
+        )
+
+        provider.moveActivatedModels(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+
+        #expect(provider.models.map(\.modelName) == ["b", "x", "c", "a", "y"])
+        #expect(provider.models.filter(\.isActivated).map(\.modelName) == ["b", "c", "a"])
+    }
+
+    @Test("非法拖拽索引不会改动模型顺序")
+    func testMoveActivatedModelsWithInvalidOffsetsNoChange() {
+        var provider = Provider(
+            name: "Test",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                makeModel("a", active: true),
+                makeModel("x", active: false),
+                makeModel("b", active: true)
+            ]
+        )
+        let original = provider.models.map(\.modelName)
+
+        provider.moveActivatedModels(fromOffsets: IndexSet(integer: 10), toOffset: 1)
+
+        #expect(provider.models.map(\.modelName) == original)
+    }
+
+    @Test("按位置移动已添加模型")
+    func testMoveActivatedModelByPosition() {
+        var provider = Provider(
+            name: "Test",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                makeModel("a", active: true),
+                makeModel("x", active: false),
+                makeModel("b", active: true),
+                makeModel("c", active: true),
+                makeModel("y", active: false)
+            ]
+        )
+
+        provider.moveActivatedModel(fromPosition: 2, toPosition: 0)
+
+        #expect(provider.models.map(\.modelName) == ["c", "x", "a", "b", "y"])
+    }
+}
+
+@Suite("ModelOrderIndex Tests")
+struct ModelOrderIndexTests {
+    @Test("合并隐藏索引时保留旧顺序并追加新增模型")
+    func testMergeOrderKeepsStoredThenAppendsNew() {
+        let stored = ["p1-m2", "p2-m1", "removed", "p1-m2"]
+        let current = ["p1-m1", "p1-m2", "p2-m1", "p3-m1"]
+
+        let merged = ModelOrderIndex.merge(storedIDs: stored, currentIDs: current)
+
+        #expect(merged == ["p1-m2", "p2-m1", "p1-m1", "p3-m1"])
+    }
+
+    @Test("按位置移动隐藏索引")
+    func testMoveOrderByPosition() {
+        let ids = ["a", "b", "c", "d"]
+
+        let moved = ModelOrderIndex.move(ids: ids, fromPosition: 3, toPosition: 1)
+
+        #expect(moved == ["a", "d", "b", "c"])
+    }
+}
+
 
 // MARK: - MemoryManager Tests
 

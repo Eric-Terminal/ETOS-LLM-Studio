@@ -32,17 +32,32 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("当前模型", selection: $viewModel.selectedModel) {
-                        ForEach(viewModel.activatedModels) { model in
-                            Text("\(model.model.displayName) | \(model.provider.name)")
-                                .tag(model as RunnableModel?)
+                    let options = viewModel.activatedModels
+                    if options.isEmpty {
+                        Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("当前模型", selection: $viewModel.selectedModel) {
+                            Text("未选择").tag(Optional<RunnableModel>.none)
+                            ForEach(options) { model in
+                                Text("\(model.model.displayName) | \(model.provider.name)")
+                                    .tag(Optional<RunnableModel>.some(model))
+                            }
+                        }
+                        .onChange(of: viewModel.selectedModel) { _, newValue in
+                            ChatService.shared.setSelectedModel(newValue)
                         }
                     }
-                    .onChange(of: viewModel.selectedModel) { _, newValue in
-                        ChatService.shared.setSelectedModel(newValue)
-                        dismiss()
-                    }
-                    
+                } header: {
+                    Text("当前模型")
+                } footer: {
+                    Text("列出当前启用的对话模型，新会话会使用所选模型。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
                     Button {
                         viewModel.createNewSession()
                         dismiss()
