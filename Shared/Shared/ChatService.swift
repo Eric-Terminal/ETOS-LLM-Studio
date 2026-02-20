@@ -251,7 +251,6 @@ public class ChatService {
         ConfigLoader.setupInitialProviderConfigs()
         ConfigLoader.setupBackgroundsDirectory()
         self.providers = ConfigLoader.loadProviders()
-        self.reconcileStoredModelOrder()
         self.adapters = adapters ?? [
             "openai-compatible": OpenAIAdapter(),
             "gemini": GeminiAdapter(),
@@ -267,6 +266,7 @@ public class ChatService {
         self.chatSessionsSubject = CurrentValueSubject(loadedSessions)
         self.currentSessionSubject = CurrentValueSubject(newTemporarySession)
         self.messagesForSessionSubject = CurrentValueSubject([])
+        self.reconcileStoredModelOrder()
         
         let savedModelID = UserDefaults.standard.string(forKey: "selectedRunnableModelID")
         let allRunnable = activatedRunnableModels
