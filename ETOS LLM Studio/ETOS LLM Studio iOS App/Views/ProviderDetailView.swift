@@ -290,10 +290,10 @@ struct ProviderDetailView: View {
                 ForEach(indices, id: \.self) { index in
                     modelRow(for: index, isActive: true)
                 }
-                .moveDisabled(!canReorderActiveModels)
                 .onMove { offsets, destination in
                     moveActiveModels(at: offsets, to: destination, in: indices)
                 }
+                .moveDisabled(!canReorderActiveModels)
                 .onDelete { offsets in
                     deleteModels(at: offsets, in: indices)
                 }
