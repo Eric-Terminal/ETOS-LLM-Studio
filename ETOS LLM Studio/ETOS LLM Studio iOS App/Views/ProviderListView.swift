@@ -11,6 +11,7 @@ struct ProviderListView: View {
     @State private var isEditingModelOrder = false
     @State private var editMode: EditMode = .inactive
     @State private var editingConfiguredModels: [RunnableModel] = []
+    private let modeTransitionAnimation = Animation.spring(response: 0.36, dampingFraction: 0.88)
     
     var body: some View {
         List {
@@ -32,35 +33,50 @@ struct ProviderListView: View {
                         }
                     }
                 }
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .opacity
+                    )
+                )
             } else {
-                ForEach(viewModel.providers) { provider in
-                    NavigationLink {
-                        ProviderDetailView(provider: provider)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(provider.name)
-                            Text(provider.baseURL)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .contextMenu {
-                        Button {
-                            providerToEdit = provider
+                Section {
+                    ForEach(viewModel.providers) { provider in
+                        NavigationLink {
+                            ProviderDetailView(provider: provider)
                         } label: {
-                            Label("编辑提供商", systemImage: "pencil")
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(provider.name)
+                                Text(provider.baseURL)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        
-                        Button(role: .destructive) {
-                            providerToDelete = provider
-                            showDeleteAlert = true
-                        } label: {
-                            Label("删除提供商", systemImage: "trash")
+                        .contextMenu {
+                            Button {
+                                providerToEdit = provider
+                            } label: {
+                                Label("编辑提供商", systemImage: "pencil")
+                            }
+                            
+                            Button(role: .destructive) {
+                                providerToDelete = provider
+                                showDeleteAlert = true
+                            } label: {
+                                Label("删除提供商", systemImage: "trash")
+                            }
                         }
                     }
                 }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity,
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    )
+                )
             }
         }
+        .animation(modeTransitionAnimation, value: isEditingModelOrder)
         .navigationTitle("提供商设置")
         .environment(\.editMode, $editMode)
         .toolbar {
@@ -131,8 +147,10 @@ struct ProviderListView: View {
 
     private func beginModelOrderEditing() {
         editingConfiguredModels = viewModel.configuredModels
-        isEditingModelOrder = true
-        editMode = .active
+        withAnimation(modeTransitionAnimation) {
+            isEditingModelOrder = true
+            editMode = .active
+        }
     }
 
     private func finishModelOrderEditing() {
@@ -142,8 +160,10 @@ struct ProviderListView: View {
         if !editedIDs.isEmpty, editedIDs != currentIDs {
             ChatService.shared.setConfiguredModelOrder(editedIDs, notifyChange: true)
         }
-        editMode = .inactive
-        isEditingModelOrder = false
+        withAnimation(modeTransitionAnimation) {
+            editMode = .inactive
+            isEditingModelOrder = false
+        }
         editingConfiguredModels = []
     }
 
