@@ -224,9 +224,15 @@ public class ChatService {
         UserDefaults.standard.set(mergedIDs, forKey: Self.modelOrderStorageKey)
     }
 
-    private func saveConfiguredModelOrder(_ orderedModelIDs: [String]) {
-        UserDefaults.standard.set(orderedModelIDs, forKey: Self.modelOrderStorageKey)
-        providersSubject.send(providers)
+    public func setConfiguredModelOrder(_ orderedModelIDs: [String], notifyChange: Bool = true) {
+        let currentIDs = providers.flatMap { provider in
+            provider.models.map { RunnableModel(provider: provider, model: $0).id }
+        }
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: orderedModelIDs, currentIDs: currentIDs)
+        UserDefaults.standard.set(mergedIDs, forKey: Self.modelOrderStorageKey)
+        if notifyChange {
+            providersSubject.send(providers)
+        }
     }
 
     // MARK: - 初始化
@@ -519,7 +525,7 @@ public class ChatService {
             fromPosition: source,
             toPosition: destination
         )
-        saveConfiguredModelOrder(reorderedIDs)
+        setConfiguredModelOrder(reorderedIDs)
     }
 
     public func moveConfiguredModels(fromOffsets offsets: IndexSet, toOffset destination: Int) {
@@ -531,7 +537,7 @@ public class ChatService {
         guard !offsets.isEmpty else { return }
 
         moveElements(in: &orderedModels, fromOffsets: offsets, toOffset: destination)
-        saveConfiguredModelOrder(orderedModels.map(\.id))
+        setConfiguredModelOrder(orderedModels.map(\.id))
     }
 
     // MARK: - 公开方法 (会话管理)

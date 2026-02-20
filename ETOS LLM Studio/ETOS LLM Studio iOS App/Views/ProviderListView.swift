@@ -10,6 +10,7 @@ struct ProviderListView: View {
     @State private var showDeleteAlert = false
     @State private var isEditingModelOrder = false
     @State private var editMode: EditMode = .inactive
+    @State private var editingConfiguredModels: [RunnableModel] = []
     
     var body: some View {
         List {
@@ -18,16 +19,16 @@ struct ProviderListView: View {
                     header: Text("模型顺序"),
                     footer: Text("这里维护全局模型顺序（隐藏索引）。拖拽调整后，模型选择列表会按新顺序展示。")
                 ) {
-                    if viewModel.configuredModels.isEmpty {
+                    if editingConfiguredModels.isEmpty {
                         Text("暂无可排序模型。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(viewModel.configuredModels, id: \.id) { runnable in
+                        ForEach(editingConfiguredModels, id: \.id) { runnable in
                             modelOrderRow(runnable: runnable)
                         }
                         .onMove { offsets, destination in
-                            ChatService.shared.moveConfiguredModels(fromOffsets: offsets, toOffset: destination)
+                            editingConfiguredModels.move(fromOffsets: offsets, toOffset: destination)
                         }
                     }
                 }
@@ -67,11 +68,9 @@ struct ProviderListView: View {
                 if !viewModel.configuredModels.isEmpty {
                     Button(isEditingModelOrder ? "完成" : "编辑") {
                         if isEditingModelOrder {
-                            editMode = .inactive
-                            isEditingModelOrder = false
+                            finishModelOrderEditing()
                         } else {
-                            isEditingModelOrder = true
-                            editMode = .active
+                            beginModelOrderEditing()
                         }
                     }
                 }
@@ -122,10 +121,30 @@ struct ProviderListView: View {
         }
         .onChange(of: viewModel.configuredModels.count) { _, count in
             if count < 2 {
-                editMode = .inactive
-                isEditingModelOrder = false
+                finishModelOrderEditing()
             }
         }
+        .onDisappear {
+            finishModelOrderEditing()
+        }
+    }
+
+    private func beginModelOrderEditing() {
+        editingConfiguredModels = viewModel.configuredModels
+        isEditingModelOrder = true
+        editMode = .active
+    }
+
+    private func finishModelOrderEditing() {
+        guard isEditingModelOrder else { return }
+        let editedIDs = editingConfiguredModels.map(\.id)
+        let currentIDs = viewModel.configuredModels.map(\.id)
+        if !editedIDs.isEmpty, editedIDs != currentIDs {
+            ChatService.shared.setConfiguredModelOrder(editedIDs, notifyChange: true)
+        }
+        editMode = .inactive
+        isEditingModelOrder = false
+        editingConfiguredModels = []
     }
 
     @ViewBuilder
