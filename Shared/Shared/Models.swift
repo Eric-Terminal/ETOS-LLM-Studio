@@ -212,6 +212,36 @@ public struct Model: Codable, Identifiable, Hashable {
     }
 }
 
+public enum ModelOrderIndex {
+    public static func merge(storedIDs: [String], currentIDs: [String]) -> [String] {
+        let currentSet = Set(currentIDs)
+        var result: [String] = []
+        result.reserveCapacity(currentIDs.count)
+        var seen = Set<String>()
+
+        for id in storedIDs where currentSet.contains(id) {
+            guard seen.insert(id).inserted else { continue }
+            result.append(id)
+        }
+        for id in currentIDs {
+            guard seen.insert(id).inserted else { continue }
+            result.append(id)
+        }
+        return result
+    }
+
+    public static func move(ids: [String], fromPosition source: Int, toPosition destination: Int) -> [String] {
+        var orderedIDs = ids
+        guard source >= 0 && source < orderedIDs.count else { return ids }
+        guard destination >= 0 && destination < orderedIDs.count else { return ids }
+        guard source != destination else { return ids }
+
+        let moved = orderedIDs.remove(at: source)
+        orderedIDs.insert(moved, at: destination)
+        return orderedIDs
+    }
+}
+
 public extension Provider {
     /// 仅重排已添加模型（isActivated = true）的相对顺序，不影响未添加模型的相对顺序。
     /// - Parameters:

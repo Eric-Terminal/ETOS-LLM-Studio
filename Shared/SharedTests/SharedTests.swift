@@ -156,6 +156,28 @@ struct ProviderActiveModelOrderTests {
     }
 }
 
+@Suite("ModelOrderIndex Tests")
+struct ModelOrderIndexTests {
+    @Test("合并隐藏索引时保留旧顺序并追加新增模型")
+    func testMergeOrderKeepsStoredThenAppendsNew() {
+        let stored = ["p1-m2", "p2-m1", "removed", "p1-m2"]
+        let current = ["p1-m1", "p1-m2", "p2-m1", "p3-m1"]
+
+        let merged = ModelOrderIndex.merge(storedIDs: stored, currentIDs: current)
+
+        #expect(merged == ["p1-m2", "p2-m1", "p1-m1", "p3-m1"])
+    }
+
+    @Test("按位置移动隐藏索引")
+    func testMoveOrderByPosition() {
+        let ids = ["a", "b", "c", "d"]
+
+        let moved = ModelOrderIndex.move(ids: ids, fromPosition: 3, toPosition: 1)
+
+        #expect(moved == ["a", "d", "b", "c"])
+    }
+}
+
 
 // MARK: - MemoryManager Tests
 

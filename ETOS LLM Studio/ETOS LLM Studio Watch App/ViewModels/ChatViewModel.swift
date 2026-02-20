@@ -39,6 +39,7 @@ class ChatViewModel: ObservableObject {
     @Published var currentSession: ChatSession?
     
     @Published var providers: [Provider] = []
+    @Published var configuredModels: [RunnableModel] = []
     @Published var selectedModel: RunnableModel?
     @Published var activatedModels: [RunnableModel] = []
     
@@ -126,9 +127,7 @@ class ChatViewModel: ObservableObject {
     }
     
     var embeddingModelOptions: [RunnableModel] {
-        providers.flatMap { provider in
-            provider.models.map { RunnableModel(provider: provider, model: $0) }
-        }
+        configuredModels
     }
 
     func toggleMathRendering(for messageID: UUID) {
@@ -280,6 +279,7 @@ class ChatViewModel: ObservableObject {
             .sink { [weak self] providers in
                 guard let self = self else { return }
                 self.providers = providers
+                self.configuredModels = self.chatService.configuredRunnableModels
                 self.activatedModels = self.chatService.activatedRunnableModels
                 self.speechModels = self.chatService.activatedSpeechModels
                 self.syncSpeechModelSelection()

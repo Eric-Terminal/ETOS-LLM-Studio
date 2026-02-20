@@ -22,7 +22,6 @@ struct ProviderDetailView: View {
     @State private var hasAutoFetchedModels = false
     @State private var searchText = ""
     @State private var isSearchPresented = false
-    @State private var isSortModeEnabled = false
     @FocusState private var isSearchFieldFocused: Bool
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
     
@@ -52,11 +51,11 @@ struct ProviderDetailView: View {
                 Section("列表设置") {
                     Toggle("按模型家族分组", isOn: $groupByFamilySection)
                     if groupByFamilySection {
-                        Text("已开启家族分组，关闭后可调整已添加模型排序。")
+                        Text("将按模型家族拆分显示。")
                             .font(.footnote)
                             .foregroundColor(.secondary)
-                    } else if isSearching {
-                        Text("搜索中暂不支持排序，请清空关键词后调整。")
+                    } else {
+                        Text("将按已添加/未添加展示。")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
@@ -126,13 +125,6 @@ struct ProviderDetailView: View {
                         Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
                     }
                     .accessibilityLabel(isSearchPresented ? "取消搜索" : "搜索模型")
-                    if canShowReorderControl {
-                        Spacer()
-                        Button(action: { toggleSortMode() }) {
-                            Image(systemName: isSortModeEnabled ? "checkmark" : "arrow.up.arrow.down")
-                        }
-                        .accessibilityLabel(isSortModeEnabled ? "完成排序" : "调整排序")
-                    }
                 }
             }
         }
@@ -140,20 +132,7 @@ struct ProviderDetailView: View {
             ModelAddView(provider: $provider)
         }
         .onChange(of: provider) {
-            if !canShowReorderControl {
-                isSortModeEnabled = false
-            }
             saveChanges()
-        }
-        .onChange(of: groupByFamilySection) { _, isEnabled in
-            if isEnabled {
-                isSortModeEnabled = false
-            }
-        }
-        .onChange(of: searchText) { _, newValue in
-            if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                isSortModeEnabled = false
-            }
         }
         .alert("获取模型失败", isPresented: $showErrorAlert) {
             Button("好的") { }
@@ -185,18 +164,6 @@ struct ProviderDetailView: View {
         })
         provider.models.remove(atOffsets: mappedOffsets)
     }
-
-    private func moveActiveModelUp(at position: Int) {
-        guard canReorderActiveModels else { return }
-        guard position > 0 else { return }
-        provider.moveActivatedModel(fromPosition: position, toPosition: position - 1)
-    }
-
-    private func moveActiveModelDown(at position: Int, total: Int) {
-        guard canReorderActiveModels else { return }
-        guard position >= 0 && position + 1 < total else { return }
-        provider.moveActivatedModel(fromPosition: position, toPosition: position + 1)
-    }
     
     private func saveChanges() {
         var providerToSave = provider
@@ -212,22 +179,6 @@ struct ProviderDetailView: View {
 
     private var isSearching: Bool {
         !normalizedSearchText.isEmpty
-    }
-
-    private var activeModelCount: Int {
-        provider.models.reduce(into: 0) { count, model in
-            if model.isActivated {
-                count += 1
-            }
-        }
-    }
-
-    private var canReorderActiveModels: Bool {
-        !groupByFamilySection && !isSearching
-    }
-
-    private var canShowReorderControl: Bool {
-        canReorderActiveModels && activeModelCount > 1
     }
 
     private func modelMatchesSearch(_ model: Model) -> Bool {
@@ -306,13 +257,8 @@ struct ProviderDetailView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
             } else if isActive {
-                ForEach(Array(indices.enumerated()), id: \.element) { position, index in
-                    modelRow(
-                        for: index,
-                        isActive: true,
-                        activePosition: position,
-                        activeCount: indices.count
-                    )
+                ForEach(indices, id: \.self) { index in
+                    modelRow(for: index, isActive: true)
                 }
                 .onDelete { offsets in
                     deleteModels(at: offsets, in: indices)
@@ -331,7 +277,6 @@ struct ProviderDetailView: View {
             searchText = ""
             isSearchFieldFocused = false
         } else {
-            isSortModeEnabled = false
             isSearchPresented = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 isSearchFieldFocused = true
@@ -339,49 +284,16 @@ struct ProviderDetailView: View {
         }
     }
 
-    private func toggleSortMode() {
-        guard canShowReorderControl else { return }
-        isSortModeEnabled.toggle()
-    }
-
     @ViewBuilder
     private func modelRow(
         for index: Int,
-        isActive: Bool,
-        activePosition: Int? = nil,
-        activeCount: Int = 0
+        isActive: Bool
     ) -> some View {
         let model = provider.models[index]
 
         if isActive {
-            if isSortModeEnabled && canReorderActiveModels, let activePosition {
-                HStack(spacing: 6) {
-                    modelLabel(for: model)
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Button {
-                            moveActiveModelUp(at: activePosition)
-                        } label: {
-                            Image(systemName: "chevron.up")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(activePosition == 0)
-                        .accessibilityLabel("上移模型")
-
-                        Button {
-                            moveActiveModelDown(at: activePosition, total: activeCount)
-                        } label: {
-                            Image(systemName: "chevron.down")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(activePosition + 1 >= activeCount)
-                        .accessibilityLabel("下移模型")
-                    }
-                }
-            } else {
-                NavigationLink(destination: ModelSettingsView(model: $provider.models[index], provider: provider)) {
-                    modelLabel(for: model)
-                }
+            NavigationLink(destination: ModelSettingsView(model: $provider.models[index], provider: provider)) {
+                modelLabel(for: model)
             }
         } else {
             HStack(spacing: 6) {
