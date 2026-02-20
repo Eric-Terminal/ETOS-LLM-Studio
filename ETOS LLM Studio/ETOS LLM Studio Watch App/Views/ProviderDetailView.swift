@@ -22,7 +22,7 @@ struct ProviderDetailView: View {
     @State private var hasAutoFetchedModels = false
     @State private var searchText = ""
     @State private var isSearchPresented = false
-    @State private var editMode: EditMode = .inactive
+    @State private var isSortModeEnabled = false
     @FocusState private var isSearchFieldFocused: Bool
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
     
@@ -89,7 +89,6 @@ struct ProviderDetailView: View {
                     .edgesIgnoringSafeArea(.all)
             }
         }
-        .environment(\.editMode, $editMode)
         .navigationTitle(provider.name)
         .task {
             guard !hasAutoFetchedModels, !isFetchingModels else { return }
@@ -117,9 +116,9 @@ struct ProviderDetailView: View {
                     if canShowReorderControl {
                         Spacer()
                         Button(action: { toggleSortMode() }) {
-                            Image(systemName: editMode.isEditing ? "checkmark" : "arrow.up.arrow.down")
+                            Image(systemName: isSortModeEnabled ? "checkmark" : "arrow.up.arrow.down")
                         }
-                        .accessibilityLabel(editMode.isEditing ? "完成排序" : "调整排序")
+                        .accessibilityLabel(isSortModeEnabled ? "完成排序" : "调整排序")
                     }
                 }
             }
@@ -129,18 +128,18 @@ struct ProviderDetailView: View {
         }
         .onChange(of: provider) {
             if !canShowReorderControl {
-                editMode = .inactive
+                isSortModeEnabled = false
             }
             saveChanges()
         }
         .onChange(of: groupByFamilySection) { _, isEnabled in
             if isEnabled {
-                editMode = .inactive
+                isSortModeEnabled = false
             }
         }
         .onChange(of: searchText) { _, newValue in
             if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                editMode = .inactive
+                isSortModeEnabled = false
             }
         }
         .alert("获取模型失败", isPresented: $showErrorAlert) {
@@ -174,11 +173,16 @@ struct ProviderDetailView: View {
         provider.models.remove(atOffsets: mappedOffsets)
     }
 
-    private func moveActiveModels(at offsets: IndexSet, to destination: Int, in indices: [Int]) {
+    private func moveActiveModelUp(at position: Int) {
         guard canReorderActiveModels else { return }
-        let expectedActiveIndices = provider.models.indices.filter { provider.models[$0].isActivated }
-        guard indices == expectedActiveIndices else { return }
-        provider.moveActivatedModels(fromOffsets: offsets, toOffset: destination)
+        guard position > 0 else { return }
+        provider.moveActivatedModel(fromPosition: position, toPosition: position - 1)
+    }
+
+    private func moveActiveModelDown(at position: Int, total: Int) {
+        guard canReorderActiveModels else { return }
+        guard position >= 0 && position + 1 < total else { return }
+        provider.moveActivatedModel(fromPosition: position, toPosition: position + 1)
     }
     
     private func saveChanges() {
@@ -289,12 +293,13 @@ struct ProviderDetailView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
             } else if isActive {
-                ForEach(indices, id: \.self) { index in
-                    modelRow(for: index, isActive: true)
-                }
-                .moveDisabled(!canReorderActiveModels)
-                .onMove { offsets, destination in
-                    moveActiveModels(at: offsets, to: destination, in: indices)
+                ForEach(Array(indices.enumerated()), id: \.element) { position, index in
+                    modelRow(
+                        for: index,
+                        isActive: true,
+                        activePosition: position,
+                        activeCount: indices.count
+                    )
                 }
                 .onDelete { offsets in
                     deleteModels(at: offsets, in: indices)
@@ -313,7 +318,7 @@ struct ProviderDetailView: View {
             searchText = ""
             isSearchFieldFocused = false
         } else {
-            editMode = .inactive
+            isSortModeEnabled = false
             isSearchPresented = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 isSearchFieldFocused = true
@@ -323,16 +328,47 @@ struct ProviderDetailView: View {
 
     private func toggleSortMode() {
         guard canShowReorderControl else { return }
-        editMode = editMode.isEditing ? .inactive : .active
+        isSortModeEnabled.toggle()
     }
 
     @ViewBuilder
-    private func modelRow(for index: Int, isActive: Bool) -> some View {
+    private func modelRow(
+        for index: Int,
+        isActive: Bool,
+        activePosition: Int? = nil,
+        activeCount: Int = 0
+    ) -> some View {
         let model = provider.models[index]
 
         if isActive {
-            NavigationLink(destination: ModelSettingsView(model: $provider.models[index], provider: provider)) {
-                modelLabel(for: model)
+            if isSortModeEnabled && canReorderActiveModels, let activePosition {
+                HStack(spacing: 6) {
+                    modelLabel(for: model)
+                    Spacer()
+                    VStack(spacing: 4) {
+                        Button {
+                            moveActiveModelUp(at: activePosition)
+                        } label: {
+                            Image(systemName: "chevron.up")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(activePosition == 0)
+                        .accessibilityLabel("上移模型")
+
+                        Button {
+                            moveActiveModelDown(at: activePosition, total: activeCount)
+                        } label: {
+                            Image(systemName: "chevron.down")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(activePosition + 1 >= activeCount)
+                        .accessibilityLabel("下移模型")
+                    }
+                }
+            } else {
+                NavigationLink(destination: ModelSettingsView(model: $provider.models[index], provider: provider)) {
+                    modelLabel(for: model)
+                }
             }
         } else {
             HStack(spacing: 6) {

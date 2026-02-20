@@ -232,6 +232,27 @@ public extension Provider {
             models[modelIndex] = activatedModels[position]
         }
     }
+
+    /// 将已添加模型子列表中的某一项移动到目标位置。
+    /// - Parameters:
+    ///   - source: 源位置（基于“已添加模型”子列表）
+    ///   - destination: 目标位置（基于“已添加模型”子列表）
+    mutating func moveActivatedModel(fromPosition source: Int, toPosition destination: Int) {
+        let activatedIndices = models.indices.filter { models[$0].isActivated }
+        let activatedCount = activatedIndices.count
+        guard activatedCount > 1 else { return }
+        guard source >= 0 && source < activatedCount else { return }
+        guard destination >= 0 && destination < activatedCount else { return }
+        guard source != destination else { return }
+
+        var activatedModels = activatedIndices.map { models[$0] }
+        let moved = activatedModels.remove(at: source)
+        activatedModels.insert(moved, at: destination)
+
+        for (position, modelIndex) in activatedIndices.enumerated() {
+            models[modelIndex] = activatedModels[position]
+        }
+    }
 }
 
 private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {

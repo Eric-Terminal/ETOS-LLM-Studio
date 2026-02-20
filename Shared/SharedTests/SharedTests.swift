@@ -133,6 +133,27 @@ struct ProviderActiveModelOrderTests {
 
         #expect(provider.models.map(\.modelName) == original)
     }
+
+    @Test("按位置移动已添加模型")
+    func testMoveActivatedModelByPosition() {
+        var provider = Provider(
+            name: "Test",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                makeModel("a", active: true),
+                makeModel("x", active: false),
+                makeModel("b", active: true),
+                makeModel("c", active: true),
+                makeModel("y", active: false)
+            ]
+        )
+
+        provider.moveActivatedModel(fromPosition: 2, toPosition: 0)
+
+        #expect(provider.models.map(\.modelName) == ["c", "x", "a", "b", "y"])
+    }
 }
 
 
