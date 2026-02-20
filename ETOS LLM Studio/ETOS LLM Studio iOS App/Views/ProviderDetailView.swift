@@ -10,7 +10,6 @@ struct ProviderDetailView: View {
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
     @State private var searchText = ""
-    @AppStorage("providerDetail.modelCategoryFilter") private var modelCategoryFilterRaw = ModelCategoryFilter.all.rawValue
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
 
     var body: some View {
@@ -19,13 +18,6 @@ struct ProviderDetailView: View {
 
         List {
             Section("列表设置") {
-                Picker("模型分类", selection: modelCategoryFilterBinding) {
-                    ForEach(ModelCategoryFilter.allCases) { filter in
-                        Text(filter.title).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-
                 Toggle("按模型家族分组", isOn: $groupByFamilySection)
             }
 
@@ -147,23 +139,11 @@ struct ProviderDetailView: View {
             || model.modelName.lowercased().contains(keyword)
     }
 
-    private func modelMatchesCategoryFilter(_ model: Model) -> Bool {
-        switch modelCategoryFilter {
-        case .all:
-            return true
-        case .mainstream:
-            return model.isMainstreamModel
-        case .other:
-            return !model.isMainstreamModel
-        }
-    }
-
     private func filteredIndices(forActive isActive: Bool) -> [Int] {
         provider.models.indices.filter { index in
             let model = provider.models[index]
             return model.isActivated == isActive
                 && modelMatchesSearch(model)
-                && modelMatchesCategoryFilter(model)
         }
     }
 
@@ -211,17 +191,6 @@ struct ProviderDetailView: View {
             return [ModelListSection(title: sectionPrefix, indices: [], isActive: isActive)]
         }
         return result
-    }
-
-    private var modelCategoryFilter: ModelCategoryFilter {
-        ModelCategoryFilter(rawValue: modelCategoryFilterRaw) ?? .all
-    }
-
-    private var modelCategoryFilterBinding: Binding<ModelCategoryFilter> {
-        Binding(
-            get: { modelCategoryFilter },
-            set: { modelCategoryFilterRaw = $0.rawValue }
-        )
     }
 
     private var searchPill: some View {
@@ -329,25 +298,6 @@ private struct ModelListSection: Identifiable {
 
     var id: String {
         "\(isActive ? "active" : "inactive")-\(title)"
-    }
-}
-
-private enum ModelCategoryFilter: String, CaseIterable, Identifiable {
-    case all
-    case mainstream
-    case other
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .all:
-            return "全部"
-        case .mainstream:
-            return "主流"
-        case .other:
-            return "其他"
-        }
     }
 }
 
