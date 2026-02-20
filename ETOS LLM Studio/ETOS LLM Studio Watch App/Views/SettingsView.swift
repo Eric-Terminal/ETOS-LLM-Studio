@@ -39,31 +39,30 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         Picker("当前模型", selection: $viewModel.selectedModel) {
-                            Text("未选择").tag(Optional<RunnableModel>.none)
                             ForEach(options) { model in
                                 Text("\(model.model.displayName) | \(model.provider.name)")
                                     .tag(Optional<RunnableModel>.some(model))
                             }
                         }
+                        .onAppear {
+                            ensureSelectedModel(in: options)
+                        }
+                        .onChange(of: options.map(\.id)) { _, _ in
+                            ensureSelectedModel(in: options)
+                        }
                         .onChange(of: viewModel.selectedModel) { _, newValue in
                             ChatService.shared.setSelectedModel(newValue)
                         }
                     }
-                } header: {
-                    Text("当前模型")
-                } footer: {
-                    Text("列出当前启用的对话模型，新会话会使用所选模型。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
 
-                Section {
                     Button {
                         viewModel.createNewSession()
                         dismiss()
                     } label: {
                         Label("开启新对话", systemImage: "plus.message")
                     }
+                } header: {
+                    Text("当前模型")
                 }
 
                 Section {
@@ -189,6 +188,16 @@ struct SettingsView: View {
         @unknown default:
             Image(systemName: "bell.fill")
                 .foregroundColor(.gray)
+        }
+    }
+
+    private func ensureSelectedModel(in options: [RunnableModel]) {
+        guard let first = options.first else { return }
+        guard let selectedID = viewModel.selectedModel?.id,
+              options.contains(where: { $0.id == selectedID }) else {
+            viewModel.selectedModel = first
+            ChatService.shared.setSelectedModel(first)
+            return
         }
     }
 }
