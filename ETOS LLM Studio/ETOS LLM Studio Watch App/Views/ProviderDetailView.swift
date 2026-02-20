@@ -243,14 +243,13 @@ struct ProviderDetailView: View {
     }
 
     private var modelCategoryFilter: ModelCategoryFilter {
-        get { ModelCategoryFilter(rawValue: modelCategoryFilterRaw) ?? .all }
-        set { modelCategoryFilterRaw = newValue.rawValue }
+        ModelCategoryFilter(rawValue: modelCategoryFilterRaw) ?? .all
     }
 
     private var modelCategoryFilterBinding: Binding<ModelCategoryFilter> {
         Binding(
             get: { modelCategoryFilter },
-            set: { modelCategoryFilter = $0 }
+            set: { modelCategoryFilterRaw = $0.rawValue }
         )
     }
 
