@@ -86,6 +86,55 @@ struct MainstreamModelFamilyTests {
     }
 }
 
+@Suite("Provider Active Model Order Tests")
+struct ProviderActiveModelOrderTests {
+    private func makeModel(_ name: String, active: Bool) -> Model {
+        Model(modelName: name, displayName: name, isActivated: active)
+    }
+
+    @Test("仅重排已添加模型，未添加模型位置保持不变")
+    func testMoveActivatedModelsKeepsInactiveOrder() {
+        var provider = Provider(
+            name: "Test",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                makeModel("a", active: true),
+                makeModel("x", active: false),
+                makeModel("b", active: true),
+                makeModel("c", active: true),
+                makeModel("y", active: false)
+            ]
+        )
+
+        provider.moveActivatedModels(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+
+        #expect(provider.models.map(\.modelName) == ["b", "x", "c", "a", "y"])
+        #expect(provider.models.filter(\.isActivated).map(\.modelName) == ["b", "c", "a"])
+    }
+
+    @Test("非法拖拽索引不会改动模型顺序")
+    func testMoveActivatedModelsWithInvalidOffsetsNoChange() {
+        var provider = Provider(
+            name: "Test",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                makeModel("a", active: true),
+                makeModel("x", active: false),
+                makeModel("b", active: true)
+            ]
+        )
+        let original = provider.models.map(\.modelName)
+
+        provider.moveActivatedModels(fromOffsets: IndexSet(integer: 10), toOffset: 1)
+
+        #expect(provider.models.map(\.modelName) == original)
+    }
+}
+
 
 // MARK: - MemoryManager Tests
 

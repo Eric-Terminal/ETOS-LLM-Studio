@@ -10,6 +10,7 @@ struct ProviderDetailView: View {
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
     @State private var searchText = ""
+    @State private var editMode: EditMode = .inactive
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
 
     var body: some View {
@@ -19,6 +20,15 @@ struct ProviderDetailView: View {
         List {
             Section("列表设置") {
                 Toggle("按模型家族分组", isOn: $groupByFamilySection)
+                if groupByFamilySection {
+                    Text("已开启家族分组，关闭后可调整已添加模型排序。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else if isSearching {
+                    Text("搜索中暂不支持排序，请清空关键词后调整。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             ForEach(activeSections) { section in
@@ -37,6 +47,7 @@ struct ProviderDetailView: View {
                 )
             }
         }
+        .environment(\.editMode, $editMode)
         .overlay {
             if isFetchingModels {
                 progressOverlay
@@ -52,6 +63,13 @@ struct ProviderDetailView: View {
             await fetchAndMergeModels()
         }
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                if canShowReorderControl {
+                    EditButton()
+                        .accessibilityLabel(editMode.isEditing ? "完成排序" : "调整排序")
+                }
+            }
+
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
                     Task { await fetchAndMergeModels() }
@@ -75,7 +93,20 @@ struct ProviderDetailView: View {
             }
         }
         .onChange(of: provider) { _, _ in
+            if !canShowReorderControl {
+                editMode = .inactive
+            }
             saveChanges()
+        }
+        .onChange(of: groupByFamilySection) { _, isEnabled in
+            if isEnabled {
+                editMode = .inactive
+            }
+        }
+        .onChange(of: searchText) { _, newValue in
+            if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                editMode = .inactive
+            }
         }
         .alert("获取模型失败", isPresented: $showErrorAlert) {
             Button("好的", role: .cancel) { }
@@ -114,6 +145,13 @@ struct ProviderDetailView: View {
         provider.models.remove(atOffsets: mappedOffsets)
     }
 
+    private func moveActiveModels(at offsets: IndexSet, to destination: Int, in indices: [Int]) {
+        guard canReorderActiveModels else { return }
+        let expectedActiveIndices = provider.models.indices.filter { provider.models[$0].isActivated }
+        guard indices == expectedActiveIndices else { return }
+        provider.moveActivatedModels(fromOffsets: offsets, toOffset: destination)
+    }
+
     @ViewBuilder
     private var progressOverlay: some View {
         ZStack {
@@ -130,6 +168,22 @@ struct ProviderDetailView: View {
 
     private var isSearching: Bool {
         !normalizedSearchText.isEmpty
+    }
+
+    private var activeModelCount: Int {
+        provider.models.reduce(into: 0) { count, model in
+            if model.isActivated {
+                count += 1
+            }
+        }
+    }
+
+    private var canReorderActiveModels: Bool {
+        !groupByFamilySection && !isSearching
+    }
+
+    private var canShowReorderControl: Bool {
+        canReorderActiveModels && activeModelCount > 1
     }
 
     private func modelMatchesSearch(_ model: Model) -> Bool {
@@ -235,6 +289,10 @@ struct ProviderDetailView: View {
             } else if isActive {
                 ForEach(indices, id: \.self) { index in
                     modelRow(for: index, isActive: true)
+                }
+                .moveDisabled(!canReorderActiveModels)
+                .onMove { offsets, destination in
+                    moveActiveModels(at: offsets, to: destination, in: indices)
                 }
                 .onDelete { offsets in
                     deleteModels(at: offsets, in: indices)

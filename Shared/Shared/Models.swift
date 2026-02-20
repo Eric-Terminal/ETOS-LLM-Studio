@@ -212,6 +212,44 @@ public struct Model: Codable, Identifiable, Hashable {
     }
 }
 
+public extension Provider {
+    /// 仅重排已添加模型（isActivated = true）的相对顺序，不影响未添加模型的相对顺序。
+    /// - Parameters:
+    ///   - offsets: 拖拽源索引（基于“已添加模型”子列表）
+    ///   - destination: 拖拽目标索引（基于“已添加模型”子列表）
+    mutating func moveActivatedModels(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        let activatedIndices = models.indices.filter { models[$0].isActivated }
+        let activatedCount = activatedIndices.count
+        guard activatedCount > 1 else { return }
+        guard destination >= 0 && destination <= activatedCount else { return }
+        guard offsets.allSatisfy({ $0 >= 0 && $0 < activatedCount }) else { return }
+        guard !offsets.isEmpty else { return }
+
+        var activatedModels = activatedIndices.map { models[$0] }
+        moveElements(in: &activatedModels, fromOffsets: offsets, toOffset: destination)
+
+        for (position, modelIndex) in activatedIndices.enumerated() {
+            models[modelIndex] = activatedModels[position]
+        }
+    }
+}
+
+private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {
+    let sortedOffsets = offsets.sorted()
+    guard !sortedOffsets.isEmpty else { return }
+    guard sortedOffsets.allSatisfy({ $0 >= 0 && $0 < array.count }) else { return }
+    guard destination >= 0 && destination <= array.count else { return }
+
+    let movedItems = sortedOffsets.map { array[$0] }
+    for index in sortedOffsets.reversed() {
+        array.remove(at: index)
+    }
+
+    let removedBeforeDestination = sortedOffsets.filter { $0 < destination }.count
+    let insertionIndex = max(0, min(destination - removedBeforeDestination, array.count))
+    array.insert(contentsOf: movedItems, at: insertionIndex)
+}
+
 public extension Model {
     var supportsSpeechToText: Bool {
         capabilities.contains(.speechToText)
