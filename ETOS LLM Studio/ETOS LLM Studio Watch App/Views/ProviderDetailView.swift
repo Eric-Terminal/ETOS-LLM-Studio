@@ -6,7 +6,7 @@
 // 定义内容:
 // - 显示一个提供商下的所有模型
 // - 允许用户激活/禁用模型、添加新模型、从云端获取模型列表
-// - 支持按“主流/其他”分组与筛选
+// - 支持按模型家族分组与筛选
 // ============================================================================
 
 import SwiftUI
@@ -24,10 +24,11 @@ struct ProviderDetailView: View {
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
     @AppStorage("providerDetail.modelCategoryFilter") private var modelCategoryFilterRaw = ModelCategoryFilter.all.rawValue
-    @AppStorage("providerDetail.groupByMainstream") private var groupByMainstreamCategory = true
+    @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
     
     var body: some View {
-        let groupedIndices = buildGroupedIndices()
+        let activeSections = sections(forActive: true)
+        let inactiveSections = sections(forActive: false)
 
         ZStack {
             List {
@@ -58,48 +59,22 @@ struct ProviderDetailView: View {
                         }
                     }
 
-                    Toggle("按主流/其他分组", isOn: $groupByMainstreamCategory)
+                    Toggle("按模型家族分组", isOn: $groupByFamilySection)
                 }
 
-                if groupByMainstreamCategory {
-                    if modelCategoryFilter != .other {
-                        modelSection(
-                            title: "已添加 · 主流",
-                            indices: groupedIndices.activeMainstream,
-                            isActive: true
-                        )
-                    }
-                    if modelCategoryFilter != .mainstream {
-                        modelSection(
-                            title: "已添加 · 其他",
-                            indices: groupedIndices.activeOther,
-                            isActive: true
-                        )
-                    }
-                    if modelCategoryFilter != .other {
-                        modelSection(
-                            title: "未添加 · 主流",
-                            indices: groupedIndices.inactiveMainstream,
-                            isActive: false
-                        )
-                    }
-                    if modelCategoryFilter != .mainstream {
-                        modelSection(
-                            title: "未添加 · 其他",
-                            indices: groupedIndices.inactiveOther,
-                            isActive: false
-                        )
-                    }
-                } else {
+                ForEach(activeSections) { section in
                     modelSection(
-                        title: "已添加",
-                        indices: groupedIndices.filteredActive,
-                        isActive: true
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
                     )
+                }
+
+                ForEach(inactiveSections) { section in
                     modelSection(
-                        title: "未添加",
-                        indices: groupedIndices.filteredInactive,
-                        isActive: false
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
                     )
                 }
             }
@@ -209,37 +184,59 @@ struct ProviderDetailView: View {
         }
     }
 
-    private func buildGroupedIndices() -> GroupedModelIndices {
-        var grouped = GroupedModelIndices()
-
-        for index in provider.models.indices {
+    private func filteredIndices(forActive isActive: Bool) -> [Int] {
+        provider.models.indices.filter { index in
             let model = provider.models[index]
-            guard modelMatchesSearch(model), modelMatchesCategoryFilter(model) else {
-                continue
-            }
+            return model.isActivated == isActive
+                && modelMatchesSearch(model)
+                && modelMatchesCategoryFilter(model)
+        }
+    }
 
-            if model.isActivated {
-                grouped.filteredActive.append(index)
-            } else {
-                grouped.filteredInactive.append(index)
-            }
+    private func sections(forActive isActive: Bool) -> [ModelListSection] {
+        let indices = filteredIndices(forActive: isActive)
+        let sectionPrefix = isActive ? "已添加" : "未添加"
 
-            if model.isMainstreamModel {
-                if model.isActivated {
-                    grouped.activeMainstream.append(index)
-                } else {
-                    grouped.inactiveMainstream.append(index)
-                }
+        guard groupByFamilySection else {
+            return [ModelListSection(title: sectionPrefix, indices: indices, isActive: isActive)]
+        }
+
+        var indicesByFamily: [MainstreamModelFamily: [Int]] = [:]
+        var otherIndices: [Int] = []
+        for index in indices {
+            if let family = provider.models[index].mainstreamFamily {
+                indicesByFamily[family, default: []].append(index)
             } else {
-                if model.isActivated {
-                    grouped.activeOther.append(index)
-                } else {
-                    grouped.inactiveOther.append(index)
-                }
+                otherIndices.append(index)
             }
         }
 
-        return grouped
+        var result: [ModelListSection] = []
+        for family in MainstreamModelFamily.allCases {
+            guard let familyIndices = indicesByFamily[family], !familyIndices.isEmpty else { continue }
+            result.append(
+                ModelListSection(
+                    title: "\(sectionPrefix) · \(family.displayName)",
+                    indices: familyIndices,
+                    isActive: isActive
+                )
+            )
+        }
+
+        if !otherIndices.isEmpty {
+            result.append(
+                ModelListSection(
+                    title: "\(sectionPrefix) · 其他",
+                    indices: otherIndices,
+                    isActive: isActive
+                )
+            )
+        }
+
+        if result.isEmpty {
+            return [ModelListSection(title: sectionPrefix, indices: [], isActive: isActive)]
+        }
+        return result
     }
 
     private var modelCategoryFilter: ModelCategoryFilter {
@@ -322,7 +319,7 @@ struct ProviderDetailView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(model.displayName)
                 .lineLimit(1)
-            Text("\(model.mainstreamFamily?.displayName ?? "其他") · \(model.modelName)")
+            Text(model.modelName)
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
@@ -330,13 +327,14 @@ struct ProviderDetailView: View {
     }
 }
 
-private struct GroupedModelIndices {
-    var activeMainstream: [Int] = []
-    var activeOther: [Int] = []
-    var inactiveMainstream: [Int] = []
-    var inactiveOther: [Int] = []
-    var filteredActive: [Int] = []
-    var filteredInactive: [Int] = []
+private struct ModelListSection: Identifiable {
+    let title: String
+    let indices: [Int]
+    let isActive: Bool
+
+    var id: String {
+        "\(isActive ? "active" : "inactive")-\(title)"
+    }
 }
 
 private enum ModelCategoryFilter: String, CaseIterable, Identifiable {
