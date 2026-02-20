@@ -9,25 +9,25 @@ struct ProviderListView: View {
     @State private var providerToDelete: Provider?
     @State private var showDeleteAlert = false
     @State private var isEditingModelOrder = false
+    @State private var editMode: EditMode = .inactive
     
     var body: some View {
         List {
             if isEditingModelOrder {
                 Section(
                     header: Text("模型顺序"),
-                    footer: Text("这里维护全局模型顺序（隐藏索引）。上下移动后，模型选择列表会按新顺序展示。")
+                    footer: Text("这里维护全局模型顺序（隐藏索引）。拖拽调整后，模型选择列表会按新顺序展示。")
                 ) {
                     if viewModel.configuredModels.isEmpty {
                         Text("暂无可排序模型。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
-                            modelOrderRow(
-                                runnable: runnable,
-                                position: position,
-                                total: viewModel.configuredModels.count
-                            )
+                        ForEach(viewModel.configuredModels, id: \.id) { runnable in
+                            modelOrderRow(runnable: runnable)
+                        }
+                        .onMove { offsets, destination in
+                            ChatService.shared.moveConfiguredModels(fromOffsets: offsets, toOffset: destination)
                         }
                     }
                 }
@@ -61,11 +61,18 @@ struct ProviderListView: View {
             }
         }
         .navigationTitle("提供商设置")
+        .environment(\.editMode, $editMode)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 if !viewModel.configuredModels.isEmpty {
                     Button(isEditingModelOrder ? "完成" : "编辑") {
-                        isEditingModelOrder.toggle()
+                        if isEditingModelOrder {
+                            editMode = .inactive
+                            isEditingModelOrder = false
+                        } else {
+                            isEditingModelOrder = true
+                            editMode = .active
+                        }
                     }
                 }
             }
@@ -115,23 +122,14 @@ struct ProviderListView: View {
         }
         .onChange(of: viewModel.configuredModels.count) { _, count in
             if count < 2 {
+                editMode = .inactive
                 isEditingModelOrder = false
             }
         }
     }
 
-    private func moveModelUp(at position: Int) {
-        guard position > 0 else { return }
-        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position - 1)
-    }
-
-    private func moveModelDown(at position: Int, total: Int) {
-        guard position + 1 < total else { return }
-        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position + 1)
-    }
-
     @ViewBuilder
-    private func modelOrderRow(runnable: RunnableModel, position: Int, total: Int) -> some View {
+    private func modelOrderRow(runnable: RunnableModel) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(runnable.model.displayName)
@@ -145,24 +143,6 @@ struct ProviderListView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-            }
-            Spacer()
-            VStack(spacing: 6) {
-                Button {
-                    moveModelUp(at: position)
-                } label: {
-                    Image(systemName: "chevron.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(position == 0)
-
-                Button {
-                    moveModelDown(at: position, total: total)
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.borderless)
-                .disabled(position + 1 >= total)
             }
         }
     }
