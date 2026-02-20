@@ -14,9 +14,6 @@ struct ProviderDetailView: View {
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
 
     var body: some View {
-        let activeSections = sections(forActive: true)
-        let inactiveSections = sections(forActive: false)
-
         List {
             Section("列表设置") {
                 Toggle("按模型家族分组", isOn: $groupByFamilySection)
@@ -30,23 +27,39 @@ struct ProviderDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if groupByFamilySection {
+                let activeSections = sections(forActive: true)
+                let inactiveSections = sections(forActive: false)
 
-            ForEach(activeSections) { section in
+                ForEach(activeSections) { section in
+                    modelSection(
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
+                    )
+                }
+
+                ForEach(inactiveSections) { section in
+                    modelSection(
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
+                    )
+                }
+            } else {
                 modelSection(
-                    title: section.title,
-                    indices: section.indices,
-                    isActive: section.isActive
+                    title: "已添加",
+                    indices: filteredIndices(forActive: true),
+                    isActive: true
                 )
-            }
-
-            ForEach(inactiveSections) { section in
                 modelSection(
-                    title: section.title,
-                    indices: section.indices,
-                    isActive: section.isActive
+                    title: "未添加",
+                    indices: filteredIndices(forActive: false),
+                    isActive: false
                 )
             }
         }
+        .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
         .environment(\.editMode, $editMode)
         .overlay {
             if isFetchingModels {

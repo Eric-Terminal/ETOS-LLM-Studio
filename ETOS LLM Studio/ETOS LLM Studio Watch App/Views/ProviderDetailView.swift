@@ -27,9 +27,6 @@ struct ProviderDetailView: View {
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
     
     var body: some View {
-        let activeSections = sections(forActive: true)
-        let inactiveSections = sections(forActive: false)
-
         ZStack {
             List {
                 if isSearchPresented {
@@ -64,23 +61,39 @@ struct ProviderDetailView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                if groupByFamilySection {
+                    let activeSections = sections(forActive: true)
+                    let inactiveSections = sections(forActive: false)
 
-                ForEach(activeSections) { section in
+                    ForEach(activeSections) { section in
+                        modelSection(
+                            title: section.title,
+                            indices: section.indices,
+                            isActive: section.isActive
+                        )
+                    }
+
+                    ForEach(inactiveSections) { section in
+                        modelSection(
+                            title: section.title,
+                            indices: section.indices,
+                            isActive: section.isActive
+                        )
+                    }
+                } else {
                     modelSection(
-                        title: section.title,
-                        indices: section.indices,
-                        isActive: section.isActive
+                        title: "已添加",
+                        indices: filteredIndices(forActive: true),
+                        isActive: true
                     )
-                }
-
-                ForEach(inactiveSections) { section in
                     modelSection(
-                        title: section.title,
-                        indices: section.indices,
-                        isActive: section.isActive
+                        title: "未添加",
+                        indices: filteredIndices(forActive: false),
+                        isActive: false
                     )
                 }
             }
+            .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
             
             if isFetchingModels {
                 ProgressView("正在获取...")
