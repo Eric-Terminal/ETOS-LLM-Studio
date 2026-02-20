@@ -6,6 +6,7 @@
 // 定义内容:
 // - 显示一个提供商下的所有模型
 // - 允许用户激活/禁用模型、添加新模型、从云端获取模型列表
+// - 支持按“主流/其他”分组与筛选
 // ============================================================================
 
 import SwiftUI
@@ -22,10 +23,11 @@ struct ProviderDetailView: View {
     @State private var searchText = ""
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
+    @AppStorage("providerDetail.modelCategoryFilter") private var modelCategoryFilterRaw = ModelCategoryFilter.all.rawValue
+    @AppStorage("providerDetail.groupByMainstream") private var groupByMainstreamCategory = true
     
     var body: some View {
-        let activeIndices = activeModelIndices()
-        let inactiveIndices = inactiveModelIndices()
+        let groupedIndices = buildGroupedIndices()
 
         ZStack {
             List {
@@ -49,31 +51,56 @@ struct ProviderDetailView: View {
                     }
                 }
 
-                Section("已添加") {
-                    if activeIndices.isEmpty {
-                        Text(isSearching ? "没有匹配的已添加模型" : "暂无已添加模型")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(activeIndices, id: \.self) { index in
-                            modelRow(for: index, isActive: true)
-                        }
-                        .onDelete { offsets in
-                            deleteModels(at: offsets, in: activeIndices)
+                Section("列表设置") {
+                    Picker("模型分类", selection: modelCategoryFilterBinding) {
+                        ForEach(ModelCategoryFilter.allCases) { filter in
+                            Text(filter.title).tag(filter)
                         }
                     }
+
+                    Toggle("按主流/其他分组", isOn: $groupByMainstreamCategory)
                 }
 
-                Section("未添加") {
-                    if inactiveIndices.isEmpty {
-                        Text(isSearching ? "没有匹配的未添加模型" : "暂无未添加模型")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(inactiveIndices, id: \.self) { index in
-                            modelRow(for: index, isActive: false)
-                        }
+                if groupByMainstreamCategory {
+                    if modelCategoryFilter != .other {
+                        modelSection(
+                            title: "已添加 · 主流",
+                            indices: groupedIndices.activeMainstream,
+                            isActive: true
+                        )
                     }
+                    if modelCategoryFilter != .mainstream {
+                        modelSection(
+                            title: "已添加 · 其他",
+                            indices: groupedIndices.activeOther,
+                            isActive: true
+                        )
+                    }
+                    if modelCategoryFilter != .other {
+                        modelSection(
+                            title: "未添加 · 主流",
+                            indices: groupedIndices.inactiveMainstream,
+                            isActive: false
+                        )
+                    }
+                    if modelCategoryFilter != .mainstream {
+                        modelSection(
+                            title: "未添加 · 其他",
+                            indices: groupedIndices.inactiveOther,
+                            isActive: false
+                        )
+                    }
+                } else {
+                    modelSection(
+                        title: "已添加",
+                        indices: groupedIndices.filteredActive,
+                        isActive: true
+                    )
+                    modelSection(
+                        title: "未添加",
+                        indices: groupedIndices.filteredInactive,
+                        isActive: false
+                    )
                 }
             }
             
@@ -130,15 +157,11 @@ struct ProviderDetailView: View {
         
         do {
             let fetchedModels = try await ChatService.shared.fetchModels(for: provider)
-            
             let existingModelNames = Set(provider.models.map { $0.modelName })
-            
-            for fetchedModel in fetchedModels {
-                if !existingModelNames.contains(fetchedModel.modelName) {
-                    provider.models.append(fetchedModel)
-                }
+
+            for fetchedModel in fetchedModels where !existingModelNames.contains(fetchedModel.modelName) {
+                provider.models.append(fetchedModel)
             }
-            
         } catch {
             fetchError = error.localizedDescription
             showErrorAlert = true
@@ -175,15 +198,88 @@ struct ProviderDetailView: View {
             || model.modelName.lowercased().contains(keyword)
     }
 
-    private func activeModelIndices() -> [Int] {
-        provider.models.indices.filter {
-            provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
+    private func modelMatchesCategoryFilter(_ model: Model) -> Bool {
+        switch modelCategoryFilter {
+        case .all:
+            return true
+        case .mainstream:
+            return model.isMainstreamModel
+        case .other:
+            return !model.isMainstreamModel
         }
     }
 
-    private func inactiveModelIndices() -> [Int] {
-        provider.models.indices.filter {
-            !provider.models[$0].isActivated && modelMatchesSearch(provider.models[$0])
+    private func buildGroupedIndices() -> GroupedModelIndices {
+        var grouped = GroupedModelIndices()
+
+        for index in provider.models.indices {
+            let model = provider.models[index]
+            guard modelMatchesSearch(model), modelMatchesCategoryFilter(model) else {
+                continue
+            }
+
+            if model.isActivated {
+                grouped.filteredActive.append(index)
+            } else {
+                grouped.filteredInactive.append(index)
+            }
+
+            if model.isMainstreamModel {
+                if model.isActivated {
+                    grouped.activeMainstream.append(index)
+                } else {
+                    grouped.inactiveMainstream.append(index)
+                }
+            } else {
+                if model.isActivated {
+                    grouped.activeOther.append(index)
+                } else {
+                    grouped.inactiveOther.append(index)
+                }
+            }
+        }
+
+        return grouped
+    }
+
+    private var modelCategoryFilter: ModelCategoryFilter {
+        get { ModelCategoryFilter(rawValue: modelCategoryFilterRaw) ?? .all }
+        set { modelCategoryFilterRaw = newValue.rawValue }
+    }
+
+    private var modelCategoryFilterBinding: Binding<ModelCategoryFilter> {
+        Binding(
+            get: { modelCategoryFilter },
+            set: { modelCategoryFilter = $0 }
+        )
+    }
+
+    private func emptyStateText(forActiveSection isActive: Bool) -> String {
+        if isSearching {
+            return isActive ? "没有匹配的已添加模型" : "没有匹配的未添加模型"
+        }
+        return isActive ? "暂无已添加模型" : "暂无未添加模型"
+    }
+
+    @ViewBuilder
+    private func modelSection(title: String, indices: [Int], isActive: Bool) -> some View {
+        Section(title) {
+            if indices.isEmpty {
+                Text(emptyStateText(forActiveSection: isActive))
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            } else if isActive {
+                ForEach(indices, id: \.self) { index in
+                    modelRow(for: index, isActive: true)
+                }
+                .onDelete { offsets in
+                    deleteModels(at: offsets, in: indices)
+                }
+            } else {
+                ForEach(indices, id: \.self) { index in
+                    modelRow(for: index, isActive: false)
+                }
+            }
         }
     }
 
@@ -202,26 +298,63 @@ struct ProviderDetailView: View {
 
     @ViewBuilder
     private func modelRow(for index: Int, isActive: Bool) -> some View {
+        let model = provider.models[index]
+
         if isActive {
             NavigationLink(destination: ModelSettingsView(model: $provider.models[index], provider: provider)) {
-                Text(provider.models[index].displayName)
+                modelLabel(for: model)
             }
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(provider.models[index].displayName)
-                    Spacer()
-                    if !isActive {
-                        Button {
-                            provider.models[index].isActivated = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("激活模型")
-                    }
+            HStack(spacing: 6) {
+                modelLabel(for: model)
+                Spacer()
+                Button {
+                    provider.models[index].isActivated = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
                 }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("激活模型")
             }
+        }
+    }
+
+    private func modelLabel(for model: Model) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(model.displayName)
+                .lineLimit(1)
+            Text("\(model.mainstreamFamily?.displayName ?? "其他") · \(model.modelName)")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+private struct GroupedModelIndices {
+    var activeMainstream: [Int] = []
+    var activeOther: [Int] = []
+    var inactiveMainstream: [Int] = []
+    var inactiveOther: [Int] = []
+    var filteredActive: [Int] = []
+    var filteredInactive: [Int] = []
+}
+
+private enum ModelCategoryFilter: String, CaseIterable, Identifiable {
+    case all
+    case mainstream
+    case other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "全部"
+        case .mainstream:
+            return "主流"
+        case .other:
+            return "其他"
         }
     }
 }

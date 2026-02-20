@@ -57,6 +57,35 @@ fileprivate class MockURLProtocol: URLProtocol {
     }
 }
 
+@Suite("MainstreamModelFamily Tests")
+struct MainstreamModelFamilyTests {
+    @Test("按模型ID识别主流模型家族")
+    func testDetectByModelName() {
+        #expect(MainstreamModelFamily.detect(modelName: "gpt-4o") == .chatgpt)
+        #expect(MainstreamModelFamily.detect(modelName: "gemini-2.5-pro") == .gemini)
+        #expect(MainstreamModelFamily.detect(modelName: "claude-3-7-sonnet") == .claude)
+        #expect(MainstreamModelFamily.detect(modelName: "deepseek-chat") == .deepseek)
+        #expect(MainstreamModelFamily.detect(modelName: "qwen-max") == .qwen)
+        #expect(MainstreamModelFamily.detect(modelName: "moonshot-v1-8k") == .kimi)
+        #expect(MainstreamModelFamily.detect(modelName: "doubao-seed-1.6") == .doubao)
+        #expect(MainstreamModelFamily.detect(modelName: "grok-3") == .grok)
+        #expect(MainstreamModelFamily.detect(modelName: "meta-llama/llama-3.1-8b-instruct") == .llama)
+        #expect(MainstreamModelFamily.detect(modelName: "mixtral-8x7b-instruct") == .mistral)
+        #expect(MainstreamModelFamily.detect(modelName: "glm-4-plus") == .glm)
+    }
+
+    @Test("按显示名识别主流模型家族")
+    func testDetectByDisplayName() {
+        #expect(MainstreamModelFamily.detect(modelName: "custom-model", displayName: "ChatGPT 企业版") == .chatgpt)
+        #expect(MainstreamModelFamily.detect(modelName: "custom-model", displayName: "豆包 Pro") == .doubao)
+    }
+
+    @Test("未知模型识别为其他")
+    func testUnknownModelReturnsNil() {
+        #expect(MainstreamModelFamily.detect(modelName: "my-private-model") == nil)
+    }
+}
+
 
 // MARK: - MemoryManager Tests
 
