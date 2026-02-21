@@ -35,6 +35,7 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
 struct ProviderListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var selectedTab: ProviderManagementTab = .provider
+    @State private var isAddingProvider = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -60,12 +61,31 @@ struct ProviderListView: View {
                 .tag(ProviderManagementTab.specializedModel)
         }
         .navigationTitle("提供商与模型管理")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if selectedTab == .provider {
+                    Button {
+                        isAddingProvider = true
+                    } label: {
+                        Label("添加提供商", systemImage: "plus")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $isAddingProvider) {
+            NavigationStack {
+                ProviderEditView(
+                    provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"),
+                    isNew: true
+                )
+                .environmentObject(viewModel)
+            }
+        }
     }
 }
 
 private struct ProviderManagementContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @State private var isAddingProvider = false
     @State private var providerToEdit: Provider?
     @State private var providerToDelete: Provider?
     @State private var showDeleteAlert = false
@@ -99,24 +119,6 @@ private struct ProviderManagementContentView: View {
                         }
                     }
                 }
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    isAddingProvider = true
-                } label: {
-                    Label("添加提供商", systemImage: "plus")
-                }
-            }
-        }
-        .sheet(isPresented: $isAddingProvider) {
-            NavigationStack {
-                ProviderEditView(
-                    provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"),
-                    isNew: true
-                )
-                .environmentObject(viewModel)
             }
         }
         .sheet(item: $providerToEdit) { provider in
