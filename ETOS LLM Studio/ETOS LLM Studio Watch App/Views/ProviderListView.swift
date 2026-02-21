@@ -1,67 +1,35 @@
 import SwiftUI
 import Shared
 
-private enum WatchProviderManagementTab: String, CaseIterable, Identifiable {
-    case provider
-    case modelOrder
-    case specializedModel
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .provider:
-            return "提供商管理"
-        case .modelOrder:
-            return "模型顺序"
-        case .specializedModel:
-            return "专用模型"
-        }
-    }
-}
-
 struct ProviderListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @State private var selectedTab: WatchProviderManagementTab = .provider
 
     var body: some View {
-        Group {
-            switch selectedTab {
-            case .provider:
-                WatchProviderManagementContentView()
-                    .environmentObject(viewModel)
-            case .modelOrder:
-                WatchProviderModelOrderContentView()
-                    .environmentObject(viewModel)
-            case .specializedModel:
-                SpecializedModelSelectorView()
-                    .environmentObject(viewModel)
+        List {
+            Section("管理入口") {
+                NavigationLink {
+                    WatchProviderManagementContentView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("提供商管理", systemImage: "shippingbox")
+                }
+
+                NavigationLink {
+                    WatchProviderModelOrderContentView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("模型顺序", systemImage: "arrow.up.arrow.down")
+                }
+
+                NavigationLink {
+                    SpecializedModelSelectorView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("专用模型", systemImage: "slider.horizontal.3")
+                }
             }
         }
         .navigationTitle("提供商与模型管理")
-        .safeAreaInset(edge: .top) {
-            HStack(spacing: 6) {
-                ForEach(WatchProviderManagementTab.allCases) { tab in
-                    Button {
-                        selectedTab = tab
-                    } label: {
-                        Text(tab.title)
-                            .font(.footnote)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(selectedTab == tab ? Color.accentColor.opacity(0.2) : Color.clear)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 4)
-            .padding(.bottom, 2)
-            .background(.thinMaterial)
-        }
     }
 }
 
@@ -90,6 +58,7 @@ private struct WatchProviderManagementContentView: View {
                 }
             }
         }
+        .navigationTitle("提供商管理")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { isAddingProvider = true }) {
@@ -138,6 +107,7 @@ private struct WatchProviderModelOrderContentView: View {
                 }
             }
         }
+        .navigationTitle("模型顺序")
     }
 
     private func moveModelUp(at position: Int) {
