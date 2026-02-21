@@ -4,6 +4,7 @@ import Shared
 
 private enum ProviderManagementTab: String, CaseIterable, Identifiable {
     case provider
+    case modelOrder
     case specializedModel
 
     var id: String { rawValue }
@@ -12,6 +13,8 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
         switch self {
         case .provider:
             return "提供商管理"
+        case .modelOrder:
+            return "模型顺序"
         case .specializedModel:
             return "专用模型"
         }
@@ -21,6 +24,8 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
         switch self {
         case .provider:
             return "shippingbox"
+        case .modelOrder:
+            return "arrow.up.arrow.down"
         case .specializedModel:
             return "slider.horizontal.3"
         }
@@ -36,6 +41,9 @@ struct ProviderListView: View {
             switch selectedTab {
             case .provider:
                 ProviderManagementContentView()
+                    .environmentObject(viewModel)
+            case .modelOrder:
+                ProviderModelOrderContentView()
                     .environmentObject(viewModel)
             case .specializedModel:
                 SpecializedModelSelectorView()
@@ -87,96 +95,44 @@ private struct ProviderManagementContentView: View {
     @State private var providerToEdit: Provider?
     @State private var providerToDelete: Provider?
     @State private var showDeleteAlert = false
-    @State private var isEditingModelOrder = false
-    @State private var editMode: EditMode = .inactive
-    @State private var editingConfiguredModels: [RunnableModel] = []
-    private let modeTransitionAnimation = Animation.spring(response: 0.36, dampingFraction: 0.88)
 
     var body: some View {
         List {
-            if isEditingModelOrder {
-                Section(
-                    header: Text("模型顺序"),
-                    footer: Text("这里维护全局模型顺序（隐藏索引）。拖拽调整后，模型选择列表会按新顺序展示。")
-                ) {
-                    if editingConfiguredModels.isEmpty {
-                        Text("暂无可排序模型。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(editingConfiguredModels, id: \.id) { runnable in
-                            modelOrderRow(runnable: runnable)
-                        }
-                        .onMove { offsets, destination in
-                            editingConfiguredModels.move(fromOffsets: offsets, toOffset: destination)
+            Section {
+                ForEach(viewModel.providers) { provider in
+                    NavigationLink {
+                        ProviderDetailView(provider: provider)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(provider.name)
+                            Text(provider.baseURL)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                }
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .opacity
-                    )
-                )
-            } else {
-                Section {
-                    ForEach(viewModel.providers) { provider in
-                        NavigationLink {
-                            ProviderDetailView(provider: provider)
+                    .contextMenu {
+                        Button {
+                            providerToEdit = provider
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(provider.name)
-                                Text(provider.baseURL)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            Label("编辑提供商", systemImage: "pencil")
                         }
-                        .contextMenu {
-                            Button {
-                                providerToEdit = provider
-                            } label: {
-                                Label("编辑提供商", systemImage: "pencil")
-                            }
 
-                            Button(role: .destructive) {
-                                providerToDelete = provider
-                                showDeleteAlert = true
-                            } label: {
-                                Label("删除提供商", systemImage: "trash")
-                            }
+                        Button(role: .destructive) {
+                            providerToDelete = provider
+                            showDeleteAlert = true
+                        } label: {
+                            Label("删除提供商", systemImage: "trash")
                         }
                     }
                 }
-                .transition(
-                    .asymmetric(
-                        insertion: .opacity,
-                        removal: .move(edge: .top).combined(with: .opacity)
-                    )
-                )
             }
         }
-        .animation(modeTransitionAnimation, value: isEditingModelOrder)
-        .environment(\.editMode, $editMode)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                if !viewModel.configuredModels.isEmpty {
-                    Button(isEditingModelOrder ? "完成" : "编辑") {
-                        if isEditingModelOrder {
-                            finishModelOrderEditing()
-                        } else {
-                            beginModelOrderEditing()
-                        }
-                    }
-                }
-            }
-
             ToolbarItem(placement: .navigationBarTrailing) {
-                if !isEditingModelOrder {
-                    Button {
-                        isAddingProvider = true
-                    } label: {
-                        Label("添加提供商", systemImage: "plus")
-                    }
+                Button {
+                    isAddingProvider = true
+                } label: {
+                    Label("添加提供商", systemImage: "plus")
                 }
             }
         }
@@ -213,40 +169,47 @@ private struct ProviderManagementContentView: View {
                 Text("此操作无法撤销。")
             }
         }
-        .onChange(of: viewModel.configuredModels.count) { _, count in
-            if count < 2 {
-                finishModelOrderEditing()
+    }
+}
+
+private struct ProviderModelOrderContentView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+
+    var body: some View {
+        List {
+            Section(
+                header: Text("模型顺序"),
+                footer: Text("维护全局模型顺序。模型选择列表会按这里的顺序展示。")
+            ) {
+                if viewModel.configuredModels.isEmpty {
+                    Text("暂无可排序模型。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
+                        modelOrderRow(
+                            runnable: runnable,
+                            position: position,
+                            total: viewModel.configuredModels.count
+                        )
+                    }
+                }
             }
         }
-        .onDisappear {
-            finishModelOrderEditing()
-        }
     }
 
-    private func beginModelOrderEditing() {
-        editingConfiguredModels = viewModel.configuredModels
-        withAnimation(modeTransitionAnimation) {
-            isEditingModelOrder = true
-            editMode = .active
-        }
+    private func moveModelUp(at position: Int) {
+        guard position > 0 else { return }
+        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position - 1)
     }
 
-    private func finishModelOrderEditing() {
-        guard isEditingModelOrder else { return }
-        let editedIDs = editingConfiguredModels.map(\.id)
-        let currentIDs = viewModel.configuredModels.map(\.id)
-        if !editedIDs.isEmpty, editedIDs != currentIDs {
-            ChatService.shared.setConfiguredModelOrder(editedIDs, notifyChange: true)
-        }
-        withAnimation(modeTransitionAnimation) {
-            editMode = .inactive
-            isEditingModelOrder = false
-        }
-        editingConfiguredModels = []
+    private func moveModelDown(at position: Int, total: Int) {
+        guard position + 1 < total else { return }
+        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position + 1)
     }
 
     @ViewBuilder
-    private func modelOrderRow(runnable: RunnableModel) -> some View {
+    private func modelOrderRow(runnable: RunnableModel, position: Int, total: Int) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(runnable.model.displayName)
@@ -260,6 +223,26 @@ private struct ProviderManagementContentView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Spacer()
+
+            VStack(spacing: 6) {
+                Button {
+                    moveModelUp(at: position)
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(position == 0)
+
+                Button {
+                    moveModelDown(at: position, total: total)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(position + 1 >= total)
             }
         }
     }

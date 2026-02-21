@@ -3,6 +3,7 @@ import Shared
 
 private enum WatchProviderManagementTab: String, CaseIterable, Identifiable {
     case provider
+    case modelOrder
     case specializedModel
 
     var id: String { rawValue }
@@ -11,6 +12,8 @@ private enum WatchProviderManagementTab: String, CaseIterable, Identifiable {
         switch self {
         case .provider:
             return "提供商管理"
+        case .modelOrder:
+            return "模型顺序"
         case .specializedModel:
             return "专用模型"
         }
@@ -26,6 +29,9 @@ struct ProviderListView: View {
             switch selectedTab {
             case .provider:
                 WatchProviderManagementContentView()
+                    .environmentObject(viewModel)
+            case .modelOrder:
+                WatchProviderModelOrderContentView()
                     .environmentObject(viewModel)
             case .specializedModel:
                 SpecializedModelSelectorView()
@@ -62,64 +68,32 @@ struct ProviderListView: View {
 private struct WatchProviderManagementContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var isAddingProvider = false
-    @State private var isEditingModelOrder = false
 
     var body: some View {
         List {
-            if isEditingModelOrder {
-                Section(
-                    header: Text("模型顺序"),
-                    footer: Text("维护全局模型顺序，模型选择列表会按这里的顺序展示。")
-                ) {
-                    if viewModel.configuredModels.isEmpty {
-                        Text("暂无可排序模型。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
-                            modelOrderRow(
-                                runnable: runnable,
-                                position: position,
-                                total: viewModel.configuredModels.count
-                            )
-                        }
-                    }
+            ForEach(viewModel.providers) { provider in
+                NavigationLink(destination: ProviderDetailView(provider: provider)) {
+                    Text(provider.name)
                 }
-            } else {
-                ForEach(viewModel.providers) { provider in
-                    NavigationLink(destination: ProviderDetailView(provider: provider)) {
-                        Text(provider.name)
+                .swipeActions(edge: .leading) {
+                    NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
+                        Label("编辑", systemImage: "pencil")
                     }
-                    .swipeActions(edge: .leading) {
-                        NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
-                            Label("编辑", systemImage: "pencil")
-                        }
-                        .tint(.blue)
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            deleteProvider(provider)
-                        } label: {
-                            Label("删除", systemImage: "trash")
-                        }
+                    .tint(.blue)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        deleteProvider(provider)
+                    } label: {
+                        Label("删除", systemImage: "trash")
                     }
                 }
             }
         }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                if !viewModel.configuredModels.isEmpty {
-                    Button(isEditingModelOrder ? "完成" : "编辑") {
-                        isEditingModelOrder.toggle()
-                    }
-                }
-            }
-
             ToolbarItem(placement: .topBarTrailing) {
-                if !isEditingModelOrder {
-                    Button(action: { isAddingProvider = true }) {
-                        Image(systemName: "plus")
-                    }
+                Button(action: { isAddingProvider = true }) {
+                    Image(systemName: "plus")
                 }
             }
         }
@@ -132,16 +106,38 @@ private struct WatchProviderManagementContentView: View {
                 .environmentObject(viewModel)
             }
         }
-        .onChange(of: viewModel.configuredModels.count) { _, count in
-            if count < 2 {
-                isEditingModelOrder = false
-            }
-        }
     }
 
     private func deleteProvider(_ provider: Provider) {
         ConfigLoader.deleteProvider(provider)
         ChatService.shared.reloadProviders()
+    }
+}
+
+private struct WatchProviderModelOrderContentView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+
+    var body: some View {
+        List {
+            Section(
+                header: Text("模型顺序"),
+                footer: Text("维护全局模型顺序，模型选择列表会按这里的顺序展示。")
+            ) {
+                if viewModel.configuredModels.isEmpty {
+                    Text("暂无可排序模型。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
+                        modelOrderRow(
+                            runnable: runnable,
+                            position: position,
+                            total: viewModel.configuredModels.count
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private func moveModelUp(at position: Int) {
