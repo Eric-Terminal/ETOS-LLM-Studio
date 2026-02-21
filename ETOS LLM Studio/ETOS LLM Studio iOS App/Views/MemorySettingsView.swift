@@ -75,14 +75,23 @@ struct MemorySettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker("嵌入模型", selection: embeddingModelBinding) {
-                        Text("未选择").tag(Optional<RunnableModel>.none)
-                        ForEach(options) { runnable in
-                            Text("\(runnable.model.displayName) | \(runnable.provider.name)")
-                                .tag(Optional<RunnableModel>.some(runnable))
+                    NavigationLink {
+                        EmbeddingModelSelectionView(
+                            embeddingModels: options,
+                            selectedEmbeddingModel: embeddingModelBinding
+                        )
+                    } label: {
+                        HStack {
+                            Text("嵌入模型")
+                            MarqueeText(
+                                content: selectedEmbeddingModelLabel(in: options),
+                                uiFont: .preferredFont(forTextStyle: .body)
+                            )
+                            .foregroundStyle(.secondary)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
-                    .pickerStyle(.menu)
                 }
             } header: {
                 Text("嵌入模型")
@@ -337,6 +346,14 @@ struct MemorySettingsView: View {
             await viewModel.deleteMemories(at: offsets)
         }
     }
+
+    private func selectedEmbeddingModelLabel(in options: [RunnableModel]) -> String {
+        guard let selected = viewModel.selectedEmbeddingModel,
+              options.contains(where: { $0.id == selected.id }) else {
+            return "未选择"
+        }
+        return "\(selected.model.displayName) | \(selected.provider.name)"
+    }
     
     private func triggerFullReembed() {
         guard !isReembeddingMemories else { return }
@@ -354,6 +371,54 @@ struct MemorySettingsView: View {
                     reembedAlert = MemoryReembedAlert.failure(message: error.localizedDescription)
                     isReembeddingMemories = false
                 }
+            }
+        }
+    }
+}
+
+private struct EmbeddingModelSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    let embeddingModels: [RunnableModel]
+    @Binding var selectedEmbeddingModel: RunnableModel?
+    
+    var body: some View {
+        List {
+            Button {
+                select(nil)
+            } label: {
+                selectionRow(title: "未选择", isSelected: selectedEmbeddingModel == nil)
+            }
+            
+            ForEach(embeddingModels) { runnable in
+                Button {
+                    select(runnable)
+                } label: {
+                    selectionRow(
+                        title: "\(runnable.model.displayName) | \(runnable.provider.name)",
+                        isSelected: selectedEmbeddingModel?.id == runnable.id
+                    )
+                }
+            }
+        }
+        .navigationTitle("嵌入模型")
+    }
+    
+    private func select(_ model: RunnableModel?) {
+        selectedEmbeddingModel = model
+        dismiss()
+    }
+    
+    @ViewBuilder
+    private func selectionRow(title: String, isSelected: Bool) -> some View {
+        HStack {
+            MarqueeText(content: title, uiFont: .preferredFont(forTextStyle: .body))
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.footnote)
+                    .foregroundColor(.accentColor)
             }
         }
     }

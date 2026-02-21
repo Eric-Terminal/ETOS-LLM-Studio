@@ -46,10 +46,13 @@ struct SettingsView: View {
                         } label: {
                             HStack {
                                 Text("当前模型")
-                                Spacer()
-                                Text(selectedModelLabel(in: options))
+                                MarqueeText(
+                                    content: selectedModelLabel(in: options),
+                                    uiFont: .preferredFont(forTextStyle: .footnote)
+                                )
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                                    .allowsHitTesting(false)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                         }
                     }
@@ -256,8 +259,9 @@ private struct ModelSelectionView: View {
     @ViewBuilder
     private func selectionRow(title: String, isSelected: Bool) -> some View {
         HStack {
-            Text(title)
-            Spacer()
+            MarqueeText(content: title, uiFont: .preferredFont(forTextStyle: .body))
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if isSelected {
                 Image(systemName: "checkmark")
                     .font(.footnote)
