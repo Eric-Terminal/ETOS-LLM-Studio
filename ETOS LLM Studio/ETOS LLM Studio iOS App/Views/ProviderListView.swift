@@ -37,55 +37,29 @@ struct ProviderListView: View {
     @State private var selectedTab: ProviderManagementTab = .provider
 
     var body: some View {
-        Group {
-            switch selectedTab {
-            case .provider:
-                ProviderManagementContentView()
-                    .environmentObject(viewModel)
-            case .modelOrder:
-                ProviderModelOrderContentView()
-                    .environmentObject(viewModel)
-            case .specializedModel:
-                SpecializedModelSelectorView()
-                    .environmentObject(viewModel)
-            }
+        TabView(selection: $selectedTab) {
+            ProviderManagementContentView()
+                .environmentObject(viewModel)
+                .tabItem {
+                    Label(ProviderManagementTab.provider.title, systemImage: ProviderManagementTab.provider.iconName)
+                }
+                .tag(ProviderManagementTab.provider)
+
+            ProviderModelOrderContentView()
+                .environmentObject(viewModel)
+                .tabItem {
+                    Label(ProviderManagementTab.modelOrder.title, systemImage: ProviderManagementTab.modelOrder.iconName)
+                }
+                .tag(ProviderManagementTab.modelOrder)
+
+            SpecializedModelSelectorView()
+                .environmentObject(viewModel)
+                .tabItem {
+                    Label(ProviderManagementTab.specializedModel.title, systemImage: ProviderManagementTab.specializedModel.iconName)
+                }
+                .tag(ProviderManagementTab.specializedModel)
         }
         .navigationTitle("提供商与模型管理")
-        .safeAreaInset(edge: .bottom) {
-            tabBar
-        }
-    }
-
-    private var tabBar: some View {
-        HStack(spacing: 10) {
-            ForEach(ProviderManagementTab.allCases) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: tab.iconName)
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(tab.title)
-                            .font(.caption2)
-                    }
-                    .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(selectedTab == tab ? Color.accentColor.opacity(0.15) : Color.clear)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-            Divider()
-        }
     }
 }
 
