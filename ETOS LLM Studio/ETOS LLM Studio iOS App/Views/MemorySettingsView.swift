@@ -96,7 +96,7 @@ struct MemorySettingsView: View {
             } header: {
                 Text("嵌入模型")
             } footer: {
-                Text("列出当前配置的所有模型，记忆嵌入请求会使用所选模型发送。")
+                Text("列出当前配置的所有模型，记忆嵌入请求会使用所选模型发送。也可以在“提供商与模型管理 > 专用模型”中统一设置。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -1,21 +1,55 @@
-// ============================================================================
-// ProviderListView.swift
-// ============================================================================
-// ETOS LLM Studio Watch App 提供商列表视图
-//
-// 定义内容:
-// - 显示所有已配置的 API 提供商
-// - 提供添加和删除提供商的功能
-// ============================================================================
-
 import SwiftUI
 import Shared
 
+private enum WatchProviderManagementTab: String, CaseIterable, Identifiable {
+    case provider
+    case specializedModel
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .provider:
+            return "提供商管理"
+        case .specializedModel:
+            return "专用模型"
+        }
+    }
+}
+
 struct ProviderListView: View {
-    // 从环境中访问共享视图模型
-    @EnvironmentObject var viewModel: ChatViewModel
-    
-    // 用于显示添加新提供商表单的状态
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @State private var selectedTab: WatchProviderManagementTab = .provider
+
+    var body: some View {
+        Group {
+            switch selectedTab {
+            case .provider:
+                WatchProviderManagementContentView()
+                    .environmentObject(viewModel)
+            case .specializedModel:
+                SpecializedModelSelectorView()
+                    .environmentObject(viewModel)
+            }
+        }
+        .navigationTitle("提供商与模型管理")
+        .safeAreaInset(edge: .top) {
+            Picker("管理页签", selection: $selectedTab) {
+                ForEach(WatchProviderManagementTab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
+            .background(.thinMaterial)
+        }
+    }
+}
+
+private struct WatchProviderManagementContentView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
     @State private var isAddingProvider = false
     @State private var isEditingModelOrder = false
 
@@ -61,7 +95,6 @@ struct ProviderListView: View {
                 }
             }
         }
-        .navigationTitle("提供商设置")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if !viewModel.configuredModels.isEmpty {
@@ -80,10 +113,12 @@ struct ProviderListView: View {
             }
         }
         .sheet(isPresented: $isAddingProvider) {
-            // 传递一个全新的、空的提供商对象给编辑视图
             NavigationStack {
-                ProviderEditView(provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"), isNew: true)
-                    .environmentObject(viewModel)
+                ProviderEditView(
+                    provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"),
+                    isNew: true
+                )
+                .environmentObject(viewModel)
             }
         }
         .onChange(of: viewModel.configuredModels.count) { _, count in

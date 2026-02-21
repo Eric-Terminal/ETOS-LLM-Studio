@@ -163,6 +163,10 @@ struct ModelAdvancedSettingsView: View {
                     Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+
+                    Text("也可以在“提供商与模型管理 > 专用模型”中统一设置。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
                 }
             }

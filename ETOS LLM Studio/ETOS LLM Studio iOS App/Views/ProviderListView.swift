@@ -2,8 +2,87 @@ import SwiftUI
 import Foundation
 import Shared
 
+private enum ProviderManagementTab: String, CaseIterable, Identifiable {
+    case provider
+    case specializedModel
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .provider:
+            return "提供商管理"
+        case .specializedModel:
+            return "专用模型"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .provider:
+            return "shippingbox"
+        case .specializedModel:
+            return "slider.horizontal.3"
+        }
+    }
+}
+
 struct ProviderListView: View {
-    @EnvironmentObject var viewModel: ChatViewModel
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @State private var selectedTab: ProviderManagementTab = .provider
+
+    var body: some View {
+        Group {
+            switch selectedTab {
+            case .provider:
+                ProviderManagementContentView()
+                    .environmentObject(viewModel)
+            case .specializedModel:
+                SpecializedModelSelectorView()
+                    .environmentObject(viewModel)
+            }
+        }
+        .navigationTitle("提供商与模型管理")
+        .safeAreaInset(edge: .bottom) {
+            tabBar
+        }
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 10) {
+            ForEach(ProviderManagementTab.allCases) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: tab.iconName)
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(tab.title)
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(selectedTab == tab ? Color.accentColor.opacity(0.15) : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+}
+
+private struct ProviderManagementContentView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
     @State private var isAddingProvider = false
     @State private var providerToEdit: Provider?
     @State private var providerToDelete: Provider?
@@ -12,7 +91,7 @@ struct ProviderListView: View {
     @State private var editMode: EditMode = .inactive
     @State private var editingConfiguredModels: [RunnableModel] = []
     private let modeTransitionAnimation = Animation.spring(response: 0.36, dampingFraction: 0.88)
-    
+
     var body: some View {
         List {
             if isEditingModelOrder {
@@ -58,7 +137,7 @@ struct ProviderListView: View {
                             } label: {
                                 Label("编辑提供商", systemImage: "pencil")
                             }
-                            
+
                             Button(role: .destructive) {
                                 providerToDelete = provider
                                 showDeleteAlert = true
@@ -77,7 +156,6 @@ struct ProviderListView: View {
             }
         }
         .animation(modeTransitionAnimation, value: isEditingModelOrder)
-        .navigationTitle("提供商设置")
         .environment(\.editMode, $editMode)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {

@@ -81,7 +81,7 @@ struct ImageGenerationFeatureView: View {
                     }
                 }
             } footer: {
-                Text(NSLocalizedString("生图请求会使用这里单独选择的模型，不影响主聊天模型。", comment: "Image generation uses independent model selection"))
+                Text(NSLocalizedString("生图请求会使用这里单独选择的模型，不影响主聊天模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。", comment: "Image generation uses independent model selection"))
             }
 
             Section {

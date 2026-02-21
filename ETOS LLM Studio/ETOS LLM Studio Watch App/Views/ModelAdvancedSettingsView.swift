@@ -202,6 +202,10 @@ struct ModelAdvancedSettingsView: View {
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
+
+                    Text("也可以在“提供商与模型管理 > 专用模型”中统一设置。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
                 }
             }
         }
