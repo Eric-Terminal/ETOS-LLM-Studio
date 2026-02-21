@@ -38,20 +38,19 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("当前模型", selection: $viewModel.selectedModel) {
-                            ForEach(options) { model in
-                                Text("\(model.model.displayName) | \(model.provider.name)")
-                                    .tag(Optional<RunnableModel>.some(model))
+                        NavigationLink {
+                            ModelSelectionView(
+                                models: options,
+                                selectedModel: selectedModelBinding
+                            )
+                        } label: {
+                            HStack {
+                                Text("当前模型")
+                                Spacer()
+                                Text(selectedModelLabel(in: options))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
-                        }
-                        .onAppear {
-                            ensureSelectedModel(in: options)
-                        }
-                        .onChange(of: options.map(\.id)) { _, _ in
-                            ensureSelectedModel(in: options)
-                        }
-                        .onChange(of: viewModel.selectedModel) { _, newValue in
-                            ChatService.shared.setSelectedModel(newValue)
                         }
                     }
 
@@ -167,6 +166,12 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("设置")
+            .onAppear {
+                ensureSelectedModel(in: viewModel.activatedModels)
+            }
+            .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
+                ensureSelectedModel(in: viewModel.activatedModels)
+            }
         }
     }
     
@@ -198,6 +203,66 @@ struct SettingsView: View {
             viewModel.selectedModel = first
             ChatService.shared.setSelectedModel(first)
             return
+        }
+    }
+
+    private var selectedModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedModel },
+            set: { model in
+                viewModel.selectedModel = model
+                ChatService.shared.setSelectedModel(model)
+            }
+        )
+    }
+
+    private func selectedModelLabel(in options: [RunnableModel]) -> String {
+        if let selected = viewModel.selectedModel,
+           options.contains(where: { $0.id == selected.id }) {
+            return "\(selected.model.displayName) | \(selected.provider.name)"
+        }
+        guard let first = options.first else { return "" }
+        return "\(first.model.displayName) | \(first.provider.name)"
+    }
+}
+
+private struct ModelSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let models: [RunnableModel]
+    @Binding var selectedModel: RunnableModel?
+
+    var body: some View {
+        List {
+            ForEach(models) { model in
+                Button {
+                    select(model)
+                } label: {
+                    selectionRow(
+                        title: "\(model.model.displayName) | \(model.provider.name)",
+                        isSelected: selectedModel?.id == model.id
+                    )
+                }
+            }
+        }
+        .navigationTitle("当前模型")
+    }
+
+    private func select(_ model: RunnableModel) {
+        selectedModel = model
+        dismiss()
+    }
+
+    @ViewBuilder
+    private func selectionRow(title: String, isSelected: Bool) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.footnote)
+                    .foregroundColor(.accentColor)
+            }
         }
     }
 }
