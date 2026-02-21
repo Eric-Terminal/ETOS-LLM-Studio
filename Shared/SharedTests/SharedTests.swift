@@ -645,6 +645,8 @@ fileprivate class MockAPIAdapter: APIAdapter {
     var receivedMessages: [ChatMessage]?
     var receivedTools: [InternalToolDefinition]?
     var responseToReturn: ChatMessage?
+    var receivedChatModel: RunnableModel?
+    var receivedTitleModel: RunnableModel?
     
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         self.receivedMessages = messages
@@ -652,8 +654,10 @@ fileprivate class MockAPIAdapter: APIAdapter {
         
         // 根据请求内容返回不同 URL，以便 MockURLProtocol 能够区分它们
         if messages.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {
+            self.receivedTitleModel = model
             return URLRequest(url: URL(string: "https://fake.url/title-gen")!)
         } else {
+            self.receivedChatModel = model
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
         }
     }
@@ -722,10 +726,31 @@ fileprivate struct ChatServiceTests {
         if !allMems.isEmpty {
             await memoryManager.deleteMemories(allMems)
         }
+        UserDefaults.standard.removeObject(forKey: "titleGenerationModelIdentifier")
         // 清理模拟响应，避免测试间互相影响
         MockURLProtocol.mockResponses = [:]
+        mockAdapter.receivedMessages = nil
+        mockAdapter.receivedTools = nil
+        mockAdapter.responseToReturn = nil
+        mockAdapter.receivedChatModel = nil
+        mockAdapter.receivedTitleModel = nil
         // 重置 ChatService 状态
         chatService.createNewSession()
+    }
+
+    private func setupMockResponsesForChatAndTitle(title: String = "测试标题") {
+        let chatURL = URL(string: "https://fake.url/chat")!
+        let titleURL = URL(string: "https://fake.url/title-gen")!
+        let chatHTTPResponse = HTTPURLResponse(url: chatURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let titleHTTPResponse = HTTPURLResponse(url: titleURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let titleJSON = #"{"choices":[{"message":{"content":"\#(title)"}}]}"#.data(using: .utf8) ?? Data()
+        MockURLProtocol.mockResponses[chatURL] = .success((chatHTTPResponse, Data()))
+        MockURLProtocol.mockResponses[titleURL] = .success((titleHTTPResponse, titleJSON))
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "聊天回复")
+    }
+
+    private func activatedChatModels() -> [RunnableModel] {
+        chatService.activatedRunnableModels.filter { $0.model.capabilities.contains(.chat) }
     }
 
     @Test("Auto-naming handles network error during title generation")
@@ -791,6 +816,106 @@ fileprivate struct ChatServiceTests {
         #expect(finalSession?.name == String(expectedInitialName), "当AI返回空标题时，会话名称应保持为用户第一条消息的缩略，而不是变成空字符串。")
         #expect(finalSession?.name != initialSessionName, "会话名称应该已经从'新的对话'变为消息缩略。")
         
+        await cleanup()
+    }
+
+    @Test("Auto-naming prioritizes dedicated title model when configured")
+    func testAutoSessionNaming_UsesDedicatedTitleModel() async throws {
+        await cleanup()
+
+        let chatModels = activatedChatModels()
+        guard chatModels.count >= 2 else {
+            Issue.record("测试环境至少需要 2 个已激活聊天模型。")
+            return
+        }
+        let conversationModel = chatModels[0]
+        let dedicatedTitleModel = chatModels[1]
+        chatService.setSelectedModel(conversationModel)
+        UserDefaults.standard.set(dedicatedTitleModel.id, forKey: "titleGenerationModelIdentifier")
+
+        setupMockResponsesForChatAndTitle(title: "独立标题模型命名")
+
+        await chatService.sendAndProcessMessage(
+            content: "请帮我整理一次模型重构方案",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(mockAdapter.receivedTitleModel?.id == dedicatedTitleModel.id, "标题请求应优先使用独立配置的标题模型。")
+        #expect(mockAdapter.receivedTitleModel?.id != conversationModel.id, "标题请求不应继续绑定主对话模型。")
+
+        await cleanup()
+    }
+
+    @Test("Auto-naming falls back to selected model when dedicated model is empty")
+    func testAutoSessionNaming_FallbackToSelectedModelWhenDedicatedIsEmpty() async throws {
+        await cleanup()
+
+        guard let selectedChatModel = activatedChatModels().first else {
+            Issue.record("测试环境至少需要 1 个已激活聊天模型。")
+            return
+        }
+        chatService.setSelectedModel(selectedChatModel)
+        UserDefaults.standard.removeObject(forKey: "titleGenerationModelIdentifier")
+
+        setupMockResponsesForChatAndTitle(title: "回退到主模型")
+
+        await chatService.sendAndProcessMessage(
+            content: "请帮我写一个 SwiftUI 组件",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(mockAdapter.receivedTitleModel?.id == selectedChatModel.id, "未设置独立标题模型时，应回退到当前对话模型。")
+
+        await cleanup()
+    }
+
+    @Test("Auto-naming falls back to selected model when dedicated model is invalid")
+    func testAutoSessionNaming_FallbackWhenDedicatedModelInvalid() async throws {
+        await cleanup()
+
+        guard let selectedChatModel = activatedChatModels().first else {
+            Issue.record("测试环境至少需要 1 个已激活聊天模型。")
+            return
+        }
+        chatService.setSelectedModel(selectedChatModel)
+        UserDefaults.standard.set("non-existent-model-id", forKey: "titleGenerationModelIdentifier")
+
+        setupMockResponsesForChatAndTitle(title: "无效配置回退")
+
+        await chatService.sendAndProcessMessage(
+            content: "请总结我的待办清单",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(mockAdapter.receivedTitleModel?.id == selectedChatModel.id, "独立标题模型失效时，应自动回退到当前对话模型。")
+
         await cleanup()
     }
 

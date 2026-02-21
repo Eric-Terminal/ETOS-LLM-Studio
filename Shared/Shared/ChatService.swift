@@ -57,6 +57,7 @@ public class ChatService {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
     private static let modelOrderStorageKey = "modelOrder.runnableModels"
+    private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
 
     // MARK: - 单例
     public static let shared = ChatService()
@@ -4027,13 +4028,18 @@ public class ChatService {
             return
         }
         
-        // 2. 获取当前模型和适配器
-        guard let runnableModel = selectedModelSubject.value, let adapter = adapters[runnableModel.provider.apiFormat] else {
-            logger.error("无法获取当前模型或适配器，无法生成标题。")
+        // 2. 获取标题模型和适配器（优先独立标题模型，未配置时回退到当前对话模型）
+        let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
+        guard let runnableModel = resolveTitleGenerationModel(),
+              let adapter = adapters[runnableModel.provider.apiFormat] else {
+            logger.error("无法获取标题模型或适配器，无法生成标题。")
             return
         }
+        let usingDedicatedTitleModel = !dedicatedModelIdentifier.isEmpty && dedicatedModelIdentifier == runnableModel.id
         
-        logger.info("开始为会话 \(sessionID.uuidString) 生成标题...")
+        logger.info(
+            "开始为会话 \(sessionID.uuidString) 生成标题，使用\(usingDedicatedTitleModel ? "独立标题模型" : "当前对话模型"): \(runnableModel.model.displayName, privacy: .public)"
+        )
 
         // 3. 准备生成标题的提示（只基于用户的第一条消息）
         let titlePromptTemplate = NSLocalizedString("""
@@ -4091,5 +4097,16 @@ public class ChatService {
         } catch {
             logger.error("生成会话标题时发生网络或解析错误: \(error.localizedDescription)")
         }
+    }
+
+    private func resolveTitleGenerationModel() -> RunnableModel? {
+        let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
+        if !dedicatedModelIdentifier.isEmpty,
+           let dedicatedModel = activatedRunnableModels.first(
+                where: { $0.id == dedicatedModelIdentifier && $0.model.capabilities.contains(.chat) }
+           ) {
+            return dedicatedModel
+        }
+        return selectedModelSubject.value
     }
 }

@@ -38,32 +38,33 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("当前模型", selection: $viewModel.selectedModel) {
-                            Text("未选择").tag(Optional<RunnableModel>.none)
-                            ForEach(options) { model in
-                                Text("\(model.model.displayName) | \(model.provider.name)")
-                                    .tag(Optional<RunnableModel>.some(model))
+                        NavigationLink {
+                            ModelSelectionView(
+                                models: options,
+                                selectedModel: selectedModelBinding
+                            )
+                        } label: {
+                            HStack {
+                                Text("当前模型")
+                                MarqueeText(
+                                    content: selectedModelLabel(in: options),
+                                    uiFont: .preferredFont(forTextStyle: .footnote)
+                                )
+                                    .foregroundStyle(.secondary)
+                                    .allowsHitTesting(false)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                         }
-                        .onChange(of: viewModel.selectedModel) { _, newValue in
-                            ChatService.shared.setSelectedModel(newValue)
-                        }
                     }
-                } header: {
-                    Text("当前模型")
-                } footer: {
-                    Text("列出当前启用的对话模型，新会话会使用所选模型。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
 
-                Section {
                     Button {
                         viewModel.createNewSession()
                         dismiss()
                     } label: {
                         Label("开启新对话", systemImage: "plus.message")
                     }
+                } header: {
+                    Text("当前模型")
                 }
 
                 Section {
@@ -168,6 +169,12 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("设置")
+            .onAppear {
+                ensureSelectedModel(in: viewModel.activatedModels)
+            }
+            .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
+                ensureSelectedModel(in: viewModel.activatedModels)
+            }
         }
     }
     
@@ -189,6 +196,77 @@ struct SettingsView: View {
         @unknown default:
             Image(systemName: "bell.fill")
                 .foregroundColor(.gray)
+        }
+    }
+
+    private func ensureSelectedModel(in options: [RunnableModel]) {
+        guard let first = options.first else { return }
+        guard let selectedID = viewModel.selectedModel?.id,
+              options.contains(where: { $0.id == selectedID }) else {
+            viewModel.selectedModel = first
+            ChatService.shared.setSelectedModel(first)
+            return
+        }
+    }
+
+    private var selectedModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedModel },
+            set: { model in
+                viewModel.selectedModel = model
+                ChatService.shared.setSelectedModel(model)
+            }
+        )
+    }
+
+    private func selectedModelLabel(in options: [RunnableModel]) -> String {
+        if let selected = viewModel.selectedModel,
+           options.contains(where: { $0.id == selected.id }) {
+            return "\(selected.model.displayName) | \(selected.provider.name)"
+        }
+        guard let first = options.first else { return "" }
+        return "\(first.model.displayName) | \(first.provider.name)"
+    }
+}
+
+private struct ModelSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let models: [RunnableModel]
+    @Binding var selectedModel: RunnableModel?
+
+    var body: some View {
+        List {
+            ForEach(models) { model in
+                Button {
+                    select(model)
+                } label: {
+                    selectionRow(
+                        title: "\(model.model.displayName) | \(model.provider.name)",
+                        isSelected: selectedModel?.id == model.id
+                    )
+                }
+            }
+        }
+        .navigationTitle("当前模型")
+    }
+
+    private func select(_ model: RunnableModel) {
+        selectedModel = model
+        dismiss()
+    }
+
+    @ViewBuilder
+    private func selectionRow(title: String, isSelected: Bool) -> some View {
+        HStack {
+            MarqueeText(content: title, uiFont: .preferredFont(forTextStyle: .body))
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.footnote)
+                    .foregroundColor(.accentColor)
+            }
         }
     }
 }

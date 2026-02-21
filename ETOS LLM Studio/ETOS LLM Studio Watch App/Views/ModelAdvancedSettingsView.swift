@@ -182,9 +182,13 @@ struct ModelAdvancedSettingsView: View {
                         } label: {
                             HStack {
                                 Text("语音模型")
-                                Spacer()
-                                Text(selectedSpeechModelLabel)
+                                MarqueeText(
+                                    content: selectedSpeechModelLabel,
+                                    uiFont: .preferredFont(forTextStyle: .footnote)
+                                )
                                     .foregroundColor(.secondary)
+                                    .allowsHitTesting(false)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                         }
                     } else if sendSpeechAsAudio {
@@ -198,6 +202,10 @@ struct ModelAdvancedSettingsView: View {
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
+
+                    Text("也可以在“提供商与模型管理 > 专用模型”中统一设置。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -251,8 +259,9 @@ private struct SpeechModelSelectionView: View {
     @ViewBuilder
     private func selectionRow(title: String, isSelected: Bool) -> some View {
         HStack {
-            Text(title)
-            Spacer()
+            MarqueeText(content: title, uiFont: .preferredFont(forTextStyle: .body))
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if isSelected {
                 Image(systemName: "checkmark")
                     .font(.footnote)

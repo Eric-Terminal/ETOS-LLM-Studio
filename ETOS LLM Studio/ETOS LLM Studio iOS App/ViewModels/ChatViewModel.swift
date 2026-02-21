@@ -40,6 +40,7 @@ final class ChatViewModel: ObservableObject {
     @Published var activatedModels: [RunnableModel] = []
     @Published var memories: [MemoryItem] = []
     @Published var selectedEmbeddingModel: RunnableModel?
+    @Published var selectedTitleGenerationModel: RunnableModel?
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var isSendingMessage: Bool = false
@@ -97,6 +98,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
+    @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
     
@@ -133,6 +135,10 @@ final class ChatViewModel: ObservableObject {
     
     var embeddingModelOptions: [RunnableModel] {
         configuredModels
+    }
+
+    var titleGenerationModelOptions: [RunnableModel] {
+        activatedModels.filter { $0.model.capabilities.contains(.chat) }
     }
     
     // MARK: - Private Properties
@@ -249,6 +255,7 @@ final class ChatViewModel: ObservableObject {
                 self.speechModels = chatService.activatedSpeechModels
                 self.syncSpeechModelSelection()
                 self.syncEmbeddingModelSelection()
+                self.syncTitleGenerationModelSelection()
             }
             .store(in: &cancellables)
         
@@ -328,6 +335,7 @@ final class ChatViewModel: ObservableObject {
         
         syncSpeechModelSelection()
         syncEmbeddingModelSelection()
+        syncTitleGenerationModelSelection()
     }
     
     private func rotateBackgroundImageIfNeeded() {
@@ -532,6 +540,14 @@ final class ChatViewModel: ObservableObject {
             memoryEmbeddingModelIdentifier = newIdentifier
         }
     }
+
+    func setSelectedTitleGenerationModel(_ model: RunnableModel?) {
+        selectedTitleGenerationModel = model
+        let newIdentifier = model?.id ?? ""
+        if titleGenerationModelIdentifier != newIdentifier {
+            titleGenerationModelIdentifier = newIdentifier
+        }
+    }
     
     func appendTranscribedText(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -581,6 +597,25 @@ final class ChatViewModel: ObservableObject {
         
         selectedEmbeddingModel = nil
         memoryEmbeddingModelIdentifier = ""
+    }
+
+    private func syncTitleGenerationModelSelection() {
+        if let match = titleGenerationModelOptions.first(where: { $0.id == titleGenerationModelIdentifier }) {
+            if selectedTitleGenerationModel?.id != match.id {
+                selectedTitleGenerationModel = match
+            }
+            return
+        }
+
+        guard !titleGenerationModelIdentifier.isEmpty else {
+            selectedTitleGenerationModel = nil
+            return
+        }
+
+        guard !titleGenerationModelOptions.isEmpty else { return }
+
+        selectedTitleGenerationModel = nil
+        titleGenerationModelIdentifier = ""
     }
     
     func addErrorMessage(_ content: String) {

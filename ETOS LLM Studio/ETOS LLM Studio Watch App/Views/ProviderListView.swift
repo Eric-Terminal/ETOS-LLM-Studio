@@ -1,94 +1,78 @@
-// ============================================================================
-// ProviderListView.swift
-// ============================================================================
-// ETOS LLM Studio Watch App 提供商列表视图
-//
-// 定义内容:
-// - 显示所有已配置的 API 提供商
-// - 提供添加和删除提供商的功能
-// ============================================================================
-
 import SwiftUI
 import Shared
 
 struct ProviderListView: View {
-    // 从环境中访问共享视图模型
-    @EnvironmentObject var viewModel: ChatViewModel
-    
-    // 用于显示添加新提供商表单的状态
-    @State private var isAddingProvider = false
-    @State private var isEditingModelOrder = false
+    @EnvironmentObject private var viewModel: ChatViewModel
 
     var body: some View {
         List {
-            if isEditingModelOrder {
-                Section(
-                    header: Text("模型顺序"),
-                    footer: Text("维护全局模型顺序，模型选择列表会按这里的顺序展示。")
-                ) {
-                    if viewModel.configuredModels.isEmpty {
-                        Text("暂无可排序模型。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
-                            modelOrderRow(
-                                runnable: runnable,
-                                position: position,
-                                total: viewModel.configuredModels.count
-                            )
-                        }
-                    }
+            Section("管理入口") {
+                NavigationLink {
+                    WatchProviderManagementContentView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("提供商管理", systemImage: "shippingbox")
                 }
-            } else {
-                ForEach(viewModel.providers) { provider in
-                    NavigationLink(destination: ProviderDetailView(provider: provider)) {
-                        Text(provider.name)
+
+                NavigationLink {
+                    WatchProviderModelOrderContentView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("模型顺序", systemImage: "arrow.up.arrow.down")
+                }
+
+                NavigationLink {
+                    SpecializedModelSelectorView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("专用模型", systemImage: "slider.horizontal.3")
+                }
+            }
+        }
+        .navigationTitle("提供商与模型管理")
+    }
+}
+
+private struct WatchProviderManagementContentView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @State private var isAddingProvider = false
+
+    var body: some View {
+        List {
+            ForEach(viewModel.providers) { provider in
+                NavigationLink(destination: ProviderDetailView(provider: provider)) {
+                    Text(provider.name)
+                }
+                .swipeActions(edge: .leading) {
+                    NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
+                        Label("编辑", systemImage: "pencil")
                     }
-                    .swipeActions(edge: .leading) {
-                        NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
-                            Label("编辑", systemImage: "pencil")
-                        }
-                        .tint(.blue)
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            deleteProvider(provider)
-                        } label: {
-                            Label("删除", systemImage: "trash")
-                        }
+                    .tint(.blue)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        deleteProvider(provider)
+                    } label: {
+                        Label("删除", systemImage: "trash")
                     }
                 }
             }
         }
-        .navigationTitle("提供商设置")
+        .navigationTitle("提供商管理")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                if !viewModel.configuredModels.isEmpty {
-                    Button(isEditingModelOrder ? "完成" : "编辑") {
-                        isEditingModelOrder.toggle()
-                    }
-                }
-            }
-
             ToolbarItem(placement: .topBarTrailing) {
-                if !isEditingModelOrder {
-                    Button(action: { isAddingProvider = true }) {
-                        Image(systemName: "plus")
-                    }
+                Button(action: { isAddingProvider = true }) {
+                    Image(systemName: "plus")
                 }
             }
         }
         .sheet(isPresented: $isAddingProvider) {
-            // 传递一个全新的、空的提供商对象给编辑视图
             NavigationStack {
-                ProviderEditView(provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"), isNew: true)
-                    .environmentObject(viewModel)
-            }
-        }
-        .onChange(of: viewModel.configuredModels.count) { _, count in
-            if count < 2 {
-                isEditingModelOrder = false
+                ProviderEditView(
+                    provider: Provider(name: "", baseURL: "", apiKeys: [""], apiFormat: "openai-compatible"),
+                    isNew: true
+                )
+                .environmentObject(viewModel)
             }
         }
     }
@@ -96,6 +80,34 @@ struct ProviderListView: View {
     private func deleteProvider(_ provider: Provider) {
         ConfigLoader.deleteProvider(provider)
         ChatService.shared.reloadProviders()
+    }
+}
+
+private struct WatchProviderModelOrderContentView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+
+    var body: some View {
+        List {
+            Section(
+                header: Text("模型顺序"),
+                footer: Text("维护全局模型顺序，模型选择列表会按这里的顺序展示。")
+            ) {
+                if viewModel.configuredModels.isEmpty {
+                    Text("暂无可排序模型。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
+                        modelOrderRow(
+                            runnable: runnable,
+                            position: position,
+                            total: viewModel.configuredModels.count
+                        )
+                    }
+                }
+            }
+        }
+        .navigationTitle("模型顺序")
     }
 
     private func moveModelUp(at position: Int) {
