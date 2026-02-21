@@ -34,12 +34,23 @@ struct ProviderListView: View {
         }
         .navigationTitle("提供商与模型管理")
         .safeAreaInset(edge: .top) {
-            Picker("管理页签", selection: $selectedTab) {
+            HStack(spacing: 6) {
                 ForEach(WatchProviderManagementTab.allCases) { tab in
-                    Text(tab.title).tag(tab)
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Text(tab.title)
+                            .font(.footnote)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(selectedTab == tab ? Color.accentColor.opacity(0.2) : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
             .padding(.horizontal, 8)
             .padding(.top, 4)
             .padding(.bottom, 2)
