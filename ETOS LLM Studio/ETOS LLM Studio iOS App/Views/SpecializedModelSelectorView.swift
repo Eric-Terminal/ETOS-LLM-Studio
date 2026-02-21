@@ -5,61 +5,33 @@ struct SpecializedModelSelectorView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @AppStorage("imageGenerationModelIdentifier") private var imageGenerationModelIdentifier: String = ""
 
-    private var speechModelBinding: Binding<RunnableModel?> {
-        Binding(
-            get: { viewModel.selectedSpeechModel },
-            set: { viewModel.setSelectedSpeechModel($0) }
-        )
-    }
-
-    private var embeddingModelBinding: Binding<RunnableModel?> {
-        Binding(
-            get: { viewModel.selectedEmbeddingModel },
-            set: { viewModel.setSelectedEmbeddingModel($0) }
-        )
-    }
-
-    private var titleModelBinding: Binding<RunnableModel?> {
-        Binding(
-            get: { viewModel.selectedTitleGenerationModel },
-            set: { viewModel.setSelectedTitleGenerationModel($0) }
-        )
-    }
-
-    private var imageGenerationModelBinding: Binding<RunnableModel?> {
-        Binding(
-            get: { viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) },
-            set: { imageGenerationModelIdentifier = $0?.id ?? "" }
-        )
-    }
-
     var body: some View {
         Form {
-            modelSelectionSection(
+            modelPickerSection(
                 title: "语音模型",
                 options: viewModel.speechModels,
-                selection: speechModelBinding,
+                selectionID: speechModelIdentifierBinding,
                 footer: "用于语音转文字；也可在“高级模型设置”中修改。"
             )
 
-            modelSelectionSection(
+            modelPickerSection(
                 title: "嵌入模型",
                 options: viewModel.embeddingModelOptions,
-                selection: embeddingModelBinding,
+                selectionID: embeddingModelIdentifierBinding,
                 footer: "用于记忆向量化与检索；也可在“记忆库管理”中修改。"
             )
 
-            modelSelectionSection(
+            modelPickerSection(
                 title: "标题生成模型",
                 options: viewModel.titleGenerationModelOptions,
-                selection: titleModelBinding,
+                selectionID: titleModelIdentifierBinding,
                 footer: "留空时跟随当前对话模型。"
             )
 
-            modelSelectionSection(
+            modelPickerSection(
                 title: "生图模型",
                 options: viewModel.imageGenerationModelOptions,
-                selection: imageGenerationModelBinding,
+                selectionID: imageGenerationModelIdentifierBinding,
                 allowEmptySelection: false,
                 footer: "用于图片生成功能；也可在“图片生成”中修改。"
             )
@@ -71,11 +43,60 @@ struct SpecializedModelSelectorView: View {
         }
     }
 
+    private var speechModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedSpeechModel?.id ?? "" },
+            set: { newIdentifier in
+                guard !newIdentifier.isEmpty else {
+                    viewModel.setSelectedSpeechModel(nil)
+                    return
+                }
+                let selected = viewModel.speechModels.first(where: { $0.id == newIdentifier })
+                viewModel.setSelectedSpeechModel(selected)
+            }
+        )
+    }
+
+    private var embeddingModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedEmbeddingModel?.id ?? "" },
+            set: { newIdentifier in
+                guard !newIdentifier.isEmpty else {
+                    viewModel.setSelectedEmbeddingModel(nil)
+                    return
+                }
+                let selected = viewModel.embeddingModelOptions.first(where: { $0.id == newIdentifier })
+                viewModel.setSelectedEmbeddingModel(selected)
+            }
+        )
+    }
+
+    private var titleModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedTitleGenerationModel?.id ?? "" },
+            set: { newIdentifier in
+                guard !newIdentifier.isEmpty else {
+                    viewModel.setSelectedTitleGenerationModel(nil)
+                    return
+                }
+                let selected = viewModel.titleGenerationModelOptions.first(where: { $0.id == newIdentifier })
+                viewModel.setSelectedTitleGenerationModel(selected)
+            }
+        )
+    }
+
+    private var imageGenerationModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { imageGenerationModelIdentifier },
+            set: { imageGenerationModelIdentifier = $0 }
+        )
+    }
+
     @ViewBuilder
-    private func modelSelectionSection(
+    private func modelPickerSection(
         title: String,
         options: [RunnableModel],
-        selection: Binding<RunnableModel?>,
+        selectionID: Binding<String>,
         allowEmptySelection: Bool = true,
         footer: String
     ) -> some View {
@@ -85,20 +106,13 @@ struct SpecializedModelSelectorView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                NavigationLink {
-                    RunnableModelSelectionListView(
-                        title: title,
-                        models: options,
-                        selectedModel: selection,
-                        allowEmptySelection: allowEmptySelection
-                    )
-                } label: {
-                    HStack {
-                        Text(title)
-                        Spacer()
-                        Text(selectedModelLabel(selection.wrappedValue, in: options))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                Picker(title, selection: selectionID) {
+                    if allowEmptySelection {
+                        Text("未选择").tag("")
+                    }
+                    ForEach(options) { runnable in
+                        Text("\(runnable.model.displayName) | \(runnable.provider.name)")
+                            .tag(runnable.id)
                     }
                 }
             }
@@ -107,69 +121,18 @@ struct SpecializedModelSelectorView: View {
         }
     }
 
-    private func selectedModelLabel(_ selection: RunnableModel?, in options: [RunnableModel]) -> String {
-        guard let selection,
-              options.contains(where: { $0.id == selection.id }) else {
-            return "未选择"
-        }
-        return "\(selection.model.displayName) | \(selection.provider.name)"
-    }
-
     private func syncImageGenerationSelection() {
-        guard !imageGenerationModelIdentifier.isEmpty else { return }
-        if viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) == nil {
+        let options = viewModel.imageGenerationModelOptions
+        guard !options.isEmpty else {
             imageGenerationModelIdentifier = ""
+            return
         }
-    }
-}
 
-private struct RunnableModelSelectionListView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let title: String
-    let models: [RunnableModel]
-    @Binding var selectedModel: RunnableModel?
-    let allowEmptySelection: Bool
-
-    var body: some View {
-        List {
-            if allowEmptySelection {
-                Button {
-                    select(nil)
-                } label: {
-                    selectionRow(title: "未选择", isSelected: selectedModel == nil)
-                }
-            }
-
-            ForEach(models) { runnable in
-                Button {
-                    select(runnable)
-                } label: {
-                    selectionRow(
-                        title: "\(runnable.model.displayName) | \(runnable.provider.name)",
-                        isSelected: selectedModel?.id == runnable.id
-                    )
-                }
-            }
+        if let matched = viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) {
+            imageGenerationModelIdentifier = matched.id
+            return
         }
-        .navigationTitle(title)
-    }
 
-    private func select(_ model: RunnableModel?) {
-        selectedModel = model
-        dismiss()
-    }
-
-    @ViewBuilder
-    private func selectionRow(title: String, isSelected: Bool) -> some View {
-        HStack {
-            Text(title)
-                .lineLimit(1)
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.tint)
-            }
-        }
+        imageGenerationModelIdentifier = options[0].id
     }
 }
