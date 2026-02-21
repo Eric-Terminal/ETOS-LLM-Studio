@@ -153,37 +153,27 @@ private struct ProviderModelOrderContentView: View {
         List {
             Section(
                 header: Text("模型顺序"),
-                footer: Text("维护全局模型顺序。模型选择列表会按这里的顺序展示。")
+                footer: Text("拖拽右侧把手可调整全局模型顺序。模型选择列表会按这里的顺序展示。")
             ) {
                 if viewModel.configuredModels.isEmpty {
                     Text("暂无可排序模型。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
-                        modelOrderRow(
-                            runnable: runnable,
-                            position: position,
-                            total: viewModel.configuredModels.count
-                        )
+                    ForEach(viewModel.configuredModels, id: \.id) { runnable in
+                        modelOrderRow(runnable: runnable)
+                    }
+                    .onMove { offsets, destination in
+                        ChatService.shared.moveConfiguredModels(fromOffsets: offsets, toOffset: destination)
                     }
                 }
             }
         }
-    }
-
-    private func moveModelUp(at position: Int) {
-        guard position > 0 else { return }
-        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position - 1)
-    }
-
-    private func moveModelDown(at position: Int, total: Int) {
-        guard position + 1 < total else { return }
-        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position + 1)
+        .environment(\.editMode, .constant(.active))
     }
 
     @ViewBuilder
-    private func modelOrderRow(runnable: RunnableModel, position: Int, total: Int) -> some View {
+    private func modelOrderRow(runnable: RunnableModel) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(runnable.model.displayName)
@@ -197,26 +187,6 @@ private struct ProviderModelOrderContentView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            Spacer()
-
-            VStack(spacing: 6) {
-                Button {
-                    moveModelUp(at: position)
-                } label: {
-                    Image(systemName: "chevron.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(position == 0)
-
-                Button {
-                    moveModelDown(at: position, total: total)
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.borderless)
-                .disabled(position + 1 >= total)
             }
         }
     }
