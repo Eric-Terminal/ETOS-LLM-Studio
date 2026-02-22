@@ -599,10 +599,14 @@ public extension MCPClientInfo {
 
 public extension MCPClientCapabilities {
     static var standard: MCPClientCapabilities {
-        MCPClientCapabilities()
+        MCPClientCapabilities(
+            roots: MCPClientRootsCapabilities(listChanged: true)
+        )
     }
 
     static var httpOnly: MCPClientCapabilities {
-        standard
+        MCPClientCapabilities(
+            roots: MCPClientRootsCapabilities(listChanged: true)
+        )
     }
 }
