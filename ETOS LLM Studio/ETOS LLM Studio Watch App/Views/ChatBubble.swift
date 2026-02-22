@@ -369,8 +369,8 @@ struct ChatBubble: View {
             let content = VStack(alignment: .leading, spacing: 6) {
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
                     toolCallsInlineView(toolCalls)
-                    if activeToolPermissionRequest != nil {
-                        toolPermissionInlineView(onDecision: { decision in
+                    if let activeToolPermissionRequest {
+                        toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
                             toolPermissionCenter.resolveActiveRequest(with: decision)
                         })
                     }
@@ -442,8 +442,8 @@ struct ChatBubble: View {
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
             toolCallsInlineView(toolCalls)
-            if activeToolPermissionRequest != nil {
-                toolPermissionInlineView(onDecision: { decision in
+            if let activeToolPermissionRequest {
+                toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
                     toolPermissionCenter.resolveActiveRequest(with: decision)
                 })
             }
@@ -672,8 +672,11 @@ struct ChatBubble: View {
         }
     }
 
-    private func toolPermissionInlineView(onDecision: @escaping (ToolPermissionDecision) -> Void) -> some View {
-        ToolPermissionInlineView(onDecision: onDecision)
+    private func toolPermissionInlineView(
+        request: ToolPermissionRequest,
+        onDecision: @escaping (ToolPermissionDecision) -> Void
+    ) -> some View {
+        ToolPermissionInlineView(request: request, onDecision: onDecision)
             .padding(.bottom, 5)
     }
 
@@ -802,8 +805,23 @@ struct ChatBubble: View {
     }
 
     private struct ToolPermissionInlineView: View {
+        let request: ToolPermissionRequest
         let onDecision: (ToolPermissionDecision) -> Void
         @State private var isShowingMoreOptions = false
+        @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
+
+        private var countdownText: String? {
+            guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
+                return nil
+            }
+            return "将在 \(remaining)s 后自动允许"
+        }
+
+        private var autoApproveToggleLabel: String {
+            permissionCenter.isAutoApproveDisabled(for: request.toolName)
+                ? "恢复该工具自动批准"
+                : "关闭该工具自动批准"
+        }
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -847,6 +865,18 @@ struct ChatBubble: View {
                         }
                         .buttonStyle(.bordered)
                     }
+
+                    Button(autoApproveToggleLabel) {
+                        let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
+                        permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if let countdownText {
+                    Text(countdownText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
             .controlSize(.mini)

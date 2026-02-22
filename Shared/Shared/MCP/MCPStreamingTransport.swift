@@ -41,7 +41,7 @@ public protocol MCPStreamingTransportProtocol: AnyObject {
 
 // MARK: - Streaming Transport
 
-public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
+public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, MCPResumptionControllableTransport, @unchecked Sendable {
     private let sseEndpoint: URL
     private let session: URLSession
     private let headers: [String: String]
@@ -193,6 +193,24 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
 
     public func updateProtocolVersion(_ protocolVersion: String?) async {
         self.protocolVersion = protocolVersion
+    }
+
+    public func currentResumptionToken() async -> String? {
+        let trimmed = lastEventId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            return trimmed
+        }
+        return nil
+    }
+
+    public func updateResumptionToken(_ token: String?) async {
+        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastEventId = (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    public func terminateSession() async {
+        disconnect()
+        await state.clearSession()
     }
     
     private func runSSELoop(url: URL) async {
@@ -688,6 +706,11 @@ private actor StreamingState {
     func prepareForNewStream() {
         endpointReady = false
         sessionId = nil
+    }
+
+    func clearSession() {
+        sessionId = nil
+        endpointReady = false
     }
 
     private func awaitMessageEndpoint(timeout: TimeInterval?) async -> URL {

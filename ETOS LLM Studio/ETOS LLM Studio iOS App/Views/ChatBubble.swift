@@ -539,10 +539,13 @@ struct ChatBubble: View {
                 toolCalls: toolCalls,
                 isOutgoing: isOutgoing
             )
-            if activeToolPermissionRequest != nil {
-                ToolPermissionInlineView(onDecision: { decision in
+            if let activeToolPermissionRequest {
+                ToolPermissionInlineView(
+                    request: activeToolPermissionRequest,
+                    onDecision: { decision in
                     toolPermissionCenter.resolveActiveRequest(with: decision)
-                })
+                    }
+                )
             }
             let shouldShowResults = hasToolResults || hasPendingToolResults
             if shouldShowResults {
@@ -1040,32 +1043,60 @@ struct ToolCallsInlineView: View, Equatable {
 }
 
 private struct ToolPermissionInlineView: View {
+    let request: ToolPermissionRequest
     let onDecision: (ToolPermissionDecision) -> Void
+    @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
+
+    private var countdownText: String? {
+        guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
+            return nil
+        }
+        return "将在 \(remaining)s 后自动允许"
+    }
+
+    private var autoApproveToggleLabel: String {
+        permissionCenter.isAutoApproveDisabled(for: request.toolName)
+            ? "恢复该工具自动批准"
+            : "关闭该工具自动批准"
+    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button("允许") {
-                onDecision(.allowOnce)
-            }
-            .buttonStyle(.borderedProminent)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button("允许") {
+                    onDecision(.allowOnce)
+                }
+                .buttonStyle(.borderedProminent)
 
-            Menu {
-                Button("拒绝", role: .destructive) {
-                    onDecision(.deny)
+                Menu {
+                    Button("拒绝", role: .destructive) {
+                        onDecision(.deny)
+                    }
+                    Button("补充提示") {
+                        onDecision(.supplement)
+                    }
+                    Button("保持允许") {
+                        onDecision(.allowForTool)
+                    }
+                    Button("完全权限") {
+                        onDecision(.allowAll)
+                    }
+                    Divider()
+                    Button(autoApproveToggleLabel) {
+                        let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
+                        permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
+                    }
+                } label: {
+                    Label("更多", systemImage: "ellipsis")
                 }
-                Button("补充提示") {
-                    onDecision(.supplement)
-                }
-                Button("保持允许") {
-                    onDecision(.allowForTool)
-                }
-                Button("完全权限") {
-                    onDecision(.allowAll)
-                }
-            } label: {
-                Label("更多", systemImage: "ellipsis")
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
+
+            if let countdownText {
+                Text(countdownText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .controlSize(.small)
         .padding(.top, 4)

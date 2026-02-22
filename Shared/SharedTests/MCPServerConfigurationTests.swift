@@ -68,4 +68,22 @@ struct MCPServerConfigurationTests {
         #expect(decoded.toolApprovalPolicies["always.deny"] == .alwaysDeny)
         #expect(decoded.toolApprovalPolicies["default.ask"] == nil)
     }
+
+    @Test("流式恢复令牌可持久化并在解码时清理空白")
+    func streamResumptionTokenPersistence() throws {
+        let config = MCPServerConfiguration(
+            displayName: "Token",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/mcp")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            streamResumptionToken: "  token-123  "
+        )
+
+        let encoded = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(MCPServerConfiguration.self, from: encoded)
+
+        #expect(decoded.streamResumptionToken == "token-123")
+    }
 }

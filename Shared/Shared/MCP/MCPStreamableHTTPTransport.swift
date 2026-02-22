@@ -14,7 +14,7 @@ private let mcpSessionHeader = "MCP-Session-Id"
 private let mcpProtocolHeader = "MCP-Protocol-Version"
 private let mcpResumptionHeader = "Last-Event-ID"
 
-public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
+public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, MCPResumptionControllableTransport, @unchecked Sendable {
     private let endpoint: URL
     private let session: URLSession
     private let headers: [String: String]
@@ -132,6 +132,34 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     public func updateProtocolVersion(_ protocolVersion: String?) async {
         self.protocolVersion = protocolVersion
+    }
+
+    public func currentResumptionToken() async -> String? {
+        let trimmed = lastEventId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            return trimmed
+        }
+        return nil
+    }
+
+    public func updateResumptionToken(_ token: String?) async {
+        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastEventId = (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    public func terminateSession() async {
+        disconnectStream()
+        let previousSessionId = snapshotAndClearSession()
+        guard let previousSessionId else { return }
+        let dynamicHeaders = (try? await resolveDynamicHeaders()) ?? [:]
+        await Self.terminateRemoteSession(
+            session: session,
+            endpoint: endpoint,
+            headers: headers,
+            dynamicHeaders: dynamicHeaders,
+            protocolVersion: protocolVersion,
+            sessionId: previousSessionId
+        )
     }
 
     private func disconnectStream() {
@@ -506,9 +534,9 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     private func suspendSSEMode(reason: String) async {
         isSSEEnabled = false
-        sseSuspendedUntil = Date().addingTimeInterval(sseSuspensionInterval)
+        sseSuspendedUntil = Date().addingTimeInterval(self.sseSuspensionInterval)
         sseReconnectAttempt = 0
-        streamableLogger.info("\(reason, privacy: .public) 将在 \(sseSuspensionInterval, privacy: .public)s 后重新探测。")
+        streamableLogger.info("\(reason, privacy: .public) 将在 \(self.sseSuspensionInterval, privacy: .public)s 后重新探测。")
         await pendingRequestsActor.failAwaitingSSE()
     }
 

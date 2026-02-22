@@ -22,6 +22,19 @@ public extension MCPProtocolVersionConfigurableTransport {
     func updateProtocolVersion(_ protocolVersion: String?) async {}
 }
 
+/// 支持流式会话恢复令牌与远端会话显式终止的传输层能力。
+public protocol MCPResumptionControllableTransport: AnyObject, Sendable {
+    func currentResumptionToken() async -> String?
+    func updateResumptionToken(_ token: String?) async
+    func terminateSession() async
+}
+
+public extension MCPResumptionControllableTransport {
+    func currentResumptionToken() async -> String? { nil }
+    func updateResumptionToken(_ token: String?) async {}
+    func terminateSession() async {}
+}
+
 public enum MCPTransportError: LocalizedError {
     case httpStatus(code: Int, body: String?)
     case oauthConfiguration(message: String)
@@ -431,7 +444,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurable
 /// OAuth + Streamable HTTP 组合传输：
 /// - 令牌通过 OAuth actor 动态获取/刷新；
 /// - 实际请求与通知流由 MCPStreamableHTTPTransport 处理，以支持服务端通知与进度。
-public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
+public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, MCPResumptionControllableTransport, @unchecked Sendable {
     private let oauthTransport: MCPOAuthHTTPTransport
     private let streamableTransport: MCPStreamableHTTPTransport
 
@@ -507,5 +520,17 @@ public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTr
     public func updateProtocolVersion(_ protocolVersion: String?) async {
         await oauthTransport.updateProtocolVersion(protocolVersion)
         await streamableTransport.updateProtocolVersion(protocolVersion)
+    }
+
+    public func currentResumptionToken() async -> String? {
+        await streamableTransport.currentResumptionToken()
+    }
+
+    public func updateResumptionToken(_ token: String?) async {
+        await streamableTransport.updateResumptionToken(token)
+    }
+
+    public func terminateSession() async {
+        await streamableTransport.terminateSession()
     }
 }
