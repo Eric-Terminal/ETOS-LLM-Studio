@@ -8,6 +8,30 @@ import Foundation
 
 private let mcpTokenPlaceholder = "{token}"
 
+public enum MCPOAuthGrantType: String, Codable, Hashable, CaseIterable {
+    case clientCredentials = "client_credentials"
+    case authorizationCode = "authorization_code"
+}
+
+public enum MCPToolApprovalPolicy: String, Codable, Hashable, CaseIterable, Sendable {
+    case askEveryTime = "ask_every_time"
+    case alwaysAllow = "always_allow"
+    case alwaysDeny = "always_deny"
+}
+
+public extension MCPToolApprovalPolicy {
+    public var displayName: String {
+        switch self {
+        case .askEveryTime:
+            return "每次询问"
+        case .alwaysAllow:
+            return "总是允许"
+        case .alwaysDeny:
+            return "始终拒绝"
+        }
+    }
+}
+
 private func resolveAdditionalHeaders(_ headers: [String: String], token: String?) -> [String: String] {
     var resolved: [String: String]
     if headers.isEmpty {
@@ -33,7 +57,17 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public enum Transport: Codable, Hashable {
         case http(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
         case httpSSE(messageEndpoint: URL, sseEndpoint: URL, apiKey: String?, additionalHeaders: [String: String])
-        case oauth(endpoint: URL, tokenEndpoint: URL, clientID: String, clientSecret: String, scope: String?)
+        case oauth(
+            endpoint: URL,
+            tokenEndpoint: URL,
+            clientID: String,
+            clientSecret: String?,
+            scope: String?,
+            grantType: MCPOAuthGrantType,
+            authorizationCode: String?,
+            redirectURI: String?,
+            codeVerifier: String?
+        )
     }
 
     public var id: UUID
@@ -42,6 +76,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public var transport: Transport
     public var isSelectedForChat: Bool
     public var disabledToolIds: [String]
+    public var toolApprovalPolicies: [String: MCPToolApprovalPolicy]
 
     public init(
         id: UUID = UUID(),
@@ -49,7 +84,8 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         notes: String? = nil,
         transport: Transport,
         isSelectedForChat: Bool = false,
-        disabledToolIds: [String] = []
+        disabledToolIds: [String] = [],
+        toolApprovalPolicies: [String: MCPToolApprovalPolicy] = [:]
     ) {
         self.id = id
         self.displayName = displayName
@@ -57,6 +93,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         self.transport = transport
         self.isSelectedForChat = isSelectedForChat
         self.disabledToolIds = disabledToolIds
+        self.toolApprovalPolicies = toolApprovalPolicies
     }
 }
 
@@ -68,6 +105,7 @@ extension MCPServerConfiguration {
         case transport
         case isSelectedForChat
         case disabledToolIds
+        case toolApprovalPolicies
     }
 
     public init(from decoder: Decoder) throws {
@@ -78,6 +116,7 @@ extension MCPServerConfiguration {
         transport = try container.decode(Transport.self, forKey: .transport)
         isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
         disabledToolIds = try container.decodeIfPresent([String].self, forKey: .disabledToolIds) ?? []
+        toolApprovalPolicies = try container.decodeIfPresent([String: MCPToolApprovalPolicy].self, forKey: .toolApprovalPolicies) ?? [:]
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -93,6 +132,14 @@ extension MCPServerConfiguration {
             let uniqueIds = Array(Set(disabledToolIds)).sorted()
             try container.encode(uniqueIds, forKey: .disabledToolIds)
         }
+        let normalizedToolApprovalPolicies = toolApprovalPolicies.reduce(into: [String: MCPToolApprovalPolicy]()) { partialResult, element in
+            if element.value != .askEveryTime {
+                partialResult[element.key] = element.value
+            }
+        }
+        if !normalizedToolApprovalPolicies.isEmpty {
+            try container.encode(normalizedToolApprovalPolicies, forKey: .toolApprovalPolicies)
+        }
     }
 }
 
@@ -103,7 +150,7 @@ public extension MCPServerConfiguration {
             return endpoint.absoluteString
         case .httpSSE(_, let sseEndpoint, _, _):
             return sseEndpoint.absoluteString
-        case .oauth(let endpoint, _, _, _, _):
+        case .oauth(let endpoint, _, _, _, _, _, _, _, _):
             return endpoint.absoluteString
         }
     }
@@ -124,17 +171,20 @@ public extension MCPServerConfiguration {
         case .http(let endpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
-        case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
+        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
-            let messageEndpoint = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
-        case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
-            return MCPOAuthHTTPTransport(
+        case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
+            return MCPOAuthStreamableHTTPTransport(
                 endpoint: endpoint,
                 tokenEndpoint: tokenEndpoint,
                 clientID: clientID,
                 clientSecret: clientSecret,
                 scope: scope,
+                grantType: grantType,
+                authorizationCode: authorizationCode,
+                redirectURI: redirectURI,
+                codeVerifier: codeVerifier,
                 session: urlSession
             )
         }
@@ -151,6 +201,18 @@ public extension MCPServerConfiguration {
             disabledToolIds.removeAll { $0 == toolId }
         } else if !disabledToolIds.contains(toolId) {
             disabledToolIds.append(toolId)
+        }
+    }
+
+    public func approvalPolicy(for toolId: String) -> MCPToolApprovalPolicy {
+        toolApprovalPolicies[toolId] ?? .askEveryTime
+    }
+
+    public mutating func setApprovalPolicy(_ policy: MCPToolApprovalPolicy, for toolId: String) {
+        if policy == .askEveryTime {
+            toolApprovalPolicies.removeValue(forKey: toolId)
+        } else {
+            toolApprovalPolicies[toolId] = policy
         }
     }
 }
@@ -189,9 +251,14 @@ extension MCPServerConfiguration.Transport {
         case clientID
         case clientSecret
         case scope
+        case grantType
+        case authorizationCode
+        case redirectURI
+        case codeVerifier
     }
 
     private enum Kind: String, Codable {
+        case stdio
         case http
         case streamableHTTP = "streamable_http"
         case httpSSE
@@ -203,6 +270,12 @@ extension MCPServerConfiguration.Transport {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try container.decode(Kind.self, forKey: .kind)
         switch kind {
+        case .stdio:
+            throw DecodingError.dataCorruptedError(
+                forKey: .kind,
+                in: container,
+                debugDescription: "当前平台不支持 stdio 传输（iOS/watchOS 无法启动本地子进程）。请改用 streamable_http、sse 或 oauth。"
+            )
         case .http, .streamableHTTP:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
@@ -224,9 +297,23 @@ extension MCPServerConfiguration.Transport {
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let tokenEndpoint = try container.decode(URL.self, forKey: .tokenEndpoint)
             let clientID = try container.decode(String.self, forKey: .clientID)
-            let clientSecret = try container.decode(String.self, forKey: .clientSecret)
+            let clientSecret = try container.decodeIfPresent(String.self, forKey: .clientSecret)
             let scope = try container.decodeIfPresent(String.self, forKey: .scope)
-            self = .oauth(endpoint: endpoint, tokenEndpoint: tokenEndpoint, clientID: clientID, clientSecret: clientSecret, scope: scope)
+            let grantType = try container.decodeIfPresent(MCPOAuthGrantType.self, forKey: .grantType) ?? .clientCredentials
+            let authorizationCode = try container.decodeIfPresent(String.self, forKey: .authorizationCode)
+            let redirectURI = try container.decodeIfPresent(String.self, forKey: .redirectURI)
+            let codeVerifier = try container.decodeIfPresent(String.self, forKey: .codeVerifier)
+            self = .oauth(
+                endpoint: endpoint,
+                tokenEndpoint: tokenEndpoint,
+                clientID: clientID,
+                clientSecret: clientSecret,
+                scope: scope,
+                grantType: grantType,
+                authorizationCode: authorizationCode,
+                redirectURI: redirectURI,
+                codeVerifier: codeVerifier
+            )
         }
     }
 
@@ -249,13 +336,19 @@ extension MCPServerConfiguration.Transport {
             if !headers.isEmpty {
                 try container.encode(headers, forKey: .additionalHeaders)
             }
-        case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
+        case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             try container.encode(Kind.oauth, forKey: .kind)
             try container.encode(endpoint, forKey: .endpoint)
             try container.encode(tokenEndpoint, forKey: .tokenEndpoint)
             try container.encode(clientID, forKey: .clientID)
-            try container.encode(clientSecret, forKey: .clientSecret)
+            try container.encodeIfPresent(clientSecret, forKey: .clientSecret)
             try container.encodeIfPresent(scope, forKey: .scope)
+            if grantType != .clientCredentials {
+                try container.encode(grantType, forKey: .grantType)
+            }
+            try container.encodeIfPresent(authorizationCode, forKey: .authorizationCode)
+            try container.encodeIfPresent(redirectURI, forKey: .redirectURI)
+            try container.encodeIfPresent(codeVerifier, forKey: .codeVerifier)
         }
     }
 

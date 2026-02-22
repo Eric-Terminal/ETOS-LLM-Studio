@@ -9,11 +9,16 @@ import Foundation
 import os.log
 
 private let streamingLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPStreamingTransport")
+private let streamingResumptionHeader = "Last-Event-ID"
 
 // MARK: - Sampling Handler Protocol
 
 public protocol MCPSamplingHandler: AnyObject {
     func handleSamplingRequest(_ request: MCPSamplingRequest) async throws -> MCPSamplingResponse
+}
+
+public protocol MCPElicitationHandler: AnyObject {
+    func handleElicitationRequest(_ request: MCPElicitationRequest) async throws -> MCPElicitationResult
 }
 
 // MARK: - Notification Delegate
@@ -29,25 +34,32 @@ public protocol MCPNotificationDelegate: AnyObject {
 public protocol MCPStreamingTransportProtocol: AnyObject {
     var notificationDelegate: MCPNotificationDelegate? { get set }
     var samplingHandler: MCPSamplingHandler? { get set }
+    var elicitationHandler: MCPElicitationHandler? { get set }
     func connectStream()
     func disconnect()
 }
 
 // MARK: - Streaming Transport
 
-public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, @unchecked Sendable {
+public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     private let sseEndpoint: URL
     private let session: URLSession
     private let headers: [String: String]
-    private let protocolVersion: String? = MCPProtocolVersion.current
+    private var protocolVersion: String? = MCPProtocolVersion.current
     private let endpointWaitTimeout: TimeInterval = 0.8
+    private let sseReconnectMaxAttempts = 5
+    private let sseReconnectBaseDelay: TimeInterval = 1.0
+    private let sseReconnectMaxDelay: TimeInterval = 30.0
     
     private var sseTask: Task<Void, Never>?
     private let pendingRequestsActor = PendingRequestsActor()
     private let state: StreamingState
+    private var sseReconnectAttempt = 0
+    private var lastEventId: String?
     
     public weak var notificationDelegate: MCPNotificationDelegate?
     public weak var samplingHandler: MCPSamplingHandler?
+    public weak var elicitationHandler: MCPElicitationHandler?
     
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -93,6 +105,9 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
                     if let sessionId, !sessionId.isEmpty, !hasHeader("MCP-Session-Id", in: headers) {
                         request.setValue(sessionId, forHTTPHeaderField: "MCP-Session-Id")
                     }
+                    if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+                        request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+                    }
 
                     let (data, response) = try await session.data(for: request)
                     guard let httpResponse = response as? HTTPURLResponse else {
@@ -133,9 +148,6 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
         if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
             request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
-        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
-            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
-        }
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -156,6 +168,8 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
 
     public func connectSSE() {
         disconnect()
+        sseReconnectAttempt = 0
+        lastEventId = nil
         Task { await state.prepareForNewStream() }
         
         sseTask = Task { [weak self] in
@@ -176,65 +190,94 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             }
         }
     }
+
+    public func updateProtocolVersion(_ protocolVersion: String?) async {
+        self.protocolVersion = protocolVersion
+    }
     
     private func runSSELoop(url: URL) async {
-        var request = URLRequest(url: url)
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = .infinity
-        
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
-            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
-        }
-        
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200..<300).contains(httpResponse.statusCode) else {
-                streamingLogger.error("SSE 连接失败")
-                return
+        while !Task.isCancelled {
+            var request = URLRequest(url: url)
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = .infinity
+
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+            if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+                request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+            }
+            if let lastEventId, !lastEventId.isEmpty, !hasHeader(streamingResumptionHeader, in: headers) {
+                request.setValue(lastEventId, forHTTPHeaderField: streamingResumptionHeader)
             }
 
-            streamingLogger.info("SSE 连接已建立")
-            if let sessionId = httpResponse.value(forHTTPHeaderField: "MCP-Session-Id"),
-               !sessionId.isEmpty {
-                await state.updateSessionId(sessionId)
-            }
-
-            var eventName = "message"
-            var dataLines: [String] = []
-            for try await line in bytes.lines {
-                if Task.isCancelled { break }
-                
-                if line.isEmpty {
-                    // 空行表示事件结束
-                    if !dataLines.isEmpty {
-                        let payload = dataLines.joined(separator: "\n")
-                        await handleSSEEvent(name: eventName, data: payload)
-                    }
-                    eventName = "message"
-                    dataLines = []
-                } else if line.hasPrefix(":") {
+            do {
+                let (bytes, response) = try await session.bytes(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw MCPClientError.invalidResponse
+                }
+                guard (200..<300).contains(httpResponse.statusCode) else {
+                    streamingLogger.error("SSE 连接失败：status=\(httpResponse.statusCode)")
+                    guard await scheduleSSEReconnectIfNeeded() else { return }
                     continue
-                } else if line.hasPrefix("event:") {
-                    eventName = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-                } else if line.hasPrefix("data:") {
-                    let data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                    if data != "[DONE]" {
-                        dataLines.append(data)
+                }
+
+                streamingLogger.info("SSE 连接已建立")
+                sseReconnectAttempt = 0
+                if let sessionId = httpResponse.value(forHTTPHeaderField: "MCP-Session-Id"),
+                   !sessionId.isEmpty {
+                    await state.updateSessionId(sessionId)
+                }
+
+                var eventName = "message"
+                var eventId: String?
+                var dataLines: [String] = []
+                for try await line in bytes.lines {
+                    if Task.isCancelled { break }
+
+                    if line.isEmpty {
+                        // 空行表示事件结束
+                        if !dataLines.isEmpty {
+                            let payload = dataLines.joined(separator: "\n")
+                            await handleSSEEvent(name: eventName, data: payload, id: eventId)
+                        }
+                        eventName = "message"
+                        eventId = nil
+                        dataLines = []
+                    } else if line.hasPrefix(":") {
+                        continue
+                    } else if line.hasPrefix("event:") {
+                        eventName = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                    } else if line.hasPrefix("id:") {
+                        eventId = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                    } else if line.hasPrefix("data:") {
+                        let data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        if data != "[DONE]" {
+                            dataLines.append(data)
+                        }
                     }
                 }
-            }
-        } catch {
-            if !Task.isCancelled {
+
+                if Task.isCancelled {
+                    return
+                }
+
+                streamingLogger.info("SSE 连接被服务端关闭，准备重连。")
+                guard await scheduleSSEReconnectIfNeeded() else { return }
+            } catch {
+                if Task.isCancelled {
+                    return
+                }
                 streamingLogger.error("SSE 连接错误: \(error.localizedDescription)")
+                guard await scheduleSSEReconnectIfNeeded() else { return }
             }
         }
     }
     
-    private func handleSSEEvent(name: String, data: String) async {
+    private func handleSSEEvent(name: String, data: String, id: String?) async {
+        if let id, !id.isEmpty {
+            lastEventId = id
+        }
         let trimmed = data.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if name == "endpoint" {
@@ -262,11 +305,27 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             await handleNotification(notification)
             return
         }
-        
-        // 尝试解析为 Sampling 请求
-        if let samplingRequest = try? decoder.decode(MCPServerSamplingRequest.self, from: jsonData) {
-            await handleSamplingRequest(samplingRequest)
-            return
+
+        // 尝试解析为服务端请求
+        if let requestEnvelope = try? decoder.decode(JSONRPCRequestMethodEnvelope.self, from: jsonData) {
+            switch requestEnvelope.method {
+            case "sampling/createMessage":
+                if let samplingRequest = try? decoder.decode(MCPServerSamplingRequest.self, from: jsonData) {
+                    await handleSamplingRequest(samplingRequest)
+                } else if let requestID = requestEnvelope.id {
+                    await sendErrorResponse(requestId: requestID, code: -32602, message: "Sampling 请求参数无效")
+                }
+                return
+            case "elicitation/create":
+                if let elicitationRequest = try? decoder.decode(MCPServerElicitationRequest.self, from: jsonData) {
+                    await handleElicitationRequest(elicitationRequest)
+                } else if let requestID = requestEnvelope.id {
+                    await sendErrorResponse(requestId: requestID, code: -32602, message: "Elicitation 请求参数无效")
+                }
+                return
+            default:
+                break
+            }
         }
         
         // 尝试解析为 JSON-RPC 响应
@@ -309,7 +368,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     private func handleSamplingRequest(_ request: MCPServerSamplingRequest) async {
         guard let handler = samplingHandler else {
             streamingLogger.warning("收到 Sampling 请求但未设置 handler")
-            await sendSamplingError(requestId: request.id, message: "Client does not support sampling")
+            await sendErrorResponse(requestId: request.id, code: -32603, message: "客户端未启用 Sampling 能力")
             return
         }
         
@@ -317,11 +376,26 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             let response = try await handler.handleSamplingRequest(request.params)
             await sendSamplingResponse(requestId: request.id, response: response)
         } catch {
-            await sendSamplingError(requestId: request.id, message: error.localizedDescription)
+            await sendErrorResponse(requestId: request.id, code: -32603, message: error.localizedDescription)
+        }
+    }
+
+    private func handleElicitationRequest(_ request: MCPServerElicitationRequest) async {
+        guard let handler = elicitationHandler else {
+            streamingLogger.info("收到 Elicitation 请求但未设置 handler，返回 decline")
+            await sendElicitationResponse(requestId: request.id, response: .declined)
+            return
+        }
+
+        do {
+            let response = try await handler.handleElicitationRequest(request.params)
+            await sendElicitationResponse(requestId: request.id, response: response)
+        } catch {
+            await sendErrorResponse(requestId: request.id, code: -32603, message: error.localizedDescription)
         }
     }
     
-    private func sendSamplingResponse(requestId: String, response: MCPSamplingResponse) async {
+    private func sendSamplingResponse(requestId: JSONRPCID, response: MCPSamplingResponse) async {
         let rpcResponse = JSONRPCSamplingResponse(id: requestId, result: response)
         guard let data = try? encoder.encode(rpcResponse) else { return }
         
@@ -332,17 +406,28 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
         }
     }
     
-    private func sendSamplingError(requestId: String, message: String) async {
+    private func sendElicitationResponse(requestId: JSONRPCID, response: MCPElicitationResult) async {
+        let rpcResponse = JSONRPCElicitationResponse(id: requestId, result: response)
+        guard let data = try? encoder.encode(rpcResponse) else { return }
+
+        do {
+            try await sendNotification(data)
+        } catch {
+            streamingLogger.error("发送 Elicitation 响应失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func sendErrorResponse(requestId: JSONRPCID, code: Int, message: String) async {
         let error = JSONRPCErrorResponse(
             id: requestId,
-            error: JSONRPCErrorBody(code: -32603, message: message)
+            error: JSONRPCErrorBody(code: code, message: message)
         )
         guard let data = try? encoder.encode(error) else { return }
         
         do {
             try await sendNotification(data)
         } catch {
-            streamingLogger.error("发送 Sampling 错误响应失败: \(error.localizedDescription)")
+            streamingLogger.error("发送 RPC 错误响应失败: \(error.localizedDescription)")
         }
     }
     
@@ -356,7 +441,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
         return try decoder.decode(MCPProgressParams.self, from: data)
     }
 
-    private func extractRequestId(from payload: Data) throws -> String {
+    private func extractRequestId(from payload: Data) throws -> JSONRPCID {
         if let request = try? decoder.decode(JSONRPCRequestEnvelope.self, from: payload) {
             return request.id
         }
@@ -444,6 +529,35 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
         return nil
     }
 
+    private func scheduleSSEReconnectIfNeeded() async -> Bool {
+        let nextAttempt = sseReconnectAttempt + 1
+        guard nextAttempt <= sseReconnectMaxAttempts else {
+            streamingLogger.error("SSE 重连次数已耗尽：\(nextAttempt - 1)")
+            await failAllPendingRequests()
+            return false
+        }
+
+        sseReconnectAttempt = nextAttempt
+        let exponent = max(0, nextAttempt - 1)
+        let delay = min(sseReconnectBaseDelay * pow(2.0, Double(exponent)), sseReconnectMaxDelay)
+        streamingLogger.info("SSE 准备重连：attempt=\(nextAttempt), delay=\(delay, privacy: .public)s")
+
+        let nanos = UInt64(delay * 1_000_000_000)
+        do {
+            try await Task.sleep(nanoseconds: nanos)
+        } catch {
+            return false
+        }
+        return !Task.isCancelled
+    }
+
+    private func failAllPendingRequests() async {
+        let pending = await pendingRequestsActor.removeAll()
+        for continuation in pending {
+            continuation.resume(throwing: MCPClientError.invalidResponse)
+        }
+    }
+
     private func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
         headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
@@ -452,27 +566,51 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
 // MARK: - Internal Models
 
 private struct JSONRPCRequestEnvelope: Decodable {
-    let id: String
+    let id: JSONRPCID
+}
+
+private struct JSONRPCRequestMethodEnvelope: Decodable {
+    let id: JSONRPCID?
+    let method: String
 }
 
 private struct MCPServerSamplingRequest: Codable {
     let jsonrpc: String
-    let id: String
+    let id: JSONRPCID
     let method: String
     let params: MCPSamplingRequest
 }
 
+private struct MCPServerElicitationRequest: Codable {
+    let jsonrpc: String
+    let id: JSONRPCID
+    let method: String
+    let params: MCPElicitationRequest
+}
+
 private struct JSONRPCResponseWrapper: Codable {
     let jsonrpc: String
-    let id: String?
+    let id: JSONRPCID?
 }
 
 private struct JSONRPCSamplingResponse: Encodable {
     let jsonrpc: String
-    let id: String
+    let id: JSONRPCID
     let result: MCPSamplingResponse
     
-    init(id: String, result: MCPSamplingResponse) {
+    init(id: JSONRPCID, result: MCPSamplingResponse) {
+        self.jsonrpc = "2.0"
+        self.id = id
+        self.result = result
+    }
+}
+
+private struct JSONRPCElicitationResponse: Encodable {
+    let jsonrpc: String
+    let id: JSONRPCID
+    let result: MCPElicitationResult
+
+    init(id: JSONRPCID, result: MCPElicitationResult) {
         self.jsonrpc = "2.0"
         self.id = id
         self.result = result
@@ -481,10 +619,10 @@ private struct JSONRPCSamplingResponse: Encodable {
 
 private struct JSONRPCErrorResponse: Encodable {
     let jsonrpc: String
-    let id: String
+    let id: JSONRPCID
     let error: JSONRPCErrorBody
     
-    init(id: String, error: JSONRPCErrorBody) {
+    init(id: JSONRPCID, error: JSONRPCErrorBody) {
         self.jsonrpc = "2.0"
         self.id = id
         self.error = error
@@ -499,13 +637,13 @@ private struct JSONRPCErrorBody: Codable {
 // MARK: - Actor for Thread-Safe Pending Requests
 
 private actor PendingRequestsActor {
-    private var requests: [String: CheckedContinuation<Data, Error>] = [:]
+    private var requests: [JSONRPCID: CheckedContinuation<Data, Error>] = [:]
     
-    func add(id: String, continuation: CheckedContinuation<Data, Error>) {
+    func add(id: JSONRPCID, continuation: CheckedContinuation<Data, Error>) {
         requests[id] = continuation
     }
     
-    func remove(id: String) -> CheckedContinuation<Data, Error>? {
+    func remove(id: JSONRPCID) -> CheckedContinuation<Data, Error>? {
         requests.removeValue(forKey: id)
     }
     

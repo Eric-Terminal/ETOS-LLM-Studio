@@ -275,7 +275,8 @@ extension MCPServerConfiguration {
         notes == other.notes &&
         transport == other.transport &&
         isSelectedForChat == other.isSelectedForChat &&
-        Set(disabledToolIds) == Set(other.disabledToolIds)
+        Set(disabledToolIds) == Set(other.disabledToolIds) &&
+        toolApprovalPolicies == other.toolApprovalPolicies
     }
     
     /// 去除所有同步后缀的基础名称

@@ -14,6 +14,7 @@ public struct MCPServerMetadataCache: Codable, Hashable {
     public var info: MCPServerInfo?
     public var tools: [MCPToolDescription]
     public var resources: [MCPResourceDescription]
+    public var resourceTemplates: [MCPResourceTemplate]
     public var prompts: [MCPPromptDescription]
     public var roots: [MCPRoot]
 
@@ -22,6 +23,7 @@ public struct MCPServerMetadataCache: Codable, Hashable {
         info: MCPServerInfo?,
         tools: [MCPToolDescription],
         resources: [MCPResourceDescription],
+        resourceTemplates: [MCPResourceTemplate],
         prompts: [MCPPromptDescription],
         roots: [MCPRoot]
     ) {
@@ -29,8 +31,30 @@ public struct MCPServerMetadataCache: Codable, Hashable {
         self.info = info
         self.tools = tools
         self.resources = resources
+        self.resourceTemplates = resourceTemplates
         self.prompts = prompts
         self.roots = roots
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cachedAt
+        case info
+        case tools
+        case resources
+        case resourceTemplates
+        case prompts
+        case roots
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        cachedAt = try container.decodeIfPresent(Date.self, forKey: .cachedAt) ?? Date()
+        info = try container.decodeIfPresent(MCPServerInfo.self, forKey: .info)
+        tools = try container.decodeIfPresent([MCPToolDescription].self, forKey: .tools) ?? []
+        resources = try container.decodeIfPresent([MCPResourceDescription].self, forKey: .resources) ?? []
+        resourceTemplates = try container.decodeIfPresent([MCPResourceTemplate].self, forKey: .resourceTemplates) ?? []
+        prompts = try container.decodeIfPresent([MCPPromptDescription].self, forKey: .prompts) ?? []
+        roots = try container.decodeIfPresent([MCPRoot].self, forKey: .roots) ?? []
     }
 }
 
@@ -103,7 +127,7 @@ public struct MCPServerStore {
         setupDirectoryIfNeeded()
         guard var record = loadRecord(for: serverID) else { return }
         record.metadata = metadata
-        record.schemaVersion = 2
+        record.schemaVersion = 3
         writeRecord(record, fileName: serverID.uuidString)
     }
 
@@ -112,7 +136,7 @@ public struct MCPServerStore {
         var server: MCPServerConfiguration
         var metadata: MCPServerMetadataCache?
 
-        init(schemaVersion: Int = 2, server: MCPServerConfiguration, metadata: MCPServerMetadataCache?) {
+        init(schemaVersion: Int = 3, server: MCPServerConfiguration, metadata: MCPServerMetadataCache?) {
             self.schemaVersion = schemaVersion
             self.server = server
             self.metadata = metadata
@@ -127,7 +151,7 @@ public struct MCPServerStore {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             if container.contains(.server) {
-                schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 2
+                schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 3
                 server = try container.decode(MCPServerConfiguration.self, forKey: .server)
                 metadata = try container.decodeIfPresent(MCPServerMetadataCache.self, forKey: .metadata)
             } else {

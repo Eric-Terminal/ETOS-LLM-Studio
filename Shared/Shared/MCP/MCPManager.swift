@@ -38,6 +38,20 @@ public struct MCPAvailableResource: Identifiable, Hashable {
     }
 }
 
+public struct MCPAvailableResourceTemplate: Identifiable, Hashable {
+    public let id: String
+    public let server: MCPServerConfiguration
+    public let resourceTemplate: MCPResourceTemplate
+    public let internalName: String
+
+    public init(server: MCPServerConfiguration, resourceTemplate: MCPResourceTemplate, internalName: String) {
+        self.server = server
+        self.resourceTemplate = resourceTemplate
+        self.internalName = internalName
+        self.id = internalName
+    }
+}
+
 public struct MCPAvailablePrompt: Identifiable, Hashable {
     public let id: String
     public let server: MCPServerConfiguration
@@ -57,8 +71,10 @@ public struct MCPServerStatus: Equatable {
     public var info: MCPServerInfo?
     public var tools: [MCPToolDescription]
     public var resources: [MCPResourceDescription]
+    public var resourceTemplates: [MCPResourceTemplate]
     public var prompts: [MCPPromptDescription]
     public var roots: [MCPRoot]
+    public var metadataCachedAt: Date?
     public var isBusy: Bool
     public var isSelectedForChat: Bool
     public var logLevel: MCPLogLevel
@@ -68,8 +84,10 @@ public struct MCPServerStatus: Equatable {
         info: MCPServerInfo? = nil,
         tools: [MCPToolDescription] = [],
         resources: [MCPResourceDescription] = [],
+        resourceTemplates: [MCPResourceTemplate] = [],
         prompts: [MCPPromptDescription] = [],
         roots: [MCPRoot] = [],
+        metadataCachedAt: Date? = nil,
         isBusy: Bool = false,
         isSelectedForChat: Bool = false,
         logLevel: MCPLogLevel = .info
@@ -78,11 +96,54 @@ public struct MCPServerStatus: Equatable {
         self.info = info
         self.tools = tools
         self.resources = resources
+        self.resourceTemplates = resourceTemplates
         self.prompts = prompts
         self.roots = roots
+        self.metadataCachedAt = metadataCachedAt
         self.isBusy = isBusy
         self.isSelectedForChat = isSelectedForChat
         self.logLevel = logLevel
+    }
+}
+
+public enum MCPGovernanceLogCategory: String, Hashable, CaseIterable {
+    case lifecycle
+    case cache
+    case routing
+    case toolCall
+    case notification
+    case serverLog
+    case progress
+}
+
+public struct MCPGovernanceLogEntry: Identifiable, Hashable {
+    public let id: UUID
+    public let timestamp: Date
+    public let level: MCPLogLevel
+    public let category: MCPGovernanceLogCategory
+    public let serverID: UUID?
+    public let serverDisplayName: String?
+    public let message: String
+    public let payload: JSONValue?
+
+    public init(
+        id: UUID = UUID(),
+        timestamp: Date = Date(),
+        level: MCPLogLevel,
+        category: MCPGovernanceLogCategory,
+        serverID: UUID?,
+        serverDisplayName: String?,
+        message: String,
+        payload: JSONValue? = nil
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        self.level = level
+        self.category = category
+        self.serverID = serverID
+        self.serverDisplayName = serverDisplayName
+        self.message = message
+        self.payload = payload
     }
 }
 
@@ -108,16 +169,33 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var serverStatuses: [UUID: MCPServerStatus] = [:]
     @Published public private(set) var tools: [MCPAvailableTool] = []
     @Published public private(set) var resources: [MCPAvailableResource] = []
+    @Published public private(set) var resourceTemplates: [MCPAvailableResourceTemplate] = []
     @Published public private(set) var prompts: [MCPAvailablePrompt] = []
     @Published public private(set) var logEntries: [MCPLogEntry] = []
+    @Published public private(set) var governanceLogEntries: [MCPGovernanceLogEntry] = []
+    @Published public private(set) var progressByToken: [String: MCPProgressParams] = [:]
     @Published public private(set) var lastOperationOutput: String?
     @Published public private(set) var lastOperationError: String?
     @Published public private(set) var isBusy: Bool = false
 
-    public weak var samplingHandler: MCPSamplingHandler?
+    public weak var samplingHandler: MCPSamplingHandler? {
+        didSet {
+            for transport in streamingTransports.values {
+                transport.samplingHandler = samplingHandler
+            }
+        }
+    }
+    public weak var elicitationHandler: MCPElicitationHandler? {
+        didSet {
+            for transport in streamingTransports.values {
+                transport.elicitationHandler = elicitationHandler
+            }
+        }
+    }
 
     private var clients: [UUID: MCPClient] = [:]
     private var streamingTransports: [UUID: MCPStreamingTransportProtocol] = [:]
+    private var notificationRelays: [UUID: MCPServerNotificationRelay] = [:]
     private var routedTools: [String: RoutedTool] = [:]
     private var routedPrompts: [String: RoutedPrompt] = [:]
     private var debugBusyCount = 0
@@ -127,6 +205,10 @@ public final class MCPManager: ObservableObject {
     private let autoConnectMaxRetries = 5
     private let autoConnectBaseDelay: TimeInterval = 1.0
     private let autoConnectMaxDelay: TimeInterval = 30.0
+    private let defaultToolCallTimeout: TimeInterval = 60
+    private let defaultChatToolCallTimeout: TimeInterval = 120
+    private let metadataCacheTTL: TimeInterval = 300
+    private let governanceLogLimit = 1200
 
     private init() {
         reloadServers()
@@ -155,25 +237,30 @@ public final class MCPManager: ObservableObject {
                 if status.info == nil {
                     status.info = cache.info
                 }
-                if status.tools.isEmpty && status.resources.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
+                if status.tools.isEmpty && status.resources.isEmpty && status.resourceTemplates.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
                     status.tools = cache.tools
                     status.resources = cache.resources
+                    status.resourceTemplates = cache.resourceTemplates
                     status.prompts = cache.prompts
                     status.roots = cache.roots
                 }
+                status.metadataCachedAt = cache.cachedAt
             }
             newStatuses[server.id] = status
         }
         serverStatuses = newStatuses
         clients = clients.filter { serverIDs.contains($0.key) }
         streamingTransports = streamingTransports.filter { serverIDs.contains($0.key) }
+        notificationRelays = notificationRelays.filter { serverIDs.contains($0.key) }
 
         rebuildAggregates()
         updateBusyFlag()
+        appendGovernanceLog(level: .info, category: .lifecycle, message: "重载 MCP 服务器配置，共 \(servers.count) 台。")
     }
 
     public func save(server: MCPServerConfiguration) {
         MCPServerStore.save(server)
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "保存服务器配置：\(server.displayName)")
         reloadServers()
     }
 
@@ -185,7 +272,9 @@ public final class MCPManager: ObservableObject {
         clients[server.id] = nil
         streamingTransports[server.id]?.disconnect()
         streamingTransports[server.id] = nil
+        notificationRelays[server.id] = nil
         serverStatuses[server.id] = nil
+        appendGovernanceLog(level: .warning, category: .lifecycle, serverID: server.id, message: "删除服务器配置：\(server.displayName)")
         reloadServers()
     }
 
@@ -193,7 +282,13 @@ public final class MCPManager: ObservableObject {
         for server in servers where server.isSelectedForChat {
             let status = status(for: server)
             switch status.connectionState {
-            case .ready, .connecting:
+            case .ready:
+                if isMetadataStale(status.metadataCachedAt) {
+                    appendGovernanceLog(level: .info, category: .cache, serverID: server.id, message: "检测到元数据缓存过期，触发刷新。")
+                    refreshMetadata(for: server)
+                }
+                continue
+            case .connecting:
                 continue
             case .idle, .failed:
                 connect(to: server, preserveSelection: true, retryOnFailure: true)
@@ -227,15 +322,19 @@ public final class MCPManager: ObservableObject {
         clients[server.id] = nil
         streamingTransports[server.id]?.disconnect()
         streamingTransports[server.id] = nil
+        notificationRelays[server.id] = nil
         updateStatus(for: server.id) {
             $0.connectionState = .idle
             $0.info = nil
             $0.tools = []
             $0.resources = []
+            $0.resourceTemplates = []
             $0.prompts = []
             $0.roots = []
+            $0.metadataCachedAt = nil
             $0.isBusy = false
         }
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "已断开服务器连接。")
     }
 
     private func ensureClientReady(
@@ -298,7 +397,8 @@ public final class MCPManager: ObservableObject {
         }
         mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
         let cachedMetadata = MCPServerStore.loadMetadata(for: server.id)
-        let shouldRefreshMetadata = refreshMetadataIfCacheMissing && cachedMetadata == nil
+        let shouldRefreshMetadata = refreshMetadataIfCacheMissing && (cachedMetadata == nil || isMetadataStale(cachedMetadata?.cachedAt))
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "开始连接服务器，传输=\(transportLabel(for: server))，将刷新元数据=\(shouldRefreshMetadata ? "是" : "否")")
         updateStatus(for: server.id) {
             $0.connectionState = .connecting
             $0.isBusy = true
@@ -309,13 +409,18 @@ public final class MCPManager: ObservableObject {
         clients[server.id] = client
 
         if let streamingTransport = transport as? MCPStreamingTransportProtocol {
-            streamingTransport.notificationDelegate = self
+            let relay = MCPServerNotificationRelay(serverID: server.id, manager: self)
+            notificationRelays[server.id] = relay
+            streamingTransport.notificationDelegate = relay
             streamingTransport.samplingHandler = samplingHandler
+            streamingTransport.elicitationHandler = elicitationHandler
             streamingTransports[server.id] = streamingTransport
+        } else {
+            notificationRelays[server.id] = nil
         }
 
         do {
-            let info = try await client.initialize()
+            let info = try await client.initialize(capabilities: clientCapabilitiesForCurrentHandlers())
             mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
 
             let shouldSelectForChat = !preserveSelection && !status(for: server).isSelectedForChat
@@ -327,11 +432,13 @@ public final class MCPManager: ObservableObject {
                     $0.isSelectedForChat = true
                 }
                 if let cache = cachedMetadata,
-                   $0.tools.isEmpty && $0.resources.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
+                   $0.tools.isEmpty && $0.resources.isEmpty && $0.resourceTemplates.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
                     $0.tools = cache.tools
                     $0.resources = cache.resources
+                    $0.resourceTemplates = cache.resourceTemplates
                     $0.prompts = cache.prompts
                     $0.roots = cache.roots
+                    $0.metadataCachedAt = cache.cachedAt
                 }
             }
             if shouldSelectForChat {
@@ -344,6 +451,7 @@ public final class MCPManager: ObservableObject {
                 MCPServerStore.saveMetadata(updatedCache, for: server.id)
             }
             cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+            appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "服务器连接成功：\(info.name)")
 
             if shouldRefreshMetadata {
                 await refreshMetadata(for: server.id, client: client, serverInfo: info)
@@ -361,9 +469,11 @@ public final class MCPManager: ObservableObject {
             clients[server.id] = nil
             streamingTransports[server.id]?.disconnect()
             streamingTransports[server.id] = nil
+            notificationRelays[server.id] = nil
             if retryOnFailure, server.isSelectedForChat {
                 scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
             }
+            appendGovernanceLog(level: .error, category: .lifecycle, serverID: server.id, message: "服务器连接失败：\(error.localizedDescription)")
             throw error
         }
     }
@@ -379,6 +489,7 @@ public final class MCPManager: ObservableObject {
         let delaySeconds = autoConnectBackoffDelaySeconds(attempt: attempt)
         let delayNanoseconds = UInt64(delaySeconds * 1_000_000_000)
         mcpManagerLogger.info("MCP 自动重试连接：server=\(serverID.uuidString, privacy: .public)，attempt=\(attempt)，delay=\(delaySeconds, privacy: .public)s")
+        appendGovernanceLog(level: .warning, category: .lifecycle, serverID: serverID, message: "自动重连已排队，第 \(attempt) 次，延迟 \(String(format: "%.1f", delaySeconds)) 秒。")
         autoConnectRetryTasks[serverID] = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: delayNanoseconds)
@@ -445,6 +556,7 @@ public final class MCPManager: ObservableObject {
             return
         }
         mcpManagerLogger.info("刷新 MCP 元数据：\(server.displayName, privacy: .public)")
+        appendGovernanceLog(level: .info, category: .cache, serverID: server.id, message: "开始刷新元数据。")
         updateStatus(for: server.id) { $0.isBusy = true }
         let currentInfo = status(for: server).info
         Task {
@@ -456,17 +568,19 @@ public final class MCPManager: ObservableObject {
         do {
             async let toolsTask = client.listTools()
             async let resourcesTask = listResourcesIfSupported(client: client)
+            async let resourceTemplatesTask = listResourceTemplatesIfSupported(client: client)
             async let promptsTask = listPromptsIfSupported(client: client)
             async let rootsTask = listRootsIfSupported(client: client)
             
             let tools = try await toolsTask
             let resources = try await resourcesTask
+            let resourceTemplates = try await resourceTemplatesTask
             let prompts = try await promptsTask
             let roots = try await rootsTask
             if let server = servers.first(where: { $0.id == serverID }) {
-                mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+                mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，resourceTemplates=\(resourceTemplates.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             } else {
-                mcpManagerLogger.info("MCP 元数据加载完成：server=\(serverID.uuidString, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+                mcpManagerLogger.info("MCP 元数据加载完成：server=\(serverID.uuidString, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，resourceTemplates=\(resourceTemplates.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             }
 
             let resolvedInfo: MCPServerInfo?
@@ -480,6 +594,7 @@ public final class MCPManager: ObservableObject {
                 info: resolvedInfo,
                 tools: tools,
                 resources: resources,
+                resourceTemplates: resourceTemplates,
                 prompts: prompts,
                 roots: roots
             )
@@ -489,10 +604,13 @@ public final class MCPManager: ObservableObject {
                 self.updateStatus(for: serverID) {
                     $0.tools = tools
                     $0.resources = resources
+                    $0.resourceTemplates = resourceTemplates
                     $0.prompts = prompts
                     $0.roots = roots
+                    $0.metadataCachedAt = cache.cachedAt
                     $0.isBusy = false
                 }
+                self.appendGovernanceLog(level: .info, category: .cache, serverID: serverID, message: "元数据刷新成功：tools=\(tools.count), resources=\(resources.count), prompts=\(prompts.count)")
             }
         } catch {
             if let server = servers.first(where: { $0.id == serverID }) {
@@ -507,6 +625,11 @@ public final class MCPManager: ObservableObject {
                 }
                 self.lastOperationError = error.localizedDescription
                 self.lastOperationOutput = nil
+                if let server = self.servers.first(where: { $0.id == serverID }),
+                   server.isSelectedForChat {
+                    self.scheduleAutoConnectRetry(for: serverID, preserveSelection: true)
+                }
+                self.appendGovernanceLog(level: .error, category: .cache, serverID: serverID, message: "元数据刷新失败：\(error.localizedDescription)")
             }
         }
     }
@@ -514,6 +637,14 @@ public final class MCPManager: ObservableObject {
     private func listResourcesIfSupported(client: MCPClient) async throws -> [MCPResourceDescription] {
         do {
             return try await client.listResources()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
+        }
+    }
+
+    private func listResourceTemplatesIfSupported(client: MCPClient) async throws -> [MCPResourceTemplate] {
+        do {
+            return try await client.listResourceTemplates()
         } catch let MCPClientError.rpcError(error) where error.code == -32601 {
             return []
         }
@@ -541,19 +672,26 @@ public final class MCPManager: ObservableObject {
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试调用工具：\(toolId)")
 
         Task {
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
-                let result = try await client.executeTool(toolId: toolId, inputs: inputs)
+                let result = try await client.executeTool(
+                    toolId: toolId,
+                    inputs: inputs,
+                    options: self.defaultToolCallOptions(timeout: self.defaultToolCallTimeout, reason: "调试工具调用超时")
+                )
                 await MainActor.run {
                     self.lastOperationOutput = result.prettyPrinted()
                     self.setDebugBusy(false)
+                    self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试工具调用成功：\(toolId)")
                 }
             } catch {
                 await MainActor.run {
                     self.lastOperationError = error.localizedDescription
                     self.setDebugBusy(false)
+                    self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试工具调用失败：\(toolId)，错误=\(error.localizedDescription)")
                 }
             }
         }
@@ -563,6 +701,7 @@ public final class MCPManager: ObservableObject {
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试读取资源：\(resourceId)")
 
         Task {
             do {
@@ -571,11 +710,13 @@ public final class MCPManager: ObservableObject {
                 await MainActor.run {
                     self.lastOperationOutput = result.prettyPrinted()
                     self.setDebugBusy(false)
+                    self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试资源读取成功：\(resourceId)")
                 }
             } catch {
                 await MainActor.run {
                     self.lastOperationError = error.localizedDescription
                     self.setDebugBusy(false)
+                    self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试资源读取失败：\(resourceId)，错误=\(error.localizedDescription)")
                 }
             }
         }
@@ -587,6 +728,7 @@ public final class MCPManager: ObservableObject {
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试获取提示词：\(name)")
 
         Task {
             do {
@@ -595,11 +737,13 @@ public final class MCPManager: ObservableObject {
                 await MainActor.run {
                     self.lastOperationOutput = self.formatPromptResult(result)
                     self.setDebugBusy(false)
+                    self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试提示词获取成功：\(name)")
                 }
             } catch {
                 await MainActor.run {
                     self.lastOperationError = error.localizedDescription
                     self.setDebugBusy(false)
+                    self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试提示词获取失败：\(name)，错误=\(error.localizedDescription)")
                 }
             }
         }
@@ -647,10 +791,12 @@ public final class MCPManager: ObservableObject {
                     self.updateStatus(for: serverID) {
                         $0.logLevel = level
                     }
+                    self.appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: "日志级别已更新为 \(level.rawValue)。")
                 }
             } catch {
                 await MainActor.run {
                     self.lastOperationError = error.localizedDescription
+                    self.appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: "更新日志级别失败：\(error.localizedDescription)")
                 }
             }
         }
@@ -660,10 +806,41 @@ public final class MCPManager: ObservableObject {
         logEntries.removeAll()
     }
 
+    public func clearGovernanceLogEntries() {
+        governanceLogEntries.removeAll()
+    }
+
+    public func invalidateMetadataCache(for serverID: UUID, reason: String, refreshIfConnected: Bool = true) {
+        guard let server = servers.first(where: { $0.id == serverID }) else { return }
+        MCPServerStore.saveMetadata(nil, for: serverID)
+        updateStatus(for: serverID) {
+            $0.tools = []
+            $0.resources = []
+            $0.resourceTemplates = []
+            $0.prompts = []
+            $0.roots = []
+            $0.metadataCachedAt = nil
+        }
+        appendGovernanceLog(level: .warning, category: .cache, serverID: serverID, message: "元数据缓存已失效：\(reason)")
+        if refreshIfConnected, case .ready = status(for: server).connectionState {
+            refreshMetadata(for: server)
+        }
+    }
+
+    public func invalidateAllMetadataCaches(reason: String, refreshIfConnected: Bool = true) {
+        let serverIDs = servers.map(\.id)
+        for serverID in serverIDs {
+            invalidateMetadataCache(for: serverID, reason: reason, refreshIfConnected: refreshIfConnected)
+        }
+    }
+
     // MARK: - Chat Integration
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
-        tools.map { available in
+        tools.compactMap { available in
+            if available.server.approvalPolicy(for: available.tool.toolId) == .alwaysDeny {
+                return nil
+            }
             let description: String
             if let desc = available.tool.description, !desc.isEmpty {
                 description = "[\(available.server.displayName)] \(desc)"
@@ -682,10 +859,26 @@ public final class MCPManager: ObservableObject {
         guard let routed = routedTools[toolName] else {
             throw MCPChatBridgeError.unknownTool
         }
+        if routed.server.approvalPolicy(for: routed.tool.toolId) == .alwaysDeny {
+            throw MCPChatBridgeError.toolDeniedByPolicy(displayName(for: routed))
+        }
+        let startedAt = Date()
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: "开始执行聊天工具：\(routed.tool.toolId)")
         let client = try await ensureClientReady(serverID: routed.server.id, refreshMetadataIfCacheMissing: false)
         let inputs = try decodeJSONDictionary(from: argumentsJSON)
-        let result = try await client.executeTool(toolId: routed.tool.toolId, inputs: inputs)
-        return result.prettyPrinted()
+        do {
+            let result = try await client.executeTool(
+                toolId: routed.tool.toolId,
+                inputs: inputs,
+                options: defaultToolCallOptions(timeout: defaultChatToolCallTimeout, reason: "聊天工具调用超时")
+            )
+            let elapsed = Date().timeIntervalSince(startedAt)
+            appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行成功：\(routed.tool.toolId)，耗时 \(String(format: "%.2f", elapsed)) 秒。")
+            return result.prettyPrinted()
+        } catch {
+            appendGovernanceLog(level: .error, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行失败：\(routed.tool.toolId)，错误=\(error.localizedDescription)")
+            throw error
+        }
     }
 
     public func internalName(for tool: MCPAvailableTool) -> String {
@@ -707,6 +900,26 @@ public final class MCPManager: ObservableObject {
     public func setToolEnabled(serverID: UUID, toolId: String, isEnabled: Bool) {
         guard var server = servers.first(where: { $0.id == serverID }) else { return }
         server.setToolEnabled(toolId, isEnabled: isEnabled)
+        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: "工具 \(toolId) 已\(isEnabled ? "启用" : "禁用")。")
+        save(server: server)
+    }
+
+    public func approvalPolicy(serverID: UUID, toolId: String) -> MCPToolApprovalPolicy {
+        guard let server = servers.first(where: { $0.id == serverID }) else {
+            return .askEveryTime
+        }
+        return server.approvalPolicy(for: toolId)
+    }
+
+    public func approvalPolicy(for toolName: String) -> MCPToolApprovalPolicy? {
+        guard let routed = routedTools[toolName] else { return nil }
+        return routed.server.approvalPolicy(for: routed.tool.toolId)
+    }
+
+    public func setToolApprovalPolicy(serverID: UUID, toolId: String, policy: MCPToolApprovalPolicy) {
+        guard var server = servers.first(where: { $0.id == serverID }) else { return }
+        server.setApprovalPolicy(policy, for: toolId)
+        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: "工具 \(toolId) 审批策略已更新为 \(policy.rawValue)。")
         save(server: server)
     }
 
@@ -732,6 +945,20 @@ public final class MCPManager: ObservableObject {
         serverStatuses[id] ?? MCPServerStatus()
     }
 
+    private func isMetadataStale(_ cachedAt: Date?) -> Bool {
+        guard let cachedAt else { return true }
+        return Date().timeIntervalSince(cachedAt) > metadataCacheTTL
+    }
+
+    private func displayName(for serverID: UUID?) -> String? {
+        guard let serverID else { return nil }
+        return servers.first(where: { $0.id == serverID })?.displayName
+    }
+
+    private func displayName(for routed: RoutedTool) -> String {
+        "[\(routed.server.displayName)] \(routed.tool.toolId)"
+    }
+
     private func updateStatus(for id: UUID, _ update: (inout MCPServerStatus) -> Void) {
         var statuses = serverStatuses
         var status = statuses[id] ?? MCPServerStatus()
@@ -745,24 +972,26 @@ public final class MCPManager: ObservableObject {
     private func rebuildAggregates() {
         var aggregatedTools: [MCPAvailableTool] = []
         var aggregatedResources: [MCPAvailableResource] = []
+        var aggregatedResourceTemplates: [MCPAvailableResourceTemplate] = []
         var aggregatedPrompts: [MCPAvailablePrompt] = []
         var newToolRouting: [String: RoutedTool] = [:]
         var newPromptRouting: [String: RoutedPrompt] = [:]
 
         for server in servers {
             guard let status = serverStatuses[server.id], status.isSelectedForChat else { continue }
-            let hasMetadataCache = !status.tools.isEmpty || !status.resources.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty
+            let hasMetadataCache = !status.tools.isEmpty || !status.resources.isEmpty || !status.resourceTemplates.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty
             switch status.connectionState {
             case .ready:
                 break
             case .idle, .connecting, .failed:
-                guard hasMetadataCache else { continue }
+                guard hasMetadataCache, !isMetadataStale(status.metadataCachedAt) else { continue }
             @unknown default:
                 continue
             }
 
             for tool in status.tools {
                 guard server.isToolEnabled(tool.toolId) else { continue }
+                guard server.approvalPolicy(for: tool.toolId) != .alwaysDeny else { continue }
                 let fullName = internalToolName(for: server, tool: tool)
                 let shortNameCandidate = shortToolName(for: server, tool: tool)
                 let shortName = newToolRouting[shortNameCandidate] == nil ? shortNameCandidate : fullName
@@ -780,6 +1009,17 @@ public final class MCPManager: ObservableObject {
                 aggregatedResources.append(MCPAvailableResource(server: server, resource: resource, internalName: name))
             }
 
+            for resourceTemplate in status.resourceTemplates {
+                let name = internalResourceTemplateName(for: server, resourceTemplate: resourceTemplate)
+                aggregatedResourceTemplates.append(
+                    MCPAvailableResourceTemplate(
+                        server: server,
+                        resourceTemplate: resourceTemplate,
+                        internalName: name
+                    )
+                )
+            }
+
             for prompt in status.prompts {
                 let name = internalPromptName(for: server, prompt: prompt)
                 aggregatedPrompts.append(MCPAvailablePrompt(server: server, prompt: prompt, internalName: name))
@@ -789,6 +1029,7 @@ public final class MCPManager: ObservableObject {
 
         tools = aggregatedTools
         resources = aggregatedResources
+        resourceTemplates = aggregatedResourceTemplates
         prompts = aggregatedPrompts
         routedTools = newToolRouting
         routedPrompts = newPromptRouting
@@ -808,6 +1049,27 @@ public final class MCPManager: ObservableObject {
         isBusy = serverBusy || debugBusyCount > 0
     }
 
+    private func appendGovernanceLog(
+        level: MCPLogLevel,
+        category: MCPGovernanceLogCategory,
+        serverID: UUID? = nil,
+        message: String,
+        payload: JSONValue? = nil
+    ) {
+        let entry = MCPGovernanceLogEntry(
+            level: level,
+            category: category,
+            serverID: serverID,
+            serverDisplayName: displayName(for: serverID),
+            message: message,
+            payload: payload
+        )
+        governanceLogEntries.append(entry)
+        if governanceLogEntries.count > governanceLogLimit {
+            governanceLogEntries.removeFirst(governanceLogEntries.count - governanceLogLimit)
+        }
+    }
+
     private func persistSelection(for serverID: UUID, isSelected: Bool) {
         guard let index = servers.firstIndex(where: { $0.id == serverID }) else { return }
         guard servers[index].isSelectedForChat != isSelected else { return }
@@ -817,6 +1079,7 @@ public final class MCPManager: ObservableObject {
         updatedServers[index] = updatedServer
         servers = updatedServers
         MCPServerStore.save(updatedServer)
+        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: "聊天路由已\(isSelected ? "加入" : "移除")服务器。")
     }
 
     private func internalToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {
@@ -832,6 +1095,12 @@ public final class MCPManager: ObservableObject {
         "\(Self.resourceNamePrefix)\(server.id.uuidString)/\(resource.resourceId)"
     }
 
+    private nonisolated static var resourceTemplateNamePrefix: String { "mcprestpl://" }
+
+    private func internalResourceTemplateName(for server: MCPServerConfiguration, resourceTemplate: MCPResourceTemplate) -> String {
+        "\(Self.resourceTemplateNamePrefix)\(server.id.uuidString)/\(resourceTemplate.uriTemplate)"
+    }
+
     private nonisolated static var promptNamePrefix: String { "mcpprompt://" }
 
     private func internalPromptName(for server: MCPServerConfiguration, prompt: MCPPromptDescription) -> String {
@@ -843,6 +1112,28 @@ public final class MCPManager: ObservableObject {
         guard !trimmed.isEmpty else { return [:] }
         let data = Data(trimmed.utf8)
         return try JSONDecoder().decode([String: JSONValue].self, from: data)
+    }
+
+    private func defaultToolCallOptions(timeout: TimeInterval, reason: String) -> MCPToolCallOptions {
+        MCPToolCallOptions(
+            timeout: timeout,
+            cancellationReason: reason,
+            includeTimeoutInMeta: true
+        )
+    }
+
+    private func clientCapabilitiesForCurrentHandlers() -> MCPClientCapabilities {
+        var capabilities = MCPClientCapabilities(roots: MCPClientRootsCapabilities(listChanged: true))
+        if samplingHandler != nil {
+            capabilities.sampling = MCPClientSamplingCapabilities()
+        }
+        if elicitationHandler != nil {
+            capabilities.elicitation = MCPClientElicitationCapabilities(
+                form: MCPClientElicitationFormCapability(),
+                url: MCPClientElicitationURLCapability()
+            )
+        }
+        return capabilities
     }
 
     private func transportLabel(for server: MCPServerConfiguration) -> String {
@@ -862,34 +1153,127 @@ public final class MCPManager: ObservableObject {
 extension MCPManager: MCPNotificationDelegate {
     public nonisolated func didReceiveNotification(_ notification: MCPNotification) {
         Task { @MainActor in
-            switch notification.method {
-            case MCPNotificationType.toolsListChanged.rawValue,
-                 MCPNotificationType.resourcesListChanged.rawValue,
-                 MCPNotificationType.promptsListChanged.rawValue:
-                // 自动刷新元数据
-                self.refreshMetadata()
-            case MCPNotificationType.rootsListChanged.rawValue:
-                self.refreshMetadata()
-            default:
-                break
-            }
+            self.handleNotification(notification, sourceServerID: nil)
         }
     }
 
     public nonisolated func didReceiveLogMessage(_ entry: MCPLogEntry) {
         Task { @MainActor in
-            self.logEntries.append(entry)
-            // 保持最多 500 条日志
-            if self.logEntries.count > 500 {
-                self.logEntries.removeFirst(self.logEntries.count - 500)
-            }
+            self.handleLogMessage(entry, sourceServerID: nil)
         }
     }
 
     public nonisolated func didReceiveProgress(_ progress: MCPProgressParams) {
-        // 可以在这里实现进度追踪，目前仅记录
         Task { @MainActor in
-            // 可以通过 @Published 属性暴露给 UI
+            self.handleProgress(progress, sourceServerID: nil)
+        }
+    }
+}
+
+fileprivate extension MCPManager {
+    func handleNotification(_ notification: MCPNotification, sourceServerID: UUID?) {
+        switch notification.method {
+        case MCPNotificationType.toolsListChanged.rawValue,
+             MCPNotificationType.resourcesListChanged.rawValue,
+             MCPNotificationType.promptsListChanged.rawValue,
+             MCPNotificationType.resourceUpdated.rawValue,
+             MCPNotificationType.rootsListChanged.rawValue:
+            appendGovernanceLog(
+                level: .info,
+                category: .notification,
+                serverID: sourceServerID,
+                message: "收到能力变更通知：\(notification.method)"
+            )
+            if let sourceServerID {
+                invalidateMetadataCache(for: sourceServerID, reason: "收到 \(notification.method) 通知")
+            } else {
+                invalidateAllMetadataCaches(reason: "收到全局能力变更通知：\(notification.method)")
+            }
+        case MCPNotificationType.cancelled.rawValue:
+            if let params = notification.params,
+               let cancelled = try? decodeCancelled(from: params) {
+                mcpManagerLogger.info("收到 MCP 取消通知：requestId=\(cancelled.requestId.canonicalValue, privacy: .public)，reason=\(cancelled.reason ?? "unknown", privacy: .public)")
+                appendGovernanceLog(
+                    level: .warning,
+                    category: .notification,
+                    serverID: sourceServerID,
+                    message: "收到取消通知 requestId=\(cancelled.requestId.canonicalValue)"
+                )
+                if let reason = cancelled.reason, !reason.isEmpty {
+                    lastOperationError = reason
+                }
+            }
+        default:
+            appendGovernanceLog(
+                level: .debug,
+                category: .notification,
+                serverID: sourceServerID,
+                message: "收到通知：\(notification.method)"
+            )
+        }
+    }
+
+    func handleLogMessage(_ entry: MCPLogEntry, sourceServerID: UUID?) {
+        logEntries.append(entry)
+        // 保持最多 500 条日志
+        if logEntries.count > 500 {
+            logEntries.removeFirst(logEntries.count - 500)
+        }
+        appendGovernanceLog(
+            level: entry.level,
+            category: .serverLog,
+            serverID: sourceServerID,
+            message: entry.logger ?? "服务器日志",
+            payload: entry.data
+        )
+    }
+
+    func handleProgress(_ progress: MCPProgressParams, sourceServerID: UUID?) {
+        let tokenKey = progress.progressToken.canonicalValue
+        progressByToken[tokenKey] = progress
+        if let total = progress.total,
+           total > 0,
+           progress.progress >= total {
+            progressByToken.removeValue(forKey: tokenKey)
+        }
+        appendGovernanceLog(
+            level: .info,
+            category: .progress,
+            serverID: sourceServerID,
+            message: "进度更新 token=\(tokenKey), progress=\(progress.progress), total=\(progress.total ?? 0)"
+        )
+    }
+
+    func decodeCancelled(from value: JSONValue) throws -> MCPCancelledParams {
+        let data = try JSONEncoder().encode(value)
+        return try JSONDecoder().decode(MCPCancelledParams.self, from: data)
+    }
+}
+
+private final class MCPServerNotificationRelay: MCPNotificationDelegate {
+    let serverID: UUID
+    weak var manager: MCPManager?
+
+    init(serverID: UUID, manager: MCPManager) {
+        self.serverID = serverID
+        self.manager = manager
+    }
+
+    func didReceiveNotification(_ notification: MCPNotification) {
+        Task { @MainActor [weak manager] in
+            manager?.handleNotification(notification, sourceServerID: self.serverID)
+        }
+    }
+
+    func didReceiveLogMessage(_ entry: MCPLogEntry) {
+        Task { @MainActor [weak manager] in
+            manager?.handleLogMessage(entry, sourceServerID: self.serverID)
+        }
+    }
+
+    func didReceiveProgress(_ progress: MCPProgressParams) {
+        Task { @MainActor [weak manager] in
+            manager?.handleProgress(progress, sourceServerID: self.serverID)
         }
     }
 }
@@ -909,6 +1293,7 @@ private struct RoutedPrompt {
 public enum MCPChatBridgeError: LocalizedError {
     case unknownTool
     case unknownPrompt
+    case toolDeniedByPolicy(String)
 
     public var errorDescription: String? {
         switch self {
@@ -916,6 +1301,8 @@ public enum MCPChatBridgeError: LocalizedError {
             return "未找到匹配的 MCP 工具。"
         case .unknownPrompt:
             return "未找到匹配的 MCP 提示词模板。"
+        case .toolDeniedByPolicy(let displayName):
+            return "\(displayName) 已被策略禁止调用。"
         }
     }
 }

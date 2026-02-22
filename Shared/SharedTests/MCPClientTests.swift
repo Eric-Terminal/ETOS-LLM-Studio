@@ -27,7 +27,10 @@ struct MCPClientTests {
         let client = MCPClient(transport: transport)
         let info = try await client.initialize(
             clientInfo: .init(name: "Harness", version: "0.1"),
-            capabilities: .init(transports: ["http+sse"], supportsStreamingResponses: false)
+            capabilities: .init(
+                roots: .init(listChanged: true),
+                sampling: .init()
+            )
         )
 
         #expect(info == expectedInfo)
@@ -42,9 +45,37 @@ struct MCPClientTests {
         #expect(protocolVersion == MCPProtocolVersion.current)
         #expect(clientInfo["name"] as? String == "Harness")
         #expect(clientInfo["version"] as? String == "0.1")
-        #expect(capabilities["supportsStreamingResponses"] as? Bool == false)
-        #expect((capabilities["transports"] as? [String]) == ["http+sse"])
+        #expect((capabilities["roots"] as? [String: Any])?["listChanged"] as? Bool == true)
+        #expect(capabilities["sampling"] as? [String: Any] != nil)
         #expect(transport.request(named: "notifications/initialized") != nil)
+    }
+
+    @Test("Initialize 会将协商后的协议版本下发到 transport")
+    func testInitializePropagatesNegotiatedProtocolVersion() async throws {
+        let transport = MockTransport()
+        let negotiatedVersion = "2025-06-18"
+        let expectedInfo = MCPServerInfo(
+            name: "Negotiated MCP Server",
+            version: "2.0.0",
+            capabilities: ["search": .bool(true)],
+            metadata: ["region": .string("us")]
+        )
+        transport.enqueueSuccess(
+            result: InitializeNegotiatedPayload(
+                protocolVersion: negotiatedVersion,
+                serverInfo: expectedInfo
+            )
+        )
+
+        let client = MCPClient(transport: transport)
+        let info = try await client.initialize(
+            clientInfo: .init(name: "Harness", version: "0.2"),
+            capabilities: .standard
+        )
+
+        #expect(info == expectedInfo)
+        #expect(client.negotiatedProtocolVersion == negotiatedVersion)
+        #expect(transport.updatedProtocolVersions.last ?? nil == negotiatedVersion)
     }
 
     @Test("List tools decodes JSON payload")
@@ -66,6 +97,68 @@ struct MCPClientTests {
             return
         }
         #expect(recorded.params == nil)
+    }
+
+    @Test("List tools follows cursor pagination")
+    func testListToolsPagination() async throws {
+        let transport = MockTransport()
+        transport.enqueueSuccess(result: ToolsPagePayload(
+            tools: [MCPToolDescription(toolId: "tool.page.1", description: "第一页", inputSchema: nil, examples: nil)],
+            nextCursor: "cursor-2"
+        ))
+        transport.enqueueSuccess(result: ToolsPagePayload(
+            tools: [MCPToolDescription(toolId: "tool.page.2", description: "第二页", inputSchema: nil, examples: nil)],
+            nextCursor: nil
+        ))
+
+        let client = MCPClient(transport: transport)
+        let fetched = try await client.listTools()
+
+        #expect(fetched.map(\.toolId) == ["tool.page.1", "tool.page.2"])
+        let requests = transport.requests(named: "tools/list")
+        #expect(requests.count == 2)
+        #expect(requests[0].params == nil)
+        #expect(requests[1].params?["cursor"] as? String == "cursor-2")
+    }
+
+    @Test("资源模板列表支持 cursor 分页拉取")
+    func testListResourceTemplatesPagination() async throws {
+        let transport = MockTransport()
+        transport.enqueueSuccess(result: ResourceTemplatesPagePayload(
+            resourceTemplates: [
+                MCPResourceTemplate(
+                    uriTemplate: "file://docs/{name}",
+                    name: "文档模板",
+                    title: nil,
+                    description: "分页第一页",
+                    mimeType: "text/plain",
+                    annotations: nil
+                )
+            ],
+            nextCursor: "template-cursor-2"
+        ))
+        transport.enqueueSuccess(result: ResourceTemplatesPagePayload(
+            resourceTemplates: [
+                MCPResourceTemplate(
+                    uriTemplate: "file://images/{id}",
+                    name: "图片模板",
+                    title: nil,
+                    description: "分页第二页",
+                    mimeType: "image/png",
+                    annotations: nil
+                )
+            ],
+            nextCursor: nil
+        ))
+
+        let client = MCPClient(transport: transport)
+        let fetched = try await client.listResourceTemplates()
+
+        #expect(fetched.map(\.uriTemplate) == ["file://docs/{name}", "file://images/{id}"])
+        let requests = transport.requests(named: "resources/templates/list")
+        #expect(requests.count == 2)
+        #expect(requests[0].params == nil)
+        #expect(requests[1].params?["cursor"] as? String == "template-cursor-2")
     }
 
     @Test("Execute tool encodes inputs and returns JSONValue")
@@ -95,6 +188,86 @@ struct MCPClientTests {
         #expect(inputs["question"] as? String == "What is 6 * 7?")
     }
 
+    @Test("Execute tool encodes MCP meta fields")
+    func testExecuteToolMetaEncoding() async throws {
+        let transport = MockTransport()
+        let responseValue = JSONValue.dictionary(["status": .string("ok")])
+        transport.enqueueSuccess(result: responseValue)
+
+        let client = MCPClient(transport: transport)
+        _ = try await client.executeTool(
+            toolId: "meta-tool",
+            inputs: ["query": .string("hello")],
+            options: .init(timeout: 12, progressToken: "progress-001", cancellationReason: "单测")
+        )
+
+        guard let recorded = transport.request(named: "tools/call"),
+              let params = recorded.params,
+              let meta = params["_meta"] as? [String: Any] else {
+            Issue.record("tools/call 缺少 _meta 字段。")
+            return
+        }
+        #expect(meta["progressToken"] as? String == "progress-001")
+        #expect(meta["timeout"] as? Int == 12000)
+    }
+
+    @Test("Execute tool encodes integer progress token")
+    func testExecuteToolIntegerProgressTokenEncoding() async throws {
+        let transport = MockTransport()
+        let responseValue = JSONValue.dictionary(["status": .string("ok")])
+        transport.enqueueSuccess(result: responseValue)
+
+        let client = MCPClient(transport: transport)
+        _ = try await client.executeTool(
+            toolId: "meta-tool-int",
+            inputs: ["query": .string("hello")],
+            options: .init(timeout: 8, progressToken: 42, cancellationReason: "单测")
+        )
+
+        guard let recorded = transport.request(named: "tools/call"),
+              let params = recorded.params,
+              let meta = params["_meta"] as? [String: Any] else {
+            Issue.record("tools/call 缺少 _meta 字段。")
+            return
+        }
+        #expect(meta["progressToken"] as? Int == 42)
+        #expect(meta["timeout"] as? Int == 8000)
+    }
+
+    @Test("Execute tool timeout sends cancelled notification")
+    func testExecuteToolTimeoutSendsCancelledNotification() async throws {
+        let transport = MockTransport()
+        transport.messageDelayNanoseconds = 400_000_000
+        transport.enqueueSuccess(result: JSONValue.dictionary(["status": .string("slow")]))
+
+        let client = MCPClient(transport: transport)
+        do {
+            _ = try await client.executeTool(
+                toolId: "slow-tool",
+                inputs: [:],
+                options: .init(timeout: 0.05, progressToken: "p-timeout", cancellationReason: "调用超时")
+            )
+            Issue.record("超时场景应抛出错误。")
+            return
+        } catch let error as MCPClientError {
+            guard case .requestTimedOut(let method, _) = error else {
+                Issue.record("错误类型不是 requestTimedOut：\(error)")
+                return
+            }
+            #expect(method == "tools/call")
+        } catch {
+            Issue.record("捕获到未知错误：\(error)")
+        }
+
+        guard let cancelled = await transport.waitForRequest(named: "notifications/cancelled"),
+              let params = cancelled.params else {
+            Issue.record("超时后未发送 notifications/cancelled。")
+            return
+        }
+        #expect(params["reason"] as? String == "调用超时")
+        #expect(params["requestId"] != nil)
+    }
+
     @Test("Read resource surfaces RPC errors")
     func testReadResourceErrorPropagation() async throws {
         let transport = MockTransport()
@@ -115,11 +288,59 @@ struct MCPClientTests {
             Issue.record("捕获到未知错误：\(error)")
         }
     }
+
+    @Test("Progress params decodes integer progressToken")
+    func testProgressParamsDecodeIntegerToken() throws {
+        let json = #"{"progressToken":7,"progress":2.5,"total":10}"#
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(MCPProgressParams.self, from: data)
+        #expect(decoded.progressToken == .int(7))
+        #expect(decoded.progress == 2.5)
+        #expect(decoded.total == 10)
+    }
+
+    @Test("completion 请求可编码引用并解析返回候选")
+    func testCompletionEncodingAndDecoding() async throws {
+        let transport = MockTransport()
+        transport.enqueueSuccess(result: CompletionResultPayload(
+            completion: MCPCompletion(values: ["苹果", "安卓"], total: 2, hasMore: false)
+        ))
+
+        let client = MCPClient(transport: transport)
+        let completion = try await client.complete(
+            reference: .prompt(name: "suggest-platform"),
+            argument: MCPCompletionArgument(name: "keyword", value: "移动"),
+            context: MCPCompletionContext(arguments: ["language": "zh-CN"]),
+            options: MCPCompletionOptions(progressToken: 7)
+        )
+
+        #expect(completion.values == ["苹果", "安卓"])
+        #expect(completion.total == 2)
+        #expect(completion.hasMore == false)
+
+        guard let recorded = transport.request(named: "completion/complete"),
+              let params = recorded.params,
+              let ref = params["ref"] as? [String: Any],
+              let argument = params["argument"] as? [String: Any],
+              let context = params["context"] as? [String: Any],
+              let contextArguments = context["arguments"] as? [String: Any],
+              let meta = params["_meta"] as? [String: Any] else {
+            Issue.record("completion/complete 请求参数缺失。")
+            return
+        }
+
+        #expect(ref["type"] as? String == "ref/prompt")
+        #expect(ref["name"] as? String == "suggest-platform")
+        #expect(argument["name"] as? String == "keyword")
+        #expect(argument["value"] as? String == "移动")
+        #expect(contextArguments["language"] as? String == "zh-CN")
+        #expect(meta["progressToken"] as? Int == 7)
+    }
 }
 
 // MARK: - Test Helpers
 
-private final class MockTransport: MCPTransport {
+private final class MockTransport: MCPTransport, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     struct RecordedRequest {
         let method: String
         let payload: [String: Any]
@@ -131,6 +352,8 @@ private final class MockTransport: MCPTransport {
 
     private var responses: [Result<Data, Error>] = []
     private(set) var recordedRequests: [RecordedRequest] = []
+    private(set) var updatedProtocolVersions: [String?] = []
+    var messageDelayNanoseconds: UInt64 = 0
 
     func enqueueSuccess<T: Encodable>(result: T) {
         let wrapper = RPCSuccessPayload(result: result)
@@ -154,7 +377,14 @@ private final class MockTransport: MCPTransport {
         recordedRequests.first(where: { $0.method == method })
     }
 
+    func requests(named method: String) -> [RecordedRequest] {
+        recordedRequests.filter { $0.method == method }
+    }
+
     func sendMessage(_ payload: Data) async throws -> Data {
+        if messageDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: messageDelayNanoseconds)
+        }
         let json = try JSONSerialization.jsonObject(with: payload)
         let dictionary = json as? [String: Any] ?? [:]
         let method = dictionary["method"] as? String ?? ""
@@ -179,12 +409,32 @@ private final class MockTransport: MCPTransport {
         let method = dictionary["method"] as? String ?? ""
         recordedRequests.append(RecordedRequest(method: method, payload: dictionary))
     }
+
+    func updateProtocolVersion(_ protocolVersion: String?) async {
+        updatedProtocolVersions.append(protocolVersion)
+    }
+
+    func waitForRequest(named method: String, timeoutSeconds: TimeInterval = 1.0) async -> RecordedRequest? {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if let request = request(named: method) {
+                return request
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return request(named: method)
+    }
 }
 
 private struct RPCSuccessPayload<Result: Encodable>: Encodable {
     let jsonrpc = "2.0"
     let id = UUID().uuidString
     let result: Result
+}
+
+private struct InitializeNegotiatedPayload: Encodable {
+    let protocolVersion: String
+    let serverInfo: MCPServerInfo
 }
 
 private struct RPCErrorPayload: Encodable {
@@ -201,4 +451,18 @@ private struct RPCErrorPayload: Encodable {
     init(code: Int, message: String, data: JSONValue?) {
         self.error = Body(code: code, message: message, data: data)
     }
+}
+
+private struct ToolsPagePayload: Encodable {
+    let tools: [MCPToolDescription]
+    let nextCursor: String?
+}
+
+private struct ResourceTemplatesPagePayload: Encodable {
+    let resourceTemplates: [MCPResourceTemplate]
+    let nextCursor: String?
+}
+
+private struct CompletionResultPayload: Encodable {
+    let completion: MCPCompletion
 }

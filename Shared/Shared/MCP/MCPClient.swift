@@ -14,6 +14,7 @@ public final class MCPClient {
     private let transport: MCPTransport
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    public private(set) var negotiatedProtocolVersion: String?
     
     public init(transport: MCPTransport) {
         self.transport = transport
@@ -26,7 +27,7 @@ public final class MCPClient {
     public func initialize(
         protocolVersion: String = MCPProtocolVersion.current,
         clientInfo: MCPClientInfo = .appDefault,
-        capabilities: MCPClientCapabilities = .httpOnly
+        capabilities: MCPClientCapabilities = .standard
     ) async throws -> MCPServerInfo {
         let params = InitializeParams(
             protocolVersion: protocolVersion,
@@ -34,23 +35,62 @@ public final class MCPClient {
             capabilities: capabilities
         )
         let result: InitializeResult = try await send(method: "initialize", params: AnyEncodable(params))
+        let resolvedProtocolVersion = result.protocolVersion ?? protocolVersion
+        guard MCPProtocolVersion.isSupported(resolvedProtocolVersion) else {
+            throw MCPClientError.unsupportedProtocolVersion(resolvedProtocolVersion)
+        }
+        negotiatedProtocolVersion = resolvedProtocolVersion
+        if let configurableTransport = transport as? MCPProtocolVersionConfigurableTransport {
+            await configurableTransport.updateProtocolVersion(resolvedProtocolVersion)
+        }
         try? await sendNotification(method: "notifications/initialized")
         return result.info
     }
     
     public func listTools() async throws -> [MCPToolDescription] {
-        let result: ToolsListResult = try await send(method: "tools/list")
-        return result.tools
+        try await collectPaginatedItems(method: "tools/list") { (result: ToolsListResult) in
+            (result.tools, result.nextCursor)
+        }
     }
     
     public func listResources() async throws -> [MCPResourceDescription] {
-        let result: ResourcesListResult = try await send(method: "resources/list")
-        return result.resources
+        try await collectPaginatedItems(method: "resources/list") { (result: ResourcesListResult) in
+            (result.resources, result.nextCursor)
+        }
+    }
+
+    public func listResourceTemplates() async throws -> [MCPResourceTemplate] {
+        try await collectPaginatedItems(method: "resources/templates/list") { (result: ResourceTemplatesListResult) in
+            (result.resourceTemplates, result.nextCursor)
+        }
     }
     
-    public func executeTool(toolId: String, inputs: [String: JSONValue]) async throws -> JSONValue {
-        let params = ToolExecuteParams(toolId: toolId, inputs: inputs)
-        return try await send(method: "tools/call", params: AnyEncodable(params))
+    public func executeTool(
+        toolId: String,
+        inputs: [String: JSONValue],
+        options: MCPToolCallOptions = MCPToolCallOptions()
+    ) async throws -> JSONValue {
+        let timeoutMilliseconds: Int?
+        if options.includeTimeoutInMeta, let timeout = options.timeout, timeout > 0 {
+            timeoutMilliseconds = Int((timeout * 1000).rounded())
+        } else {
+            timeoutMilliseconds = nil
+        }
+        let metadata = ToolExecuteMeta(
+            progressToken: options.progressToken,
+            timeout: timeoutMilliseconds
+        )
+        let params = ToolExecuteParams(
+            toolId: toolId,
+            inputs: inputs,
+            metadata: metadata.isEmpty ? nil : metadata
+        )
+        return try await send(
+            method: "tools/call",
+            params: AnyEncodable(params),
+            timeout: options.timeout,
+            cancellationReason: options.cancellationReason
+        )
     }
     
     public func readResource(resourceId: String, query: [String: JSONValue]?) async throws -> JSONValue {
@@ -61,8 +101,9 @@ public final class MCPClient {
     // MARK: - Prompts
 
     public func listPrompts() async throws -> [MCPPromptDescription] {
-        let result: PromptsListResult = try await send(method: "prompts/list")
-        return result.prompts
+        try await collectPaginatedItems(method: "prompts/list") { (result: PromptsListResult) in
+            (result.prompts, result.nextCursor)
+        }
     }
 
     public func getPrompt(name: String, arguments: [String: String]?) async throws -> MCPGetPromptResult {
@@ -70,11 +111,31 @@ public final class MCPClient {
         return try await send(method: "prompts/get", params: AnyEncodable(params))
     }
 
+    // MARK: - Completion
+
+    public func complete(
+        reference: MCPCompletionReference,
+        argument: MCPCompletionArgument,
+        context: MCPCompletionContext? = nil,
+        options: MCPCompletionOptions = MCPCompletionOptions()
+    ) async throws -> MCPCompletion {
+        let metadata = CompletionRequestMeta(progressToken: options.progressToken)
+        let params = CompletionRequestParams(
+            reference: reference,
+            argument: argument,
+            context: context,
+            metadata: metadata.isEmpty ? nil : metadata
+        )
+        let result: CompletionResult = try await send(method: "completion/complete", params: AnyEncodable(params))
+        return result.completion
+    }
+
     // MARK: - Roots
 
     public func listRoots() async throws -> [MCPRoot] {
-        let result: RootsListResult = try await send(method: "roots/list")
-        return result.roots
+        try await collectPaginatedItems(method: "roots/list") { (result: RootsListResult) in
+            (result.roots, result.nextCursor)
+        }
     }
 
     // MARK: - Logging
@@ -86,8 +147,14 @@ public final class MCPClient {
 
     // MARK: - 内部发送逻辑
     
-    private func send<Result: Decodable>(method: String, params: AnyEncodable? = nil) async throws -> Result {
-        let request = JSONRPCRequest(id: UUID().uuidString, method: method, params: params)
+    private func send<Result: Decodable>(
+        method: String,
+        params: AnyEncodable? = nil,
+        timeout: TimeInterval? = nil,
+        cancellationReason: String? = nil
+    ) async throws -> Result {
+        let requestID = JSONRPCID.string(UUID().uuidString)
+        let request = JSONRPCRequest(id: requestID, method: method, params: params)
         let payload: Data
         do {
             payload = try encoder.encode(request)
@@ -99,7 +166,26 @@ public final class MCPClient {
         
         let rawResponse: Data
         do {
-            rawResponse = try await transport.sendMessage(payload)
+            rawResponse = try await withTaskCancellationHandler {
+                try await sendWithTimeout(
+                    payload: payload,
+                    method: method,
+                    timeout: timeout
+                )
+            } onCancel: { [weak self] in
+                self?.postCancelledNotification(
+                    requestId: requestID,
+                    reason: cancellationReason ?? "客户端已取消请求"
+                )
+            }
+        } catch let timeoutError as MCPClientError {
+            if case .requestTimedOut = timeoutError {
+                postCancelledNotification(
+                    requestId: requestID,
+                    reason: cancellationReason ?? "请求超时"
+                )
+            }
+            throw timeoutError
         } catch {
             mcpClientLogger.error("MCP 请求失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             throw error
@@ -143,6 +229,45 @@ public final class MCPClient {
             throw error
         }
     }
+
+    private func sendWithTimeout(payload: Data, method: String, timeout: TimeInterval?) async throws -> Data {
+        guard let timeout, timeout > 0 else {
+            return try await transport.sendMessage(payload)
+        }
+
+        return try await withThrowingTaskGroup(of: Data.self) { group in
+            group.addTask { [transport] in
+                try await transport.sendMessage(payload)
+            }
+            group.addTask {
+                let timeoutNanoseconds = UInt64(timeout * 1_000_000_000)
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw MCPClientError.requestTimedOut(method: method, timeout: timeout)
+            }
+
+            do {
+                guard let first = try await group.next() else {
+                    throw MCPClientError.invalidResponse
+                }
+                group.cancelAll()
+                return first
+            } catch {
+                group.cancelAll()
+                throw error
+            }
+        }
+    }
+
+    private func postCancelledNotification(requestId: JSONRPCID, reason: String?) {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let params = MCPCancelledParams(requestId: requestId, reason: reason)
+            try? await self.sendNotification(
+                method: MCPNotificationType.cancelled.rawValue,
+                params: AnyEncodable(params)
+            )
+        }
+    }
 }
 
 // MARK: - 参数模型
@@ -156,16 +281,34 @@ private struct InitializeParams: Codable {
 private struct ToolExecuteParams: Encodable {
     let toolId: String
     let inputs: [String: JSONValue]
+    let metadata: ToolExecuteMeta?
 
     enum CodingKeys: String, CodingKey {
         case name
         case arguments
+        case metadata = "_meta"
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(toolId, forKey: .name)
         try container.encode(inputs, forKey: .arguments)
+        try container.encodeIfPresent(metadata, forKey: .metadata)
+    }
+}
+
+private struct ToolExecuteMeta: Codable {
+    let progressToken: MCPProgressToken?
+    let timeout: Int?
+
+    var isEmpty: Bool {
+        let hasToken: Bool
+        if let progressToken {
+            hasToken = !progressToken.isEmptyString
+        } else {
+            hasToken = false
+        }
+        return !hasToken && timeout == nil
     }
 }
 
@@ -196,12 +339,41 @@ private struct SetLogLevelParams: Codable {
     let level: MCPLogLevel
 }
 
+private struct CompletionRequestParams: Encodable {
+    let reference: MCPCompletionReference
+    let argument: MCPCompletionArgument
+    let context: MCPCompletionContext?
+    let metadata: CompletionRequestMeta?
+
+    enum CodingKeys: String, CodingKey {
+        case reference = "ref"
+        case argument
+        case context
+        case metadata = "_meta"
+    }
+}
+
+private struct CompletionRequestMeta: Codable {
+    let progressToken: MCPProgressToken?
+
+    var isEmpty: Bool {
+        guard let progressToken else { return true }
+        return progressToken.isEmptyString
+    }
+}
+
+private struct CompletionResult: Decodable {
+    let completion: MCPCompletion
+}
+
 private struct EmptyResult: Codable {}
 
 private struct InitializeResult: Decodable {
     let info: MCPServerInfo
+    let protocolVersion: String?
 
     private enum CodingKeys: String, CodingKey {
+        case protocolVersion
         case serverInfo
         case capabilities
         case metadata
@@ -210,10 +382,12 @@ private struct InitializeResult: Decodable {
     init(from decoder: Decoder) throws {
         if let info = try? MCPServerInfo(from: decoder) {
             self.info = info
+            self.protocolVersion = nil
             return
         }
 
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        protocolVersion = try container.decodeIfPresent(String.self, forKey: .protocolVersion)
         var serverInfo = try container.decode(MCPServerInfo.self, forKey: .serverInfo)
         let capabilities = try container.decodeIfPresent([String: JSONValue].self, forKey: .capabilities)
         let metadata = try container.decodeIfPresent([String: JSONValue].self, forKey: .metadata)
@@ -225,6 +399,57 @@ private struct InitializeResult: Decodable {
         }
         self.info = serverInfo
     }
+}
+
+public struct MCPToolCallOptions: Sendable {
+    public var timeout: TimeInterval?
+    public var progressToken: MCPProgressToken?
+    public var cancellationReason: String?
+    public var includeTimeoutInMeta: Bool
+
+    public init(
+        timeout: TimeInterval? = nil,
+        progressToken: MCPProgressToken? = nil,
+        cancellationReason: String? = nil,
+        includeTimeoutInMeta: Bool = true
+    ) {
+        self.timeout = timeout
+        self.progressToken = progressToken
+        self.cancellationReason = cancellationReason
+        self.includeTimeoutInMeta = includeTimeoutInMeta
+    }
+
+    public init(
+        timeout: TimeInterval? = nil,
+        progressToken: String?,
+        cancellationReason: String? = nil,
+        includeTimeoutInMeta: Bool = true
+    ) {
+        self.init(
+            timeout: timeout,
+            progressToken: progressToken.map(MCPProgressToken.string),
+            cancellationReason: cancellationReason,
+            includeTimeoutInMeta: includeTimeoutInMeta
+        )
+    }
+
+    public init(
+        timeout: TimeInterval? = nil,
+        progressToken: Int?,
+        cancellationReason: String? = nil,
+        includeTimeoutInMeta: Bool = true
+    ) {
+        self.init(
+            timeout: timeout,
+            progressToken: progressToken.map(MCPProgressToken.int),
+            cancellationReason: cancellationReason,
+            includeTimeoutInMeta: includeTimeoutInMeta
+        )
+    }
+}
+
+private struct CursorPaginationParams: Encodable {
+    let cursor: String
 }
 
 private struct ToolsListResult: Decodable {
@@ -265,6 +490,27 @@ private struct ResourcesListResult: Decodable {
         }
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.resources = try container.decode([MCPResourceDescription].self, forKey: .resources)
+        self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+}
+
+private struct ResourceTemplatesListResult: Decodable {
+    let resourceTemplates: [MCPResourceTemplate]
+    let nextCursor: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case resourceTemplates
+        case nextCursor
+    }
+
+    init(from decoder: Decoder) throws {
+        if let resourceTemplates = try? [MCPResourceTemplate](from: decoder) {
+            self.resourceTemplates = resourceTemplates
+            self.nextCursor = nil
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.resourceTemplates = try container.decode([MCPResourceTemplate].self, forKey: .resourceTemplates)
         self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
     }
 }
@@ -312,6 +558,44 @@ private struct RootsListResult: Decodable {
 }
 
 private extension MCPClient {
+    func collectPaginatedItems<Result: Decodable, Item>(
+        method: String,
+        extract: (Result) -> (items: [Item], nextCursor: String?)
+    ) async throws -> [Item] {
+        var allItems: [Item] = []
+        var currentCursor: String?
+        var seenCursors: Set<String> = []
+
+        while true {
+            let params: AnyEncodable?
+            if let currentCursor {
+                params = AnyEncodable(CursorPaginationParams(cursor: currentCursor))
+            } else {
+                params = nil
+            }
+
+            let result: Result = try await send(method: method, params: params)
+            let page = extract(result)
+            allItems.append(contentsOf: page.items)
+
+            guard let rawNextCursor = page.nextCursor else {
+                break
+            }
+            let nextCursor = rawNextCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !nextCursor.isEmpty else {
+                break
+            }
+            if seenCursors.contains(nextCursor) {
+                mcpClientLogger.error("MCP 分页游标出现循环：\(method, privacy: .public), cursor=\(nextCursor, privacy: .public)")
+                break
+            }
+            seenCursors.insert(nextCursor)
+            currentCursor = nextCursor
+        }
+
+        return allItems
+    }
+
     func logJSON(data: Data, prefix: String) {
         if let text = String(data: data, encoding: .utf8) {
             mcpClientLogger.info("\(prefix, privacy: .public)：\(self.truncate(text), privacy: .public)")
