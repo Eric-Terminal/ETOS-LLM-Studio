@@ -17,6 +17,10 @@ public protocol MCPSamplingHandler: AnyObject {
     func handleSamplingRequest(_ request: MCPSamplingRequest) async throws -> MCPSamplingResponse
 }
 
+public protocol MCPElicitationHandler: AnyObject {
+    func handleElicitationRequest(_ request: MCPElicitationRequest) async throws -> MCPElicitationResult
+}
+
 // MARK: - Notification Delegate
 
 public protocol MCPNotificationDelegate: AnyObject {
@@ -30,6 +34,7 @@ public protocol MCPNotificationDelegate: AnyObject {
 public protocol MCPStreamingTransportProtocol: AnyObject {
     var notificationDelegate: MCPNotificationDelegate? { get set }
     var samplingHandler: MCPSamplingHandler? { get set }
+    var elicitationHandler: MCPElicitationHandler? { get set }
     func connectStream()
     func disconnect()
 }
@@ -54,6 +59,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     
     public weak var notificationDelegate: MCPNotificationDelegate?
     public weak var samplingHandler: MCPSamplingHandler?
+    public weak var elicitationHandler: MCPElicitationHandler?
     
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -295,11 +301,27 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             await handleNotification(notification)
             return
         }
-        
-        // 尝试解析为 Sampling 请求
-        if let samplingRequest = try? decoder.decode(MCPServerSamplingRequest.self, from: jsonData) {
-            await handleSamplingRequest(samplingRequest)
-            return
+
+        // 尝试解析为服务端请求
+        if let requestEnvelope = try? decoder.decode(JSONRPCRequestMethodEnvelope.self, from: jsonData) {
+            switch requestEnvelope.method {
+            case "sampling/createMessage":
+                if let samplingRequest = try? decoder.decode(MCPServerSamplingRequest.self, from: jsonData) {
+                    await handleSamplingRequest(samplingRequest)
+                } else if let requestID = requestEnvelope.id {
+                    await sendErrorResponse(requestId: requestID, code: -32602, message: "Sampling 请求参数无效")
+                }
+                return
+            case "elicitation/create":
+                if let elicitationRequest = try? decoder.decode(MCPServerElicitationRequest.self, from: jsonData) {
+                    await handleElicitationRequest(elicitationRequest)
+                } else if let requestID = requestEnvelope.id {
+                    await sendErrorResponse(requestId: requestID, code: -32602, message: "Elicitation 请求参数无效")
+                }
+                return
+            default:
+                break
+            }
         }
         
         // 尝试解析为 JSON-RPC 响应
@@ -342,7 +364,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     private func handleSamplingRequest(_ request: MCPServerSamplingRequest) async {
         guard let handler = samplingHandler else {
             streamingLogger.warning("收到 Sampling 请求但未设置 handler")
-            await sendSamplingError(requestId: request.id, message: "Client does not support sampling")
+            await sendErrorResponse(requestId: request.id, code: -32603, message: "客户端未启用 Sampling 能力")
             return
         }
         
@@ -350,7 +372,22 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             let response = try await handler.handleSamplingRequest(request.params)
             await sendSamplingResponse(requestId: request.id, response: response)
         } catch {
-            await sendSamplingError(requestId: request.id, message: error.localizedDescription)
+            await sendErrorResponse(requestId: request.id, code: -32603, message: error.localizedDescription)
+        }
+    }
+
+    private func handleElicitationRequest(_ request: MCPServerElicitationRequest) async {
+        guard let handler = elicitationHandler else {
+            streamingLogger.info("收到 Elicitation 请求但未设置 handler，返回 decline")
+            await sendElicitationResponse(requestId: request.id, response: .declined)
+            return
+        }
+
+        do {
+            let response = try await handler.handleElicitationRequest(request.params)
+            await sendElicitationResponse(requestId: request.id, response: response)
+        } catch {
+            await sendErrorResponse(requestId: request.id, code: -32603, message: error.localizedDescription)
         }
     }
     
@@ -365,17 +402,28 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
         }
     }
     
-    private func sendSamplingError(requestId: JSONRPCID, message: String) async {
+    private func sendElicitationResponse(requestId: JSONRPCID, response: MCPElicitationResult) async {
+        let rpcResponse = JSONRPCElicitationResponse(id: requestId, result: response)
+        guard let data = try? encoder.encode(rpcResponse) else { return }
+
+        do {
+            try await sendNotification(data)
+        } catch {
+            streamingLogger.error("发送 Elicitation 响应失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func sendErrorResponse(requestId: JSONRPCID, code: Int, message: String) async {
         let error = JSONRPCErrorResponse(
             id: requestId,
-            error: JSONRPCErrorBody(code: -32603, message: message)
+            error: JSONRPCErrorBody(code: code, message: message)
         )
         guard let data = try? encoder.encode(error) else { return }
         
         do {
             try await sendNotification(data)
         } catch {
-            streamingLogger.error("发送 Sampling 错误响应失败: \(error.localizedDescription)")
+            streamingLogger.error("发送 RPC 错误响应失败: \(error.localizedDescription)")
         }
     }
     
@@ -517,11 +565,23 @@ private struct JSONRPCRequestEnvelope: Decodable {
     let id: JSONRPCID
 }
 
+private struct JSONRPCRequestMethodEnvelope: Decodable {
+    let id: JSONRPCID?
+    let method: String
+}
+
 private struct MCPServerSamplingRequest: Codable {
     let jsonrpc: String
     let id: JSONRPCID
     let method: String
     let params: MCPSamplingRequest
+}
+
+private struct MCPServerElicitationRequest: Codable {
+    let jsonrpc: String
+    let id: JSONRPCID
+    let method: String
+    let params: MCPElicitationRequest
 }
 
 private struct JSONRPCResponseWrapper: Codable {
@@ -535,6 +595,18 @@ private struct JSONRPCSamplingResponse: Encodable {
     let result: MCPSamplingResponse
     
     init(id: JSONRPCID, result: MCPSamplingResponse) {
+        self.jsonrpc = "2.0"
+        self.id = id
+        self.result = result
+    }
+}
+
+private struct JSONRPCElicitationResponse: Encodable {
+    let jsonrpc: String
+    let id: JSONRPCID
+    let result: MCPElicitationResult
+
+    init(id: JSONRPCID, result: MCPElicitationResult) {
         self.jsonrpc = "2.0"
         self.id = id
         self.result = result

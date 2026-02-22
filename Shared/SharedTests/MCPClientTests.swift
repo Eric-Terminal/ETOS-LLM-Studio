@@ -93,6 +93,46 @@ struct MCPClientTests {
         #expect(requests[1].params?["cursor"] as? String == "cursor-2")
     }
 
+    @Test("资源模板列表支持 cursor 分页拉取")
+    func testListResourceTemplatesPagination() async throws {
+        let transport = MockTransport()
+        transport.enqueueSuccess(result: ResourceTemplatesPagePayload(
+            resourceTemplates: [
+                MCPResourceTemplate(
+                    uriTemplate: "file://docs/{name}",
+                    name: "文档模板",
+                    title: nil,
+                    description: "分页第一页",
+                    mimeType: "text/plain",
+                    annotations: nil
+                )
+            ],
+            nextCursor: "template-cursor-2"
+        ))
+        transport.enqueueSuccess(result: ResourceTemplatesPagePayload(
+            resourceTemplates: [
+                MCPResourceTemplate(
+                    uriTemplate: "file://images/{id}",
+                    name: "图片模板",
+                    title: nil,
+                    description: "分页第二页",
+                    mimeType: "image/png",
+                    annotations: nil
+                )
+            ],
+            nextCursor: nil
+        ))
+
+        let client = MCPClient(transport: transport)
+        let fetched = try await client.listResourceTemplates()
+
+        #expect(fetched.map(\.uriTemplate) == ["file://docs/{name}", "file://images/{id}"])
+        let requests = transport.requests(named: "resources/templates/list")
+        #expect(requests.count == 2)
+        #expect(requests[0].params == nil)
+        #expect(requests[1].params?["cursor"] as? String == "template-cursor-2")
+    }
+
     @Test("Execute tool encodes inputs and returns JSONValue")
     func testExecuteTool() async throws {
         let transport = MockTransport()
@@ -230,6 +270,44 @@ struct MCPClientTests {
         #expect(decoded.progress == 2.5)
         #expect(decoded.total == 10)
     }
+
+    @Test("completion 请求可编码引用并解析返回候选")
+    func testCompletionEncodingAndDecoding() async throws {
+        let transport = MockTransport()
+        transport.enqueueSuccess(result: CompletionResultPayload(
+            completion: MCPCompletion(values: ["苹果", "安卓"], total: 2, hasMore: false)
+        ))
+
+        let client = MCPClient(transport: transport)
+        let completion = try await client.complete(
+            reference: .prompt(name: "suggest-platform"),
+            argument: MCPCompletionArgument(name: "keyword", value: "移动"),
+            context: MCPCompletionContext(arguments: ["language": "zh-CN"]),
+            options: MCPCompletionOptions(progressToken: 7)
+        )
+
+        #expect(completion.values == ["苹果", "安卓"])
+        #expect(completion.total == 2)
+        #expect(completion.hasMore == false)
+
+        guard let recorded = transport.request(named: "completion/complete"),
+              let params = recorded.params,
+              let ref = params["ref"] as? [String: Any],
+              let argument = params["argument"] as? [String: Any],
+              let context = params["context"] as? [String: Any],
+              let contextArguments = context["arguments"] as? [String: Any],
+              let meta = params["_meta"] as? [String: Any] else {
+            Issue.record("completion/complete 请求参数缺失。")
+            return
+        }
+
+        #expect(ref["type"] as? String == "ref/prompt")
+        #expect(ref["name"] as? String == "suggest-platform")
+        #expect(argument["name"] as? String == "keyword")
+        #expect(argument["value"] as? String == "移动")
+        #expect(contextArguments["language"] as? String == "zh-CN")
+        #expect(meta["progressToken"] as? Int == 7)
+    }
 }
 
 // MARK: - Test Helpers
@@ -340,4 +418,13 @@ private struct RPCErrorPayload: Encodable {
 private struct ToolsPagePayload: Encodable {
     let tools: [MCPToolDescription]
     let nextCursor: String?
+}
+
+private struct ResourceTemplatesPagePayload: Encodable {
+    let resourceTemplates: [MCPResourceTemplate]
+    let nextCursor: String?
+}
+
+private struct CompletionResultPayload: Encodable {
+    let completion: MCPCompletion
 }

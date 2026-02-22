@@ -38,6 +38,20 @@ public struct MCPAvailableResource: Identifiable, Hashable {
     }
 }
 
+public struct MCPAvailableResourceTemplate: Identifiable, Hashable {
+    public let id: String
+    public let server: MCPServerConfiguration
+    public let resourceTemplate: MCPResourceTemplate
+    public let internalName: String
+
+    public init(server: MCPServerConfiguration, resourceTemplate: MCPResourceTemplate, internalName: String) {
+        self.server = server
+        self.resourceTemplate = resourceTemplate
+        self.internalName = internalName
+        self.id = internalName
+    }
+}
+
 public struct MCPAvailablePrompt: Identifiable, Hashable {
     public let id: String
     public let server: MCPServerConfiguration
@@ -57,6 +71,7 @@ public struct MCPServerStatus: Equatable {
     public var info: MCPServerInfo?
     public var tools: [MCPToolDescription]
     public var resources: [MCPResourceDescription]
+    public var resourceTemplates: [MCPResourceTemplate]
     public var prompts: [MCPPromptDescription]
     public var roots: [MCPRoot]
     public var isBusy: Bool
@@ -68,6 +83,7 @@ public struct MCPServerStatus: Equatable {
         info: MCPServerInfo? = nil,
         tools: [MCPToolDescription] = [],
         resources: [MCPResourceDescription] = [],
+        resourceTemplates: [MCPResourceTemplate] = [],
         prompts: [MCPPromptDescription] = [],
         roots: [MCPRoot] = [],
         isBusy: Bool = false,
@@ -78,6 +94,7 @@ public struct MCPServerStatus: Equatable {
         self.info = info
         self.tools = tools
         self.resources = resources
+        self.resourceTemplates = resourceTemplates
         self.prompts = prompts
         self.roots = roots
         self.isBusy = isBusy
@@ -108,6 +125,7 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var serverStatuses: [UUID: MCPServerStatus] = [:]
     @Published public private(set) var tools: [MCPAvailableTool] = []
     @Published public private(set) var resources: [MCPAvailableResource] = []
+    @Published public private(set) var resourceTemplates: [MCPAvailableResourceTemplate] = []
     @Published public private(set) var prompts: [MCPAvailablePrompt] = []
     @Published public private(set) var logEntries: [MCPLogEntry] = []
     @Published public private(set) var progressByToken: [String: MCPProgressParams] = [:]
@@ -115,7 +133,20 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var lastOperationError: String?
     @Published public private(set) var isBusy: Bool = false
 
-    public weak var samplingHandler: MCPSamplingHandler?
+    public weak var samplingHandler: MCPSamplingHandler? {
+        didSet {
+            for transport in streamingTransports.values {
+                transport.samplingHandler = samplingHandler
+            }
+        }
+    }
+    public weak var elicitationHandler: MCPElicitationHandler? {
+        didSet {
+            for transport in streamingTransports.values {
+                transport.elicitationHandler = elicitationHandler
+            }
+        }
+    }
 
     private var clients: [UUID: MCPClient] = [:]
     private var streamingTransports: [UUID: MCPStreamingTransportProtocol] = [:]
@@ -158,9 +189,10 @@ public final class MCPManager: ObservableObject {
                 if status.info == nil {
                     status.info = cache.info
                 }
-                if status.tools.isEmpty && status.resources.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
+                if status.tools.isEmpty && status.resources.isEmpty && status.resourceTemplates.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
                     status.tools = cache.tools
                     status.resources = cache.resources
+                    status.resourceTemplates = cache.resourceTemplates
                     status.prompts = cache.prompts
                     status.roots = cache.roots
                 }
@@ -235,6 +267,7 @@ public final class MCPManager: ObservableObject {
             $0.info = nil
             $0.tools = []
             $0.resources = []
+            $0.resourceTemplates = []
             $0.prompts = []
             $0.roots = []
             $0.isBusy = false
@@ -314,11 +347,12 @@ public final class MCPManager: ObservableObject {
         if let streamingTransport = transport as? MCPStreamingTransportProtocol {
             streamingTransport.notificationDelegate = self
             streamingTransport.samplingHandler = samplingHandler
+            streamingTransport.elicitationHandler = elicitationHandler
             streamingTransports[server.id] = streamingTransport
         }
 
         do {
-            let info = try await client.initialize()
+            let info = try await client.initialize(capabilities: clientCapabilitiesForCurrentHandlers())
             mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
 
             let shouldSelectForChat = !preserveSelection && !status(for: server).isSelectedForChat
@@ -330,9 +364,10 @@ public final class MCPManager: ObservableObject {
                     $0.isSelectedForChat = true
                 }
                 if let cache = cachedMetadata,
-                   $0.tools.isEmpty && $0.resources.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
+                   $0.tools.isEmpty && $0.resources.isEmpty && $0.resourceTemplates.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
                     $0.tools = cache.tools
                     $0.resources = cache.resources
+                    $0.resourceTemplates = cache.resourceTemplates
                     $0.prompts = cache.prompts
                     $0.roots = cache.roots
                 }
@@ -459,17 +494,19 @@ public final class MCPManager: ObservableObject {
         do {
             async let toolsTask = client.listTools()
             async let resourcesTask = listResourcesIfSupported(client: client)
+            async let resourceTemplatesTask = listResourceTemplatesIfSupported(client: client)
             async let promptsTask = listPromptsIfSupported(client: client)
             async let rootsTask = listRootsIfSupported(client: client)
             
             let tools = try await toolsTask
             let resources = try await resourcesTask
+            let resourceTemplates = try await resourceTemplatesTask
             let prompts = try await promptsTask
             let roots = try await rootsTask
             if let server = servers.first(where: { $0.id == serverID }) {
-                mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+                mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，resourceTemplates=\(resourceTemplates.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             } else {
-                mcpManagerLogger.info("MCP 元数据加载完成：server=\(serverID.uuidString, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，prompts=\(prompts.count)，roots=\(roots.count)")
+                mcpManagerLogger.info("MCP 元数据加载完成：server=\(serverID.uuidString, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，resourceTemplates=\(resourceTemplates.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             }
 
             let resolvedInfo: MCPServerInfo?
@@ -483,6 +520,7 @@ public final class MCPManager: ObservableObject {
                 info: resolvedInfo,
                 tools: tools,
                 resources: resources,
+                resourceTemplates: resourceTemplates,
                 prompts: prompts,
                 roots: roots
             )
@@ -492,6 +530,7 @@ public final class MCPManager: ObservableObject {
                 self.updateStatus(for: serverID) {
                     $0.tools = tools
                     $0.resources = resources
+                    $0.resourceTemplates = resourceTemplates
                     $0.prompts = prompts
                     $0.roots = roots
                     $0.isBusy = false
@@ -517,6 +556,14 @@ public final class MCPManager: ObservableObject {
     private func listResourcesIfSupported(client: MCPClient) async throws -> [MCPResourceDescription] {
         do {
             return try await client.listResources()
+        } catch let MCPClientError.rpcError(error) where error.code == -32601 {
+            return []
+        }
+    }
+
+    private func listResourceTemplatesIfSupported(client: MCPClient) async throws -> [MCPResourceTemplate] {
+        do {
+            return try await client.listResourceTemplates()
         } catch let MCPClientError.rpcError(error) where error.code == -32601 {
             return []
         }
@@ -756,13 +803,14 @@ public final class MCPManager: ObservableObject {
     private func rebuildAggregates() {
         var aggregatedTools: [MCPAvailableTool] = []
         var aggregatedResources: [MCPAvailableResource] = []
+        var aggregatedResourceTemplates: [MCPAvailableResourceTemplate] = []
         var aggregatedPrompts: [MCPAvailablePrompt] = []
         var newToolRouting: [String: RoutedTool] = [:]
         var newPromptRouting: [String: RoutedPrompt] = [:]
 
         for server in servers {
             guard let status = serverStatuses[server.id], status.isSelectedForChat else { continue }
-            let hasMetadataCache = !status.tools.isEmpty || !status.resources.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty
+            let hasMetadataCache = !status.tools.isEmpty || !status.resources.isEmpty || !status.resourceTemplates.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty
             switch status.connectionState {
             case .ready:
                 break
@@ -791,6 +839,17 @@ public final class MCPManager: ObservableObject {
                 aggregatedResources.append(MCPAvailableResource(server: server, resource: resource, internalName: name))
             }
 
+            for resourceTemplate in status.resourceTemplates {
+                let name = internalResourceTemplateName(for: server, resourceTemplate: resourceTemplate)
+                aggregatedResourceTemplates.append(
+                    MCPAvailableResourceTemplate(
+                        server: server,
+                        resourceTemplate: resourceTemplate,
+                        internalName: name
+                    )
+                )
+            }
+
             for prompt in status.prompts {
                 let name = internalPromptName(for: server, prompt: prompt)
                 aggregatedPrompts.append(MCPAvailablePrompt(server: server, prompt: prompt, internalName: name))
@@ -800,6 +859,7 @@ public final class MCPManager: ObservableObject {
 
         tools = aggregatedTools
         resources = aggregatedResources
+        resourceTemplates = aggregatedResourceTemplates
         prompts = aggregatedPrompts
         routedTools = newToolRouting
         routedPrompts = newPromptRouting
@@ -843,6 +903,12 @@ public final class MCPManager: ObservableObject {
         "\(Self.resourceNamePrefix)\(server.id.uuidString)/\(resource.resourceId)"
     }
 
+    private nonisolated static var resourceTemplateNamePrefix: String { "mcprestpl://" }
+
+    private func internalResourceTemplateName(for server: MCPServerConfiguration, resourceTemplate: MCPResourceTemplate) -> String {
+        "\(Self.resourceTemplateNamePrefix)\(server.id.uuidString)/\(resourceTemplate.uriTemplate)"
+    }
+
     private nonisolated static var promptNamePrefix: String { "mcpprompt://" }
 
     private func internalPromptName(for server: MCPServerConfiguration, prompt: MCPPromptDescription) -> String {
@@ -862,6 +928,20 @@ public final class MCPManager: ObservableObject {
             cancellationReason: reason,
             includeTimeoutInMeta: true
         )
+    }
+
+    private func clientCapabilitiesForCurrentHandlers() -> MCPClientCapabilities {
+        var capabilities = MCPClientCapabilities(roots: MCPClientRootsCapabilities(listChanged: true))
+        if samplingHandler != nil {
+            capabilities.sampling = MCPClientSamplingCapabilities()
+        }
+        if elicitationHandler != nil {
+            capabilities.elicitation = MCPClientElicitationCapabilities(
+                form: MCPClientElicitationFormCapability(),
+                url: MCPClientElicitationURLCapability()
+            )
+        }
+        return capabilities
     }
 
     private func transportLabel(for server: MCPServerConfiguration) -> String {

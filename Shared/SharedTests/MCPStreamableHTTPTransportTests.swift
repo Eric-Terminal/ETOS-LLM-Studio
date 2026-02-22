@@ -2,9 +2,10 @@
 //  MCPStreamableHTTPTransportTests.swift
 //  SharedTests
 //
-//  覆盖 Streamable HTTP 的关键会话行为：
+//  覆盖 Streamable HTTP 的关键会话与双向行为：
 //  1) disconnect 时发送 DELETE 终止会话；
 //  2) POST 携带旧 session 返回 404 时自动清理并重试。
+//  3) inline SSE 下的 elicitation/create 请求可触发客户端响应。
 //
 
 import Foundation
@@ -81,6 +82,94 @@ struct MCPStreamableHTTPTransportTests {
         transport.disconnect()
     }
 
+    @Test("inline SSE 的 elicitation 请求可调用 handler 并返回 accept")
+    func testInlineSSEElicitationHandledByClient() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: ["Content-Type": "text/event-stream"],
+            body: makeInlineSSEData(
+                json: #"{"jsonrpc":"2.0","id":"elic-req-1","method":"elicitation/create","params":{"mode":"form","message":"请输入邮箱","requestedSchema":{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}}}"#
+            )
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: [:],
+            body: Data("{}".utf8)
+        )
+
+        let transport = makeTransport()
+        transport.elicitationHandler = ElicitationHandlerStub(
+            result: MCPElicitationResult(action: .accept, content: ["email": .string("user@example.com")])
+        )
+        try await transport.sendNotification(makeNotificationPayload(method: "test/inline-elicitation"))
+
+        let hasResponsePost = await waitUntil {
+            let requests = StreamableTransportURLProtocol.requests().filter { $0.httpMethod == "POST" }
+            return requests.count >= 2
+        }
+        #expect(hasResponsePost)
+
+        let postRequests = StreamableTransportURLProtocol.requests().filter { $0.httpMethod == "POST" }
+        #expect(postRequests.count >= 2)
+        guard postRequests.count >= 2,
+              let payload = postRequests[1].httpBody,
+              let response = parseJSONObject(from: payload),
+              let result = response["result"] as? [String: Any],
+              let action = result["action"] as? String,
+              let content = result["content"] as? [String: Any] else {
+            Issue.record("未捕获到 Elicitation 响应 JSON。")
+            return
+        }
+
+        #expect(response["id"] as? String == "elic-req-1")
+        #expect(action == "accept")
+        #expect(content["email"] as? String == "user@example.com")
+        transport.disconnect()
+    }
+
+    @Test("inline SSE 的 elicitation 请求在无 handler 时返回 decline")
+    func testInlineSSEElicitationWithoutHandlerDeclines() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: ["Content-Type": "text/event-stream"],
+            body: makeInlineSSEData(
+                json: #"{"jsonrpc":"2.0","id":"elic-req-2","method":"elicitation/create","params":{"message":"请确认操作","requestedSchema":{"type":"object","properties":{"confirm":{"type":"boolean"}}}}}"#
+            )
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: [:],
+            body: Data("{}".utf8)
+        )
+
+        let transport = makeTransport()
+        try await transport.sendNotification(makeNotificationPayload(method: "test/inline-elicitation-no-handler"))
+
+        let hasResponsePost = await waitUntil {
+            let requests = StreamableTransportURLProtocol.requests().filter { $0.httpMethod == "POST" }
+            return requests.count >= 2
+        }
+        #expect(hasResponsePost)
+
+        let postRequests = StreamableTransportURLProtocol.requests().filter { $0.httpMethod == "POST" }
+        #expect(postRequests.count >= 2)
+        guard postRequests.count >= 2,
+              let payload = postRequests[1].httpBody,
+              let response = parseJSONObject(from: payload),
+              let result = response["result"] as? [String: Any],
+              let action = result["action"] as? String else {
+            Issue.record("未捕获到 Elicitation decline 响应 JSON。")
+            return
+        }
+
+        #expect(response["id"] as? String == "elic-req-2")
+        #expect(action == "decline")
+        #expect(result["content"] == nil)
+        transport.disconnect()
+    }
+
     private func makeTransport() -> MCPStreamableHTTPTransport {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StreamableTransportURLProtocol.self]
@@ -93,6 +182,17 @@ struct MCPStreamableHTTPTransportTests {
         Data(#"{"jsonrpc":"2.0","method":"\#(method)"}"#.utf8)
     }
 
+    private func makeInlineSSEData(json: String) -> Data {
+        Data("data: \(json)\n\n".utf8)
+    }
+
+    private func parseJSONObject(from data: Data) -> [String: Any]? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return object
+    }
+
     private func waitUntil(timeoutNanoseconds: UInt64 = 1_000_000_000, condition: @escaping @Sendable () -> Bool) async -> Bool {
         let start = DispatchTime.now().uptimeNanoseconds
         while DispatchTime.now().uptimeNanoseconds - start <= timeoutNanoseconds {
@@ -102,6 +202,18 @@ struct MCPStreamableHTTPTransportTests {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         return condition()
+    }
+}
+
+private final class ElicitationHandlerStub: MCPElicitationHandler {
+    let result: MCPElicitationResult
+
+    init(result: MCPElicitationResult) {
+        self.result = result
+    }
+
+    func handleElicitationRequest(_ request: MCPElicitationRequest) async throws -> MCPElicitationResult {
+        result
     }
 }
 

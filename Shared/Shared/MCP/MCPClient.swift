@@ -55,6 +55,12 @@ public final class MCPClient {
             (result.resources, result.nextCursor)
         }
     }
+
+    public func listResourceTemplates() async throws -> [MCPResourceTemplate] {
+        try await collectPaginatedItems(method: "resources/templates/list") { (result: ResourceTemplatesListResult) in
+            (result.resourceTemplates, result.nextCursor)
+        }
+    }
     
     public func executeTool(
         toolId: String,
@@ -100,6 +106,25 @@ public final class MCPClient {
     public func getPrompt(name: String, arguments: [String: String]?) async throws -> MCPGetPromptResult {
         let params = GetPromptParams(name: name, arguments: arguments)
         return try await send(method: "prompts/get", params: AnyEncodable(params))
+    }
+
+    // MARK: - Completion
+
+    public func complete(
+        reference: MCPCompletionReference,
+        argument: MCPCompletionArgument,
+        context: MCPCompletionContext? = nil,
+        options: MCPCompletionOptions = MCPCompletionOptions()
+    ) async throws -> MCPCompletion {
+        let metadata = CompletionRequestMeta(progressToken: options.progressToken)
+        let params = CompletionRequestParams(
+            reference: reference,
+            argument: argument,
+            context: context,
+            metadata: metadata.isEmpty ? nil : metadata
+        )
+        let result: CompletionResult = try await send(method: "completion/complete", params: AnyEncodable(params))
+        return result.completion
     }
 
     // MARK: - Roots
@@ -311,6 +336,33 @@ private struct SetLogLevelParams: Codable {
     let level: MCPLogLevel
 }
 
+private struct CompletionRequestParams: Encodable {
+    let reference: MCPCompletionReference
+    let argument: MCPCompletionArgument
+    let context: MCPCompletionContext?
+    let metadata: CompletionRequestMeta?
+
+    enum CodingKeys: String, CodingKey {
+        case reference = "ref"
+        case argument
+        case context
+        case metadata = "_meta"
+    }
+}
+
+private struct CompletionRequestMeta: Codable {
+    let progressToken: MCPProgressToken?
+
+    var isEmpty: Bool {
+        guard let progressToken else { return true }
+        return progressToken.isEmptyString
+    }
+}
+
+private struct CompletionResult: Decodable {
+    let completion: MCPCompletion
+}
+
 private struct EmptyResult: Codable {}
 
 private struct InitializeResult: Decodable {
@@ -435,6 +487,27 @@ private struct ResourcesListResult: Decodable {
         }
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.resources = try container.decode([MCPResourceDescription].self, forKey: .resources)
+        self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+}
+
+private struct ResourceTemplatesListResult: Decodable {
+    let resourceTemplates: [MCPResourceTemplate]
+    let nextCursor: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case resourceTemplates
+        case nextCursor
+    }
+
+    init(from decoder: Decoder) throws {
+        if let resourceTemplates = try? [MCPResourceTemplate](from: decoder) {
+            self.resourceTemplates = resourceTemplates
+            self.nextCursor = nil
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.resourceTemplates = try container.decode([MCPResourceTemplate].self, forKey: .resourceTemplates)
         self.nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
     }
 }

@@ -19,15 +19,18 @@ public struct MCPClientInfo: Codable, Hashable {
 public struct MCPClientCapabilities: Codable, Hashable {
     public var roots: MCPClientRootsCapabilities?
     public var sampling: MCPClientSamplingCapabilities?
+    public var elicitation: MCPClientElicitationCapabilities?
     public var experimental: [String: JSONValue]?
 
     public init(
         roots: MCPClientRootsCapabilities? = nil,
         sampling: MCPClientSamplingCapabilities? = nil,
+        elicitation: MCPClientElicitationCapabilities? = nil,
         experimental: [String: JSONValue]? = nil
     ) {
         self.roots = roots
         self.sampling = sampling
+        self.elicitation = elicitation
         self.experimental = experimental
     }
 }
@@ -41,6 +44,27 @@ public struct MCPClientRootsCapabilities: Codable, Hashable {
 }
 
 public struct MCPClientSamplingCapabilities: Codable, Hashable {
+    public init() {}
+}
+
+public struct MCPClientElicitationCapabilities: Codable, Hashable {
+    public var form: MCPClientElicitationFormCapability?
+    public var url: MCPClientElicitationURLCapability?
+
+    public init(
+        form: MCPClientElicitationFormCapability? = nil,
+        url: MCPClientElicitationURLCapability? = nil
+    ) {
+        self.form = form
+        self.url = url
+    }
+}
+
+public struct MCPClientElicitationFormCapability: Codable, Hashable {
+    public init() {}
+}
+
+public struct MCPClientElicitationURLCapability: Codable, Hashable {
     public init() {}
 }
 
@@ -155,6 +179,46 @@ public struct MCPResourceDescription: Codable, Identifiable, Hashable {
     }
 }
 
+public struct MCPResourceTemplate: Codable, Identifiable, Hashable {
+    public var id: String { uriTemplate }
+
+    public let uriTemplate: String
+    public let name: String?
+    public let title: String?
+    public let description: String?
+    public let mimeType: String?
+    public let annotations: JSONValue?
+    public let metadata: [String: JSONValue]?
+
+    public init(
+        uriTemplate: String,
+        name: String?,
+        title: String?,
+        description: String?,
+        mimeType: String?,
+        annotations: JSONValue?,
+        metadata: [String: JSONValue]? = nil
+    ) {
+        self.uriTemplate = uriTemplate
+        self.name = name
+        self.title = title
+        self.description = description
+        self.mimeType = mimeType
+        self.annotations = annotations
+        self.metadata = metadata
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case uriTemplate
+        case name
+        case title
+        case description
+        case mimeType
+        case annotations
+        case metadata = "_meta"
+    }
+}
+
 // MARK: - Prompts
 
 public struct MCPPromptDescription: Codable, Identifiable, Hashable {
@@ -249,6 +313,263 @@ public struct MCPGetPromptResult: Codable, Hashable {
     public init(description: String?, messages: [MCPPromptMessage]) {
         self.description = description
         self.messages = messages
+    }
+}
+
+// MARK: - Completion
+
+public enum MCPCompletionReference: Codable, Hashable, Sendable {
+    case prompt(name: String)
+    case resource(uri: String)
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case name
+        case uri
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        switch type {
+        case "ref/prompt":
+            let name = try container.decode(String.self, forKey: .name)
+            self = .prompt(name: name)
+        case "ref/resource":
+            let uri = try container.decode(String.self, forKey: .uri)
+            self = .resource(uri: uri)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "未知的 completion 引用类型：\(type)")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .prompt(let name):
+            try container.encode("ref/prompt", forKey: .type)
+            try container.encode(name, forKey: .name)
+        case .resource(let uri):
+            try container.encode("ref/resource", forKey: .type)
+            try container.encode(uri, forKey: .uri)
+        }
+    }
+}
+
+public struct MCPCompletionArgument: Codable, Hashable, Sendable {
+    public let name: String
+    public let value: String
+
+    public init(name: String, value: String) {
+        self.name = name
+        self.value = value
+    }
+}
+
+public struct MCPCompletionContext: Codable, Hashable, Sendable {
+    public let arguments: [String: String]?
+
+    public init(arguments: [String: String]? = nil) {
+        self.arguments = arguments
+    }
+}
+
+public struct MCPCompletion: Codable, Hashable, Sendable {
+    public let values: [String]
+    public let total: Int?
+    public let hasMore: Bool?
+
+    public init(values: [String], total: Int? = nil, hasMore: Bool? = nil) {
+        self.values = values
+        self.total = total
+        self.hasMore = hasMore
+    }
+}
+
+public struct MCPCompletionOptions: Sendable {
+    public var progressToken: MCPProgressToken?
+
+    public init(progressToken: MCPProgressToken? = nil) {
+        self.progressToken = progressToken
+    }
+
+    public init(progressToken: String?) {
+        self.progressToken = progressToken.map(MCPProgressToken.string)
+    }
+
+    public init(progressToken: Int?) {
+        self.progressToken = progressToken.map(MCPProgressToken.int)
+    }
+}
+
+// MARK: - Elicitation
+
+public enum MCPElicitationMode: String, Codable, Hashable, Sendable {
+    case form
+    case url
+}
+
+public struct MCPElicitationRequestedSchema: Codable, Hashable, Sendable {
+    public let schemaURI: String?
+    public let type: String
+    public let properties: [String: JSONValue]
+    public let required: [String]?
+
+    public init(
+        schemaURI: String? = nil,
+        type: String,
+        properties: [String: JSONValue],
+        required: [String]? = nil
+    ) {
+        self.schemaURI = schemaURI
+        self.type = type
+        self.properties = properties
+        self.required = required
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaURI = "$schema"
+        case type
+        case properties
+        case required
+    }
+}
+
+public struct MCPElicitationRequestMeta: Codable, Hashable, Sendable {
+    public let progressToken: MCPProgressToken?
+
+    public init(progressToken: MCPProgressToken? = nil) {
+        self.progressToken = progressToken
+    }
+}
+
+public struct MCPFormElicitationRequest: Codable, Hashable, Sendable {
+    public let mode: MCPElicitationMode?
+    public let message: String
+    public let requestedSchema: MCPElicitationRequestedSchema
+    public let metadata: MCPElicitationRequestMeta?
+
+    public init(
+        message: String,
+        requestedSchema: MCPElicitationRequestedSchema,
+        metadata: MCPElicitationRequestMeta? = nil
+    ) {
+        self.mode = .form
+        self.message = message
+        self.requestedSchema = requestedSchema
+        self.metadata = metadata
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode
+        case message
+        case requestedSchema
+        case metadata = "_meta"
+    }
+}
+
+public struct MCPURLElicitationRequest: Codable, Hashable, Sendable {
+    public let mode: MCPElicitationMode
+    public let message: String
+    public let elicitationId: String
+    public let url: String
+    public let metadata: MCPElicitationRequestMeta?
+
+    public init(
+        message: String,
+        elicitationId: String,
+        url: String,
+        metadata: MCPElicitationRequestMeta? = nil
+    ) {
+        self.mode = .url
+        self.message = message
+        self.elicitationId = elicitationId
+        self.url = url
+        self.metadata = metadata
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode
+        case message
+        case elicitationId
+        case url
+        case metadata = "_meta"
+    }
+}
+
+public enum MCPElicitationRequest: Codable, Hashable, Sendable {
+    case form(MCPFormElicitationRequest)
+    case url(MCPURLElicitationRequest)
+
+    private enum CodingKeys: String, CodingKey {
+        case mode
+    }
+
+    public var mode: MCPElicitationMode {
+        switch self {
+        case .form:
+            return .form
+        case .url:
+            return .url
+        }
+    }
+
+    public var message: String {
+        switch self {
+        case .form(let request):
+            return request.message
+        case .url(let request):
+            return request.message
+        }
+    }
+
+    public var progressToken: MCPProgressToken? {
+        switch self {
+        case .form(let request):
+            return request.metadata?.progressToken
+        case .url(let request):
+            return request.metadata?.progressToken
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let mode = try container.decodeIfPresent(MCPElicitationMode.self, forKey: .mode) ?? .form
+        switch mode {
+        case .form:
+            self = .form(try MCPFormElicitationRequest(from: decoder))
+        case .url:
+            self = .url(try MCPURLElicitationRequest(from: decoder))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .form(let request):
+            try request.encode(to: encoder)
+        case .url(let request):
+            try request.encode(to: encoder)
+        }
+    }
+}
+
+public enum MCPElicitationAction: String, Codable, Hashable, Sendable {
+    case accept
+    case decline
+    case cancel
+}
+
+public struct MCPElicitationResult: Codable, Hashable, Sendable {
+    public let action: MCPElicitationAction
+    public let content: [String: JSONValue]?
+
+    public init(action: MCPElicitationAction, content: [String: JSONValue]? = nil) {
+        self.action = action
+        self.content = content
+    }
+
+    public static var declined: MCPElicitationResult {
+        MCPElicitationResult(action: .decline, content: nil)
     }
 }
 
@@ -381,6 +702,7 @@ public enum MCPNotificationType: String, Codable {
     case logMessage = "notifications/message"
     case rootsListChanged = "notifications/roots/list_changed"
     case cancelled = "notifications/cancelled"
+    case elicitationComplete = "notifications/elicitation/complete"
 }
 
 public struct MCPNotification: Codable {
