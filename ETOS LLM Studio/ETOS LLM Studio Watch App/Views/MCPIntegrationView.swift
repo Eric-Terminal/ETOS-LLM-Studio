@@ -80,6 +80,20 @@ struct MCPIntegrationView: View {
                     ProgressView("同步中…")
                 }
             }
+
+            Section("治理日志") {
+                NavigationLink {
+                    MCPGovernanceLogListView()
+                } label: {
+                    HStack {
+                        Label("查看治理日志", systemImage: "list.bullet.rectangle")
+                        Spacer()
+                        Text("\(manager.governanceLogEntries.count)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(manager.governanceLogEntries.isEmpty)
+            }
             
             Section("能力概览") {
                 HStack {
@@ -235,15 +249,23 @@ private struct MCPServerDetailView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(status.tools) { tool in
-                            Toggle(isOn: toolBinding(for: server.id, toolId: tool.toolId)) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(tool.toolId)
-                                    if let desc = tool.description, !desc.isEmpty {
-                                        Text(desc)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Toggle(isOn: toolBinding(for: server.id, toolId: tool.toolId)) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(tool.toolId)
+                                        if let desc = tool.description, !desc.isEmpty {
+                                            Text(desc)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
                                 }
+                                Picker("审批策略", selection: toolApprovalPolicyBinding(for: server.id, toolId: tool.toolId)) {
+                                    ForEach(MCPToolApprovalPolicy.allCases, id: \.self) { policy in
+                                        Text(policy.displayName).tag(policy)
+                                    }
+                                }
+                                .font(.caption2)
                             }
                         }
                     }
@@ -284,6 +306,14 @@ private struct MCPServerDetailView: View {
             manager.isToolEnabled(serverID: serverID, toolId: toolId)
         } set: { newValue in
             manager.setToolEnabled(serverID: serverID, toolId: toolId, isEnabled: newValue)
+        }
+    }
+
+    private func toolApprovalPolicyBinding(for serverID: UUID, toolId: String) -> Binding<MCPToolApprovalPolicy> {
+        Binding {
+            manager.approvalPolicy(serverID: serverID, toolId: toolId)
+        } set: { newValue in
+            manager.setToolApprovalPolicy(serverID: serverID, toolId: toolId, policy: newValue)
         }
     }
     
@@ -366,6 +396,42 @@ private struct MCPResourceListView: View {
             }
         }
         .navigationTitle("资源列表")
+    }
+}
+
+private struct MCPGovernanceLogListView: View {
+    @ObservedObject private var manager = MCPManager.shared
+
+    var body: some View {
+        List {
+            if manager.governanceLogEntries.isEmpty {
+                Text("暂无治理日志。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(manager.governanceLogEntries.suffix(80).reversed()) { entry in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 4) {
+                            Text(entry.serverDisplayName ?? "全局")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(entry.timestamp, style: .time)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text(entry.message)
+                            .font(.footnote)
+                            .lineLimit(3)
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                Button("清空治理日志", role: .destructive) {
+                    manager.clearGovernanceLogEntries()
+                }
+            }
+        }
+        .navigationTitle("治理日志")
     }
 }
 

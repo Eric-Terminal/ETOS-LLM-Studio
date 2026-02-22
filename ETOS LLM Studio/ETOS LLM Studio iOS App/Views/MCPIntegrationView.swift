@@ -220,6 +220,39 @@ struct MCPIntegrationView: View {
                     Text("服务器日志 (最近 20 条)")
                 }
             }
+
+            if !manager.governanceLogEntries.isEmpty {
+                Section {
+                    ForEach(manager.governanceLogEntries.suffix(40).reversed()) { entry in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                governanceCategoryIcon(entry.category)
+                                Text(entry.serverDisplayName ?? "全局")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(entry.timestamp, style: .time)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Text(entry.message)
+                                .font(.footnote)
+                            if let payload = entry.payload {
+                                Text(payload.prettyPrintedCompact())
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    Button("清空治理日志", role: .destructive) {
+                        manager.clearGovernanceLogEntries()
+                    }
+                } header: {
+                    Text("治理日志 (最近 40 条)")
+                }
+            }
             
             Section("快速调试") {
                 VStack(alignment: .leading, spacing: 8) {
@@ -396,6 +429,29 @@ struct MCPIntegrationView: View {
         return Image(systemName: icon)
             .foregroundStyle(color)
     }
+
+    private func governanceCategoryIcon(_ category: MCPGovernanceLogCategory) -> some View {
+        let icon: String = {
+            switch category {
+            case .lifecycle:
+                return "link"
+            case .cache:
+                return "externaldrive"
+            case .routing:
+                return "arrow.triangle.branch"
+            case .toolCall:
+                return "hammer"
+            case .notification:
+                return "bell"
+            case .serverLog:
+                return "doc.text"
+            case .progress:
+                return "gauge.with.dots.needle.67percent"
+            }
+        }()
+        return Image(systemName: icon)
+            .foregroundStyle(.secondary)
+    }
     
     private func statusDescription(for server: MCPServerConfiguration) -> String {
         let status = manager.status(for: server)
@@ -511,15 +567,24 @@ private struct MCPServerDetailView: View {
                     String(format: NSLocalizedString("工具 (%d)", comment: ""), status.tools.count)
                 ) {
                     ForEach(status.tools) { tool in
-                        Toggle(isOn: toolBinding(for: tool.toolId)) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(tool.toolId)
-                                if let desc = tool.description {
-                                    Text(desc)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle(isOn: toolBinding(for: tool.toolId)) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(tool.toolId)
+                                    if let desc = tool.description {
+                                        Text(desc)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
+                            Picker("审批策略", selection: toolApprovalPolicyBinding(for: tool.toolId)) {
+                                ForEach(MCPToolApprovalPolicy.allCases, id: \.self) { policy in
+                                    Text(policy.displayName).tag(policy)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .font(.caption)
                         }
                     }
                 }
@@ -587,6 +652,14 @@ private struct MCPServerDetailView: View {
             manager.isToolEnabled(serverID: server.id, toolId: toolId)
         } set: { newValue in
             manager.setToolEnabled(serverID: server.id, toolId: toolId, isEnabled: newValue)
+        }
+    }
+
+    private func toolApprovalPolicyBinding(for toolId: String) -> Binding<MCPToolApprovalPolicy> {
+        Binding {
+            manager.approvalPolicy(serverID: server.id, toolId: toolId)
+        } set: { newValue in
+            manager.setToolApprovalPolicy(serverID: server.id, toolId: toolId, policy: newValue)
         }
     }
 }

@@ -13,6 +13,25 @@ public enum MCPOAuthGrantType: String, Codable, Hashable, CaseIterable {
     case authorizationCode = "authorization_code"
 }
 
+public enum MCPToolApprovalPolicy: String, Codable, Hashable, CaseIterable, Sendable {
+    case askEveryTime = "ask_every_time"
+    case alwaysAllow = "always_allow"
+    case alwaysDeny = "always_deny"
+}
+
+public extension MCPToolApprovalPolicy {
+    public var displayName: String {
+        switch self {
+        case .askEveryTime:
+            return "每次询问"
+        case .alwaysAllow:
+            return "总是允许"
+        case .alwaysDeny:
+            return "始终拒绝"
+        }
+    }
+}
+
 private func resolveAdditionalHeaders(_ headers: [String: String], token: String?) -> [String: String] {
     var resolved: [String: String]
     if headers.isEmpty {
@@ -57,6 +76,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public var transport: Transport
     public var isSelectedForChat: Bool
     public var disabledToolIds: [String]
+    public var toolApprovalPolicies: [String: MCPToolApprovalPolicy]
 
     public init(
         id: UUID = UUID(),
@@ -64,7 +84,8 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         notes: String? = nil,
         transport: Transport,
         isSelectedForChat: Bool = false,
-        disabledToolIds: [String] = []
+        disabledToolIds: [String] = [],
+        toolApprovalPolicies: [String: MCPToolApprovalPolicy] = [:]
     ) {
         self.id = id
         self.displayName = displayName
@@ -72,6 +93,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         self.transport = transport
         self.isSelectedForChat = isSelectedForChat
         self.disabledToolIds = disabledToolIds
+        self.toolApprovalPolicies = toolApprovalPolicies
     }
 }
 
@@ -83,6 +105,7 @@ extension MCPServerConfiguration {
         case transport
         case isSelectedForChat
         case disabledToolIds
+        case toolApprovalPolicies
     }
 
     public init(from decoder: Decoder) throws {
@@ -93,6 +116,7 @@ extension MCPServerConfiguration {
         transport = try container.decode(Transport.self, forKey: .transport)
         isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
         disabledToolIds = try container.decodeIfPresent([String].self, forKey: .disabledToolIds) ?? []
+        toolApprovalPolicies = try container.decodeIfPresent([String: MCPToolApprovalPolicy].self, forKey: .toolApprovalPolicies) ?? [:]
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -107,6 +131,14 @@ extension MCPServerConfiguration {
         if !disabledToolIds.isEmpty {
             let uniqueIds = Array(Set(disabledToolIds)).sorted()
             try container.encode(uniqueIds, forKey: .disabledToolIds)
+        }
+        let normalizedToolApprovalPolicies = toolApprovalPolicies.reduce(into: [String: MCPToolApprovalPolicy]()) { partialResult, element in
+            if element.value != .askEveryTime {
+                partialResult[element.key] = element.value
+            }
+        }
+        if !normalizedToolApprovalPolicies.isEmpty {
+            try container.encode(normalizedToolApprovalPolicies, forKey: .toolApprovalPolicies)
         }
     }
 }
@@ -169,6 +201,18 @@ public extension MCPServerConfiguration {
             disabledToolIds.removeAll { $0 == toolId }
         } else if !disabledToolIds.contains(toolId) {
             disabledToolIds.append(toolId)
+        }
+    }
+
+    public func approvalPolicy(for toolId: String) -> MCPToolApprovalPolicy {
+        toolApprovalPolicies[toolId] ?? .askEveryTime
+    }
+
+    public mutating func setApprovalPolicy(_ policy: MCPToolApprovalPolicy, for toolId: String) {
+        if policy == .askEveryTime {
+            toolApprovalPolicies.removeValue(forKey: toolId)
+        } else {
+            toolApprovalPolicies[toolId] = policy
         }
     }
 }

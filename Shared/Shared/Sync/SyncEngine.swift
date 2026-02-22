@@ -724,6 +724,10 @@ public enum SyncEngine {
         for toolId in Set(server.disabledToolIds).sorted() {
             hasher.combine(toolId)
         }
+        for (toolId, policy) in server.toolApprovalPolicies.sorted(by: { $0.key < $1.key }) {
+            hasher.combine(toolId)
+            hasher.combine(policy.rawValue)
+        }
         // Transport 配置
         switch server.transport {
         case .http(let endpoint, let apiKey, let headers):

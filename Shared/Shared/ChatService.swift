@@ -1610,22 +1610,16 @@ public class ChatService {
             let toolLabel = await MainActor.run {
                 MCPManager.shared.displayLabel(for: toolCall.toolName)
             } ?? toolCall.toolName
-            let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
-                toolName: toolCall.toolName,
-                displayName: toolLabel,
-                arguments: toolCall.arguments
-            )
-            switch permissionDecision {
-            case .deny:
-                content = "\(toolLabel) 调用已被用户拒绝。"
+            let approvalPolicy = await MainActor.run {
+                MCPManager.shared.approvalPolicy(for: toolCall.toolName) ?? .askEveryTime
+            }
+
+            switch approvalPolicy {
+            case .alwaysDeny:
+                content = "\(toolLabel) 已被策略禁止调用。"
                 displayResult = content
-                logger.info("  - MCP 工具调用被用户拒绝: \(toolCall.toolName)")
-            case .supplement:
-                content = "\(toolLabel) 调用已被用户拒绝。"
-                displayResult = content
-                shouldAwaitUserSupplement = true
-                logger.info("  - MCP 工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
-            case .allowOnce, .allowForTool, .allowAll:
+                logger.info("  - MCP 工具调用被策略拒绝: \(toolCall.toolName)")
+            case .alwaysAllow:
                 do {
                     let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
                     content = result
@@ -1635,6 +1629,34 @@ public class ChatService {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
                     displayResult = content
                     logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
+                }
+            case .askEveryTime:
+                let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
+                    toolName: toolCall.toolName,
+                    displayName: toolLabel,
+                    arguments: toolCall.arguments
+                )
+                switch permissionDecision {
+                case .deny:
+                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    displayResult = content
+                    logger.info("  - MCP 工具调用被用户拒绝: \(toolCall.toolName)")
+                case .supplement:
+                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    displayResult = content
+                    shouldAwaitUserSupplement = true
+                    logger.info("  - MCP 工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
+                case .allowOnce, .allowForTool, .allowAll:
+                    do {
+                        let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
+                        content = result
+                        displayResult = result
+                        logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
+                    } catch {
+                        content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                        displayResult = content
+                        logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
+                    }
                 }
             }
 
