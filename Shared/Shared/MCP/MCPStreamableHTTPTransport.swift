@@ -19,11 +19,16 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     private let session: URLSession
     private let headers: [String: String]
     private let protocolVersion: String?
+    private let sseReconnectMaxAttempts = 5
+    private let sseReconnectBaseDelay: TimeInterval = 1.0
+    private let sseReconnectMaxDelay: TimeInterval = 30.0
 
     private let pendingRequestsActor = StreamablePendingRequestsActor()
     private var sseTask: Task<Void, Never>?
     private var sessionId: String?
     private var lastEventId: String?
+    private var sseReconnectAttempt = 0
+    private var isSSEEnabled = true
 
     public weak var notificationDelegate: MCPNotificationDelegate?
     public weak var samplingHandler: MCPSamplingHandler?
@@ -51,7 +56,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     public func sendMessage(_ payload: Data) async throws -> Data {
         let requestId = try extractRequestId(from: payload)
-        if sseTask == nil {
+        if sseTask == nil, isSSEEnabled {
             connectStream()
         }
 
@@ -75,7 +80,11 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     // MARK: - Streaming
 
     public func connectStream() {
-        disconnectStream()
+        guard isSSEEnabled else {
+            streamableLogger.info("SSE 已被服务端禁用，跳过连接。")
+            return
+        }
+        guard sseTask == nil else { return }
         sseTask = Task { [weak self] in
             guard let self else { return }
             await self.runSSELoop()
@@ -101,6 +110,8 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     // MARK: - HTTP + SSE Implementation
 
     private func postMessage(_ payload: Data, requestId: JSONRPCID?) async throws {
+        let notificationMethod = requestId == nil ? extractNotificationMethod(from: payload) : nil
+
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.httpBody = payload
@@ -125,6 +136,18 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
         // 202: response will come via SSE stream
         if httpResponse.statusCode == 202 {
+            if let requestId {
+                guard isSSEEnabled else {
+                    throw MCPClientError.invalidResponse
+                }
+                await pendingRequestsActor.markAwaitingSSE(id: requestId)
+                if sseTask == nil {
+                    connectStream()
+                }
+            } else if notificationMethod == "notifications/initialized", isSSEEnabled, sseTask == nil {
+                // 初始化后异步建立 SSE，会和官方 SDK 行为保持一致。
+                connectStream()
+            }
             return
         }
 
@@ -146,41 +169,60 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     private func runSSELoop() async {
         defer { sseTask = nil }
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "GET"
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = .infinity
-        applyHeaders(to: &request, includeResumption: true)
+        while !Task.isCancelled {
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "GET"
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = .infinity
+            applyHeaders(to: &request, includeResumption: true)
 
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw MCPClientError.invalidResponse
-            }
+            do {
+                let (bytes, response) = try await session.bytes(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw MCPClientError.invalidResponse
+                }
 
-            if httpResponse.statusCode == 405 {
-                streamableLogger.info("Streamable HTTP GET/SSE not supported (405).")
-                return
-            }
+                if let serverSession = httpResponse.value(forHTTPHeaderField: mcpSessionHeader),
+                   !serverSession.isEmpty {
+                    sessionId = serverSession
+                }
 
-            let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
-            if contentType.contains("application/json") {
-                streamableLogger.info("Streamable HTTP SSE disabled (application/json response).")
-                return
-            }
+                if httpResponse.statusCode == 405 {
+                    await disableSSEMode(reason: "Streamable HTTP GET/SSE not supported (405).")
+                    return
+                }
 
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                streamableLogger.error("Streamable HTTP SSE failed: \(httpResponse.statusCode)")
-                return
-            }
+                let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+                if contentType.contains("application/json") {
+                    await disableSSEMode(reason: "Streamable HTTP SSE disabled (application/json response).")
+                    return
+                }
 
-            for try await line in bytes.lines {
-                if Task.isCancelled { break }
-                await consumeSSELine(line)
-            }
-        } catch {
-            if !Task.isCancelled {
+                guard (200..<300).contains(httpResponse.statusCode) else {
+                    streamableLogger.error("Streamable HTTP SSE failed: \(httpResponse.statusCode)")
+                    guard await scheduleSSEReconnectIfNeeded() else { return }
+                    continue
+                }
+
+                sseReconnectAttempt = 0
+
+                for try await line in bytes.lines {
+                    if Task.isCancelled { break }
+                    await consumeSSELine(line)
+                }
+
+                if Task.isCancelled {
+                    return
+                }
+
+                streamableLogger.info("Streamable HTTP SSE stream closed by peer, scheduling reconnect.")
+                guard await scheduleSSEReconnectIfNeeded() else { return }
+            } catch {
+                if Task.isCancelled {
+                    return
+                }
                 streamableLogger.error("Streamable HTTP SSE error: \(error.localizedDescription)")
+                guard await scheduleSSEReconnectIfNeeded() else { return }
             }
         }
     }
@@ -230,6 +272,13 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     private func handleSSEEvent(name: String?, data: String, id: String?) async {
         if let id, !id.isEmpty {
             lastEventId = id
+        }
+        if name == "session" || name == "sessionId" {
+            let trimmed = data.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                sessionId = trimmed
+            }
+            return
         }
         if name == "error" {
             streamableLogger.error("Streamable HTTP SSE error event: \(data, privacy: .public)")
@@ -347,6 +396,39 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         }
     }
 
+    private func disableSSEMode(reason: String) async {
+        guard isSSEEnabled else { return }
+        isSSEEnabled = false
+        sseReconnectAttempt = 0
+        streamableLogger.info("\(reason, privacy: .public)")
+        await pendingRequestsActor.failAwaitingSSE()
+    }
+
+    private func scheduleSSEReconnectIfNeeded() async -> Bool {
+        guard isSSEEnabled else { return false }
+
+        let nextAttempt = sseReconnectAttempt + 1
+        guard nextAttempt <= sseReconnectMaxAttempts else {
+            streamableLogger.error("Streamable HTTP SSE reconnect exhausted at \(nextAttempt - 1) attempts.")
+            isSSEEnabled = false
+            await pendingRequestsActor.failAwaitingSSE()
+            return false
+        }
+
+        sseReconnectAttempt = nextAttempt
+        let exponent = max(0, nextAttempt - 1)
+        let delay = min(sseReconnectBaseDelay * pow(2.0, Double(exponent)), sseReconnectMaxDelay)
+        streamableLogger.info("Streamable HTTP SSE reconnect attempt=\(nextAttempt), delay=\(delay, privacy: .public)s")
+
+        let nanos = UInt64(delay * 1_000_000_000)
+        do {
+            try await Task.sleep(nanoseconds: nanos)
+        } catch {
+            return false
+        }
+        return !Task.isCancelled && isSSEEnabled
+    }
+
     private func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
         headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
@@ -356,6 +438,10 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
             return request.id
         }
         throw MCPClientError.invalidResponse
+    }
+
+    private func extractNotificationMethod(from payload: Data) -> String? {
+        (try? decoder.decode(JSONRPCNotificationEnvelope.self, from: payload))?.method
     }
 
     private func parseSSEEvents(from data: Data) -> [SSEEvent] {
@@ -403,24 +489,45 @@ private struct SSEEvent {
 
 private actor StreamablePendingRequestsActor {
     private var requests: [JSONRPCID: CheckedContinuation<Data, Error>] = [:]
+    private var awaitingSSE: Set<JSONRPCID> = []
 
     func add(id: JSONRPCID, continuation: CheckedContinuation<Data, Error>) {
         requests[id] = continuation
     }
 
+    func markAwaitingSSE(id: JSONRPCID) {
+        awaitingSSE.insert(id)
+    }
+
     func remove(id: JSONRPCID) -> CheckedContinuation<Data, Error>? {
+        awaitingSSE.remove(id)
         requests.removeValue(forKey: id)
+    }
+
+    func failAwaitingSSE() {
+        let targets = awaitingSSE
+        awaitingSSE.removeAll()
+        for id in targets {
+            if let continuation = requests.removeValue(forKey: id) {
+                continuation.resume(throwing: MCPClientError.invalidResponse)
+            }
+        }
     }
 
     func removeAll() -> [CheckedContinuation<Data, Error>] {
         let all = Array(requests.values)
         requests.removeAll()
+        awaitingSSE.removeAll()
         return all
     }
 }
 
 private struct JSONRPCRequestEnvelope: Decodable {
     let id: JSONRPCID
+}
+
+private struct JSONRPCNotificationEnvelope: Decodable {
+    let method: String
 }
 
 private struct MCPServerSamplingRequest: Codable {

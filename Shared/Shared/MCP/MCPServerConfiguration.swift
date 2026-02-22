@@ -139,9 +139,8 @@ public extension MCPServerConfiguration {
         case .http(let endpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             return MCPStreamableHTTPTransport(endpoint: endpoint, session: urlSession, headers: headers)
-        case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
+        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
-            let messageEndpoint = MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             return MCPOAuthHTTPTransport(

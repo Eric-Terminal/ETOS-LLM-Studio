@@ -9,6 +9,7 @@ import Foundation
 import os.log
 
 private let streamingLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPStreamingTransport")
+private let streamingResumptionHeader = "Last-Event-ID"
 
 // MARK: - Sampling Handler Protocol
 
@@ -41,10 +42,15 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     private let headers: [String: String]
     private let protocolVersion: String? = MCPProtocolVersion.current
     private let endpointWaitTimeout: TimeInterval = 0.8
+    private let sseReconnectMaxAttempts = 5
+    private let sseReconnectBaseDelay: TimeInterval = 1.0
+    private let sseReconnectMaxDelay: TimeInterval = 30.0
     
     private var sseTask: Task<Void, Never>?
     private let pendingRequestsActor = PendingRequestsActor()
     private let state: StreamingState
+    private var sseReconnectAttempt = 0
+    private var lastEventId: String?
     
     public weak var notificationDelegate: MCPNotificationDelegate?
     public weak var samplingHandler: MCPSamplingHandler?
@@ -156,6 +162,8 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
 
     public func connectSSE() {
         disconnect()
+        sseReconnectAttempt = 0
+        lastEventId = nil
         Task { await state.prepareForNewStream() }
         
         sseTask = Task { [weak self] in
@@ -178,63 +186,88 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     }
     
     private func runSSELoop(url: URL) async {
-        var request = URLRequest(url: url)
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = .infinity
-        
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
-            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
-        }
-        
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200..<300).contains(httpResponse.statusCode) else {
-                streamingLogger.error("SSE 连接失败")
-                return
+        while !Task.isCancelled {
+            var request = URLRequest(url: url)
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = .infinity
+
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+            if let protocolVersion, !protocolVersion.isEmpty, !hasHeader("MCP-Protocol-Version", in: headers) {
+                request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+            }
+            if let lastEventId, !lastEventId.isEmpty, !hasHeader(streamingResumptionHeader, in: headers) {
+                request.setValue(lastEventId, forHTTPHeaderField: streamingResumptionHeader)
             }
 
-            streamingLogger.info("SSE 连接已建立")
-            if let sessionId = httpResponse.value(forHTTPHeaderField: "MCP-Session-Id"),
-               !sessionId.isEmpty {
-                await state.updateSessionId(sessionId)
-            }
-
-            var eventName = "message"
-            var dataLines: [String] = []
-            for try await line in bytes.lines {
-                if Task.isCancelled { break }
-                
-                if line.isEmpty {
-                    // 空行表示事件结束
-                    if !dataLines.isEmpty {
-                        let payload = dataLines.joined(separator: "\n")
-                        await handleSSEEvent(name: eventName, data: payload)
-                    }
-                    eventName = "message"
-                    dataLines = []
-                } else if line.hasPrefix(":") {
+            do {
+                let (bytes, response) = try await session.bytes(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw MCPClientError.invalidResponse
+                }
+                guard (200..<300).contains(httpResponse.statusCode) else {
+                    streamingLogger.error("SSE 连接失败：status=\(httpResponse.statusCode)")
+                    guard await scheduleSSEReconnectIfNeeded() else { return }
                     continue
-                } else if line.hasPrefix("event:") {
-                    eventName = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-                } else if line.hasPrefix("data:") {
-                    let data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                    if data != "[DONE]" {
-                        dataLines.append(data)
+                }
+
+                streamingLogger.info("SSE 连接已建立")
+                sseReconnectAttempt = 0
+                if let sessionId = httpResponse.value(forHTTPHeaderField: "MCP-Session-Id"),
+                   !sessionId.isEmpty {
+                    await state.updateSessionId(sessionId)
+                }
+
+                var eventName = "message"
+                var eventId: String?
+                var dataLines: [String] = []
+                for try await line in bytes.lines {
+                    if Task.isCancelled { break }
+
+                    if line.isEmpty {
+                        // 空行表示事件结束
+                        if !dataLines.isEmpty {
+                            let payload = dataLines.joined(separator: "\n")
+                            await handleSSEEvent(name: eventName, data: payload, id: eventId)
+                        }
+                        eventName = "message"
+                        eventId = nil
+                        dataLines = []
+                    } else if line.hasPrefix(":") {
+                        continue
+                    } else if line.hasPrefix("event:") {
+                        eventName = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                    } else if line.hasPrefix("id:") {
+                        eventId = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                    } else if line.hasPrefix("data:") {
+                        let data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        if data != "[DONE]" {
+                            dataLines.append(data)
+                        }
                     }
                 }
-            }
-        } catch {
-            if !Task.isCancelled {
+
+                if Task.isCancelled {
+                    return
+                }
+
+                streamingLogger.info("SSE 连接被服务端关闭，准备重连。")
+                guard await scheduleSSEReconnectIfNeeded() else { return }
+            } catch {
+                if Task.isCancelled {
+                    return
+                }
                 streamingLogger.error("SSE 连接错误: \(error.localizedDescription)")
+                guard await scheduleSSEReconnectIfNeeded() else { return }
             }
         }
     }
     
-    private func handleSSEEvent(name: String, data: String) async {
+    private func handleSSEEvent(name: String, data: String, id: String?) async {
+        if let id, !id.isEmpty {
+            lastEventId = id
+        }
         let trimmed = data.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if name == "endpoint" {
@@ -442,6 +475,35 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
             }
         }
         return nil
+    }
+
+    private func scheduleSSEReconnectIfNeeded() async -> Bool {
+        let nextAttempt = sseReconnectAttempt + 1
+        guard nextAttempt <= sseReconnectMaxAttempts else {
+            streamingLogger.error("SSE 重连次数已耗尽：\(nextAttempt - 1)")
+            await failAllPendingRequests()
+            return false
+        }
+
+        sseReconnectAttempt = nextAttempt
+        let exponent = max(0, nextAttempt - 1)
+        let delay = min(sseReconnectBaseDelay * pow(2.0, Double(exponent)), sseReconnectMaxDelay)
+        streamingLogger.info("SSE 准备重连：attempt=\(nextAttempt), delay=\(delay, privacy: .public)s")
+
+        let nanos = UInt64(delay * 1_000_000_000)
+        do {
+            try await Task.sleep(nanoseconds: nanos)
+        } catch {
+            return false
+        }
+        return !Task.isCancelled
+    }
+
+    private func failAllPendingRequests() async {
+        let pending = await pendingRequestsActor.removeAll()
+        for continuation in pending {
+            continuation.resume(throwing: MCPClientError.invalidResponse)
+        }
     }
 
     private func hasHeader(_ name: String, in headers: [String: String]) -> Bool {

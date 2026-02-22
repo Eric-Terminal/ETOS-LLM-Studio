@@ -128,6 +128,8 @@ public final class MCPManager: ObservableObject {
     private let autoConnectMaxRetries = 5
     private let autoConnectBaseDelay: TimeInterval = 1.0
     private let autoConnectMaxDelay: TimeInterval = 30.0
+    private let defaultToolCallTimeout: TimeInterval = 60
+    private let defaultChatToolCallTimeout: TimeInterval = 120
 
     private init() {
         reloadServers()
@@ -546,7 +548,11 @@ public final class MCPManager: ObservableObject {
         Task {
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
-                let result = try await client.executeTool(toolId: toolId, inputs: inputs)
+                let result = try await client.executeTool(
+                    toolId: toolId,
+                    inputs: inputs,
+                    options: self.defaultToolCallOptions(timeout: self.defaultToolCallTimeout, reason: "调试工具调用超时")
+                )
                 await MainActor.run {
                     self.lastOperationOutput = result.prettyPrinted()
                     self.setDebugBusy(false)
@@ -685,7 +691,11 @@ public final class MCPManager: ObservableObject {
         }
         let client = try await ensureClientReady(serverID: routed.server.id, refreshMetadataIfCacheMissing: false)
         let inputs = try decodeJSONDictionary(from: argumentsJSON)
-        let result = try await client.executeTool(toolId: routed.tool.toolId, inputs: inputs)
+        let result = try await client.executeTool(
+            toolId: routed.tool.toolId,
+            inputs: inputs,
+            options: defaultToolCallOptions(timeout: defaultChatToolCallTimeout, reason: "聊天工具调用超时")
+        )
         return result.prettyPrinted()
     }
 
@@ -844,6 +854,14 @@ public final class MCPManager: ObservableObject {
         guard !trimmed.isEmpty else { return [:] }
         let data = Data(trimmed.utf8)
         return try JSONDecoder().decode([String: JSONValue].self, from: data)
+    }
+
+    private func defaultToolCallOptions(timeout: TimeInterval, reason: String) -> MCPToolCallOptions {
+        MCPToolCallOptions(
+            timeout: timeout,
+            cancellationReason: reason,
+            includeTimeoutInMeta: true
+        )
     }
 
     private func transportLabel(for server: MCPServerConfiguration) -> String {
