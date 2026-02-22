@@ -46,8 +46,8 @@ public struct MCPClientSamplingCapabilities: Codable, Hashable {
 
 public enum MCPProtocolVersion {
     // 优先使用当前较新的协议版本，同时兼容历史服务端返回。
-    public static let current = "2025-06-18"
-    public static let supported = ["2025-06-18", "2025-03-26", "2024-11-05"]
+    public static let current = "2025-11-25"
+    public static let supported = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
     public static func isSupported(_ version: String) -> Bool {
         supported.contains(version)
@@ -391,8 +391,57 @@ public struct MCPNotification: Codable {
 
 // MARK: - Progress
 
+public enum MCPProgressToken: Codable, Hashable, Sendable {
+    case string(String)
+    case int(Int)
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let stringValue = try? container.decode(String.self) {
+            self = .string(stringValue)
+            return
+        }
+        if let intValue = try? container.decode(Int.self) {
+            self = .int(intValue)
+            return
+        }
+        throw DecodingError.typeMismatch(
+            MCPProgressToken.self,
+            DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "progressToken 仅支持 String 或 Int")
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let stringValue):
+            try container.encode(stringValue)
+        case .int(let intValue):
+            try container.encode(intValue)
+        }
+    }
+}
+
+public extension MCPProgressToken {
+    var canonicalValue: String {
+        switch self {
+        case .string(let value):
+            return "s:\(value)"
+        case .int(let value):
+            return "i:\(value)"
+        }
+    }
+
+    var isEmptyString: Bool {
+        if case .string(let value) = self {
+            return value.isEmpty
+        }
+        return false
+    }
+}
+
 public struct MCPProgressParams: Codable, Hashable {
-    public let progressToken: String
+    public let progressToken: MCPProgressToken
     public let progress: Double
     public let total: Double?
 }

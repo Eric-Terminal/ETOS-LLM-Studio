@@ -94,7 +94,21 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     public func disconnect() {
         disconnectStream()
         let pendingActor = pendingRequestsActor
+        let previousSessionId = snapshotAndClearSession()
+        let endpoint = self.endpoint
+        let session = self.session
+        let headers = self.headers
+        let protocolVersion = self.protocolVersion
         Task {
+            if let sessionId = previousSessionId {
+                await Self.terminateRemoteSession(
+                    session: session,
+                    endpoint: endpoint,
+                    headers: headers,
+                    protocolVersion: protocolVersion,
+                    sessionId: sessionId
+                )
+            }
             let pending = await pendingActor.removeAll()
             for continuation in pending {
                 continuation.resume(throwing: CancellationError())
@@ -111,65 +125,80 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     private func postMessage(_ payload: Data, requestId: JSONRPCID?) async throws {
         let notificationMethod = requestId == nil ? extractNotificationMethod(from: payload) : nil
+        var didRetryForMissingSession = false
 
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.httpBody = payload
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
-        applyHeaders(to: &request, includeResumption: false)
+        while true {
+            let appliedSessionId = currentAppliedSessionId()
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MCPClientError.invalidResponse
-        }
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.httpBody = payload
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+            applyHeaders(to: &request, includeResumption: false)
 
-        if let serverSession = httpResponse.value(forHTTPHeaderField: mcpSessionHeader),
-           !serverSession.isEmpty {
-            sessionId = serverSession
-        }
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw MCPClientError.invalidResponse
+            }
 
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = String(data: data, encoding: .utf8)
-            throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
-        }
+            if let serverSession = httpResponse.value(forHTTPHeaderField: mcpSessionHeader),
+               !serverSession.isEmpty {
+                sessionId = serverSession
+            }
 
-        // 202: response will come via SSE stream
-        if httpResponse.statusCode == 202 {
-            if let requestId {
-                guard isSSEEnabled else {
-                    throw MCPClientError.invalidResponse
-                }
-                await pendingRequestsActor.markAwaitingSSE(id: requestId)
-                if sseTask == nil {
+            if httpResponse.statusCode == 404,
+               let staleSessionId = appliedSessionId,
+               !didRetryForMissingSession {
+                didRetryForMissingSession = true
+                resetSessionAfterNotFound(previousSessionId: staleSessionId)
+                continue
+            }
+
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                let message = String(data: data, encoding: .utf8)
+                throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
+            }
+
+            // 202: response will come via SSE stream
+            if httpResponse.statusCode == 202 {
+                if let requestId {
+                    guard isSSEEnabled else {
+                        throw MCPClientError.invalidResponse
+                    }
+                    await pendingRequestsActor.markAwaitingSSE(id: requestId)
+                    if sseTask == nil {
+                        connectStream()
+                    }
+                } else if notificationMethod == "notifications/initialized", isSSEEnabled, sseTask == nil {
+                    // 初始化后异步建立 SSE，会和官方 SDK 行为保持一致。
                     connectStream()
                 }
-            } else if notificationMethod == "notifications/initialized", isSSEEnabled, sseTask == nil {
-                // 初始化后异步建立 SSE，会和官方 SDK 行为保持一致。
-                connectStream()
+                return
             }
-            return
-        }
 
-        let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
-        if contentType.contains("text/event-stream") {
-            await handleInlineSSE(data)
-            return
-        }
+            let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+            if contentType.contains("text/event-stream") {
+                await handleInlineSSE(data)
+                return
+            }
 
-        guard let requestId else { return }
-        guard !data.isEmpty else {
+            guard let requestId else { return }
+            guard !data.isEmpty else {
+                let pending = await pendingRequestsActor.remove(id: requestId)
+                pending?.resume(throwing: MCPClientError.invalidResponse)
+                return
+            }
             let pending = await pendingRequestsActor.remove(id: requestId)
-            pending?.resume(throwing: MCPClientError.invalidResponse)
+            pending?.resume(returning: data)
             return
         }
-        let pending = await pendingRequestsActor.remove(id: requestId)
-        pending?.resume(returning: data)
     }
 
     private func runSSELoop() async {
         defer { sseTask = nil }
         while !Task.isCancelled {
+            let appliedSessionId = currentAppliedSessionId()
             var request = URLRequest(url: endpoint)
             request.httpMethod = "GET"
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
@@ -190,6 +219,12 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
                 if httpResponse.statusCode == 405 {
                     await disableSSEMode(reason: "Streamable HTTP GET/SSE not supported (405).")
                     return
+                }
+
+                if httpResponse.statusCode == 404,
+                   let staleSessionId = appliedSessionId {
+                    resetSessionAfterNotFound(previousSessionId: staleSessionId)
+                    continue
                 }
 
                 let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
@@ -385,10 +420,10 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
-        if let sessionId, !sessionId.isEmpty, !hasHeader(mcpSessionHeader, in: headers) {
+        if let sessionId, !sessionId.isEmpty, !Self.hasHeader(mcpSessionHeader, in: headers) {
             request.setValue(sessionId, forHTTPHeaderField: mcpSessionHeader)
         }
-        if let protocolVersion, !protocolVersion.isEmpty, !hasHeader(mcpProtocolHeader, in: headers) {
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader(mcpProtocolHeader, in: headers) {
             request.setValue(protocolVersion, forHTTPHeaderField: mcpProtocolHeader)
         }
         if includeResumption, let lastEventId, !lastEventId.isEmpty {
@@ -429,8 +464,67 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         return !Task.isCancelled && isSSEEnabled
     }
 
-    private func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
+    private static func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
         headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    private func currentAppliedSessionId() -> String? {
+        guard !Self.hasHeader(mcpSessionHeader, in: headers),
+              let sessionId,
+              !sessionId.isEmpty else {
+            return nil
+        }
+        return sessionId
+    }
+
+    private func resetSessionAfterNotFound(previousSessionId: String) {
+        if sessionId == previousSessionId {
+            sessionId = nil
+        }
+        lastEventId = nil
+        sseReconnectAttempt = 0
+        streamableLogger.info("Streamable HTTP session 已失效（404），将清理本地会话并重建。")
+    }
+
+    private func snapshotAndClearSession() -> String? {
+        let previousSessionId = sessionId
+        sessionId = nil
+        lastEventId = nil
+        return previousSessionId
+    }
+
+    private static func terminateRemoteSession(
+        session: URLSession,
+        endpoint: URL,
+        headers: [String: String],
+        protocolVersion: String?,
+        sessionId: String
+    ) async {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        if !Self.hasHeader(mcpSessionHeader, in: headers) {
+            request.setValue(sessionId, forHTTPHeaderField: mcpSessionHeader)
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader(mcpProtocolHeader, in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: mcpProtocolHeader)
+        }
+
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                streamableLogger.error("会话终止请求返回了无效响应。")
+                return
+            }
+            if !(200..<300).contains(httpResponse.statusCode) && httpResponse.statusCode != 405 {
+                streamableLogger.error("会话终止请求失败：status=\(httpResponse.statusCode)")
+            }
+        } catch {
+            streamableLogger.error("会话终止请求失败：\(error.localizedDescription)")
+        }
     }
 
     private func extractRequestId(from payload: Data) throws -> JSONRPCID {
@@ -501,7 +595,7 @@ private actor StreamablePendingRequestsActor {
 
     func remove(id: JSONRPCID) -> CheckedContinuation<Data, Error>? {
         awaitingSSE.remove(id)
-        requests.removeValue(forKey: id)
+        return requests.removeValue(forKey: id)
     }
 
     func failAwaitingSSE() {

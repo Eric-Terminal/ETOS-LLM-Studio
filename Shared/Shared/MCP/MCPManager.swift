@@ -916,11 +916,12 @@ extension MCPManager: MCPNotificationDelegate {
 
     public nonisolated func didReceiveProgress(_ progress: MCPProgressParams) {
         Task { @MainActor in
-            self.progressByToken[progress.progressToken] = progress
+            let tokenKey = progress.progressToken.canonicalValue
+            self.progressByToken[tokenKey] = progress
             if let total = progress.total,
                total > 0,
                progress.progress >= total {
-                self.progressByToken.removeValue(forKey: progress.progressToken)
+                self.progressByToken.removeValue(forKey: tokenKey)
             }
         }
     }

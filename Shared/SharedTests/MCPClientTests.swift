@@ -71,6 +71,28 @@ struct MCPClientTests {
         #expect(recorded.params == nil)
     }
 
+    @Test("List tools follows cursor pagination")
+    func testListToolsPagination() async throws {
+        let transport = MockTransport()
+        transport.enqueueSuccess(result: ToolsPagePayload(
+            tools: [MCPToolDescription(toolId: "tool.page.1", description: "第一页", inputSchema: nil, examples: nil)],
+            nextCursor: "cursor-2"
+        ))
+        transport.enqueueSuccess(result: ToolsPagePayload(
+            tools: [MCPToolDescription(toolId: "tool.page.2", description: "第二页", inputSchema: nil, examples: nil)],
+            nextCursor: nil
+        ))
+
+        let client = MCPClient(transport: transport)
+        let fetched = try await client.listTools()
+
+        #expect(fetched.map(\.toolId) == ["tool.page.1", "tool.page.2"])
+        let requests = transport.requests(named: "tools/list")
+        #expect(requests.count == 2)
+        #expect(requests[0].params == nil)
+        #expect(requests[1].params?["cursor"] as? String == "cursor-2")
+    }
+
     @Test("Execute tool encodes inputs and returns JSONValue")
     func testExecuteTool() async throws {
         let transport = MockTransport()
@@ -119,6 +141,29 @@ struct MCPClientTests {
         }
         #expect(meta["progressToken"] as? String == "progress-001")
         #expect(meta["timeout"] as? Int == 12000)
+    }
+
+    @Test("Execute tool encodes integer progress token")
+    func testExecuteToolIntegerProgressTokenEncoding() async throws {
+        let transport = MockTransport()
+        let responseValue = JSONValue.dictionary(["status": .string("ok")])
+        transport.enqueueSuccess(result: responseValue)
+
+        let client = MCPClient(transport: transport)
+        _ = try await client.executeTool(
+            toolId: "meta-tool-int",
+            inputs: ["query": .string("hello")],
+            options: .init(timeout: 8, progressToken: 42, cancellationReason: "单测")
+        )
+
+        guard let recorded = transport.request(named: "tools/call"),
+              let params = recorded.params,
+              let meta = params["_meta"] as? [String: Any] else {
+            Issue.record("tools/call 缺少 _meta 字段。")
+            return
+        }
+        #expect(meta["progressToken"] as? Int == 42)
+        #expect(meta["timeout"] as? Int == 8000)
     }
 
     @Test("Execute tool timeout sends cancelled notification")
@@ -175,6 +220,16 @@ struct MCPClientTests {
             Issue.record("捕获到未知错误：\(error)")
         }
     }
+
+    @Test("Progress params decodes integer progressToken")
+    func testProgressParamsDecodeIntegerToken() throws {
+        let json = #"{"progressToken":7,"progress":2.5,"total":10}"#
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(MCPProgressParams.self, from: data)
+        #expect(decoded.progressToken == .int(7))
+        #expect(decoded.progress == 2.5)
+        #expect(decoded.total == 10)
+    }
 }
 
 // MARK: - Test Helpers
@@ -213,6 +268,10 @@ private final class MockTransport: MCPTransport, @unchecked Sendable {
 
     func request(named method: String) -> RecordedRequest? {
         recordedRequests.first(where: { $0.method == method })
+    }
+
+    func requests(named method: String) -> [RecordedRequest] {
+        recordedRequests.filter { $0.method == method }
     }
 
     func sendMessage(_ payload: Data) async throws -> Data {
@@ -276,4 +335,9 @@ private struct RPCErrorPayload: Encodable {
     init(code: Int, message: String, data: JSONValue?) {
         self.error = Body(code: code, message: message, data: data)
     }
+}
+
+private struct ToolsPagePayload: Encodable {
+    let tools: [MCPToolDescription]
+    let nextCursor: String?
 }

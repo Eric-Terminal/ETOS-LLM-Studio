@@ -45,13 +45,15 @@ public final class MCPClient {
     }
     
     public func listTools() async throws -> [MCPToolDescription] {
-        let result: ToolsListResult = try await send(method: "tools/list")
-        return result.tools
+        try await collectPaginatedItems(method: "tools/list") { (result: ToolsListResult) in
+            (result.tools, result.nextCursor)
+        }
     }
     
     public func listResources() async throws -> [MCPResourceDescription] {
-        let result: ResourcesListResult = try await send(method: "resources/list")
-        return result.resources
+        try await collectPaginatedItems(method: "resources/list") { (result: ResourcesListResult) in
+            (result.resources, result.nextCursor)
+        }
     }
     
     public func executeTool(
@@ -90,8 +92,9 @@ public final class MCPClient {
     // MARK: - Prompts
 
     public func listPrompts() async throws -> [MCPPromptDescription] {
-        let result: PromptsListResult = try await send(method: "prompts/list")
-        return result.prompts
+        try await collectPaginatedItems(method: "prompts/list") { (result: PromptsListResult) in
+            (result.prompts, result.nextCursor)
+        }
     }
 
     public func getPrompt(name: String, arguments: [String: String]?) async throws -> MCPGetPromptResult {
@@ -102,8 +105,9 @@ public final class MCPClient {
     // MARK: - Roots
 
     public func listRoots() async throws -> [MCPRoot] {
-        let result: RootsListResult = try await send(method: "roots/list")
-        return result.roots
+        try await collectPaginatedItems(method: "roots/list") { (result: RootsListResult) in
+            (result.roots, result.nextCursor)
+        }
     }
 
     // MARK: - Logging
@@ -266,11 +270,17 @@ private struct ToolExecuteParams: Encodable {
 }
 
 private struct ToolExecuteMeta: Codable {
-    let progressToken: String?
+    let progressToken: MCPProgressToken?
     let timeout: Int?
 
     var isEmpty: Bool {
-        (progressToken?.isEmpty ?? true) && timeout == nil
+        let hasToken: Bool
+        if let progressToken {
+            hasToken = !progressToken.isEmptyString
+        } else {
+            hasToken = false
+        }
+        return !hasToken && timeout == nil
     }
 }
 
@@ -338,13 +348,13 @@ private struct InitializeResult: Decodable {
 
 public struct MCPToolCallOptions: Sendable {
     public var timeout: TimeInterval?
-    public var progressToken: String?
+    public var progressToken: MCPProgressToken?
     public var cancellationReason: String?
     public var includeTimeoutInMeta: Bool
 
     public init(
         timeout: TimeInterval? = nil,
-        progressToken: String? = nil,
+        progressToken: MCPProgressToken? = nil,
         cancellationReason: String? = nil,
         includeTimeoutInMeta: Bool = true
     ) {
@@ -353,6 +363,38 @@ public struct MCPToolCallOptions: Sendable {
         self.cancellationReason = cancellationReason
         self.includeTimeoutInMeta = includeTimeoutInMeta
     }
+
+    public init(
+        timeout: TimeInterval? = nil,
+        progressToken: String?,
+        cancellationReason: String? = nil,
+        includeTimeoutInMeta: Bool = true
+    ) {
+        self.init(
+            timeout: timeout,
+            progressToken: progressToken.map(MCPProgressToken.string),
+            cancellationReason: cancellationReason,
+            includeTimeoutInMeta: includeTimeoutInMeta
+        )
+    }
+
+    public init(
+        timeout: TimeInterval? = nil,
+        progressToken: Int?,
+        cancellationReason: String? = nil,
+        includeTimeoutInMeta: Bool = true
+    ) {
+        self.init(
+            timeout: timeout,
+            progressToken: progressToken.map(MCPProgressToken.int),
+            cancellationReason: cancellationReason,
+            includeTimeoutInMeta: includeTimeoutInMeta
+        )
+    }
+}
+
+private struct CursorPaginationParams: Encodable {
+    let cursor: String
 }
 
 private struct ToolsListResult: Decodable {
@@ -440,6 +482,44 @@ private struct RootsListResult: Decodable {
 }
 
 private extension MCPClient {
+    func collectPaginatedItems<Result: Decodable, Item>(
+        method: String,
+        extract: (Result) -> (items: [Item], nextCursor: String?)
+    ) async throws -> [Item] {
+        var allItems: [Item] = []
+        var currentCursor: String?
+        var seenCursors: Set<String> = []
+
+        while true {
+            let params: AnyEncodable?
+            if let currentCursor {
+                params = AnyEncodable(CursorPaginationParams(cursor: currentCursor))
+            } else {
+                params = nil
+            }
+
+            let result: Result = try await send(method: method, params: params)
+            let page = extract(result)
+            allItems.append(contentsOf: page.items)
+
+            guard let rawNextCursor = page.nextCursor else {
+                break
+            }
+            let nextCursor = rawNextCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !nextCursor.isEmpty else {
+                break
+            }
+            if seenCursors.contains(nextCursor) {
+                mcpClientLogger.error("MCP 分页游标出现循环：\(method, privacy: .public), cursor=\(nextCursor, privacy: .public)")
+                break
+            }
+            seenCursors.insert(nextCursor)
+            currentCursor = nextCursor
+        }
+
+        return allItems
+    }
+
     func logJSON(data: Data, prefix: String) {
         if let text = String(data: data, encoding: .utf8) {
             mcpClientLogger.info("\(prefix, privacy: .public)：\(self.truncate(text), privacy: .public)")
