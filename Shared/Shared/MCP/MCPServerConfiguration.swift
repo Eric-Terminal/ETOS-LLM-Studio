@@ -143,7 +143,7 @@ public extension MCPServerConfiguration {
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
-            return MCPOAuthHTTPTransport(
+            return MCPOAuthStreamableHTTPTransport(
                 endpoint: endpoint,
                 tokenEndpoint: tokenEndpoint,
                 clientID: clientID,

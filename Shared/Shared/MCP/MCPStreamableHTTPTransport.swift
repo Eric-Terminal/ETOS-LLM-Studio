@@ -19,9 +19,11 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     private let session: URLSession
     private let headers: [String: String]
     private let protocolVersion: String?
+    private let dynamicHeadersProvider: (@Sendable () async throws -> [String: String])?
     private let sseReconnectMaxAttempts = 5
     private let sseReconnectBaseDelay: TimeInterval = 1.0
     private let sseReconnectMaxDelay: TimeInterval = 30.0
+    private let sseSuspensionInterval: TimeInterval = 15.0
 
     private let pendingRequestsActor = StreamablePendingRequestsActor()
     private var sseTask: Task<Void, Never>?
@@ -29,6 +31,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     private var lastEventId: String?
     private var sseReconnectAttempt = 0
     private var isSSEEnabled = true
+    private var sseSuspendedUntil: Date?
 
     public weak var notificationDelegate: MCPNotificationDelegate?
     public weak var samplingHandler: MCPSamplingHandler?
@@ -41,12 +44,14 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         endpoint: URL,
         session: URLSession = .shared,
         headers: [String: String] = [:],
-        protocolVersion: String? = MCPProtocolVersion.current
+        protocolVersion: String? = MCPProtocolVersion.current,
+        dynamicHeadersProvider: (@Sendable () async throws -> [String: String])? = nil
     ) {
         self.endpoint = endpoint
         self.session = session
         self.headers = headers
         self.protocolVersion = protocolVersion
+        self.dynamicHeadersProvider = dynamicHeadersProvider
     }
 
     deinit {
@@ -57,7 +62,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     public func sendMessage(_ payload: Data) async throws -> Data {
         let requestId = try extractRequestId(from: payload)
-        if sseTask == nil, isSSEEnabled {
+        if sseTask == nil {
             connectStream()
         }
 
@@ -81,8 +86,13 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     // MARK: - Streaming
 
     public func connectStream() {
-        guard isSSEEnabled else {
-            streamableLogger.info("SSE 已被服务端禁用，跳过连接。")
+        guard resumeSSEProbeIfNeeded(force: false, reason: "connectStream") else {
+            if let suspendedUntil = sseSuspendedUntil {
+                let remaining = max(0, suspendedUntil.timeIntervalSinceNow)
+                streamableLogger.info("SSE 当前处于降级挂起状态，\(remaining, privacy: .public)s 后重试。")
+            } else {
+                streamableLogger.info("SSE 当前处于降级挂起状态，跳过连接。")
+            }
             return
         }
         guard sseTask == nil else { return }
@@ -98,14 +108,17 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         let previousSessionId = snapshotAndClearSession()
         let endpoint = self.endpoint
         let session = self.session
-        let headers = self.headers
+        let staticHeaders = self.headers
+        let dynamicHeadersProvider = self.dynamicHeadersProvider
         let protocolVersion = self.protocolVersion
         Task {
+            let dynamicHeaders = try? await dynamicHeadersProvider?()
             if let sessionId = previousSessionId {
                 await Self.terminateRemoteSession(
                     session: session,
                     endpoint: endpoint,
-                    headers: headers,
+                    headers: staticHeaders,
+                    dynamicHeaders: dynamicHeaders ?? [:],
                     protocolVersion: protocolVersion,
                     sessionId: sessionId
                 )
@@ -130,13 +143,14 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
         while true {
             let appliedSessionId = currentAppliedSessionId()
+            let dynamicHeaders = try await resolveDynamicHeaders()
 
             var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
             request.httpBody = payload
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
-            applyHeaders(to: &request, includeResumption: false)
+            applyHeaders(to: &request, includeResumption: false, dynamicHeaders: dynamicHeaders)
 
             let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
@@ -164,14 +178,17 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
             // 202: response will come via SSE stream
             if httpResponse.statusCode == 202 {
                 if let requestId {
-                    guard isSSEEnabled else {
-                        throw MCPClientError.invalidResponse
+                    if !isSSEEnabled {
+                        _ = resumeSSEProbeIfNeeded(force: true, reason: "收到 202 响应")
                     }
                     await pendingRequestsActor.markAwaitingSSE(id: requestId)
                     if sseTask == nil {
                         connectStream()
                     }
-                } else if notificationMethod == "notifications/initialized", isSSEEnabled, sseTask == nil {
+                } else if notificationMethod == "notifications/initialized", sseTask == nil {
+                    if !isSSEEnabled {
+                        _ = resumeSSEProbeIfNeeded(force: true, reason: "初始化通知收到 202 响应")
+                    }
                     // 初始化后异步建立 SSE，会和官方 SDK 行为保持一致。
                     connectStream()
                 }
@@ -200,11 +217,19 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         defer { sseTask = nil }
         while !Task.isCancelled {
             let appliedSessionId = currentAppliedSessionId()
+            let dynamicHeaders: [String: String]
+            do {
+                dynamicHeaders = try await resolveDynamicHeaders()
+            } catch {
+                streamableLogger.error("构建认证请求头失败：\(error.localizedDescription, privacy: .public)")
+                guard await scheduleSSEReconnectIfNeeded() else { return }
+                continue
+            }
             var request = URLRequest(url: endpoint)
             request.httpMethod = "GET"
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
             request.timeoutInterval = .infinity
-            applyHeaders(to: &request, includeResumption: true)
+            applyHeaders(to: &request, includeResumption: true, dynamicHeaders: dynamicHeaders)
 
             do {
                 let (bytes, response) = try await session.bytes(for: request)
@@ -218,7 +243,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
                 }
 
                 if httpResponse.statusCode == 405 {
-                    await disableSSEMode(reason: "Streamable HTTP GET/SSE not supported (405).")
+                    await suspendSSEMode(reason: "服务端暂不支持 Streamable HTTP GET/SSE（405）。")
                     return
                 }
 
@@ -230,7 +255,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
                 let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
                 if contentType.contains("application/json") {
-                    await disableSSEMode(reason: "Streamable HTTP SSE disabled (application/json response).")
+                    await suspendSSEMode(reason: "服务端本轮返回 application/json，暂时降级 SSE。")
                     return
                 }
 
@@ -459,14 +484,15 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         return try decoder.decode(MCPProgressParams.self, from: data)
     }
 
-    private func applyHeaders(to request: inout URLRequest, includeResumption: Bool) {
-        for (key, value) in headers {
+    private func applyHeaders(to request: inout URLRequest, includeResumption: Bool, dynamicHeaders: [String: String]) {
+        let resolvedHeaders = mergedHeaders(staticHeaders: headers, dynamicHeaders: dynamicHeaders)
+        for (key, value) in resolvedHeaders {
             request.setValue(value, forHTTPHeaderField: key)
         }
-        if let sessionId, !sessionId.isEmpty, !Self.hasHeader(mcpSessionHeader, in: headers) {
+        if let sessionId, !sessionId.isEmpty, !Self.hasHeader(mcpSessionHeader, in: resolvedHeaders) {
             request.setValue(sessionId, forHTTPHeaderField: mcpSessionHeader)
         }
-        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader(mcpProtocolHeader, in: headers) {
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader(mcpProtocolHeader, in: resolvedHeaders) {
             request.setValue(protocolVersion, forHTTPHeaderField: mcpProtocolHeader)
         }
         if includeResumption, let lastEventId, !lastEventId.isEmpty {
@@ -474,11 +500,11 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         }
     }
 
-    private func disableSSEMode(reason: String) async {
-        guard isSSEEnabled else { return }
+    private func suspendSSEMode(reason: String) async {
         isSSEEnabled = false
+        sseSuspendedUntil = Date().addingTimeInterval(sseSuspensionInterval)
         sseReconnectAttempt = 0
-        streamableLogger.info("\(reason, privacy: .public)")
+        streamableLogger.info("\(reason, privacy: .public) 将在 \(sseSuspensionInterval, privacy: .public)s 后重新探测。")
         await pendingRequestsActor.failAwaitingSSE()
     }
 
@@ -488,8 +514,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         let nextAttempt = sseReconnectAttempt + 1
         guard nextAttempt <= sseReconnectMaxAttempts else {
             streamableLogger.error("Streamable HTTP SSE reconnect exhausted at \(nextAttempt - 1) attempts.")
-            isSSEEnabled = false
-            await pendingRequestsActor.failAwaitingSSE()
+            await suspendSSEMode(reason: "SSE 重连次数耗尽，暂时降级。")
             return false
         }
 
@@ -505,6 +530,36 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
             return false
         }
         return !Task.isCancelled && isSSEEnabled
+    }
+
+    private func resolveDynamicHeaders() async throws -> [String: String] {
+        guard let dynamicHeadersProvider else { return [:] }
+        return try await dynamicHeadersProvider()
+    }
+
+    private func mergedHeaders(staticHeaders: [String: String], dynamicHeaders: [String: String]) -> [String: String] {
+        var resolved = staticHeaders
+        for (key, value) in dynamicHeaders {
+            if let existingKey = resolved.keys.first(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) {
+                resolved[existingKey] = value
+            } else {
+                resolved[key] = value
+            }
+        }
+        return resolved
+    }
+
+    private func resumeSSEProbeIfNeeded(force: Bool, reason: String) -> Bool {
+        guard !isSSEEnabled else { return true }
+        let now = Date()
+        if force || sseSuspendedUntil == nil || now >= (sseSuspendedUntil ?? .distantPast) {
+            isSSEEnabled = true
+            sseSuspendedUntil = nil
+            sseReconnectAttempt = 0
+            streamableLogger.info("SSE 探测已恢复：\(reason, privacy: .public)")
+            return true
+        }
+        return false
     }
 
     private static func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
@@ -526,6 +581,8 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         }
         lastEventId = nil
         sseReconnectAttempt = 0
+        sseSuspendedUntil = nil
+        isSSEEnabled = true
         streamableLogger.info("Streamable HTTP session 已失效（404），将清理本地会话并重建。")
     }
 
@@ -533,6 +590,8 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         let previousSessionId = sessionId
         sessionId = nil
         lastEventId = nil
+        sseSuspendedUntil = nil
+        isSSEEnabled = true
         return previousSessionId
     }
 
@@ -540,19 +599,21 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         session: URLSession,
         endpoint: URL,
         headers: [String: String],
+        dynamicHeaders: [String: String],
         protocolVersion: String?,
         sessionId: String
     ) async {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "DELETE"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        for (key, value) in headers {
+        let resolvedHeaders = mergeHeaders(staticHeaders: headers, dynamicHeaders: dynamicHeaders)
+        for (key, value) in resolvedHeaders {
             request.setValue(value, forHTTPHeaderField: key)
         }
-        if !Self.hasHeader(mcpSessionHeader, in: headers) {
+        if !Self.hasHeader(mcpSessionHeader, in: resolvedHeaders) {
             request.setValue(sessionId, forHTTPHeaderField: mcpSessionHeader)
         }
-        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader(mcpProtocolHeader, in: headers) {
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader(mcpProtocolHeader, in: resolvedHeaders) {
             request.setValue(protocolVersion, forHTTPHeaderField: mcpProtocolHeader)
         }
 
@@ -568,6 +629,18 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         } catch {
             streamableLogger.error("会话终止请求失败：\(error.localizedDescription)")
         }
+    }
+
+    private static func mergeHeaders(staticHeaders: [String: String], dynamicHeaders: [String: String]) -> [String: String] {
+        var resolved = staticHeaders
+        for (key, value) in dynamicHeaders {
+            if let existingKey = resolved.keys.first(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) {
+                resolved[existingKey] = value
+            } else {
+                resolved[key] = value
+            }
+        }
+        return resolved
     }
 
     private func extractRequestId(from payload: Data) throws -> JSONRPCID {

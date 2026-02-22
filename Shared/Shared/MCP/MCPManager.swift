@@ -549,6 +549,10 @@ public final class MCPManager: ObservableObject {
                 }
                 self.lastOperationError = error.localizedDescription
                 self.lastOperationOutput = nil
+                if let server = self.servers.first(where: { $0.id == serverID }),
+                   server.isSelectedForChat {
+                    self.scheduleAutoConnectRetry(for: serverID, preserveSelection: true)
+                }
             }
         }
     }

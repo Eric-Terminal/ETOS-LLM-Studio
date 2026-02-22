@@ -170,12 +170,110 @@ struct MCPStreamableHTTPTransportTests {
         transport.disconnect()
     }
 
-    private func makeTransport() -> MCPStreamableHTTPTransport {
+    @Test("SSE 在 405 降级后可因 202 响应触发重新探测并返回结果")
+    func testSSERecoveryAfterSuspension() async throws {
+        StreamableTransportURLProtocol.reset()
+        // 首次 SSE 探测返回 405，触发临时降级。
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 405,
+            headers: [:],
+            body: Data("method not allowed".utf8)
+        )
+
+        let transport = makeTransport()
+        transport.connectStream()
+
+        let hasInitialGET = await waitUntil {
+            StreamableTransportURLProtocol.requests().contains { $0.httpMethod == "GET" }
+        }
+        #expect(hasInitialGET)
+
+        // 后续请求返回 202，客户端应强制恢复 SSE 探测并通过 SSE 收到响应。
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 202,
+            headers: [:],
+            body: Data()
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: ["Content-Type": "text/event-stream"],
+            body: makeInlineSSEData(
+                json: #"{"jsonrpc":"2.0","id":"recover-1","result":{"ok":true}}"#
+            )
+        )
+
+        let responseData = try await transport.sendMessage(
+            makeRequestPayload(id: "recover-1", method: "tools/call", paramsJSON: #"{"name":"recover.tool","arguments":{}}"#)
+        )
+        guard let response = parseJSONObject(from: responseData),
+              let id = response["id"] as? String,
+              let result = response["result"] as? [String: Any],
+              let ok = result["ok"] as? Bool else {
+            Issue.record("未解析到 SSE 恢复后的 JSON-RPC 响应。")
+            return
+        }
+        #expect(id == "recover-1")
+        #expect(ok == true)
+
+        let getRequests = StreamableTransportURLProtocol.requests().filter { $0.httpMethod == "GET" }
+        #expect(getRequests.count >= 2)
+        transport.disconnect()
+    }
+
+    @Test("动态请求头提供器会注入到 POST/GET 请求中")
+    func testDynamicHeadersProviderAppliesAuthorization() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 405,
+            headers: [:],
+            body: Data("method not allowed".utf8)
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: [:],
+            body: Data(#"{"jsonrpc":"2.0","id":"auth-1","result":{"status":"ok"}}"#.utf8)
+        )
+
+        let tokenProvider = TokenHeaderProvider()
+        let transport = makeTransport(
+            dynamicHeadersProvider: {
+                await tokenProvider.nextHeaders()
+            }
+        )
+
+        _ = try await transport.sendMessage(
+            makeRequestPayload(id: "auth-1", method: "tools/call", paramsJSON: #"{"name":"auth.tool","arguments":{}}"#)
+        )
+
+        let requests = StreamableTransportURLProtocol.requests()
+        if let postRequest = requests.first(where: { $0.httpMethod == "POST" }) {
+            let authHeader = postRequest.value(forHTTPHeaderField: "Authorization")
+            #expect(authHeader?.hasPrefix("Bearer token-") == true)
+        } else {
+            Issue.record("未捕获到 POST 请求。")
+        }
+
+        if let getRequest = requests.first(where: { $0.httpMethod == "GET" }) {
+            let authHeader = getRequest.value(forHTTPHeaderField: "Authorization")
+            #expect(authHeader?.hasPrefix("Bearer token-") == true)
+        } else {
+            Issue.record("未捕获到 GET 请求。")
+        }
+        transport.disconnect()
+    }
+
+    private func makeTransport(
+        dynamicHeadersProvider: (@Sendable () async throws -> [String: String])? = nil
+    ) -> MCPStreamableHTTPTransport {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StreamableTransportURLProtocol.self]
         let session = URLSession(configuration: config)
         let endpoint = URL(string: "https://example.com/mcp")!
-        return MCPStreamableHTTPTransport(endpoint: endpoint, session: session)
+        return MCPStreamableHTTPTransport(
+            endpoint: endpoint,
+            session: session,
+            dynamicHeadersProvider: dynamicHeadersProvider
+        )
     }
 
     private func makeNotificationPayload(method: String) -> Data {
@@ -184,6 +282,10 @@ struct MCPStreamableHTTPTransportTests {
 
     private func makeInlineSSEData(json: String) -> Data {
         Data("data: \(json)\n\n".utf8)
+    }
+
+    private func makeRequestPayload(id: String, method: String, paramsJSON: String) -> Data {
+        Data(#"{"jsonrpc":"2.0","id":"\#(id)","method":"\#(method)","params":\#(paramsJSON)}"#.utf8)
     }
 
     private func parseJSONObject(from data: Data) -> [String: Any]? {
@@ -291,4 +393,37 @@ private final class StreamableTransportURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+private actor TokenHeaderProvider {
+    private var counter = 0
+
+    func nextHeaders() -> [String: String] {
+        counter += 1
+        return ["Authorization": "Bearer token-\(counter)"]
+    }
+}
+
+@Suite("MCP OAuth Transport Wiring Tests")
+struct MCPOAuthTransportWiringTests {
+    @Test("OAuth 配置返回支持通知流的传输实现")
+    func testOAuthConfigurationBuildsStreamingTransport() {
+        let config = MCPServerConfiguration(
+            displayName: "OAuth Test",
+            transport: .oauth(
+                endpoint: URL(string: "https://example.com/mcp")!,
+                tokenEndpoint: URL(string: "https://example.com/oauth/token")!,
+                clientID: "client-id",
+                clientSecret: "client-secret",
+                scope: "mcp",
+                grantType: .clientCredentials,
+                authorizationCode: nil,
+                redirectURI: nil,
+                codeVerifier: nil
+            )
+        )
+
+        let transport = config.makeTransport()
+        #expect(transport is MCPStreamingTransportProtocol)
+    }
 }

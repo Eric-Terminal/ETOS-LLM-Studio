@@ -263,6 +263,11 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
         }
     }
 
+    public func authorizationHeaders() async throws -> [String: String] {
+        let token = try await validToken()
+        return ["Authorization": "Bearer \(token.value)"]
+    }
+
     private func validToken() async throws -> OAuthToken {
         if let cachedToken, cachedToken.isValid {
             return cachedToken
@@ -363,5 +368,80 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// OAuth + Streamable HTTP 组合传输：
+/// - 令牌通过 OAuth actor 动态获取/刷新；
+/// - 实际请求与通知流由 MCPStreamableHTTPTransport 处理，以支持服务端通知与进度。
+public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, @unchecked Sendable {
+    private let oauthTransport: MCPOAuthHTTPTransport
+    private let streamableTransport: MCPStreamableHTTPTransport
+
+    public var notificationDelegate: MCPNotificationDelegate? {
+        get { streamableTransport.notificationDelegate }
+        set { streamableTransport.notificationDelegate = newValue }
+    }
+
+    public var samplingHandler: MCPSamplingHandler? {
+        get { streamableTransport.samplingHandler }
+        set { streamableTransport.samplingHandler = newValue }
+    }
+
+    public var elicitationHandler: MCPElicitationHandler? {
+        get { streamableTransport.elicitationHandler }
+        set { streamableTransport.elicitationHandler = newValue }
+    }
+
+    public init(
+        endpoint: URL,
+        tokenEndpoint: URL,
+        clientID: String,
+        clientSecret: String?,
+        scope: String?,
+        grantType: MCPOAuthGrantType = .clientCredentials,
+        authorizationCode: String? = nil,
+        redirectURI: String? = nil,
+        codeVerifier: String? = nil,
+        session: URLSession = .shared
+    ) {
+        let oauthTransport = MCPOAuthHTTPTransport(
+            endpoint: endpoint,
+            tokenEndpoint: tokenEndpoint,
+            clientID: clientID,
+            clientSecret: clientSecret,
+            scope: scope,
+            grantType: grantType,
+            authorizationCode: authorizationCode,
+            redirectURI: redirectURI,
+            codeVerifier: codeVerifier,
+            session: session
+        )
+        self.oauthTransport = oauthTransport
+        self.streamableTransport = MCPStreamableHTTPTransport(
+            endpoint: endpoint,
+            session: session,
+            headers: [:],
+            protocolVersion: MCPProtocolVersion.current,
+            dynamicHeadersProvider: { [oauthTransport] in
+                try await oauthTransport.authorizationHeaders()
+            }
+        )
+    }
+
+    public func sendMessage(_ payload: Data) async throws -> Data {
+        try await streamableTransport.sendMessage(payload)
+    }
+
+    public func sendNotification(_ payload: Data) async throws {
+        try await streamableTransport.sendNotification(payload)
+    }
+
+    public func connectStream() {
+        streamableTransport.connectStream()
+    }
+
+    public func disconnect() {
+        streamableTransport.disconnect()
     }
 }
