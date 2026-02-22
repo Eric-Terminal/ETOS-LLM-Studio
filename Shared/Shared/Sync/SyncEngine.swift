@@ -743,12 +743,16 @@ public enum SyncEngine {
                 hasher.combine(key)
                 hasher.combine(value)
             }
-        case .oauth(let endpoint, let tokenEndpoint, let clientID, _, let scope):
+        case .oauth(let endpoint, let tokenEndpoint, let clientID, _, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             hasher.combine("oauth")
             hasher.combine(endpoint.absoluteString)
             hasher.combine(tokenEndpoint.absoluteString)
             hasher.combine(clientID)
             hasher.combine(scope ?? "")
+            hasher.combine(grantType.rawValue)
+            hasher.combine(authorizationCode ?? "")
+            hasher.combine(redirectURI ?? "")
+            hasher.combine(codeVerifier ?? "")
         }
         return String(hasher.finalize())
     }

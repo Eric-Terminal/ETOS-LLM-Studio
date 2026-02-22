@@ -17,17 +17,41 @@ public struct MCPClientInfo: Codable, Hashable {
 }
 
 public struct MCPClientCapabilities: Codable, Hashable {
-    public var transports: [String]
-    public var supportsStreamingResponses: Bool
+    public var roots: MCPClientRootsCapabilities?
+    public var sampling: MCPClientSamplingCapabilities?
+    public var experimental: [String: JSONValue]?
 
-    public init(transports: [String], supportsStreamingResponses: Bool) {
-        self.transports = transports
-        self.supportsStreamingResponses = supportsStreamingResponses
+    public init(
+        roots: MCPClientRootsCapabilities? = nil,
+        sampling: MCPClientSamplingCapabilities? = nil,
+        experimental: [String: JSONValue]? = nil
+    ) {
+        self.roots = roots
+        self.sampling = sampling
+        self.experimental = experimental
     }
 }
 
+public struct MCPClientRootsCapabilities: Codable, Hashable {
+    public var listChanged: Bool?
+
+    public init(listChanged: Bool? = nil) {
+        self.listChanged = listChanged
+    }
+}
+
+public struct MCPClientSamplingCapabilities: Codable, Hashable {
+    public init() {}
+}
+
 public enum MCPProtocolVersion {
-    public static let current = "2024-11-05"
+    // 优先使用当前较新的协议版本，同时兼容历史服务端返回。
+    public static let current = "2025-06-18"
+    public static let supported = ["2025-06-18", "2025-03-26", "2024-11-05"]
+
+    public static func isSupported(_ version: String) -> Bool {
+        supported.contains(version)
+    }
 }
 
 public struct MCPServerInfo: Codable, Hashable {
@@ -356,6 +380,7 @@ public enum MCPNotificationType: String, Codable {
     case progress = "notifications/progress"
     case logMessage = "notifications/message"
     case rootsListChanged = "notifications/roots/list_changed"
+    case cancelled = "notifications/cancelled"
 }
 
 public struct MCPNotification: Codable {
@@ -372,13 +397,65 @@ public struct MCPProgressParams: Codable, Hashable {
     public let total: Double?
 }
 
+public struct MCPCancelledParams: Codable, Hashable {
+    public let requestId: JSONRPCID
+    public let reason: String?
+
+    public init(requestId: JSONRPCID, reason: String? = nil) {
+        self.requestId = requestId
+        self.reason = reason
+    }
+}
+
+public enum JSONRPCID: Codable, Hashable, Sendable {
+    case string(String)
+    case int(Int)
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let stringValue = try? container.decode(String.self) {
+            self = .string(stringValue)
+            return
+        }
+        if let intValue = try? container.decode(Int.self) {
+            self = .int(intValue)
+            return
+        }
+        throw DecodingError.typeMismatch(
+            JSONRPCID.self,
+            DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "JSON-RPC id 仅支持 String 或 Int")
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let stringValue):
+            try container.encode(stringValue)
+        case .int(let intValue):
+            try container.encode(intValue)
+        }
+    }
+}
+
+public extension JSONRPCID {
+    var canonicalValue: String {
+        switch self {
+        case .string(let value):
+            return "s:\(value)"
+        case .int(let value):
+            return "i:\(value)"
+        }
+    }
+}
+
 struct JSONRPCRequest: Encodable {
     let jsonrpc: String = "2.0"
-    let id: String
+    let id: JSONRPCID
     let method: String
     let params: AnyEncodable?
 
-    init(id: String, method: String, params: AnyEncodable?) {
+    init(id: JSONRPCID, method: String, params: AnyEncodable?) {
         self.id = id
         self.method = method
         self.params = params
@@ -406,7 +483,7 @@ struct JSONRPCNotification: Encodable {
 
 struct JSONRPCResponse<Result: Decodable>: Decodable {
     let jsonrpc: String
-    let id: String?
+    let id: JSONRPCID?
     let result: Result?
     let error: JSONRPCError?
 }
@@ -425,6 +502,8 @@ public enum MCPClientError: LocalizedError {
     case decodingError(Error)
     case missingResult
     case notConnected
+    case unsupportedProtocolVersion(String)
+    case requestTimedOut(method: String, timeout: TimeInterval)
 
     public var errorDescription: String? {
         switch self {
@@ -442,6 +521,10 @@ public enum MCPClientError: LocalizedError {
             return "响应中缺少 result 字段。"
         case .notConnected:
             return "尚未连接到 MCP 服务器。"
+        case .unsupportedProtocolVersion(let version):
+            return "服务器协商的 MCP 协议版本不受支持：\(version)"
+        case .requestTimedOut(let method, let timeout):
+            return "请求 \(method) 超时（\(String(format: "%.1f", timeout)) 秒）。"
         }
     }
 }
@@ -466,7 +549,11 @@ public extension MCPClientInfo {
 }
 
 public extension MCPClientCapabilities {
+    static var standard: MCPClientCapabilities {
+        MCPClientCapabilities()
+    }
+
     static var httpOnly: MCPClientCapabilities {
-        MCPClientCapabilities(transports: ["streamable_http", "sse"], supportsStreamingResponses: true)
+        standard
     }
 }

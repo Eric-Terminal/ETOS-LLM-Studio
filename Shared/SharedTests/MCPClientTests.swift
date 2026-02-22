@@ -27,7 +27,10 @@ struct MCPClientTests {
         let client = MCPClient(transport: transport)
         let info = try await client.initialize(
             clientInfo: .init(name: "Harness", version: "0.1"),
-            capabilities: .init(transports: ["http+sse"], supportsStreamingResponses: false)
+            capabilities: .init(
+                roots: .init(listChanged: true),
+                sampling: .init()
+            )
         )
 
         #expect(info == expectedInfo)
@@ -42,8 +45,8 @@ struct MCPClientTests {
         #expect(protocolVersion == MCPProtocolVersion.current)
         #expect(clientInfo["name"] as? String == "Harness")
         #expect(clientInfo["version"] as? String == "0.1")
-        #expect(capabilities["supportsStreamingResponses"] as? Bool == false)
-        #expect((capabilities["transports"] as? [String]) == ["http+sse"])
+        #expect((capabilities["roots"] as? [String: Any])?["listChanged"] as? Bool == true)
+        #expect(capabilities["sampling"] as? [String: Any] != nil)
         #expect(transport.request(named: "notifications/initialized") != nil)
     }
 
@@ -95,6 +98,63 @@ struct MCPClientTests {
         #expect(inputs["question"] as? String == "What is 6 * 7?")
     }
 
+    @Test("Execute tool encodes MCP meta fields")
+    func testExecuteToolMetaEncoding() async throws {
+        let transport = MockTransport()
+        let responseValue = JSONValue.dictionary(["status": .string("ok")])
+        transport.enqueueSuccess(result: responseValue)
+
+        let client = MCPClient(transport: transport)
+        _ = try await client.executeTool(
+            toolId: "meta-tool",
+            inputs: ["query": .string("hello")],
+            options: .init(timeout: 12, progressToken: "progress-001", cancellationReason: "单测")
+        )
+
+        guard let recorded = transport.request(named: "tools/call"),
+              let params = recorded.params,
+              let meta = params["_meta"] as? [String: Any] else {
+            Issue.record("tools/call 缺少 _meta 字段。")
+            return
+        }
+        #expect(meta["progressToken"] as? String == "progress-001")
+        #expect(meta["timeout"] as? Int == 12000)
+    }
+
+    @Test("Execute tool timeout sends cancelled notification")
+    func testExecuteToolTimeoutSendsCancelledNotification() async throws {
+        let transport = MockTransport()
+        transport.messageDelayNanoseconds = 400_000_000
+        transport.enqueueSuccess(result: JSONValue.dictionary(["status": .string("slow")]))
+
+        let client = MCPClient(transport: transport)
+        do {
+            _ = try await client.executeTool(
+                toolId: "slow-tool",
+                inputs: [:],
+                options: .init(timeout: 0.05, progressToken: "p-timeout", cancellationReason: "调用超时")
+            )
+            Issue.record("超时场景应抛出错误。")
+            return
+        } catch let error as MCPClientError {
+            guard case .requestTimedOut(let method, _) = error else {
+                Issue.record("错误类型不是 requestTimedOut：\(error)")
+                return
+            }
+            #expect(method == "tools/call")
+        } catch {
+            Issue.record("捕获到未知错误：\(error)")
+        }
+
+        guard let cancelled = await transport.waitForRequest(named: "notifications/cancelled"),
+              let params = cancelled.params else {
+            Issue.record("超时后未发送 notifications/cancelled。")
+            return
+        }
+        #expect(params["reason"] as? String == "调用超时")
+        #expect(params["requestId"] != nil)
+    }
+
     @Test("Read resource surfaces RPC errors")
     func testReadResourceErrorPropagation() async throws {
         let transport = MockTransport()
@@ -119,7 +179,7 @@ struct MCPClientTests {
 
 // MARK: - Test Helpers
 
-private final class MockTransport: MCPTransport {
+private final class MockTransport: MCPTransport, @unchecked Sendable {
     struct RecordedRequest {
         let method: String
         let payload: [String: Any]
@@ -131,6 +191,7 @@ private final class MockTransport: MCPTransport {
 
     private var responses: [Result<Data, Error>] = []
     private(set) var recordedRequests: [RecordedRequest] = []
+    var messageDelayNanoseconds: UInt64 = 0
 
     func enqueueSuccess<T: Encodable>(result: T) {
         let wrapper = RPCSuccessPayload(result: result)
@@ -155,6 +216,9 @@ private final class MockTransport: MCPTransport {
     }
 
     func sendMessage(_ payload: Data) async throws -> Data {
+        if messageDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: messageDelayNanoseconds)
+        }
         let json = try JSONSerialization.jsonObject(with: payload)
         let dictionary = json as? [String: Any] ?? [:]
         let method = dictionary["method"] as? String ?? ""
@@ -178,6 +242,17 @@ private final class MockTransport: MCPTransport {
         let dictionary = json as? [String: Any] ?? [:]
         let method = dictionary["method"] as? String ?? ""
         recordedRequests.append(RecordedRequest(method: method, payload: dictionary))
+    }
+
+    func waitForRequest(named method: String, timeoutSeconds: TimeInterval = 1.0) async -> RecordedRequest? {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if let request = request(named: method) {
+                return request
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return request(named: method)
     }
 }
 

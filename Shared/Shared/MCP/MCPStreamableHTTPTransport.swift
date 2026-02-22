@@ -100,7 +100,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     // MARK: - HTTP + SSE Implementation
 
-    private func postMessage(_ payload: Data, requestId: String?) async throws {
+    private func postMessage(_ payload: Data, requestId: JSONRPCID?) async throws {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.httpBody = payload
@@ -297,7 +297,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         }
     }
 
-    private func sendSamplingResponse(requestId: String, response: MCPSamplingResponse) async {
+    private func sendSamplingResponse(requestId: JSONRPCID, response: MCPSamplingResponse) async {
         let rpcResponse = JSONRPCSamplingResponse(id: requestId, result: response)
         guard let data = try? encoder.encode(rpcResponse) else { return }
 
@@ -308,7 +308,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         }
     }
 
-    private func sendSamplingError(requestId: String, message: String) async {
+    private func sendSamplingError(requestId: JSONRPCID, message: String) async {
         let error = JSONRPCErrorResponse(
             id: requestId,
             error: JSONRPCErrorBody(code: -32603, message: message)
@@ -351,7 +351,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
         headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
 
-    private func extractRequestId(from payload: Data) throws -> String {
+    private func extractRequestId(from payload: Data) throws -> JSONRPCID {
         if let request = try? decoder.decode(JSONRPCRequestEnvelope.self, from: payload) {
             return request.id
         }
@@ -402,13 +402,13 @@ private struct SSEEvent {
 }
 
 private actor StreamablePendingRequestsActor {
-    private var requests: [String: CheckedContinuation<Data, Error>] = [:]
+    private var requests: [JSONRPCID: CheckedContinuation<Data, Error>] = [:]
 
-    func add(id: String, continuation: CheckedContinuation<Data, Error>) {
+    func add(id: JSONRPCID, continuation: CheckedContinuation<Data, Error>) {
         requests[id] = continuation
     }
 
-    func remove(id: String) -> CheckedContinuation<Data, Error>? {
+    func remove(id: JSONRPCID) -> CheckedContinuation<Data, Error>? {
         requests.removeValue(forKey: id)
     }
 
@@ -420,27 +420,27 @@ private actor StreamablePendingRequestsActor {
 }
 
 private struct JSONRPCRequestEnvelope: Decodable {
-    let id: String
+    let id: JSONRPCID
 }
 
 private struct MCPServerSamplingRequest: Codable {
     let jsonrpc: String
-    let id: String
+    let id: JSONRPCID
     let method: String
     let params: MCPSamplingRequest
 }
 
 private struct JSONRPCResponseWrapper: Codable {
     let jsonrpc: String
-    let id: String?
+    let id: JSONRPCID?
 }
 
 private struct JSONRPCSamplingResponse: Encodable {
     let jsonrpc: String
-    let id: String
+    let id: JSONRPCID
     let result: MCPSamplingResponse
 
-    init(id: String, result: MCPSamplingResponse) {
+    init(id: JSONRPCID, result: MCPSamplingResponse) {
         self.jsonrpc = "2.0"
         self.id = id
         self.result = result
@@ -449,10 +449,10 @@ private struct JSONRPCSamplingResponse: Encodable {
 
 private struct JSONRPCErrorResponse: Encodable {
     let jsonrpc: String
-    let id: String
+    let id: JSONRPCID
     let error: JSONRPCErrorBody
 
-    init(id: String, error: JSONRPCErrorBody) {
+    init(id: JSONRPCID, error: JSONRPCErrorBody) {
         self.jsonrpc = "2.0"
         self.id = id
         self.error = error

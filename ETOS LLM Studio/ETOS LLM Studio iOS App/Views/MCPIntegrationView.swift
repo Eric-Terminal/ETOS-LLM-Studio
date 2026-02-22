@@ -606,6 +606,10 @@ private struct MCPServerEditor: View {
     @State private var clientID: String
     @State private var clientSecret: String
     @State private var oauthScope: String
+    @State private var oauthGrantType: MCPOAuthGrantType
+    @State private var oauthAuthorizationCode: String
+    @State private var oauthRedirectURI: String
+    @State private var oauthCodeVerifier: String
     @State private var transportOption: TransportOption
     @State private var notes: String
     @State private var headerOverrideEntries: [HeaderOverrideEntry]
@@ -628,6 +632,10 @@ private struct MCPServerEditor: View {
                 _clientID = State(initialValue: "")
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
+                _oauthGrantType = State(initialValue: .clientCredentials)
+                _oauthAuthorizationCode = State(initialValue: "")
+                _oauthRedirectURI = State(initialValue: "")
+                _oauthCodeVerifier = State(initialValue: "")
                 _transportOption = State(initialValue: .http)
                 _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
                     ? [HeaderOverrideEntry(text: "")]
@@ -641,17 +649,25 @@ private struct MCPServerEditor: View {
                 _clientID = State(initialValue: "")
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
+                _oauthGrantType = State(initialValue: .clientCredentials)
+                _oauthAuthorizationCode = State(initialValue: "")
+                _oauthRedirectURI = State(initialValue: "")
+                _oauthCodeVerifier = State(initialValue: "")
                 _transportOption = State(initialValue: .sse)
                 _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
                     ? [HeaderOverrideEntry(text: "")]
                     : serializedHeaders.map { HeaderOverrideEntry(text: $0) })
-            case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope):
+            case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
                 _endpoint = State(initialValue: endpoint.absoluteString)
                 _sseEndpoint = State(initialValue: "")
                 _tokenEndpoint = State(initialValue: tokenEndpoint.absoluteString)
                 _clientID = State(initialValue: clientID)
-                _clientSecret = State(initialValue: clientSecret)
+                _clientSecret = State(initialValue: clientSecret ?? "")
                 _oauthScope = State(initialValue: scope ?? "")
+                _oauthGrantType = State(initialValue: grantType)
+                _oauthAuthorizationCode = State(initialValue: authorizationCode ?? "")
+                _oauthRedirectURI = State(initialValue: redirectURI ?? "")
+                _oauthCodeVerifier = State(initialValue: codeVerifier ?? "")
                 _apiKey = State(initialValue: "")
                 _transportOption = State(initialValue: .oauth)
                 _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
@@ -663,6 +679,10 @@ private struct MCPServerEditor: View {
                 _clientID = State(initialValue: "")
                 _clientSecret = State(initialValue: "")
                 _oauthScope = State(initialValue: "")
+                _oauthGrantType = State(initialValue: .clientCredentials)
+                _oauthAuthorizationCode = State(initialValue: "")
+                _oauthRedirectURI = State(initialValue: "")
+                _oauthCodeVerifier = State(initialValue: "")
                 _transportOption = State(initialValue: .http)
                 _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
             }
@@ -676,6 +696,10 @@ private struct MCPServerEditor: View {
             _clientID = State(initialValue: "")
             _clientSecret = State(initialValue: "")
             _oauthScope = State(initialValue: "")
+            _oauthGrantType = State(initialValue: .clientCredentials)
+            _oauthAuthorizationCode = State(initialValue: "")
+            _oauthRedirectURI = State(initialValue: "")
+            _oauthCodeVerifier = State(initialValue: "")
             _transportOption = State(initialValue: .http)
             _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
         }
@@ -707,6 +731,10 @@ private struct MCPServerEditor: View {
                         .autocorrectionDisabled()
                 }
                 if transportOption == .oauth {
+                    Picker("授权类型", selection: $oauthGrantType) {
+                        Text("Client Credentials").tag(MCPOAuthGrantType.clientCredentials)
+                        Text("Authorization Code").tag(MCPOAuthGrantType.authorizationCode)
+                    }
                     TextField("OAuth Token Endpoint", text: $tokenEndpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -714,10 +742,22 @@ private struct MCPServerEditor: View {
                     TextField("Client ID", text: $clientID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    SecureField("Client Secret", text: $clientSecret)
+                    SecureField("Client Secret (可选)", text: $clientSecret)
                     TextField("Scope (可选)", text: $oauthScope)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    if oauthGrantType == .authorizationCode {
+                        TextField("Authorization Code", text: $oauthAuthorizationCode)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField("Redirect URI", text: $oauthRedirectURI)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        TextField("PKCE Code Verifier (可选)", text: $oauthCodeVerifier)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
                 }
                 TextEditor(text: $notes)
                     .frame(minHeight: 60)
@@ -821,18 +861,31 @@ private struct MCPServerEditor: View {
                 return
             }
             let clientIDTrimmed = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-            let clientSecretTrimmed = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !clientIDTrimmed.isEmpty, !clientSecretTrimmed.isEmpty else {
-                validationMessage = "Client ID 与 Secret 不能为空。"
+            guard !clientIDTrimmed.isEmpty else {
+                validationMessage = "Client ID 不能为空。"
                 return
             }
             let scopeTrimmed = oauthScope.trimmingCharacters(in: .whitespacesAndNewlines)
+            let clientSecretTrimmed = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+            let authorizationCodeTrimmed = oauthAuthorizationCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            let redirectURITrimmed = oauthRedirectURI.trimmingCharacters(in: .whitespacesAndNewlines)
+            let codeVerifierTrimmed = oauthCodeVerifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            if oauthGrantType == .authorizationCode {
+                guard !authorizationCodeTrimmed.isEmpty, !redirectURITrimmed.isEmpty else {
+                    validationMessage = "授权码模式下，Authorization Code 与 Redirect URI 不能为空。"
+                    return
+                }
+            }
             transport = .oauth(
                 endpoint: url,
                 tokenEndpoint: tokenURL,
                 clientID: clientIDTrimmed,
-                clientSecret: clientSecretTrimmed,
-                scope: scopeTrimmed.isEmpty ? nil : scopeTrimmed
+                clientSecret: clientSecretTrimmed.isEmpty ? nil : clientSecretTrimmed,
+                scope: scopeTrimmed.isEmpty ? nil : scopeTrimmed,
+                grantType: oauthGrantType,
+                authorizationCode: authorizationCodeTrimmed.isEmpty ? nil : authorizationCodeTrimmed,
+                redirectURI: redirectURITrimmed.isEmpty ? nil : redirectURITrimmed,
+                codeVerifier: codeVerifierTrimmed.isEmpty ? nil : codeVerifierTrimmed
             )
         }
         
@@ -852,9 +905,14 @@ private struct MCPServerEditor: View {
     
     private func oauthFieldsValid() -> Bool {
         if transportOption == .oauth {
-            return !tokenEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            !clientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            !clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasBaseFields = !tokenEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !clientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard hasBaseFields else { return false }
+            if oauthGrantType == .authorizationCode {
+                return !oauthAuthorizationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                !oauthRedirectURI.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            return true
         }
         return true
     }

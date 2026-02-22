@@ -110,6 +110,7 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var resources: [MCPAvailableResource] = []
     @Published public private(set) var prompts: [MCPAvailablePrompt] = []
     @Published public private(set) var logEntries: [MCPLogEntry] = []
+    @Published public private(set) var progressByToken: [String: MCPProgressParams] = [:]
     @Published public private(set) var lastOperationOutput: String?
     @Published public private(set) var lastOperationError: String?
     @Published public private(set) var isBusy: Bool = false
@@ -865,11 +866,20 @@ extension MCPManager: MCPNotificationDelegate {
             switch notification.method {
             case MCPNotificationType.toolsListChanged.rawValue,
                  MCPNotificationType.resourcesListChanged.rawValue,
-                 MCPNotificationType.promptsListChanged.rawValue:
+                 MCPNotificationType.promptsListChanged.rawValue,
+                 MCPNotificationType.resourceUpdated.rawValue:
                 // 自动刷新元数据
                 self.refreshMetadata()
             case MCPNotificationType.rootsListChanged.rawValue:
                 self.refreshMetadata()
+            case MCPNotificationType.cancelled.rawValue:
+                if let params = notification.params,
+                   let cancelled = try? self.decodeCancelled(from: params) {
+                    mcpManagerLogger.info("收到 MCP 取消通知：requestId=\(cancelled.requestId.canonicalValue, privacy: .public)，reason=\(cancelled.reason ?? "unknown", privacy: .public)")
+                    if let reason = cancelled.reason, !reason.isEmpty {
+                        self.lastOperationError = reason
+                    }
+                }
             default:
                 break
             }
@@ -887,10 +897,21 @@ extension MCPManager: MCPNotificationDelegate {
     }
 
     public nonisolated func didReceiveProgress(_ progress: MCPProgressParams) {
-        // 可以在这里实现进度追踪，目前仅记录
         Task { @MainActor in
-            // 可以通过 @Published 属性暴露给 UI
+            self.progressByToken[progress.progressToken] = progress
+            if let total = progress.total,
+               total > 0,
+               progress.progress >= total {
+                self.progressByToken.removeValue(forKey: progress.progressToken)
+            }
         }
+    }
+}
+
+private extension MCPManager {
+    func decodeCancelled(from value: JSONValue) throws -> MCPCancelledParams {
+        let data = try JSONEncoder().encode(value)
+        return try JSONDecoder().decode(MCPCancelledParams.self, from: data)
     }
 }
 
