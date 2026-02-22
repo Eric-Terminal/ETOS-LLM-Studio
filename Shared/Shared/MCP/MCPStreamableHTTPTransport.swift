@@ -14,11 +14,11 @@ private let mcpSessionHeader = "MCP-Session-Id"
 private let mcpProtocolHeader = "MCP-Protocol-Version"
 private let mcpResumptionHeader = "Last-Event-ID"
 
-public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, @unchecked Sendable {
+public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     private let endpoint: URL
     private let session: URLSession
     private let headers: [String: String]
-    private let protocolVersion: String?
+    private var protocolVersion: String?
     private let dynamicHeadersProvider: (@Sendable () async throws -> [String: String])?
     private let sseReconnectMaxAttempts = 5
     private let sseReconnectBaseDelay: TimeInterval = 1.0
@@ -128,6 +128,10 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
                 continuation.resume(throwing: CancellationError())
             }
         }
+    }
+
+    public func updateProtocolVersion(_ protocolVersion: String?) async {
+        self.protocolVersion = protocolVersion
     }
 
     private func disconnectStream() {

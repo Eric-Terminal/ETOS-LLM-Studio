@@ -40,6 +40,9 @@ public final class MCPClient {
             throw MCPClientError.unsupportedProtocolVersion(resolvedProtocolVersion)
         }
         negotiatedProtocolVersion = resolvedProtocolVersion
+        if let configurableTransport = transport as? MCPProtocolVersionConfigurableTransport {
+            await configurableTransport.updateProtocolVersion(resolvedProtocolVersion)
+        }
         try? await sendNotification(method: "notifications/initialized")
         return result.info
     }

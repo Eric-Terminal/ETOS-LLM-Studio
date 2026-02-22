@@ -41,11 +41,11 @@ public protocol MCPStreamingTransportProtocol: AnyObject {
 
 // MARK: - Streaming Transport
 
-public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, @unchecked Sendable {
+public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     private let sseEndpoint: URL
     private let session: URLSession
     private let headers: [String: String]
-    private let protocolVersion: String? = MCPProtocolVersion.current
+    private var protocolVersion: String? = MCPProtocolVersion.current
     private let endpointWaitTimeout: TimeInterval = 0.8
     private let sseReconnectMaxAttempts = 5
     private let sseReconnectBaseDelay: TimeInterval = 1.0
@@ -189,6 +189,10 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
                 continuation.resume(throwing: CancellationError())
             }
         }
+    }
+
+    public func updateProtocolVersion(_ protocolVersion: String?) async {
+        self.protocolVersion = protocolVersion
     }
     
     private func runSSELoop(url: URL) async {

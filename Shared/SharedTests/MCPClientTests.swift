@@ -50,6 +50,34 @@ struct MCPClientTests {
         #expect(transport.request(named: "notifications/initialized") != nil)
     }
 
+    @Test("Initialize 会将协商后的协议版本下发到 transport")
+    func testInitializePropagatesNegotiatedProtocolVersion() async throws {
+        let transport = MockTransport()
+        let negotiatedVersion = "2025-06-18"
+        let expectedInfo = MCPServerInfo(
+            name: "Negotiated MCP Server",
+            version: "2.0.0",
+            capabilities: ["search": .bool(true)],
+            metadata: ["region": .string("us")]
+        )
+        transport.enqueueSuccess(
+            result: InitializeNegotiatedPayload(
+                protocolVersion: negotiatedVersion,
+                serverInfo: expectedInfo
+            )
+        )
+
+        let client = MCPClient(transport: transport)
+        let info = try await client.initialize(
+            clientInfo: .init(name: "Harness", version: "0.2"),
+            capabilities: .standard
+        )
+
+        #expect(info == expectedInfo)
+        #expect(client.negotiatedProtocolVersion == negotiatedVersion)
+        #expect(transport.updatedProtocolVersions.last ?? nil == negotiatedVersion)
+    }
+
     @Test("List tools decodes JSON payload")
     func testListToolsDecoding() async throws {
         let transport = MockTransport()
@@ -312,7 +340,7 @@ struct MCPClientTests {
 
 // MARK: - Test Helpers
 
-private final class MockTransport: MCPTransport, @unchecked Sendable {
+private final class MockTransport: MCPTransport, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     struct RecordedRequest {
         let method: String
         let payload: [String: Any]
@@ -324,6 +352,7 @@ private final class MockTransport: MCPTransport, @unchecked Sendable {
 
     private var responses: [Result<Data, Error>] = []
     private(set) var recordedRequests: [RecordedRequest] = []
+    private(set) var updatedProtocolVersions: [String?] = []
     var messageDelayNanoseconds: UInt64 = 0
 
     func enqueueSuccess<T: Encodable>(result: T) {
@@ -381,6 +410,10 @@ private final class MockTransport: MCPTransport, @unchecked Sendable {
         recordedRequests.append(RecordedRequest(method: method, payload: dictionary))
     }
 
+    func updateProtocolVersion(_ protocolVersion: String?) async {
+        updatedProtocolVersions.append(protocolVersion)
+    }
+
     func waitForRequest(named method: String, timeoutSeconds: TimeInterval = 1.0) async -> RecordedRequest? {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
@@ -397,6 +430,11 @@ private struct RPCSuccessPayload<Result: Encodable>: Encodable {
     let jsonrpc = "2.0"
     let id = UUID().uuidString
     let result: Result
+}
+
+private struct InitializeNegotiatedPayload: Encodable {
+    let protocolVersion: String
+    let serverInfo: MCPServerInfo
 }
 
 private struct RPCErrorPayload: Encodable {

@@ -13,6 +13,15 @@ public protocol MCPTransport: AnyObject, Sendable {
     func sendNotification(_ payload: Data) async throws
 }
 
+/// 支持在 initialize 协商后动态更新协议版本的传输层。
+public protocol MCPProtocolVersionConfigurableTransport: AnyObject, Sendable {
+    func updateProtocolVersion(_ protocolVersion: String?) async
+}
+
+public extension MCPProtocolVersionConfigurableTransport {
+    func updateProtocolVersion(_ protocolVersion: String?) async {}
+}
+
 public enum MCPTransportError: LocalizedError {
     case httpStatus(code: Int, body: String?)
     case oauthConfiguration(message: String)
@@ -31,15 +40,22 @@ public enum MCPTransportError: LocalizedError {
     }
 }
 
-public final class MCPHTTPTransport: MCPTransport, @unchecked Sendable {
+public final class MCPHTTPTransport: MCPTransport, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     private let endpoint: URL
     private let session: URLSession
     private let headers: [String: String]
+    private var protocolVersion: String?
 
-    public init(endpoint: URL, session: URLSession = .shared, headers: [String: String] = [:]) {
+    public init(
+        endpoint: URL,
+        session: URLSession = .shared,
+        headers: [String: String] = [:],
+        protocolVersion: String? = MCPProtocolVersion.current
+    ) {
         self.endpoint = endpoint
         self.session = session
         self.headers = headers
+        self.protocolVersion = protocolVersion
     }
 
     public func sendMessage(_ payload: Data) async throws -> Data {
@@ -50,6 +66,9 @@ public final class MCPHTTPTransport: MCPTransport, @unchecked Sendable {
 
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
 
         let (data, response) = try await session.data(for: request)
@@ -74,6 +93,9 @@ public final class MCPHTTPTransport: MCPTransport, @unchecked Sendable {
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+        }
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -85,17 +107,32 @@ public final class MCPHTTPTransport: MCPTransport, @unchecked Sendable {
             throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
         }
     }
+
+    public func updateProtocolVersion(_ protocolVersion: String?) async {
+        self.protocolVersion = protocolVersion
+    }
+
+    private static func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
+        headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
 }
 
-public final class MCPSSETransport: MCPTransport, @unchecked Sendable {
+public final class MCPSSETransport: MCPTransport, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     private let endpoint: URL
     private let session: URLSession
     private let headers: [String: String]
+    private var protocolVersion: String?
 
-    public init(endpoint: URL, session: URLSession = .shared, headers: [String: String] = [:]) {
+    public init(
+        endpoint: URL,
+        session: URLSession = .shared,
+        headers: [String: String] = [:],
+        protocolVersion: String? = MCPProtocolVersion.current
+    ) {
         self.endpoint = endpoint
         self.session = session
         self.headers = headers
+        self.protocolVersion = protocolVersion
     }
 
     public func sendMessage(_ payload: Data) async throws -> Data {
@@ -107,6 +144,9 @@ public final class MCPSSETransport: MCPTransport, @unchecked Sendable {
 
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
+        }
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
 
         let (data, response) = try await session.data(for: request)
@@ -132,6 +172,9 @@ public final class MCPSSETransport: MCPTransport, @unchecked Sendable {
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
+        if let protocolVersion, !protocolVersion.isEmpty, !Self.hasHeader("MCP-Protocol-Version", in: headers) {
+            request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+        }
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -142,6 +185,10 @@ public final class MCPSSETransport: MCPTransport, @unchecked Sendable {
             let message = String(data: data, encoding: .utf8)
             throw MCPTransportError.httpStatus(code: httpResponse.statusCode, body: message)
         }
+    }
+
+    public func updateProtocolVersion(_ protocolVersion: String?) async {
+        self.protocolVersion = protocolVersion
     }
 
     private func extractLastEvent(from data: Data) throws -> Data {
@@ -170,9 +217,13 @@ public final class MCPSSETransport: MCPTransport, @unchecked Sendable {
         }
         throw MCPClientError.invalidResponse
     }
+
+    private static func hasHeader(_ name: String, in headers: [String: String]) -> Bool {
+        headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
 }
 
-public actor MCPOAuthHTTPTransport: MCPTransport {
+public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurableTransport {
     private let endpoint: URL
     private let tokenEndpoint: URL
     private let clientID: String
@@ -183,7 +234,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
     private let redirectURI: String?
     private let codeVerifier: String?
     private let session: URLSession
-    private let protocolVersion: String? = MCPProtocolVersion.current
+    private var protocolVersion: String?
     private var cachedToken: OAuthToken?
 
     struct OAuthToken {
@@ -206,6 +257,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
         authorizationCode: String? = nil,
         redirectURI: String? = nil,
         codeVerifier: String? = nil,
+        protocolVersion: String? = MCPProtocolVersion.current,
         session: URLSession = .shared
     ) {
         self.endpoint = endpoint
@@ -217,6 +269,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
         self.authorizationCode = authorizationCode
         self.redirectURI = redirectURI
         self.codeVerifier = codeVerifier
+        self.protocolVersion = protocolVersion
         self.session = session
     }
 
@@ -266,6 +319,10 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
     public func authorizationHeaders() async throws -> [String: String] {
         let token = try await validToken()
         return ["Authorization": "Bearer \(token.value)"]
+    }
+
+    public func updateProtocolVersion(_ protocolVersion: String?) async {
+        self.protocolVersion = protocolVersion
     }
 
     private func validToken() async throws -> OAuthToken {
@@ -374,7 +431,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport {
 /// OAuth + Streamable HTTP 组合传输：
 /// - 令牌通过 OAuth actor 动态获取/刷新；
 /// - 实际请求与通知流由 MCPStreamableHTTPTransport 处理，以支持服务端通知与进度。
-public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, @unchecked Sendable {
+public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTransportProtocol, MCPProtocolVersionConfigurableTransport, @unchecked Sendable {
     private let oauthTransport: MCPOAuthHTTPTransport
     private let streamableTransport: MCPStreamableHTTPTransport
 
@@ -405,6 +462,7 @@ public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTr
         codeVerifier: String? = nil,
         session: URLSession = .shared
     ) {
+        let initialProtocolVersion = MCPProtocolVersion.current
         let oauthTransport = MCPOAuthHTTPTransport(
             endpoint: endpoint,
             tokenEndpoint: tokenEndpoint,
@@ -415,6 +473,7 @@ public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTr
             authorizationCode: authorizationCode,
             redirectURI: redirectURI,
             codeVerifier: codeVerifier,
+            protocolVersion: initialProtocolVersion,
             session: session
         )
         self.oauthTransport = oauthTransport
@@ -422,7 +481,7 @@ public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTr
             endpoint: endpoint,
             session: session,
             headers: [:],
-            protocolVersion: MCPProtocolVersion.current,
+            protocolVersion: initialProtocolVersion,
             dynamicHeadersProvider: { [oauthTransport] in
                 try await oauthTransport.authorizationHeaders()
             }
@@ -443,5 +502,10 @@ public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTr
 
     public func disconnect() {
         streamableTransport.disconnect()
+    }
+
+    public func updateProtocolVersion(_ protocolVersion: String?) async {
+        await oauthTransport.updateProtocolVersion(protocolVersion)
+        await streamableTransport.updateProtocolVersion(protocolVersion)
     }
 }

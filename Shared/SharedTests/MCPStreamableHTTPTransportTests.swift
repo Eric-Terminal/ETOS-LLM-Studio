@@ -48,6 +48,44 @@ struct MCPStreamableHTTPTransportTests {
         }
     }
 
+    @Test("更新协议版本后 POST/DELETE 请求头应携带协商版本")
+    func testUpdatedProtocolVersionHeaderAppliedToPostAndDelete() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: ["MCP-Session-Id": "session-version-1"],
+            body: Data("{}".utf8)
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 204,
+            headers: [:],
+            body: Data()
+        )
+
+        let transport = makeTransport()
+        await transport.updateProtocolVersion("2025-06-18")
+        try await transport.sendNotification(makeNotificationPayload(method: "test/version-header"))
+        transport.disconnect()
+
+        let didSendDelete = await waitUntil {
+            StreamableTransportURLProtocol.requests().contains { $0.httpMethod == "DELETE" }
+        }
+        #expect(didSendDelete)
+
+        let requests = StreamableTransportURLProtocol.requests()
+        if let postRequest = requests.first(where: { $0.httpMethod == "POST" }) {
+            #expect(postRequest.value(forHTTPHeaderField: "MCP-Protocol-Version") == "2025-06-18")
+        } else {
+            Issue.record("未捕获到 POST 请求。")
+        }
+
+        if let deleteRequest = requests.first(where: { $0.httpMethod == "DELETE" }) {
+            #expect(deleteRequest.value(forHTTPHeaderField: "MCP-Protocol-Version") == "2025-06-18")
+        } else {
+            Issue.record("未捕获到 DELETE 请求。")
+        }
+    }
+
     @Test("Session 404 triggers one retry without stale session header")
     func testSession404RetriesWithoutStaleSession() async throws {
         StreamableTransportURLProtocol.reset()
