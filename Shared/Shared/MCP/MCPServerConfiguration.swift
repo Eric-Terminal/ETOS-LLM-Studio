@@ -77,6 +77,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public var isSelectedForChat: Bool
     public var disabledToolIds: [String]
     public var toolApprovalPolicies: [String: MCPToolApprovalPolicy]
+    public var streamResumptionToken: String?
 
     public init(
         id: UUID = UUID(),
@@ -85,7 +86,8 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         transport: Transport,
         isSelectedForChat: Bool = false,
         disabledToolIds: [String] = [],
-        toolApprovalPolicies: [String: MCPToolApprovalPolicy] = [:]
+        toolApprovalPolicies: [String: MCPToolApprovalPolicy] = [:],
+        streamResumptionToken: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -94,6 +96,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         self.isSelectedForChat = isSelectedForChat
         self.disabledToolIds = disabledToolIds
         self.toolApprovalPolicies = toolApprovalPolicies
+        self.streamResumptionToken = streamResumptionToken?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -106,6 +109,7 @@ extension MCPServerConfiguration {
         case isSelectedForChat
         case disabledToolIds
         case toolApprovalPolicies
+        case streamResumptionToken
     }
 
     public init(from decoder: Decoder) throws {
@@ -117,6 +121,13 @@ extension MCPServerConfiguration {
         isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
         disabledToolIds = try container.decodeIfPresent([String].self, forKey: .disabledToolIds) ?? []
         toolApprovalPolicies = try container.decodeIfPresent([String: MCPToolApprovalPolicy].self, forKey: .toolApprovalPolicies) ?? [:]
+        let decodedToken = try container.decodeIfPresent(String.self, forKey: .streamResumptionToken)
+        if let decodedToken {
+            let trimmed = decodedToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            streamResumptionToken = trimmed.isEmpty ? nil : trimmed
+        } else {
+            streamResumptionToken = nil
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -139,6 +150,12 @@ extension MCPServerConfiguration {
         }
         if !normalizedToolApprovalPolicies.isEmpty {
             try container.encode(normalizedToolApprovalPolicies, forKey: .toolApprovalPolicies)
+        }
+        if let streamResumptionToken {
+            let trimmed = streamResumptionToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                try container.encode(trimmed, forKey: .streamResumptionToken)
+            }
         }
     }
 }
@@ -214,6 +231,11 @@ public extension MCPServerConfiguration {
         } else {
             toolApprovalPolicies[toolId] = policy
         }
+    }
+
+    mutating func setResumptionToken(_ token: String?) {
+        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        streamResumptionToken = (trimmed?.isEmpty == false) ? trimmed : nil
     }
 }
 

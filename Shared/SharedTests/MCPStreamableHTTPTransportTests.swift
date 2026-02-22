@@ -48,6 +48,62 @@ struct MCPStreamableHTTPTransportTests {
         }
     }
 
+    @Test("terminateSession 会发送 DELETE 结束当前会话")
+    func testTerminateSessionAPI() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: ["MCP-Session-Id": "session-terminate-api-1"],
+            body: Data("{}".utf8)
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 204,
+            headers: [:],
+            body: Data()
+        )
+
+        let transport = makeTransport()
+        try await transport.sendNotification(makeNotificationPayload(method: "test/terminate-session-api"))
+        await transport.terminateSession()
+
+        let didSendDelete = await waitUntil {
+            StreamableTransportURLProtocol.requests().contains { $0.httpMethod == "DELETE" }
+        }
+        #expect(didSendDelete)
+        let requests = StreamableTransportURLProtocol.requests()
+        if let deleteRequest = requests.first(where: { $0.httpMethod == "DELETE" }) {
+            #expect(deleteRequest.value(forHTTPHeaderField: "MCP-Session-Id") == "session-terminate-api-1")
+        } else {
+            Issue.record("terminateSession 未发送 DELETE 请求。")
+        }
+    }
+
+    @Test("updateResumptionToken 后 GET SSE 请求会携带 Last-Event-ID")
+    func testUpdateResumptionTokenAppliedToSSEProbe() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 405,
+            headers: [:],
+            body: Data("method not allowed".utf8)
+        )
+
+        let transport = makeTransport()
+        await transport.updateResumptionToken("resume-token-42")
+        transport.connectStream()
+
+        let didSendGet = await waitUntil {
+            StreamableTransportURLProtocol.requests().contains { $0.httpMethod == "GET" }
+        }
+        #expect(didSendGet)
+        let requests = StreamableTransportURLProtocol.requests()
+        if let getRequest = requests.first(where: { $0.httpMethod == "GET" }) {
+            #expect(getRequest.value(forHTTPHeaderField: "Last-Event-ID") == "resume-token-42")
+        } else {
+            Issue.record("未捕获到 GET 请求。")
+        }
+        transport.disconnect()
+    }
+
     @Test("更新协议版本后 POST/DELETE 请求头应携带协商版本")
     func testUpdatedProtocolVersionHeaderAppliedToPostAndDelete() async throws {
         StreamableTransportURLProtocol.reset()

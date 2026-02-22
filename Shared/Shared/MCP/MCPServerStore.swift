@@ -131,6 +131,35 @@ public struct MCPServerStore {
         writeRecord(record, fileName: serverID.uuidString)
     }
 
+    /// 返回用于快速判断配置目录是否发生变化的签名。
+    /// 签名包含：文件名 + 修改时间 + 文件大小。
+    public static func configurationSnapshotSignature() -> String {
+        setupDirectoryIfNeeded()
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: serversDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return "mcp_servers_signature_unavailable"
+        }
+
+        let signatures: [String] = files
+            .filter { $0.pathExtension == "json" }
+            .map { fileURL in
+                guard let record = loadRecord(from: fileURL) else {
+                    return "\(fileURL.lastPathComponent)|decode_error"
+                }
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                let serverData = (try? encoder.encode(record.server)) ?? Data()
+                let serverJSON = String(data: serverData, encoding: .utf8) ?? "{}"
+                return "\(record.server.id.uuidString)|\(serverJSON)"
+            }
+            .sorted()
+        return signatures.joined(separator: ";")
+    }
+
     private struct MCPServerStoredRecord: Codable {
         var schemaVersion: Int
         var server: MCPServerConfiguration

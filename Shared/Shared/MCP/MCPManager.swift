@@ -106,6 +106,88 @@ public struct MCPServerStatus: Equatable {
     }
 }
 
+public enum MCPToolCallState: Equatable, Sendable {
+    case running
+    case cancelling
+    case succeeded
+    case failed(reason: String)
+    case cancelled(reason: String?)
+}
+
+public struct MCPActiveToolCall: Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public let serverID: UUID
+    public let serverDisplayName: String
+    public let toolId: String
+    public let startedAt: Date
+    public var progressToken: MCPProgressToken?
+    public var latestProgress: Double?
+    public var latestTotal: Double?
+    public var lastProgressAt: Date?
+    public var timeout: TimeInterval?
+    public var maxTotalTimeout: TimeInterval?
+    public var resetTimeoutOnProgress: Bool
+    public var state: MCPToolCallState
+
+    public init(
+        id: UUID = UUID(),
+        serverID: UUID,
+        serverDisplayName: String,
+        toolId: String,
+        startedAt: Date = Date(),
+        progressToken: MCPProgressToken?,
+        latestProgress: Double? = nil,
+        latestTotal: Double? = nil,
+        lastProgressAt: Date? = nil,
+        timeout: TimeInterval?,
+        maxTotalTimeout: TimeInterval?,
+        resetTimeoutOnProgress: Bool,
+        state: MCPToolCallState = .running
+    ) {
+        self.id = id
+        self.serverID = serverID
+        self.serverDisplayName = serverDisplayName
+        self.toolId = toolId
+        self.startedAt = startedAt
+        self.progressToken = progressToken
+        self.latestProgress = latestProgress
+        self.latestTotal = latestTotal
+        self.lastProgressAt = lastProgressAt
+        self.timeout = timeout
+        self.maxTotalTimeout = maxTotalTimeout
+        self.resetTimeoutOnProgress = resetTimeoutOnProgress
+        self.state = state
+    }
+}
+
+public struct MCPManagedToolCallOptions: Sendable {
+    public var timeout: TimeInterval?
+    public var maxTotalTimeout: TimeInterval?
+    public var resetTimeoutOnProgress: Bool
+    public var progressToken: MCPProgressToken?
+    public var cancellationReason: String?
+    public var includeTimeoutInMeta: Bool
+    public var onProgress: (@Sendable (MCPProgressParams) -> Void)?
+
+    public init(
+        timeout: TimeInterval? = nil,
+        maxTotalTimeout: TimeInterval? = nil,
+        resetTimeoutOnProgress: Bool = true,
+        progressToken: MCPProgressToken? = nil,
+        cancellationReason: String? = nil,
+        includeTimeoutInMeta: Bool = true,
+        onProgress: (@Sendable (MCPProgressParams) -> Void)? = nil
+    ) {
+        self.timeout = timeout
+        self.maxTotalTimeout = maxTotalTimeout
+        self.resetTimeoutOnProgress = resetTimeoutOnProgress
+        self.progressToken = progressToken
+        self.cancellationReason = cancellationReason
+        self.includeTimeoutInMeta = includeTimeoutInMeta
+        self.onProgress = onProgress
+    }
+}
+
 public enum MCPGovernanceLogCategory: String, Hashable, CaseIterable {
     case lifecycle
     case cache
@@ -161,6 +243,7 @@ public final class MCPManager: ObservableObject {
     public enum ConnectionState: Equatable {
         case idle
         case connecting
+        case reconnecting(attempt: Int, scheduledAt: Date, reason: String)
         case ready
         case failed(reason: String)
     }
@@ -174,6 +257,7 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var logEntries: [MCPLogEntry] = []
     @Published public private(set) var governanceLogEntries: [MCPGovernanceLogEntry] = []
     @Published public private(set) var progressByToken: [String: MCPProgressParams] = [:]
+    @Published public private(set) var activeToolCalls: [UUID: MCPActiveToolCall] = [:]
     @Published public private(set) var lastOperationOutput: String?
     @Published public private(set) var lastOperationError: String?
     @Published public private(set) var isBusy: Bool = false
@@ -200,24 +284,47 @@ public final class MCPManager: ObservableObject {
     private var routedPrompts: [String: RoutedPrompt] = [:]
     private var debugBusyCount = 0
     private var inFlightConnections: [UUID: Task<MCPClient, Error>] = [:]
+    private var trackedToolCallTasks: [UUID: Task<JSONValue, Error>] = [:]
+    private var trackedToolCallObservers: [UUID: @Sendable (MCPProgressParams) -> Void] = [:]
+    private var trackedToolCallTokenKeys: [UUID: String] = [:]
+    private var progressTimestampsByToken: [String: Date] = [:]
+    private var configWatcherTask: Task<Void, Never>?
+    private var configSnapshotSignature: String = MCPServerStore.configurationSnapshotSignature()
     private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     private var autoConnectRetryAttempts: [UUID: Int] = [:]
     private let autoConnectMaxRetries = 5
     private let autoConnectBaseDelay: TimeInterval = 1.0
     private let autoConnectMaxDelay: TimeInterval = 30.0
+    private let configWatcherInterval: TimeInterval = 2.0
     private let defaultToolCallTimeout: TimeInterval = 60
     private let defaultChatToolCallTimeout: TimeInterval = 120
+    private let toolCallWatchdogInterval: TimeInterval = 0.25
     private let metadataCacheTTL: TimeInterval = 300
     private let governanceLogLimit = 1200
 
     private init() {
         reloadServers()
+        startConfigWatcherIfNeeded()
+    }
+
+    deinit {
+        configWatcherTask?.cancel()
+        for task in autoConnectRetryTasks.values {
+            task.cancel()
+        }
+        for task in inFlightConnections.values {
+            task.cancel()
+        }
+        for task in trackedToolCallTasks.values {
+            task.cancel()
+        }
     }
 
     // MARK: - Server Management
 
     public func reloadServers() {
         servers = MCPServerStore.loadServers()
+        configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
         let serverIDs = Set(servers.map { $0.id })
         let removedIDs = Set(autoConnectRetryTasks.keys).subtracting(serverIDs)
         for serverID in removedIDs {
@@ -227,6 +334,12 @@ public final class MCPManager: ObservableObject {
         for serverID in removedConnectionTaskIDs {
             inFlightConnections[serverID]?.cancel()
             inFlightConnections[serverID] = nil
+        }
+        let removedToolCallIDs = activeToolCalls
+            .filter { !serverIDs.contains($0.value.serverID) }
+            .map(\.key)
+        for callID in removedToolCallIDs {
+            cancelToolCall(callID: callID, reason: "服务器已移除")
         }
 
         var newStatuses: [UUID: MCPServerStatus] = serverStatuses.filter { serverIDs.contains($0.key) }
@@ -265,6 +378,8 @@ public final class MCPManager: ObservableObject {
     }
 
     public func delete(server: MCPServerConfiguration) {
+        persistResumptionToken(for: server.id)
+        cancelTrackedToolCalls(for: server.id, reason: "服务器被删除")
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         inFlightConnections[server.id]?.cancel()
         inFlightConnections[server.id] = nil
@@ -288,7 +403,7 @@ public final class MCPManager: ObservableObject {
                     refreshMetadata(for: server)
                 }
                 continue
-            case .connecting:
+            case .connecting, .reconnecting:
                 continue
             case .idle, .failed:
                 connect(to: server, preserveSelection: true, retryOnFailure: true)
@@ -316,6 +431,8 @@ public final class MCPManager: ObservableObject {
 
     public func disconnect(server: MCPServerConfiguration) {
         mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
+        persistResumptionToken(for: server.id)
+        cancelTrackedToolCalls(for: server.id, reason: "服务器已断开")
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         inFlightConnections[server.id]?.cancel()
         inFlightConnections[server.id] = nil
@@ -405,6 +522,17 @@ public final class MCPManager: ObservableObject {
         }
 
         let transport = server.makeTransport()
+        if let resumptionTransport = transport as? MCPResumptionControllableTransport,
+           let token = server.streamResumptionToken,
+           !token.isEmpty {
+            await resumptionTransport.updateResumptionToken(token)
+            appendGovernanceLog(
+                level: .info,
+                category: .lifecycle,
+                serverID: server.id,
+                message: "已恢复流式重连令牌。"
+            )
+        }
         let client = MCPClient(transport: transport)
         clients[server.id] = client
 
@@ -457,6 +585,8 @@ public final class MCPManager: ObservableObject {
                 await refreshMetadata(for: server.id, client: client, serverInfo: info)
             }
 
+            persistResumptionToken(for: server.id)
+
             return client
         } catch {
             mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
@@ -488,6 +618,14 @@ public final class MCPManager: ObservableObject {
         autoConnectRetryTasks[serverID]?.cancel()
         let delaySeconds = autoConnectBackoffDelaySeconds(attempt: attempt)
         let delayNanoseconds = UInt64(delaySeconds * 1_000_000_000)
+        let scheduledAt = Date().addingTimeInterval(delaySeconds)
+        updateStatus(for: serverID) {
+            $0.connectionState = .reconnecting(
+                attempt: attempt,
+                scheduledAt: scheduledAt,
+                reason: "连接失败后自动重连"
+            )
+        }
         mcpManagerLogger.info("MCP 自动重试连接：server=\(serverID.uuidString, privacy: .public)，attempt=\(attempt)，delay=\(delaySeconds, privacy: .public)s")
         appendGovernanceLog(level: .warning, category: .lifecycle, serverID: serverID, message: "自动重连已排队，第 \(attempt) 次，延迟 \(String(format: "%.1f", delaySeconds)) 秒。")
         autoConnectRetryTasks[serverID] = Task { [weak self] in
@@ -496,26 +634,28 @@ public final class MCPManager: ObservableObject {
             } catch {
                 return
             }
-            await MainActor.run {
-                guard let self else { return }
-                guard let server = self.servers.first(where: { $0.id == serverID }) else {
-                    self.cancelAutoConnectRetry(for: serverID, resetAttempts: true)
-                    return
-                }
-                guard server.isSelectedForChat else {
-                    self.cancelAutoConnectRetry(for: serverID, resetAttempts: true)
-                    return
-                }
-                let state = self.status(for: server).connectionState
-                switch state {
-                case .ready, .connecting:
-                    return
-                case .idle, .failed:
-                    self.connect(to: server, preserveSelection: preserveSelection, retryOnFailure: true)
-                @unknown default:
-                    return
-                }
-            }
+            guard let self else { return }
+            self.performAutoConnectRetry(for: serverID, preserveSelection: preserveSelection)
+        }
+    }
+
+    private func performAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) {
+        guard let server = servers.first(where: { $0.id == serverID }) else {
+            cancelAutoConnectRetry(for: serverID, resetAttempts: true)
+            return
+        }
+        guard server.isSelectedForChat else {
+            cancelAutoConnectRetry(for: serverID, resetAttempts: true)
+            return
+        }
+        let state = status(for: server).connectionState
+        switch state {
+        case .ready, .connecting:
+            return
+        case .idle, .failed, .reconnecting:
+            connect(to: server, preserveSelection: preserveSelection, retryOnFailure: true)
+        @unknown default:
+            return
         }
     }
 
@@ -587,7 +727,7 @@ public final class MCPManager: ObservableObject {
             if let serverInfo {
                 resolvedInfo = serverInfo
             } else {
-                resolvedInfo = await MainActor.run { self.status(for: serverID).info }
+                resolvedInfo = status(for: serverID).info
             }
             let cache = MCPServerMetadataCache(
                 cachedAt: Date(),
@@ -599,38 +739,35 @@ public final class MCPManager: ObservableObject {
                 roots: roots
             )
             MCPServerStore.saveMetadata(cache, for: serverID)
-            
-            await MainActor.run {
-                self.updateStatus(for: serverID) {
-                    $0.tools = tools
-                    $0.resources = resources
-                    $0.resourceTemplates = resourceTemplates
-                    $0.prompts = prompts
-                    $0.roots = roots
-                    $0.metadataCachedAt = cache.cachedAt
-                    $0.isBusy = false
-                }
-                self.appendGovernanceLog(level: .info, category: .cache, serverID: serverID, message: "元数据刷新成功：tools=\(tools.count), resources=\(resources.count), prompts=\(prompts.count)")
+
+            updateStatus(for: serverID) {
+                $0.tools = tools
+                $0.resources = resources
+                $0.resourceTemplates = resourceTemplates
+                $0.prompts = prompts
+                $0.roots = roots
+                $0.metadataCachedAt = cache.cachedAt
+                $0.isBusy = false
             }
+            appendGovernanceLog(level: .info, category: .cache, serverID: serverID, message: "元数据刷新成功：tools=\(tools.count), resources=\(resources.count), prompts=\(prompts.count)")
+            persistResumptionToken(for: serverID)
         } catch {
             if let server = servers.first(where: { $0.id == serverID }) {
                 mcpManagerLogger.error("MCP 元数据刷新失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             } else {
                 mcpManagerLogger.error("MCP 元数据刷新失败：server=\(serverID.uuidString, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             }
-            await MainActor.run {
-                self.updateStatus(for: serverID) {
-                    $0.isBusy = false
-                    $0.connectionState = .failed(reason: error.localizedDescription)
-                }
-                self.lastOperationError = error.localizedDescription
-                self.lastOperationOutput = nil
-                if let server = self.servers.first(where: { $0.id == serverID }),
-                   server.isSelectedForChat {
-                    self.scheduleAutoConnectRetry(for: serverID, preserveSelection: true)
-                }
-                self.appendGovernanceLog(level: .error, category: .cache, serverID: serverID, message: "元数据刷新失败：\(error.localizedDescription)")
+            updateStatus(for: serverID) {
+                $0.isBusy = false
+                $0.connectionState = .failed(reason: error.localizedDescription)
             }
+            lastOperationError = error.localizedDescription
+            lastOperationOutput = nil
+            if let server = servers.first(where: { $0.id == serverID }),
+               server.isSelectedForChat {
+                scheduleAutoConnectRetry(for: serverID, preserveSelection: true)
+            }
+            appendGovernanceLog(level: .error, category: .cache, serverID: serverID, message: "元数据刷新失败：\(error.localizedDescription)")
         }
     }
 
@@ -668,32 +805,76 @@ public final class MCPManager: ObservableObject {
 
     // MARK: - Debug Helpers
 
-    public func executeTool(on serverID: UUID, toolId: String, inputs: [String: JSONValue]) {
+    @discardableResult
+    public func executeTool(
+        on serverID: UUID,
+        toolId: String,
+        inputs: [String: JSONValue],
+        options: MCPManagedToolCallOptions? = nil
+    ) -> UUID {
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
         appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试调用工具：\(toolId)")
+        let resolvedOptions = options ?? defaultManagedToolCallOptions(
+            timeout: defaultToolCallTimeout,
+            reason: "调试工具调用超时"
+        )
+        let callID = UUID()
 
         Task {
             do {
-                let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
-                let result = try await client.executeTool(
+                let result = try await self.executeManagedToolCall(
+                    callID: callID,
+                    serverID: serverID,
                     toolId: toolId,
                     inputs: inputs,
-                    options: self.defaultToolCallOptions(timeout: self.defaultToolCallTimeout, reason: "调试工具调用超时")
+                    options: resolvedOptions
                 )
-                await MainActor.run {
-                    self.lastOperationOutput = result.prettyPrinted()
-                    self.setDebugBusy(false)
-                    self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试工具调用成功：\(toolId)")
-                }
+                self.lastOperationOutput = result.prettyPrinted()
+                self.setDebugBusy(false)
+                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试工具调用成功：\(toolId)")
+            } catch is CancellationError {
+                self.lastOperationError = "工具调用已取消。"
+                self.setDebugBusy(false)
+                self.appendGovernanceLog(level: .warning, category: .toolCall, serverID: serverID, message: "调试工具调用已取消：\(toolId)")
             } catch {
-                await MainActor.run {
-                    self.lastOperationError = error.localizedDescription
-                    self.setDebugBusy(false)
-                    self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试工具调用失败：\(toolId)，错误=\(error.localizedDescription)")
-                }
+                self.lastOperationError = error.localizedDescription
+                self.setDebugBusy(false)
+                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试工具调用失败：\(toolId)，错误=\(error.localizedDescription)")
             }
+        }
+        return callID
+    }
+
+    public func executeToolAsync(
+        on serverID: UUID,
+        toolId: String,
+        inputs: [String: JSONValue],
+        options: MCPManagedToolCallOptions
+    ) async throws -> JSONValue {
+        let callID = UUID()
+        return try await executeManagedToolCall(
+            callID: callID,
+            serverID: serverID,
+            toolId: toolId,
+            inputs: inputs,
+            options: options
+        )
+    }
+
+    public func cancelToolCall(callID: UUID, reason: String = "用户取消调用") {
+        guard let task = trackedToolCallTasks[callID] else { return }
+        task.cancel()
+        if var call = activeToolCalls[callID] {
+            call.state = .cancelling
+            activeToolCalls[callID] = call
+            appendGovernanceLog(
+                level: .warning,
+                category: .toolCall,
+                serverID: call.serverID,
+                message: "工具调用已请求取消：\(call.toolId)，原因=\(reason)"
+            )
         }
     }
 
@@ -707,17 +888,13 @@ public final class MCPManager: ObservableObject {
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 let result = try await client.readResource(resourceId: resourceId, query: query)
-                await MainActor.run {
-                    self.lastOperationOutput = result.prettyPrinted()
-                    self.setDebugBusy(false)
-                    self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试资源读取成功：\(resourceId)")
-                }
+                self.lastOperationOutput = result.prettyPrinted()
+                self.setDebugBusy(false)
+                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试资源读取成功：\(resourceId)")
             } catch {
-                await MainActor.run {
-                    self.lastOperationError = error.localizedDescription
-                    self.setDebugBusy(false)
-                    self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试资源读取失败：\(resourceId)，错误=\(error.localizedDescription)")
-                }
+                self.lastOperationError = error.localizedDescription
+                self.setDebugBusy(false)
+                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试资源读取失败：\(resourceId)，错误=\(error.localizedDescription)")
             }
         }
     }
@@ -734,17 +911,13 @@ public final class MCPManager: ObservableObject {
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 let result = try await client.getPrompt(name: name, arguments: arguments)
-                await MainActor.run {
-                    self.lastOperationOutput = self.formatPromptResult(result)
-                    self.setDebugBusy(false)
-                    self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试提示词获取成功：\(name)")
-                }
+                self.lastOperationOutput = self.formatPromptResult(result)
+                self.setDebugBusy(false)
+                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试提示词获取成功：\(name)")
             } catch {
-                await MainActor.run {
-                    self.lastOperationError = error.localizedDescription
-                    self.setDebugBusy(false)
-                    self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试提示词获取失败：\(name)，错误=\(error.localizedDescription)")
-                }
+                self.lastOperationError = error.localizedDescription
+                self.setDebugBusy(false)
+                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试提示词获取失败：\(name)，错误=\(error.localizedDescription)")
             }
         }
     }
@@ -787,17 +960,13 @@ public final class MCPManager: ObservableObject {
             do {
                 let client = try await self.ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
                 try await client.setLogLevel(level)
-                await MainActor.run {
-                    self.updateStatus(for: serverID) {
-                        $0.logLevel = level
-                    }
-                    self.appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: "日志级别已更新为 \(level.rawValue)。")
+                self.updateStatus(for: serverID) {
+                    $0.logLevel = level
                 }
+                self.appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: "日志级别已更新为 \(level.rawValue)。")
             } catch {
-                await MainActor.run {
-                    self.lastOperationError = error.localizedDescription
-                    self.appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: "更新日志级别失败：\(error.localizedDescription)")
-                }
+                self.lastOperationError = error.localizedDescription
+                self.appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: "更新日志级别失败：\(error.localizedDescription)")
             }
         }
     }
@@ -864,17 +1033,25 @@ public final class MCPManager: ObservableObject {
         }
         let startedAt = Date()
         appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: "开始执行聊天工具：\(routed.tool.toolId)")
-        let client = try await ensureClientReady(serverID: routed.server.id, refreshMetadataIfCacheMissing: false)
         let inputs = try decodeJSONDictionary(from: argumentsJSON)
+        let callID = UUID()
         do {
-            let result = try await client.executeTool(
+            let result = try await executeManagedToolCall(
+                callID: callID,
+                serverID: routed.server.id,
                 toolId: routed.tool.toolId,
                 inputs: inputs,
-                options: defaultToolCallOptions(timeout: defaultChatToolCallTimeout, reason: "聊天工具调用超时")
+                options: defaultManagedToolCallOptions(
+                    timeout: defaultChatToolCallTimeout,
+                    reason: "聊天工具调用超时"
+                )
             )
             let elapsed = Date().timeIntervalSince(startedAt)
             appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行成功：\(routed.tool.toolId)，耗时 \(String(format: "%.2f", elapsed)) 秒。")
             return result.prettyPrinted()
+        } catch is CancellationError {
+            appendGovernanceLog(level: .warning, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行已取消：\(routed.tool.toolId)")
+            throw MCPChatBridgeError.toolCancelled(displayName(for: routed))
         } catch {
             appendGovernanceLog(level: .error, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行失败：\(routed.tool.toolId)，错误=\(error.localizedDescription)")
             throw error
@@ -923,6 +1100,29 @@ public final class MCPManager: ObservableObject {
         save(server: server)
     }
 
+    public func currentResumptionToken(for serverID: UUID) async -> String? {
+        guard let transport = streamingTransports[serverID] as? MCPResumptionControllableTransport else {
+            return nil
+        }
+        return await transport.currentResumptionToken()
+    }
+
+    public func updateResumptionToken(_ token: String?, for serverID: UUID) async {
+        guard let transport = streamingTransports[serverID] as? MCPResumptionControllableTransport else {
+            return
+        }
+        await transport.updateResumptionToken(token)
+        persistResumptionToken(for: serverID)
+    }
+
+    public func terminateRemoteSession(for serverID: UUID) async {
+        guard let transport = streamingTransports[serverID] as? MCPResumptionControllableTransport else {
+            return
+        }
+        await transport.terminateSession()
+        persistResumptionToken(for: serverID)
+    }
+
     public func connectedServers() -> [MCPServerConfiguration] {
         servers.filter {
             if let status = serverStatuses[$0.id] {
@@ -940,6 +1140,34 @@ public final class MCPManager: ObservableObject {
     }
 
     // MARK: - Private helpers
+
+    private func startConfigWatcherIfNeeded() {
+        guard configWatcherTask == nil else { return }
+        let watcherInterval = configWatcherInterval
+        configWatcherTask = Task { [weak self, watcherInterval] in
+            while !Task.isCancelled {
+                let nanos = UInt64(watcherInterval * 1_000_000_000)
+                do {
+                    try await Task.sleep(nanoseconds: nanos)
+                } catch {
+                    return
+                }
+                guard let self else { return }
+                self.processConfigWatcherTick()
+            }
+        }
+    }
+
+    private func processConfigWatcherTick() {
+        let latestSignature = MCPServerStore.configurationSnapshotSignature()
+        guard latestSignature != configSnapshotSignature else { return }
+        appendGovernanceLog(
+            level: .info,
+            category: .lifecycle,
+            message: "检测到 MCP 配置文件变化，自动刷新。"
+        )
+        reloadServers()
+    }
 
     private func status(for id: UUID) -> MCPServerStatus {
         serverStatuses[id] ?? MCPServerStatus()
@@ -983,7 +1211,7 @@ public final class MCPManager: ObservableObject {
             switch status.connectionState {
             case .ready:
                 break
-            case .idle, .connecting, .failed:
+            case .idle, .connecting, .reconnecting, .failed:
                 guard hasMetadataCache, !isMetadataStale(status.metadataCachedAt) else { continue }
             @unknown default:
                 continue
@@ -1046,7 +1274,8 @@ public final class MCPManager: ObservableObject {
 
     private func updateBusyFlag() {
         let serverBusy = serverStatuses.values.contains(where: { $0.isBusy })
-        isBusy = serverBusy || debugBusyCount > 0
+        let toolCallBusy = !activeToolCalls.isEmpty
+        isBusy = serverBusy || debugBusyCount > 0 || toolCallBusy
     }
 
     private func appendGovernanceLog(
@@ -1114,11 +1343,236 @@ public final class MCPManager: ObservableObject {
         return try JSONDecoder().decode([String: JSONValue].self, from: data)
     }
 
-    private func defaultToolCallOptions(timeout: TimeInterval, reason: String) -> MCPToolCallOptions {
-        MCPToolCallOptions(
+    private func defaultManagedToolCallOptions(timeout: TimeInterval, reason: String) -> MCPManagedToolCallOptions {
+        MCPManagedToolCallOptions(
             timeout: timeout,
+            maxTotalTimeout: timeout * 2,
+            resetTimeoutOnProgress: true,
             cancellationReason: reason,
             includeTimeoutInMeta: true
+        )
+    }
+
+    private func executeManagedToolCall(
+        callID: UUID,
+        serverID: UUID,
+        toolId: String,
+        inputs: [String: JSONValue],
+        options: MCPManagedToolCallOptions
+    ) async throws -> JSONValue {
+        let client = try await ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
+        let startedAt = Date()
+        let resolvedProgressToken = options.progressToken ?? .string(UUID().uuidString)
+        let tokenKey = resolvedProgressToken.canonicalValue
+        let serverDisplayName = displayName(for: serverID) ?? serverID.uuidString
+
+        activeToolCalls[callID] = MCPActiveToolCall(
+            id: callID,
+            serverID: serverID,
+            serverDisplayName: serverDisplayName,
+            toolId: toolId,
+            startedAt: startedAt,
+            progressToken: resolvedProgressToken,
+            timeout: options.timeout,
+            maxTotalTimeout: options.maxTotalTimeout ?? options.timeout.map { $0 * 2 },
+            resetTimeoutOnProgress: options.resetTimeoutOnProgress,
+            state: .running
+        )
+        trackedToolCallTokenKeys[callID] = tokenKey
+        progressTimestampsByToken[tokenKey] = startedAt
+        if let onProgress = options.onProgress {
+            trackedToolCallObservers[callID] = onProgress
+        }
+
+        let clientOptions = MCPToolCallOptions(
+            timeout: nil,
+            progressToken: resolvedProgressToken,
+            cancellationReason: options.cancellationReason,
+            includeTimeoutInMeta: options.includeTimeoutInMeta
+        )
+        let task = Task<JSONValue, Error> {
+            try await client.executeTool(
+                toolId: toolId,
+                inputs: inputs,
+                options: clientOptions
+            )
+        }
+        trackedToolCallTasks[callID] = task
+        appendGovernanceLog(
+            level: .info,
+            category: .toolCall,
+            serverID: serverID,
+            message: "工具调用已注册：\(toolId)，token=\(tokenKey)"
+        )
+
+        do {
+            let result = try await awaitManagedToolCallResult(
+                task: task,
+                callID: callID,
+                serverID: serverID,
+                toolId: toolId,
+                startedAt: startedAt,
+                tokenKey: tokenKey,
+                options: options
+            )
+            completeTrackedToolCall(callID: callID, state: .succeeded)
+            return result
+        } catch is CancellationError {
+            completeTrackedToolCall(callID: callID, state: .cancelled(reason: options.cancellationReason))
+            throw CancellationError()
+        } catch {
+            completeTrackedToolCall(callID: callID, state: .failed(reason: error.localizedDescription))
+            throw error
+        }
+    }
+
+    private func awaitManagedToolCallResult(
+        task: Task<JSONValue, Error>,
+        callID: UUID,
+        serverID: UUID,
+        toolId: String,
+        startedAt: Date,
+        tokenKey: String,
+        options: MCPManagedToolCallOptions
+    ) async throws -> JSONValue {
+        let idleTimeout = options.timeout
+        let maxTotalTimeout = options.maxTotalTimeout ?? idleTimeout.map { $0 * 2 }
+        guard idleTimeout != nil || maxTotalTimeout != nil else {
+            return try await task.value
+        }
+
+        let watchdogNanos = UInt64(toolCallWatchdogInterval * 1_000_000_000)
+        return try await withThrowingTaskGroup(of: JSONValue.self) { group in
+            group.addTask {
+                try await task.value
+            }
+            group.addTask { [weak self] in
+                while !Task.isCancelled {
+                    try await Task.sleep(nanoseconds: watchdogNanos)
+                    if Task.isCancelled {
+                        throw CancellationError()
+                    }
+                    let now = Date()
+                    if let maxTotalTimeout,
+                       now.timeIntervalSince(startedAt) > maxTotalTimeout {
+                        await self?.markToolCallCancelling(
+                            callID: callID,
+                            serverID: serverID,
+                            message: "工具调用触发最大超时：\(toolId)"
+                        )
+                        task.cancel()
+                        throw MCPClientError.requestTimedOut(method: "tools/call", timeout: maxTotalTimeout)
+                    }
+                    if let idleTimeout {
+                        let anchor: Date
+                        if options.resetTimeoutOnProgress {
+                            let latestProgressAt = await self?.latestProgressTimestamp(for: tokenKey)
+                            anchor = latestProgressAt ?? startedAt
+                        } else {
+                            anchor = startedAt
+                        }
+                        if now.timeIntervalSince(anchor) > idleTimeout {
+                            await self?.markToolCallCancelling(
+                                callID: callID,
+                                serverID: serverID,
+                                message: "工具调用触发空闲超时：\(toolId)"
+                            )
+                            task.cancel()
+                            throw MCPClientError.requestTimedOut(method: "tools/call", timeout: idleTimeout)
+                        }
+                    }
+                }
+                throw CancellationError()
+            }
+
+            do {
+                guard let firstResult = try await group.next() else {
+                    throw MCPClientError.invalidResponse
+                }
+                group.cancelAll()
+                return firstResult
+            } catch {
+                group.cancelAll()
+                throw error
+            }
+        }
+    }
+
+    private func latestProgressTimestamp(for tokenKey: String) -> Date? {
+        progressTimestampsByToken[tokenKey]
+    }
+
+    private func markToolCallCancelling(callID: UUID, serverID: UUID, message: String) {
+        if var call = activeToolCalls[callID] {
+            call.state = .cancelling
+            activeToolCalls[callID] = call
+        }
+        appendGovernanceLog(
+            level: .warning,
+            category: .toolCall,
+            serverID: serverID,
+            message: message
+        )
+    }
+
+    private func completeTrackedToolCall(callID: UUID, state: MCPToolCallState) {
+        if var call = activeToolCalls[callID] {
+            call.state = state
+            activeToolCalls[callID] = call
+        }
+        trackedToolCallTasks[callID] = nil
+        trackedToolCallObservers[callID] = nil
+        if let tokenKey = trackedToolCallTokenKeys.removeValue(forKey: callID),
+           !trackedToolCallTokenKeys.values.contains(tokenKey) {
+            progressTimestampsByToken.removeValue(forKey: tokenKey)
+            progressByToken.removeValue(forKey: tokenKey)
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            await self.pruneCompletedToolCall(callID: callID)
+        }
+    }
+
+    private func pruneCompletedToolCall(callID: UUID) async {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        activeToolCalls.removeValue(forKey: callID)
+    }
+
+    private func cancelTrackedToolCalls(for serverID: UUID, reason: String) {
+        let callIDs = activeToolCalls
+            .filter { $0.value.serverID == serverID }
+            .map(\.key)
+        for callID in callIDs {
+            cancelToolCall(callID: callID, reason: reason)
+        }
+    }
+
+    private func persistResumptionToken(for serverID: UUID) {
+        guard let transport = streamingTransports[serverID] as? MCPResumptionControllableTransport else {
+            return
+        }
+        Task { [weak self] in
+            let token = await transport.currentResumptionToken()
+            guard let self else { return }
+            self.persistResumptionToken(token, for: serverID)
+        }
+    }
+
+    private func persistResumptionToken(_ token: String?, for serverID: UUID) {
+        guard let index = servers.firstIndex(where: { $0.id == serverID }) else { return }
+        var server = servers[index]
+        let previous = server.streamResumptionToken
+        server.setResumptionToken(token)
+        guard previous != server.streamResumptionToken else { return }
+        var updatedServers = servers
+        updatedServers[index] = server
+        servers = updatedServers
+        MCPServerStore.save(server)
+        appendGovernanceLog(
+            level: .info,
+            category: .lifecycle,
+            serverID: serverID,
+            message: "流式重连令牌已更新。"
         )
     }
 
@@ -1231,10 +1685,26 @@ fileprivate extension MCPManager {
     func handleProgress(_ progress: MCPProgressParams, sourceServerID: UUID?) {
         let tokenKey = progress.progressToken.canonicalValue
         progressByToken[tokenKey] = progress
+        progressTimestampsByToken[tokenKey] = Date()
+
+        let matchingCallIDs = trackedToolCallTokenKeys
+            .filter { $0.value == tokenKey }
+            .map(\.key)
+        for callID in matchingCallIDs {
+            if var call = activeToolCalls[callID] {
+                call.latestProgress = progress.progress
+                call.latestTotal = progress.total
+                call.lastProgressAt = Date()
+                activeToolCalls[callID] = call
+            }
+            trackedToolCallObservers[callID]?(progress)
+        }
+
         if let total = progress.total,
            total > 0,
            progress.progress >= total {
             progressByToken.removeValue(forKey: tokenKey)
+            progressTimestampsByToken.removeValue(forKey: tokenKey)
         }
         appendGovernanceLog(
             level: .info,
@@ -1294,6 +1764,7 @@ public enum MCPChatBridgeError: LocalizedError {
     case unknownTool
     case unknownPrompt
     case toolDeniedByPolicy(String)
+    case toolCancelled(String)
 
     public var errorDescription: String? {
         switch self {
@@ -1303,6 +1774,8 @@ public enum MCPChatBridgeError: LocalizedError {
             return "未找到匹配的 MCP 提示词模板。"
         case .toolDeniedByPolicy(let displayName):
             return "\(displayName) 已被策略禁止调用。"
+        case .toolCancelled(let displayName):
+            return "\(displayName) 调用已取消。"
         }
     }
 }

@@ -11,6 +11,7 @@ import Shared
 
 struct MCPIntegrationView: View {
     @StateObject private var manager = MCPManager.shared
+    @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var isPresentingEditor = false
     @State private var serverToEdit: MCPServerConfiguration?
     @State private var toolIdInput: String = ""
@@ -96,6 +97,35 @@ struct MCPIntegrationView: View {
                     ProgressView("正在同步…")
                 }
             }
+
+            Section("审批自动化") {
+                Toggle(
+                    "启用倒计时自动批准",
+                    isOn: Binding(
+                        get: { toolPermissionCenter.autoApproveEnabled },
+                        set: { toolPermissionCenter.setAutoApproveEnabled($0) }
+                    )
+                )
+                Stepper(
+                    value: Binding(
+                        get: { toolPermissionCenter.autoApproveCountdownSeconds },
+                        set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
+                    ),
+                    in: 1...30
+                ) {
+                    Text("倒计时：\(toolPermissionCenter.autoApproveCountdownSeconds)s")
+                }
+                .disabled(!toolPermissionCenter.autoApproveEnabled)
+                let disabledCount = toolPermissionCenter.disabledAutoApproveTools.count
+                Text("已禁用自动批准工具：\(disabledCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if disabledCount > 0 {
+                    Button("清空禁用列表", role: .destructive) {
+                        toolPermissionCenter.clearDisabledAutoApproveTools()
+                    }
+                }
+            }
             
             if !manager.tools.isEmpty {
                 Section(
@@ -126,6 +156,57 @@ struct MCPIntegrationView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                                 .textSelection(.enabled)
+                            if let schemaSummary = schemaSummary(for: available.tool.inputSchema) {
+                                Text("输入 Schema：\(schemaSummary)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
+            if !manager.activeToolCalls.isEmpty {
+                Section("活跃调用") {
+                    ForEach(manager.activeToolCalls.values.sorted(by: { $0.startedAt > $1.startedAt }), id: \.id) { call in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("\(call.serverDisplayName) · \(call.toolId)")
+                                    .font(.footnote.weight(.semibold))
+                                Spacer()
+                                Text(toolCallStateText(call.state))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let progress = call.latestProgress {
+                                if let total = call.latestTotal, total > 0 {
+                                    let fraction = min(max(progress / total, 0), 1)
+                                    ProgressView(value: fraction)
+                                    Text(String(format: "进度 %.0f / %.0f", progress, total))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text(String(format: "进度 %.0f", progress))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            HStack(spacing: 8) {
+                                if let timeout = call.timeout {
+                                    Text("空闲超时 \(Int(timeout))s")
+                                }
+                                if let totalTimeout = call.maxTotalTimeout {
+                                    Text("总超时 \(Int(totalTimeout))s")
+                                }
+                            }
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            Button("取消调用", role: .destructive) {
+                                manager.cancelToolCall(callID: call.id, reason: "用户在 MCP 工具箱取消")
+                            }
+                            .buttonStyle(.bordered)
                         }
                         .padding(.vertical, 2)
                     }
@@ -460,6 +541,9 @@ struct MCPIntegrationView: View {
             return "未连接"
         case .connecting:
             return "正在连接..."
+        case .reconnecting(let attempt, let scheduledAt, _):
+            let remaining = max(0, Int(ceil(scheduledAt.timeIntervalSinceNow)))
+            return "重连中（第\(attempt)次，约 \(remaining)s）"
         case .ready:
             return status.isSelectedForChat
                 ? NSLocalizedString("已连接并参与聊天", comment: "")
@@ -476,6 +560,8 @@ struct MCPIntegrationView: View {
         switch state {
         case .connecting:
             return "arrow.triangle.2.circlepath"
+        case .reconnecting:
+            return "arrow.clockwise.circle.fill"
         case .ready:
             return "checkmark.circle.fill"
         case .failed:
@@ -494,6 +580,8 @@ struct MCPIntegrationView: View {
             return .green
         case .connecting:
             return .blue
+        case .reconnecting:
+            return .orange
         case .failed:
             return .red
         case .idle:
@@ -501,6 +589,57 @@ struct MCPIntegrationView: View {
         @unknown default:
             return .secondary
         }
+    }
+
+    private func toolCallStateText(_ state: MCPToolCallState) -> String {
+        switch state {
+        case .running:
+            return "运行中"
+        case .cancelling:
+            return "取消中"
+        case .succeeded:
+            return "成功"
+        case .failed(let reason):
+            return "失败：\(reason)"
+        case .cancelled(let reason):
+            if let reason, !reason.isEmpty {
+                return "已取消：\(reason)"
+            }
+            return "已取消"
+        }
+    }
+
+    private func schemaSummary(for schema: JSONValue?) -> String? {
+        guard let schema else { return nil }
+        guard case .dictionary(let schemaDict) = schema else {
+            return schema.prettyPrintedCompact()
+        }
+        let typeLabel: String
+        if let typeValue = schemaDict["type"], case .string(let typeString) = typeValue {
+            typeLabel = typeString
+        } else {
+            typeLabel = "unknown"
+        }
+        var segments: [String] = ["type=\(typeLabel)"]
+        if let propertiesValue = schemaDict["properties"],
+           case .dictionary(let properties) = propertiesValue,
+           !properties.isEmpty {
+            let keys = properties.keys.sorted()
+            let previewKeys = keys.prefix(6).joined(separator: ", ")
+            segments.append("fields=\(previewKeys)")
+        }
+        if let requiredValue = schemaDict["required"],
+           case .array(let requiredItems) = requiredValue,
+           !requiredItems.isEmpty {
+            let requiredKeys = requiredItems.compactMap { item -> String? in
+                if case .string(let key) = item { return key }
+                return nil
+            }
+            if !requiredKeys.isEmpty {
+                segments.append("required=\(requiredKeys.joined(separator: ", "))")
+            }
+        }
+        return segments.joined(separator: " · ")
     }
 }
 
@@ -531,15 +670,22 @@ private struct MCPServerDetailView: View {
                 Button("连接") {
                     manager.connect(to: server)
                 }
-                .disabled(status.connectionState == .ready || status.connectionState == .connecting)
+                .disabled(status.connectionState == .ready || status.connectionState == .connecting || isReconnecting(status.connectionState))
                 
                 Button("断开连接") {
                     manager.disconnect(server: server)
                 }
                 .disabled(status.connectionState == .idle)
+
+                Button("终止远端会话") {
+                    Task {
+                        await manager.terminateRemoteSession(for: server.id)
+                    }
+                }
+                .disabled(status.connectionState == .idle)
                 
                 Toggle("用于聊天", isOn: bindingForSelection())
-                    .disabled(status.connectionState == .connecting)
+                    .disabled(status.connectionState == .connecting || isReconnecting(status.connectionState))
                 
                 Button("刷新元数据") {
                     manager.refreshMetadata(for: server)
@@ -575,6 +721,12 @@ private struct MCPServerDetailView: View {
                                         Text(desc)
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
+                                    }
+                                    if let schemaSummary = schemaSummary(for: tool.inputSchema) {
+                                        Text("输入 Schema：\(schemaSummary)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                            .lineLimit(3)
                                     }
                                 }
                             }
@@ -661,6 +813,43 @@ private struct MCPServerDetailView: View {
         } set: { newValue in
             manager.setToolApprovalPolicy(serverID: server.id, toolId: toolId, policy: newValue)
         }
+    }
+
+    private func schemaSummary(for schema: JSONValue?) -> String? {
+        guard let schema else { return nil }
+        guard case .dictionary(let schemaDict) = schema else {
+            return schema.prettyPrintedCompact()
+        }
+        let typeLabel: String
+        if let typeValue = schemaDict["type"], case .string(let typeString) = typeValue {
+            typeLabel = typeString
+        } else {
+            typeLabel = "unknown"
+        }
+        var segments: [String] = ["type=\(typeLabel)"]
+        if let propertiesValue = schemaDict["properties"],
+           case .dictionary(let properties) = propertiesValue,
+           !properties.isEmpty {
+            segments.append("fields=\(properties.keys.sorted().prefix(6).joined(separator: ", "))")
+        }
+        if let requiredValue = schemaDict["required"],
+           case .array(let requiredItems) = requiredValue {
+            let requiredKeys = requiredItems.compactMap { item -> String? in
+                if case .string(let key) = item { return key }
+                return nil
+            }
+            if !requiredKeys.isEmpty {
+                segments.append("required=\(requiredKeys.joined(separator: ", "))")
+            }
+        }
+        return segments.joined(separator: " · ")
+    }
+
+    private func isReconnecting(_ state: MCPManager.ConnectionState) -> Bool {
+        if case .reconnecting = state {
+            return true
+        }
+        return false
     }
 }
 
