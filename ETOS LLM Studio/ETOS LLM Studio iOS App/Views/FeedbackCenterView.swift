@@ -109,7 +109,7 @@ private struct FeedbackComposeView: View {
                         Text(category.localizedTitle).tag(category)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
             }
 
             Section {
