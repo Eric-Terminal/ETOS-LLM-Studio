@@ -18,6 +18,9 @@ public enum Persistence {
     private static let sessionStoreSchemaVersion = 3
     private static let messagesFileSchemaVersion = 2
     private static let migrationLogPrefix = "[(迁移V3)]"
+    private static let compatibilityReminderPrefix = "[(迁移V3)][兼容提醒]"
+    private static let compatibilityReminderLock = NSLock()
+    private static var hasLoggedCompatibilityReminder = false
 
     private static let sessionIndexFileNameV3 = "index.json"
     private static let sessionStoreDirectoryNameV3 = "v3"
@@ -118,6 +121,8 @@ public enum Persistence {
 
     /// 加载所有聊天会话的列表
     public static func loadChatSessions() -> [ChatSession] {
+        logCompatibilityReminderIfNeeded(trigger: "loadChatSessions")
+
         if let sessions = loadChatSessionsFromV3() {
             logger.info("已从 V3 会话索引加载 \(sessions.count) 个会话。")
             return sessions
@@ -161,6 +166,8 @@ public enum Persistence {
 
     /// 加载指定会话的聊天消息
     public static func loadMessages(for sessionID: UUID) -> [ChatMessage] {
+        logCompatibilityReminderIfNeeded(trigger: "loadMessages")
+
         if let v3Messages = loadMessagesFromV3(for: sessionID) {
             logger.info("会话 \(sessionID.uuidString) 已从 V3 加载 \(v3Messages.count) 条消息。")
             return v3Messages
@@ -532,6 +539,7 @@ public enum Persistence {
         }
 
         logger.info("\(migrationLogPrefix) 旧版文件已归档到 \(archiveRoot.path)")
+        logger.info("\(compatibilityReminderPrefix) 旧版文件已归档，legacy 兼容读取仍保留，后续版本可移除旧分支。")
     }
 
     private static func moveItemIfExists(from source: URL, to destination: URL) throws {
@@ -541,6 +549,43 @@ public enum Persistence {
             try FileManager.default.removeItem(at: destination)
         }
         try FileManager.default.moveItem(at: source, to: destination)
+    }
+
+    private static func logCompatibilityReminderIfNeeded(trigger: String) {
+        compatibilityReminderLock.lock()
+        defer { compatibilityReminderLock.unlock() }
+
+        guard !hasLoggedCompatibilityReminder else { return }
+
+        let hasV3Index = FileManager.default.fileExists(atPath: sessionIndexFileURLV3().path)
+        let hasLegacyIndex = FileManager.default.fileExists(atPath: legacySessionIndexFileURL().path)
+        let hasLegacyMessages = hasLegacyMessageFiles()
+
+        let legacyStatus: String
+        if hasLegacyIndex || hasLegacyMessages {
+            legacyStatus = "检测到 legacy 文件，已启用前向兼容读取。"
+        } else {
+            legacyStatus = "当前未检测到 legacy 文件，但前向兼容读取逻辑仍保留。"
+        }
+
+        logger.info("\(compatibilityReminderPrefix) 触发点=\(trigger)，存储状态: v3Index=\(hasV3Index), legacyIndex=\(hasLegacyIndex), legacyMessages=\(hasLegacyMessages)。\(legacyStatus)")
+        hasLoggedCompatibilityReminder = true
+    }
+
+    private static func hasLegacyMessageFiles() -> Bool {
+        let chatsDirectory = getChatsDirectory()
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: chatsDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return false
+        }
+
+        return entries.contains { entry in
+            let fileName = entry.lastPathComponent
+            return fileName.range(of: "^[0-9A-Fa-f-]{36}\\.json$", options: .regularExpression) != nil
+        }
     }
 
     private static func ensureDirectoryExists(_ directoryURL: URL) throws {
