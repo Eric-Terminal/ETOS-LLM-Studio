@@ -231,8 +231,7 @@ public enum Persistence {
             loadedSessions.reserveCapacity(index.sessions.count)
 
             for item in index.sessions {
-                if let summaryOptional = try? loadSessionSummaryV3(for: item.id),
-                   let summary = summaryOptional {
+                if let summary = try? loadSessionSummaryV3(for: item.id) {
                     var session = makeChatSession(from: summary, fallbackName: item.name)
                     session.isTemporary = false
                     loadedSessions.append(session)
@@ -388,8 +387,7 @@ public enum Persistence {
     }
 
     private static func resolveSessionSnapshot(for sessionID: UUID) -> ChatSession {
-        if let summaryOptional = try? loadSessionSummaryV3(for: sessionID),
-           let summary = summaryOptional {
+        if let summary = try? loadSessionSummaryV3(for: sessionID) {
             return makeChatSession(from: summary, fallbackName: summary.session.name)
         }
 
