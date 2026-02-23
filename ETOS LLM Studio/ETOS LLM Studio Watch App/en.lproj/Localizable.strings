@@ -963,7 +963,6 @@
 
 /* Feedback Assistant */
 "反馈助手" = "Feedback";
-"反馈助手（应用内）" = "In-App Feedback";
 "在 App 内提交并追踪反馈工单" = "Submit and track feedback tickets in the app.";
 "GitHub Issues（网页）" = "GitHub Issues (Web)";
 "应用内提交问题与建议，并追踪处理进度。" = "Submit issues or suggestions in-app and track progress.";
