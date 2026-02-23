@@ -53,20 +53,65 @@ private struct WatchFeedbackComposeView: View {
     @State private var category: FeedbackCategory = .bug
     @State private var title: String = ""
     @State private var detail: String = ""
+    @State private var reproductionSteps: String = ""
+    @State private var expectedBehavior: String = ""
+    @State private var actualBehavior: String = ""
+    @State private var extraContext: String = ""
     @State private var isSubmitting = false
-    @State private var errorMessage: String?
+    @State private var submitErrorMessage: String?
 
     var body: some View {
         List {
-            Section {
+            Section(NSLocalizedString("反馈类型", comment: "Feedback category section")) {
                 Picker(NSLocalizedString("反馈类型", comment: "Feedback category picker"), selection: $category) {
                     ForEach(FeedbackCategory.allCases) { category in
                         Text(category.localizedTitle).tag(category)
                     }
                 }
+            }
 
+            Section {
                 TextField(NSLocalizedString("标题", comment: "Feedback title field"), text: $title.watchKeyboardNewlineBinding())
-                TextField(NSLocalizedString("详细描述", comment: "Feedback detail field"), text: $detail.watchKeyboardNewlineBinding())
+                TextField(
+                    NSLocalizedString("详细描述", comment: "Feedback detail field"),
+                    text: $detail.watchKeyboardNewlineBinding(),
+                    axis: .vertical
+                )
+                .lineLimit(4...8)
+            }
+
+            if category == .bug {
+                Section(NSLocalizedString("问题细节（可选）", comment: "Bug detail optional section")) {
+                    TextField(
+                        NSLocalizedString("可复现步骤（可选）", comment: "Reproduction steps"),
+                        text: $reproductionSteps.watchKeyboardNewlineBinding(),
+                        axis: .vertical
+                    )
+                    .lineLimit(3...6)
+
+                    TextField(
+                        NSLocalizedString("预期行为（可选）", comment: "Expected behavior"),
+                        text: $expectedBehavior.watchKeyboardNewlineBinding(),
+                        axis: .vertical
+                    )
+                    .lineLimit(2...5)
+
+                    TextField(
+                        NSLocalizedString("实际行为（可选）", comment: "Actual behavior"),
+                        text: $actualBehavior.watchKeyboardNewlineBinding(),
+                        axis: .vertical
+                    )
+                    .lineLimit(2...5)
+                }
+            }
+
+            Section {
+                TextField(
+                    NSLocalizedString("补充信息（可选）", comment: "Extra context"),
+                    text: $extraContext.watchKeyboardNewlineBinding(),
+                    axis: .vertical
+                )
+                .lineLimit(2...5)
             }
 
             Section {
@@ -81,24 +126,57 @@ private struct WatchFeedbackComposeView: View {
                         Label(NSLocalizedString("提交", comment: "Submit button"), systemImage: "paperplane")
                     }
                 }
-                .disabled(isSubmitting)
-            }
-
-            if let errorMessage {
-                Section {
-                    Text(errorMessage)
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                }
+                .disabled(isSubmitting || !isDraftValid)
+            } footer: {
+                Text(environmentSummary)
             }
         }
         .navigationTitle(NSLocalizedString("新建反馈", comment: "Create feedback title"))
+        .alert(
+            NSLocalizedString("提交失败", comment: "Submit failed title"),
+            isPresented: Binding(
+                get: { submitErrorMessage != nil },
+                set: { newValue in
+                    if !newValue {
+                        submitErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button(NSLocalizedString("确定", comment: "OK button"), role: .cancel) {}
+        } message: {
+            Text(submitErrorMessage ?? "")
+        }
+    }
+
+    private var isDraftValid: Bool {
+        let draft = FeedbackDraft(category: category, title: title, detail: detail)
+        return draft.isValid
+    }
+
+    private var environmentSummary: String {
+        let snapshot = FeedbackEnvironmentCollector.collectSnapshot()
+        return String(
+            format: NSLocalizedString("将自动附带环境信息：%@ %@ (Build %@) · %@", comment: "Environment summary"),
+            snapshot.platform,
+            snapshot.appVersion,
+            snapshot.appBuild,
+            snapshot.deviceModel
+        )
     }
 
     private func submit() async {
-        let draft = FeedbackDraft(category: category, title: title, detail: detail)
+        let draft = FeedbackDraft(
+            category: category,
+            title: title,
+            detail: detail,
+            reproductionSteps: reproductionSteps,
+            expectedBehavior: expectedBehavior,
+            actualBehavior: actualBehavior,
+            extraContext: extraContext
+        )
         guard draft.isValid else {
-            errorMessage = NSLocalizedString("请至少填写标题和详细描述。", comment: "Feedback invalid input")
+            submitErrorMessage = NSLocalizedString("请至少填写标题和详细描述。", comment: "Feedback invalid input")
             return
         }
 
@@ -109,7 +187,7 @@ private struct WatchFeedbackComposeView: View {
             _ = try await service.submit(draft: draft)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            submitErrorMessage = error.localizedDescription
         }
     }
 }
