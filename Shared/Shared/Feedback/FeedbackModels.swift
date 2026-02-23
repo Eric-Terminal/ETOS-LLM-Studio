@@ -277,7 +277,7 @@ public enum FeedbackStatusMapper {
         }
 
         if let normalizedStatus {
-            switch normalized {
+            switch normalizedStatus {
             case "triage":
                 return .triage
             case "in_progress", "in-progress", "inprogress", "processing", "open":
