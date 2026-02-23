@@ -8,7 +8,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     FeedbackCenterView()
                 } label: {
-                    Label(NSLocalizedString("反馈助手（应用内）", comment: "In-app feedback entry"), systemImage: "text.bubble")
+                    Label(NSLocalizedString("反馈助手", comment: "反馈入口"), systemImage: "text.bubble")
                 }
             } footer: {
                 Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
