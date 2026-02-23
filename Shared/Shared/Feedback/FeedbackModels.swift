@@ -253,6 +253,14 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
 
 public enum FeedbackStatusMapper {
     public static func map(serverStatus: String?, labels: [String], isClosed: Bool) -> FeedbackTicketStatus {
+        let normalizedStatus = serverStatus?
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if isClosed || normalizedStatus == "closed" {
+            return .closed
+        }
+
         let loweredLabels = labels.map { $0.lowercased() }
 
         if loweredLabels.contains("status/triage") {
@@ -268,8 +276,7 @@ public enum FeedbackStatusMapper {
             return .resolved
         }
 
-        if let serverStatus {
-            let normalized = serverStatus.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedStatus {
             switch normalized {
             case "triage":
                 return .triage
@@ -286,7 +293,7 @@ public enum FeedbackStatusMapper {
             }
         }
 
-        return isClosed ? .closed : .inProgress
+        return .inProgress
     }
 }
 

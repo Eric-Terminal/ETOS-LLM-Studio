@@ -1077,6 +1077,9 @@
 "刷新中..." = "Refreshing...";
 "刷新状态" = "Refresh Status";
 "打开 GitHub 页面" = "Open GitHub Page";
+"删除本地索引" = "Delete Local Index";
+"标签" = "Labels";
+"暂无标签" = "No labels";
 "开发者公开回复" = "Public Developer Replies";
 "暂无公开回复" = "No public replies yet";
 "刷新失败" = "Refresh Failed";

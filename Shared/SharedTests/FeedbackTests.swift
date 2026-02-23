@@ -4,15 +4,15 @@ import Foundation
 
 @Suite("FeedbackStatusMapper Tests")
 struct FeedbackStatusMapperTests {
-    @Test("status/* 标签优先于 closed 状态")
-    func statusLabelHasPriority() {
+    @Test("closed 状态优先于 status/* 标签")
+    func closedHasPriority() {
         let mapped = FeedbackStatusMapper.map(
             serverStatus: "closed",
             labels: ["type/bug", "status/in-progress"],
             isClosed: true
         )
 
-        #expect(mapped == .inProgress)
+        #expect(mapped == .closed)
     }
 
     @Test("无标签时回退到 open/closed")

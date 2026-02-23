@@ -33,6 +33,13 @@ struct FeedbackCenterView: View {
                                 .foregroundStyle(.blue)
                         }
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            service.deleteTicket(issueNumber: ticket.issueNumber)
+                        } label: {
+                            Label(NSLocalizedString("删除本地索引", comment: "Delete local index"), systemImage: "trash")
+                        }
+                    }
                 }
             }
         }
@@ -254,6 +261,20 @@ private struct WatchFeedbackDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 2)
+                    }
+                }
+            }
+
+            Section(NSLocalizedString("标签", comment: "Labels section")) {
+                let labels = snapshot?.labels ?? []
+                if labels.isEmpty {
+                    Text(NSLocalizedString("暂无标签", comment: "No labels"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(labels, id: \.self) { label in
+                        Text(label)
+                            .font(.caption2)
                     }
                 }
             }
