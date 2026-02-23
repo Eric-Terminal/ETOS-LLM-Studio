@@ -68,18 +68,6 @@ struct AboutView: View {
                     }
                 }
 
-                NavigationLink {
-                    FeedbackCenterView()
-                } label: {
-                    HStack {
-                        Label(NSLocalizedString("反馈助手（应用内）", comment: "In-app feedback entry"), systemImage: "text.bubble")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
                 Button {
                     openURL(URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues")!)
                 } label: {

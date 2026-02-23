@@ -177,23 +177,6 @@ private struct ProjectLinksView: View {
     
     var body: some View {
         List {
-            NavigationLink {
-                FeedbackCenterView()
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Label(NSLocalizedString("反馈助手（应用内）", comment: "In-app feedback entry"), systemImage: "text.bubble")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             // 项目主页链接
             Link(destination: githubURL) {
                 VStack(alignment: .leading, spacing: 4) {
