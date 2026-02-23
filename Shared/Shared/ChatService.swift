@@ -561,10 +561,9 @@ public class ChatService {
             Persistence.deleteAudioFiles(for: messages)
             Persistence.deleteImageFiles(for: messages)
             Persistence.deleteFileFiles(for: messages)
-            
-            let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
-            try? FileManager.default.removeItem(at: fileURL)
-            logger.info("删除了会话的消息文件: \(session.name)")
+
+            Persistence.deleteSessionArtifacts(sessionID: session.id)
+            logger.info("删除了会话的数据文件: \(session.name)")
         }
         currentSessions.removeAll { session in sessionsToDelete.contains { $0.id == session.id } }
         var newCurrentSession = currentSessionSubject.value

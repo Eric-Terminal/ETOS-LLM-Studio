@@ -15,11 +15,60 @@ import os.log
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persistence")
 
 public enum Persistence {
+    private static let sessionStoreSchemaVersion = 3
     private static let messagesFileSchemaVersion = 2
+    private static let migrationLogPrefix = "[(迁移V3)]"
+
+    private static let sessionIndexFileNameV3 = "index.json"
+    private static let sessionStoreDirectoryNameV3 = "v3"
+    private static let sessionRecordsDirectoryNameV3 = "sessions"
+    private static let legacyDirectoryName = "legacy"
 
     private struct ChatMessagesFileEnvelope: Codable {
         let schemaVersion: Int
         let messages: [ChatMessage]
+    }
+
+    private struct SessionIndexFileV3: Codable {
+        let schemaVersion: Int
+        let updatedAt: String
+        let sessions: [SessionIndexItemV3]
+    }
+
+    private struct SessionIndexItemV3: Codable {
+        let id: UUID
+        let name: String
+        let updatedAt: String
+    }
+
+    private struct SessionPromptsV3: Codable {
+        let topicPrompt: String?
+        let enhancedPrompt: String?
+    }
+
+    private struct SessionMetaV3: Codable {
+        let id: UUID
+        let name: String
+        let lorebookIDs: [UUID]
+    }
+
+    private struct SessionRecordFileV3: Codable {
+        let schemaVersion: Int
+        let session: SessionMetaV3
+        let prompts: SessionPromptsV3
+        let messages: [ChatMessage]
+    }
+
+    private struct SessionRecordSummaryV3: Codable {
+        let schemaVersion: Int
+        let session: SessionMetaV3
+        let prompts: SessionPromptsV3
+    }
+
+    private struct LegacyMessagesReadResult {
+        let messages: [ChatMessage]
+        let didMigrateFileSchema: Bool
+        let didMigratePlacement: Bool
     }
 
     // MARK: - 目录管理
@@ -40,34 +89,58 @@ public enum Persistence {
 
     /// 保存所有聊天会话的列表
     public static func saveChatSessions(_ sessions: [ChatSession]) {
-        // 保存前过滤掉所有临时会话。
         let sessionsToSave = sessions.filter { !$0.isTemporary }
-        
-        let fileURL = getChatsDirectory().appendingPathComponent("sessions.json")
-        logger.info("Saving \(sessionsToSave.count) sessions to \(fileURL.path)")
+        logger.info("准备保存 \(sessionsToSave.count) 个会话到 V3 会话索引。")
 
         do {
-            let data = try JSONEncoder().encode(sessionsToSave)
-            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
-            logger.info("Session list saved successfully.")
+            for session in sessionsToSave {
+                try ensureSessionRecordMetadataUpToDate(for: session)
+            }
+
+            let now = iso8601Timestamp()
+            let index = SessionIndexFileV3(
+                schemaVersion: sessionStoreSchemaVersion,
+                updatedAt: now,
+                sessions: sessionsToSave.map { session in
+                    SessionIndexItemV3(
+                        id: session.id,
+                        name: session.name,
+                        updatedAt: now
+                    )
+                }
+            )
+            try writeSessionIndexV3(index)
+            logger.info("V3 会话索引保存成功。")
         } catch {
-            logger.error("Failed to save session list: \(error.localizedDescription)")
+            logger.error("保存 V3 会话索引失败: \(error.localizedDescription)")
         }
     }
 
     /// 加载所有聊天会话的列表
     public static func loadChatSessions() -> [ChatSession] {
-        let fileURL = getChatsDirectory().appendingPathComponent("sessions.json")
-        logger.info("Loading session list from \(fileURL.path)")
+        if let sessions = loadChatSessionsFromV3() {
+            logger.info("已从 V3 会话索引加载 \(sessions.count) 个会话。")
+            return sessions
+        }
 
-        do {
-            let data = try Data(contentsOf: fileURL)
-            let loadedSessions = try JSONDecoder().decode([ChatSession].self, from: data)
-            logger.info("Successfully loaded \(loadedSessions.count) sessions.")
-            return loadedSessions
-        } catch {
-            logger.warning("Failed to load session list, returning empty list: \(error.localizedDescription)")
+        let legacySessions = loadLegacySessions()
+        guard !legacySessions.isEmpty else {
+            logger.info("未检测到可用会话索引，返回空会话列表。")
             return []
+        }
+
+        logger.info("\(migrationLogPrefix) 检测到旧版会话索引，开始全量迁移。")
+        do {
+            try migrateLegacyStoreToV3(legacySessions: legacySessions)
+            if let migratedSessions = loadChatSessionsFromV3() {
+                logger.info("\(migrationLogPrefix) 已完成迁移，加载到 \(migratedSessions.count) 个会话。")
+                return migratedSessions
+            }
+            logger.warning("\(migrationLogPrefix) 迁移后未读取到 V3 索引，回退返回旧会话列表。")
+            return legacySessions
+        } catch {
+            logger.error("\(migrationLogPrefix) 迁移失败，回退旧会话列表: \(error.localizedDescription)")
+            return legacySessions
         }
     }
 
@@ -75,65 +148,450 @@ public enum Persistence {
 
     /// 保存指定会话的聊天消息
     public static func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
-        let fileURL = getChatsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
-        logger.info("Saving \(messages.count) messages for session \(sessionID.uuidString) to \(fileURL.path)")
-
         do {
-            let envelope = ChatMessagesFileEnvelope(
-                schemaVersion: messagesFileSchemaVersion,
-                messages: messages
-            )
-            let data = try JSONEncoder().encode(envelope)
-            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
-            logger.info("Messages saved successfully for session \(sessionID.uuidString).")
+            let normalized = normalizeToolCallsPlacement(in: messages, sessionID: sessionID)
+            let sessionSnapshot = resolveSessionSnapshot(for: sessionID)
+            let record = makeSessionRecordV3(session: sessionSnapshot, messages: normalized.messages)
+            try writeSessionRecordV3(record, for: sessionID)
+            logger.info("会话 \(sessionID.uuidString) 的消息已保存到 V3（\(normalized.messages.count) 条）。")
         } catch {
-            logger.error("Failed to save messages for session \(sessionID.uuidString): \(error.localizedDescription)")
+            logger.error("保存会话 \(sessionID.uuidString) 消息失败: \(error.localizedDescription)")
         }
     }
 
     /// 加载指定会话的聊天消息
     public static func loadMessages(for sessionID: UUID) -> [ChatMessage] {
-        let fileURL = getChatsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
-        logger.info("Loading messages for session \(sessionID.uuidString) from \(fileURL.path)")
+        if let v3Messages = loadMessagesFromV3(for: sessionID) {
+            logger.info("会话 \(sessionID.uuidString) 已从 V3 加载 \(v3Messages.count) 条消息。")
+            return v3Messages
+        }
+
+        let legacyURL = legacyMessagesFileURL(for: sessionID)
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else {
+            logger.warning("未找到会话 \(sessionID.uuidString) 的消息文件，返回空列表。")
+            return []
+        }
+
+        logger.info("\(migrationLogPrefix) 检测到旧版消息文件，开始迁移会话 \(sessionID.uuidString)。")
+        do {
+            let legacy = try readLegacyMessages(for: sessionID)
+            let sessionSnapshot = resolveSessionSnapshot(for: sessionID)
+            let record = makeSessionRecordV3(session: sessionSnapshot, messages: legacy.messages)
+            try writeSessionRecordV3(record, for: sessionID)
+            logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 消息迁移完成，共 \(legacy.messages.count) 条。")
+            return legacy.messages
+        } catch {
+            logger.warning("加载会话 \(sessionID.uuidString) 消息失败，返回空列表: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// 判断会话是否存在可读取的数据文件（V3 或 legacy）。
+    public static func sessionDataExists(sessionID: UUID) -> Bool {
+        let v3FileExists = FileManager.default.fileExists(atPath: sessionRecordFileURL(for: sessionID).path)
+        let legacyFileExists = FileManager.default.fileExists(atPath: legacyMessagesFileURL(for: sessionID).path)
+        return v3FileExists || legacyFileExists
+    }
+
+    /// 删除会话相关的消息持久化文件（V3 + legacy）。
+    public static func deleteSessionArtifacts(sessionID: UUID) {
+        let targets = [
+            sessionRecordFileURL(for: sessionID),
+            legacyMessagesFileURL(for: sessionID)
+        ]
+
+        for url in targets {
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            do {
+                try FileManager.default.removeItem(at: url)
+                logger.info("已删除会话数据文件: \(url.path)")
+            } catch {
+                logger.warning("删除会话数据文件失败 \(url.path): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private static func loadChatSessionsFromV3() -> [ChatSession]? {
+        let indexURL = sessionIndexFileURLV3()
+        guard FileManager.default.fileExists(atPath: indexURL.path) else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: indexURL)
+            let index = try JSONDecoder().decode(SessionIndexFileV3.self, from: data)
+            var loadedSessions: [ChatSession] = []
+            loadedSessions.reserveCapacity(index.sessions.count)
+
+            for item in index.sessions {
+                if let summary = try? loadSessionSummaryV3(for: item.id),
+                   let summary {
+                    var session = makeChatSession(from: summary, fallbackName: item.name)
+                    session.isTemporary = false
+                    loadedSessions.append(session)
+                } else {
+                    let session = ChatSession(
+                        id: item.id,
+                        name: item.name,
+                        topicPrompt: nil,
+                        enhancedPrompt: nil,
+                        lorebookIDs: [],
+                        isTemporary: false
+                    )
+                    loadedSessions.append(session)
+                }
+            }
+            return loadedSessions
+        } catch {
+            logger.warning("读取 V3 会话索引失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private static func loadLegacySessions() -> [ChatSession] {
+        let fileURL = legacySessionIndexFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return []
+        }
 
         do {
             let data = try Data(contentsOf: fileURL)
-            let decoder = JSONDecoder()
-            var loadedMessages: [ChatMessage]
-            var didMigrateFileSchema = false
-
-            if let envelope = try? decoder.decode(ChatMessagesFileEnvelope.self, from: data) {
-                loadedMessages = envelope.messages
-                if envelope.schemaVersion != messagesFileSchemaVersion {
-                    didMigrateFileSchema = true
-                    logger.info("Detected outdated message file schema \(envelope.schemaVersion) for session \(sessionID.uuidString), migrating to \(messagesFileSchemaVersion).")
-                }
-            } else {
-                loadedMessages = try decoder.decode([ChatMessage].self, from: data)
-                didMigrateFileSchema = true
-                logger.info("Detected legacy message array format for session \(sessionID.uuidString), migrating to schema \(messagesFileSchemaVersion).")
-            }
-
-            var didMigratePlacement = false
-            for index in loadedMessages.indices {
-                guard loadedMessages[index].toolCallsPlacement == nil,
-                      let toolCalls = loadedMessages[index].toolCalls,
-                      !toolCalls.isEmpty else { continue }
-                loadedMessages[index].toolCallsPlacement = inferToolCallsPlacement(from: loadedMessages[index].content)
-                didMigratePlacement = true
-            }
-            if didMigrateFileSchema || didMigratePlacement {
-                if didMigratePlacement {
-                    logger.info("Migrated toolCallsPlacement for session \(sessionID.uuidString).")
-                }
-                saveMessages(loadedMessages, for: sessionID)
-            }
-            logger.info("Successfully loaded \(loadedMessages.count) messages for session \(sessionID.uuidString).")
-            return loadedMessages
+            let sessions = try JSONDecoder().decode([ChatSession].self, from: data)
+            logger.info("已读取旧版会话索引，共 \(sessions.count) 个会话。")
+            return sessions
         } catch {
-            logger.warning("Failed to load messages for session \(sessionID.uuidString), returning empty list: \(error.localizedDescription)")
+            logger.warning("读取旧版会话索引失败: \(error.localizedDescription)")
             return []
         }
+    }
+
+    private static func migrateLegacyStoreToV3(legacySessions: [ChatSession]) throws {
+        let sessionsToSave = legacySessions.filter { !$0.isTemporary }
+        let now = iso8601Timestamp()
+
+        var recordsByID: [UUID: SessionRecordFileV3] = [:]
+        recordsByID.reserveCapacity(sessionsToSave.count)
+
+        for session in sessionsToSave {
+            let legacyRead = (try? readLegacyMessages(for: session.id))
+            let messages = legacyRead?.messages ?? []
+            let record = makeSessionRecordV3(session: session, messages: messages)
+            recordsByID[session.id] = record
+        }
+
+        for session in sessionsToSave {
+            if let record = recordsByID[session.id] {
+                try writeSessionRecordV3(record, for: session.id)
+                logger.info("\(migrationLogPrefix) 会话 \(session.id.uuidString) 已改写为 V3。")
+            }
+        }
+
+        let index = SessionIndexFileV3(
+            schemaVersion: sessionStoreSchemaVersion,
+            updatedAt: now,
+            sessions: sessionsToSave.map { session in
+                SessionIndexItemV3(
+                    id: session.id,
+                    name: session.name,
+                    updatedAt: now
+                )
+            }
+        )
+        try writeSessionIndexV3(index)
+        try archiveLegacyFiles(sessions: sessionsToSave)
+    }
+
+    private static func ensureSessionRecordMetadataUpToDate(for session: ChatSession) throws {
+        if let summary = try loadSessionSummaryV3(for: session.id),
+           isSamePersistedSession(summary: summary, session: session) {
+            return
+        }
+
+        let messages = try loadMessagesForRecordWrite(sessionID: session.id)
+        let record = makeSessionRecordV3(session: session, messages: messages)
+        try writeSessionRecordV3(record, for: session.id)
+    }
+
+    private static func loadMessagesForRecordWrite(sessionID: UUID) throws -> [ChatMessage] {
+        if let record = try loadSessionRecordV3(for: sessionID) {
+            return record.messages
+        }
+        if let legacy = try? readLegacyMessages(for: sessionID) {
+            return legacy.messages
+        }
+        return []
+    }
+
+    private static func loadMessagesFromV3(for sessionID: UUID) -> [ChatMessage]? {
+        let fileURL = sessionRecordFileURL(for: sessionID)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+
+        do {
+            let record = try loadSessionRecordV3(for: sessionID)
+            guard let record else { return nil }
+
+            let normalized = normalizeToolCallsPlacement(in: record.messages, sessionID: sessionID)
+            let shouldRewrite = normalized.didMigratePlacement || record.schemaVersion != sessionStoreSchemaVersion
+            if shouldRewrite {
+                let rewritten = SessionRecordFileV3(
+                    schemaVersion: sessionStoreSchemaVersion,
+                    session: record.session,
+                    prompts: record.prompts,
+                    messages: normalized.messages
+                )
+                try writeSessionRecordV3(rewritten, for: sessionID)
+                logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 的 V3 消息文件已规范化。")
+            }
+
+            return normalized.messages
+        } catch {
+            logger.warning("读取 V3 会话文件失败 \(sessionID.uuidString): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private static func readLegacyMessages(for sessionID: UUID) throws -> LegacyMessagesReadResult {
+        let fileURL = legacyMessagesFileURL(for: sessionID)
+        let data = try Data(contentsOf: fileURL)
+        let decoder = JSONDecoder()
+
+        if let envelope = try? decoder.decode(ChatMessagesFileEnvelope.self, from: data) {
+            let normalized = normalizeToolCallsPlacement(in: envelope.messages, sessionID: sessionID)
+            let didMigrateSchema = envelope.schemaVersion != messagesFileSchemaVersion
+            if didMigrateSchema {
+                logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 旧 envelope 版本 \(envelope.schemaVersion) 将迁移到 V3。")
+            }
+            return LegacyMessagesReadResult(
+                messages: normalized.messages,
+                didMigrateFileSchema: didMigrateSchema,
+                didMigratePlacement: normalized.didMigratePlacement
+            )
+        }
+
+        let rawMessages = try decoder.decode([ChatMessage].self, from: data)
+        let normalized = normalizeToolCallsPlacement(in: rawMessages, sessionID: sessionID)
+        logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 检测到旧数组消息格式。")
+        return LegacyMessagesReadResult(
+            messages: normalized.messages,
+            didMigrateFileSchema: true,
+            didMigratePlacement: normalized.didMigratePlacement
+        )
+    }
+
+    private static func resolveSessionSnapshot(for sessionID: UUID) -> ChatSession {
+        if let summary = try? loadSessionSummaryV3(for: sessionID),
+           let summary {
+            return makeChatSession(from: summary, fallbackName: summary.session.name)
+        }
+
+        if let index = loadSessionIndexV3(),
+           let item = index.sessions.first(where: { $0.id == sessionID }) {
+            return ChatSession(id: sessionID, name: item.name, isTemporary: false)
+        }
+
+        if let legacy = loadLegacySessions().first(where: { $0.id == sessionID }) {
+            return legacy
+        }
+
+        return ChatSession(id: sessionID, name: "新的对话", isTemporary: true)
+    }
+
+    private static func makeSessionRecordV3(session: ChatSession, messages: [ChatMessage]) -> SessionRecordFileV3 {
+        SessionRecordFileV3(
+            schemaVersion: sessionStoreSchemaVersion,
+            session: SessionMetaV3(
+                id: session.id,
+                name: session.name,
+                lorebookIDs: session.lorebookIDs
+            ),
+            prompts: SessionPromptsV3(
+                topicPrompt: session.topicPrompt,
+                enhancedPrompt: session.enhancedPrompt
+            ),
+            messages: messages
+        )
+    }
+
+    private static func makeChatSession(from summary: SessionRecordSummaryV3, fallbackName: String) -> ChatSession {
+        ChatSession(
+            id: summary.session.id,
+            name: summary.session.name.isEmpty ? fallbackName : summary.session.name,
+            topicPrompt: summary.prompts.topicPrompt,
+            enhancedPrompt: summary.prompts.enhancedPrompt,
+            lorebookIDs: summary.session.lorebookIDs,
+            isTemporary: false
+        )
+    }
+
+    private static func normalizeToolCallsPlacement(in messages: [ChatMessage], sessionID: UUID) -> (messages: [ChatMessage], didMigratePlacement: Bool) {
+        var normalizedMessages = messages
+        var didMigratePlacement = false
+
+        for index in normalizedMessages.indices {
+            guard normalizedMessages[index].toolCallsPlacement == nil,
+                  let toolCalls = normalizedMessages[index].toolCalls,
+                  !toolCalls.isEmpty else { continue }
+            normalizedMessages[index].toolCallsPlacement = inferToolCallsPlacement(from: normalizedMessages[index].content)
+            didMigratePlacement = true
+        }
+
+        if didMigratePlacement {
+            logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 的 toolCallsPlacement 已自动补齐。")
+        }
+        return (normalizedMessages, didMigratePlacement)
+    }
+
+    private static func isSamePersistedSession(summary: SessionRecordSummaryV3, session: ChatSession) -> Bool {
+        summary.session.id == session.id &&
+        summary.session.name == session.name &&
+        summary.session.lorebookIDs == session.lorebookIDs &&
+        summary.prompts.topicPrompt == session.topicPrompt &&
+        summary.prompts.enhancedPrompt == session.enhancedPrompt
+    }
+
+    private static func loadSessionIndexV3() -> SessionIndexFileV3? {
+        let fileURL = sessionIndexFileURLV3()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try JSONDecoder().decode(SessionIndexFileV3.self, from: data)
+        } catch {
+            logger.warning("读取 V3 索引文件失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private static func writeSessionIndexV3(_ index: SessionIndexFileV3) throws {
+        let url = sessionIndexFileURLV3()
+        try ensureDirectoryExists(url.deletingLastPathComponent())
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(index)
+        try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
+    }
+
+    private static func loadSessionSummaryV3(for sessionID: UUID) throws -> SessionRecordSummaryV3? {
+        let url = sessionRecordFileURL(for: sessionID)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(SessionRecordSummaryV3.self, from: data)
+    }
+
+    private static func loadSessionRecordV3(for sessionID: UUID) throws -> SessionRecordFileV3? {
+        let url = sessionRecordFileURL(for: sessionID)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(SessionRecordFileV3.self, from: data)
+    }
+
+    private static func writeSessionRecordV3(_ record: SessionRecordFileV3, for sessionID: UUID) throws {
+        let url = sessionRecordFileURL(for: sessionID)
+        try ensureDirectoryExists(url.deletingLastPathComponent())
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(record)
+        try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
+    }
+
+    private static func archiveLegacyFiles(sessions: [ChatSession]) throws {
+        let legacyIndexURL = legacySessionIndexFileURL()
+        let legacyMessageURLs = sessions.map { legacyMessagesFileURL(for: $0.id) }
+        let hasLegacyIndex = FileManager.default.fileExists(atPath: legacyIndexURL.path)
+        let hasLegacyMessages = legacyMessageURLs.contains(where: { FileManager.default.fileExists(atPath: $0.path) })
+        guard hasLegacyIndex || hasLegacyMessages else {
+            return
+        }
+
+        let archiveRoot = getChatsDirectory()
+            .appendingPathComponent(legacyDirectoryName)
+            .appendingPathComponent("v2_\(compactTimestamp())")
+        let archiveMessagesDirectory = archiveRoot.appendingPathComponent("messages")
+
+        try ensureDirectoryExists(archiveRoot)
+        try ensureDirectoryExists(archiveMessagesDirectory)
+
+        if hasLegacyIndex {
+            let archivedIndexURL = archiveRoot.appendingPathComponent("sessions.json")
+            try moveItemIfExists(from: legacyIndexURL, to: archivedIndexURL)
+        }
+
+        for sourceURL in legacyMessageURLs {
+            guard FileManager.default.fileExists(atPath: sourceURL.path) else { continue }
+            let targetURL = archiveMessagesDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+            try moveItemIfExists(from: sourceURL, to: targetURL)
+        }
+
+        logger.info("\(migrationLogPrefix) 旧版文件已归档到 \(archiveRoot.path)")
+    }
+
+    private static func moveItemIfExists(from source: URL, to destination: URL) throws {
+        guard FileManager.default.fileExists(atPath: source.path) else { return }
+        try ensureDirectoryExists(destination.deletingLastPathComponent())
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: source, to: destination)
+    }
+
+    private static func ensureDirectoryExists(_ directoryURL: URL) throws {
+        if !FileManager.default.fileExists(atPath: directoryURL.path) {
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
+    }
+
+    private static func getChatV3Directory() -> URL {
+        let directory = getChatsDirectory().appendingPathComponent(sessionStoreDirectoryNameV3)
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        return directory
+    }
+
+    private static func getChatV3SessionsDirectory() -> URL {
+        let directory = getChatV3Directory().appendingPathComponent(sessionRecordsDirectoryNameV3)
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        return directory
+    }
+
+    private static func sessionIndexFileURLV3() -> URL {
+        getChatV3Directory().appendingPathComponent(sessionIndexFileNameV3)
+    }
+
+    private static func sessionRecordFileURL(for sessionID: UUID) -> URL {
+        getChatV3SessionsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
+    private static func legacySessionIndexFileURL() -> URL {
+        getChatsDirectory().appendingPathComponent("sessions.json")
+    }
+
+    private static func legacyMessagesFileURL(for sessionID: UUID) -> URL {
+        getChatsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
+    private static func iso8601Timestamp() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date())
+    }
+
+    private static func compactTimestamp() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return formatter.string(from: Date())
     }
 
     private static func inferToolCallsPlacement(from content: String) -> ToolCallsPlacement {

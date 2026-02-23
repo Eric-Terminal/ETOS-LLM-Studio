@@ -1055,9 +1055,7 @@ struct ChatView: View {
             return
         }
 
-        let messageFile = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
-
-        if !FileManager.default.fileExists(atPath: messageFile.path) {
+        if !Persistence.sessionDataExists(sessionID: session.id) {
             ghostSession = session
             showGhostSessionAlert = true
         } else {

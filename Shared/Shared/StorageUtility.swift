@@ -392,7 +392,7 @@ public enum StorageUtility {
     
     // MARK: - 幽灵会话检测（彩蛋功能）
     
-    /// 幽灵会话 - sessions.json 中有记录但对应的消息文件不存在
+    /// 幽灵会话 - 会话索引存在但对应会话数据文件不存在
     public struct GhostSession: Identifiable {
         public let id: UUID
         public let name: String
@@ -407,15 +407,11 @@ public enum StorageUtility {
     /// 这是一个"彩蛋"功能 - 检测数据不一致的情况
     public static func findGhostSessions() -> [GhostSession] {
         let sessions = Persistence.loadChatSessions()
-        let chatsDirectory = Persistence.getChatsDirectory()
-        let fileManager = FileManager.default
         var ghosts: [GhostSession] = []
         
         for session in sessions {
-            let messageFile = chatsDirectory.appendingPathComponent("\(session.id.uuidString).json")
-            
-            // 如果 sessions.json 中有记录，但对应的消息文件不存在
-            if !fileManager.fileExists(atPath: messageFile.path) {
+            // 如果会话索引中有记录，但对应的会话数据文件不存在
+            if !Persistence.sessionDataExists(sessionID: session.id) {
                 ghosts.append(GhostSession(
                     id: session.id,
                     name: session.name
@@ -426,7 +422,7 @@ public enum StorageUtility {
         return ghosts
     }
     
-    /// 清理幽灵会话（从 sessions.json 中移除但消息文件不存在的会话）
+    /// 清理幽灵会话（从会话索引中移除但会话数据文件不存在的会话）
     /// 返回被清理的会话数量
     public static func cleanupGhostSessions() -> Int {
         let ghostSessions = findGhostSessions()

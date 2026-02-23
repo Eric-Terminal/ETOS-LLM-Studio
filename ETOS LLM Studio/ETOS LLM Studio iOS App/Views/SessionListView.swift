@@ -128,10 +128,8 @@ struct SessionListView: View {
             return
         }
 
-        let messageFile = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
-        
-        // 检查消息文件是否存在
-        if !FileManager.default.fileExists(atPath: messageFile.path) {
+        // 检查会话数据文件是否存在（兼容 V3 与 legacy）
+        if !Persistence.sessionDataExists(sessionID: session.id) {
             // 发现幽灵会话！
             ghostSession = session
             showGhostSessionAlert = true
