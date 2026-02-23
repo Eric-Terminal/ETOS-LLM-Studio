@@ -98,7 +98,9 @@ public final class FeedbackService: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.tickets = FeedbackStore.loadTickets()
+            Task { @MainActor [weak self] in
+                self?.tickets = FeedbackStore.loadTickets()
+            }
         }
     }
 

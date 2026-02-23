@@ -81,6 +81,8 @@ private struct FeedbackTicketRow: View {
             return .gray
         case .unknown:
             return .secondary
+        @unknown default:
+            return .secondary
         }
     }
 }
