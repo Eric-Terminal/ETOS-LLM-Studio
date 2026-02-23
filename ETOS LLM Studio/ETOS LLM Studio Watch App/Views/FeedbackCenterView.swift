@@ -1,0 +1,210 @@
+import SwiftUI
+import Shared
+
+struct FeedbackCenterView: View {
+    @ObservedObject private var service = FeedbackService.shared
+
+    var body: some View {
+        List {
+            NavigationLink {
+                WatchFeedbackComposeView()
+            } label: {
+                Label(NSLocalizedString("新建反馈", comment: "Create feedback"), systemImage: "square.and.pencil")
+            }
+
+            if service.tickets.isEmpty {
+                Text(NSLocalizedString("暂无反馈记录", comment: "No feedback records"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(service.tickets) { ticket in
+                    NavigationLink {
+                        WatchFeedbackDetailView(issueNumber: ticket.issueNumber)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(String(format: NSLocalizedString("工单 #%d", comment: "Issue number title"), ticket.issueNumber))
+                                .font(.caption.weight(.semibold))
+                            Text(ticket.title)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                            Text(ticket.lastKnownStatus.localizedTitle)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("反馈助手", comment: "Feedback center title"))
+        .task {
+            service.reloadTickets()
+        }
+        .refreshable {
+            await service.refreshAllTickets()
+        }
+    }
+}
+
+private struct WatchFeedbackComposeView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var service = FeedbackService.shared
+
+    @State private var category: FeedbackCategory = .bug
+    @State private var title: String = ""
+    @State private var detail: String = ""
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        List {
+            Section {
+                Picker(NSLocalizedString("反馈类型", comment: "Feedback category picker"), selection: $category) {
+                    ForEach(FeedbackCategory.allCases) { category in
+                        Text(category.localizedTitle).tag(category)
+                    }
+                }
+
+                TextField(NSLocalizedString("标题", comment: "Feedback title field"), text: $title.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("详细描述", comment: "Feedback detail field"), text: $detail.watchKeyboardNewlineBinding())
+            }
+
+            Section {
+                Button {
+                    Task {
+                        await submit()
+                    }
+                } label: {
+                    if isSubmitting {
+                        Label(NSLocalizedString("提交中...", comment: "Submitting state"), systemImage: "hourglass")
+                    } else {
+                        Label(NSLocalizedString("提交", comment: "Submit button"), systemImage: "paperplane")
+                    }
+                }
+                .disabled(isSubmitting)
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("新建反馈", comment: "Create feedback title"))
+    }
+
+    private func submit() async {
+        let draft = FeedbackDraft(category: category, title: title, detail: detail)
+        guard draft.isValid else {
+            errorMessage = NSLocalizedString("请至少填写标题和详细描述。", comment: "Feedback invalid input")
+            return
+        }
+
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        do {
+            _ = try await service.submit(draft: draft)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct WatchFeedbackDetailView: View {
+    @Environment(\.openURL) private var openURL
+    @ObservedObject private var service = FeedbackService.shared
+
+    let issueNumber: Int
+
+    @State private var snapshot: FeedbackStatusSnapshot?
+    @State private var isRefreshing = false
+    @State private var errorMessage: String?
+
+    private var ticket: FeedbackTicket? {
+        service.tickets.first { $0.issueNumber == issueNumber }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text(NSLocalizedString("状态", comment: "Status label"))
+                        .font(.caption2)
+                    Spacer()
+                    Text((snapshot?.status ?? ticket?.lastKnownStatus ?? .unknown).localizedTitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    Task {
+                        await refreshStatus()
+                    }
+                } label: {
+                    Label(NSLocalizedString("刷新状态", comment: "Refresh status button"), systemImage: "arrow.clockwise")
+                }
+                .disabled(isRefreshing || ticket == nil)
+
+                if let url = snapshot?.publicURL ?? ticket?.publicURL {
+                    Button {
+                        openURL(url)
+                    } label: {
+                        Label(NSLocalizedString("打开 GitHub 页面", comment: "Open GitHub page"), systemImage: "safari")
+                    }
+                }
+            }
+
+            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
+                if (snapshot?.comments ?? []).isEmpty {
+                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(snapshot?.comments ?? []) { comment in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(comment.author)
+                                .font(.caption2.weight(.semibold))
+                            Text(comment.body)
+                                .font(.caption2)
+                                .lineLimit(6)
+                            Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .navigationTitle(String(format: NSLocalizedString("工单 #%d", comment: "Issue number title"), issueNumber))
+        .task {
+            await refreshStatus()
+        }
+    }
+
+    private func refreshStatus() async {
+        guard let ticket else { return }
+
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        do {
+            snapshot = try await service.fetchStatus(ticket: ticket)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}

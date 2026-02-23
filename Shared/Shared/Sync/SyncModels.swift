@@ -30,6 +30,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let imageFiles = SyncOptions(rawValue: 1 << 6)  // 图片文件同步选项
     public static let shortcutTools = SyncOptions(rawValue: 1 << 7) // 快捷指令工具同步选项
     public static let worldbooks = SyncOptions(rawValue: 1 << 8) // 世界书同步选项
+    public static let feedbackTickets = SyncOptions(rawValue: 1 << 9) // 反馈工单同步选项
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -106,9 +107,10 @@ public struct SyncPackage: Codable {
     public var imageFiles: [SyncedImage]
     public var shortcutTools: [ShortcutToolDefinition]
     public var worldbooks: [Worldbook]
+    public var feedbackTickets: [FeedbackTicket]
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets
     }
     
     public init(
@@ -121,7 +123,8 @@ public struct SyncPackage: Codable {
         audioFiles: [SyncedAudio] = [],
         imageFiles: [SyncedImage] = [],
         shortcutTools: [ShortcutToolDefinition] = [],
-        worldbooks: [Worldbook] = []
+        worldbooks: [Worldbook] = [],
+        feedbackTickets: [FeedbackTicket] = []
     ) {
         self.options = options
         self.providers = providers
@@ -133,6 +136,7 @@ public struct SyncPackage: Codable {
         self.imageFiles = imageFiles
         self.shortcutTools = shortcutTools
         self.worldbooks = worldbooks
+        self.feedbackTickets = feedbackTickets
     }
     
     public init(from decoder: Decoder) throws {
@@ -147,6 +151,7 @@ public struct SyncPackage: Codable {
         imageFiles = try container.decodeIfPresent([SyncedImage].self, forKey: .imageFiles) ?? []
         shortcutTools = try container.decodeIfPresent([ShortcutToolDefinition].self, forKey: .shortcutTools) ?? []
         worldbooks = try container.decodeIfPresent([Worldbook].self, forKey: .worldbooks) ?? []
+        feedbackTickets = try container.decodeIfPresent([FeedbackTicket].self, forKey: .feedbackTickets) ?? []
     }
 }
 
@@ -170,6 +175,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedShortcutTools: Int
     public var importedWorldbooks: Int
     public var skippedWorldbooks: Int
+    public var importedFeedbackTickets: Int
+    public var skippedFeedbackTickets: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -189,7 +196,9 @@ public struct SyncMergeSummary: Equatable {
         importedShortcutTools: 0,
         skippedShortcutTools: 0,
         importedWorldbooks: 0,
-        skippedWorldbooks: 0
+        skippedWorldbooks: 0,
+        importedFeedbackTickets: 0,
+        skippedFeedbackTickets: 0
     )
 }
 

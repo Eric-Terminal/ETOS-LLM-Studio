@@ -12,6 +12,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.imageFiles") private var syncImageFiles = true
     @AppStorage("sync.options.shortcutTools") private var syncShortcutTools = true
     @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
+    @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     
     var body: some View {
@@ -31,6 +32,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("图片文件", isOn: $syncImageFiles)
                 Toggle("快捷指令工具", isOn: $syncShortcutTools)
                 Toggle("世界书", isOn: $syncWorldbooks)
+                Toggle("反馈工单", isOn: $syncFeedbackTickets)
             }
             
             Section {
@@ -70,6 +72,7 @@ struct DeviceSyncSettingsView: View {
         if syncImageFiles { option.insert(.imageFiles) }
         if syncShortcutTools { option.insert(.shortcutTools) }
         if syncWorldbooks { option.insert(.worldbooks) }
+        if syncFeedbackTickets { option.insert(.feedbackTickets) }
         return option
     }
     
@@ -143,6 +146,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedWorldbooks > 0 {
             parts.append(String(format: NSLocalizedString("世界书 +%d", comment: ""), summary.importedWorldbooks))
+        }
+        if summary.importedFeedbackTickets > 0 {
+            parts.append(String(format: NSLocalizedString("工单 +%d", comment: ""), summary.importedFeedbackTickets))
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
