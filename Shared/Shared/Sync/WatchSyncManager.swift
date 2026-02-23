@@ -128,6 +128,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if UserDefaults.standard.bool(forKey: "sync.options.imageFiles") { options.insert(.imageFiles) }
         if UserDefaults.standard.bool(forKey: "sync.options.shortcutTools") { options.insert(.shortcutTools) }
         if UserDefaults.standard.bool(forKey: "sync.options.worldbooks") { options.insert(.worldbooks) }
+        if UserDefaults.standard.bool(forKey: "sync.options.feedbackTickets") { options.insert(.feedbackTickets) }
         return options
     }
     
@@ -165,6 +166,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedImageFiles > 0 { parts.append("图片 +\(summary.importedImageFiles)") }
         if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }
         if summary.importedWorldbooks > 0 { parts.append("世界书 +\(summary.importedWorldbooks)") }
+        if summary.importedFeedbackTickets > 0 { parts.append("工单 +\(summary.importedFeedbackTickets)") }
         return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
     }
     

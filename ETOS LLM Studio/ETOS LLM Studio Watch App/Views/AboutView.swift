@@ -198,7 +198,7 @@ private struct ProjectLinksView: View {
             Link(destination: issuesURL) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Label("问题反馈", systemImage: "exclamationmark.bubble")
+                        Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")
                         Spacer()
                         Image(systemName: "safari")
                             .font(.caption)

@@ -20,7 +20,7 @@ public enum MCPToolApprovalPolicy: String, Codable, Hashable, CaseIterable, Send
 }
 
 public extension MCPToolApprovalPolicy {
-    public var displayName: String {
+    var displayName: String {
         switch self {
         case .askEveryTime:
             return "每次询问"
@@ -221,11 +221,11 @@ public extension MCPServerConfiguration {
         }
     }
 
-    public func approvalPolicy(for toolId: String) -> MCPToolApprovalPolicy {
+    func approvalPolicy(for toolId: String) -> MCPToolApprovalPolicy {
         toolApprovalPolicies[toolId] ?? .askEveryTime
     }
 
-    public mutating func setApprovalPolicy(_ policy: MCPToolApprovalPolicy, for toolId: String) {
+    mutating func setApprovalPolicy(_ policy: MCPToolApprovalPolicy, for toolId: String) {
         if policy == .askEveryTime {
             toolApprovalPolicies.removeValue(forKey: toolId)
         } else {

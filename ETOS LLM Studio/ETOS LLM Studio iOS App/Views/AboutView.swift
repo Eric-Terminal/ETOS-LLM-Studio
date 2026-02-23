@@ -67,12 +67,12 @@ struct AboutView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 Button {
                     openURL(URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues")!)
                 } label: {
                     HStack {
-                        Label("报告问题 / 功能建议", systemImage: "exclamationmark.bubble")
+                        Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
                             .font(.footnote)

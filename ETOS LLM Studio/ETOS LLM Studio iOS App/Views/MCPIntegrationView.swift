@@ -528,6 +528,8 @@ struct MCPIntegrationView: View {
                 return "doc.text"
             case .progress:
                 return "gauge.with.dots.needle.67percent"
+            @unknown default:
+                return "questionmark.circle"
             }
         }()
         return Image(systemName: icon)
@@ -606,6 +608,8 @@ struct MCPIntegrationView: View {
                 return "已取消：\(reason)"
             }
             return "已取消"
+        @unknown default:
+            return "未知状态"
         }
     }
 

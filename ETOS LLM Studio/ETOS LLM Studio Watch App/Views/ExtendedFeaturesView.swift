@@ -19,6 +19,20 @@ public struct ExtendedFeaturesView: View {
         List {
             Section {
                 NavigationLink {
+                    FeedbackCenterView()
+                } label: {
+                    Label(NSLocalizedString("反馈助手", comment: "反馈入口"), systemImage: "text.bubble")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {

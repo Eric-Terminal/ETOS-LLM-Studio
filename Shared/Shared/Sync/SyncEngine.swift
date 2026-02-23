@@ -27,6 +27,7 @@ public enum SyncEngine {
         var imageFiles: [SyncedImage] = []
         var shortcutTools: [ShortcutToolDefinition] = []
         var worldbooks: [Worldbook] = []
+        var feedbackTickets: [FeedbackTicket] = []
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
         
@@ -78,6 +79,10 @@ public enum SyncEngine {
         if options.contains(.worldbooks) {
             worldbooks = WorldbookStore.shared.loadWorldbooks()
         }
+
+        if options.contains(.feedbackTickets) {
+            feedbackTickets = FeedbackStore.loadTickets()
+        }
         
         // 音频文件同步：会话引用的音频 + 可选全量音频文件
         var audioFileNamesToInclude = referencedAudioFileNames
@@ -125,7 +130,8 @@ public enum SyncEngine {
             audioFiles: audioFiles,
             imageFiles: imageFiles,
             shortcutTools: shortcutTools,
-            worldbooks: worldbooks
+            worldbooks: worldbooks,
+            feedbackTickets: feedbackTickets
         )
     }
     
@@ -187,6 +193,12 @@ public enum SyncEngine {
             if !result.idMapping.isEmpty {
                 remapWorldbookIDsInSessions(result.idMapping, chatService: chatService)
             }
+        }
+
+        if package.options.contains(.feedbackTickets) {
+            let result = mergeFeedbackTickets(package.feedbackTickets)
+            summary.importedFeedbackTickets = result.imported
+            summary.skippedFeedbackTickets = result.skipped
         }
         
         // 音频文件同步
@@ -358,6 +370,12 @@ public enum SyncEngine {
         }
         
         return (imported, skipped)
+    }
+
+    // MARK: - Feedback Tickets
+
+    private static func mergeFeedbackTickets(_ incoming: [FeedbackTicket]) -> (imported: Int, skipped: Int) {
+        FeedbackStore.mergeTickets(incoming)
     }
     
     // MARK: - Memories

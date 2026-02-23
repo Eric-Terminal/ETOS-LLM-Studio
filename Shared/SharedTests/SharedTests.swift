@@ -1504,14 +1504,68 @@ fileprivate struct ChatSessionTests {
 
 @Suite("Persistence Tests")
 fileprivate struct PersistenceTests {
+
+    private struct SessionRecordV3: Decodable {
+        struct SessionMeta: Decodable {
+            let id: UUID
+            let name: String
+            let lorebookIDs: [UUID]
+        }
+
+        struct SessionPrompts: Decodable {
+            let topicPrompt: String?
+            let enhancedPrompt: String?
+        }
+
+        let schemaVersion: Int
+        let session: SessionMeta
+        let prompts: SessionPrompts
+        let messages: [ChatMessage]
+    }
+
+    private var chatsDirectory: URL {
+        Persistence.getChatsDirectory()
+    }
+
+    private var v3Directory: URL {
+        chatsDirectory.appendingPathComponent("v3")
+    }
+
+    private var v3IndexFileURL: URL {
+        v3Directory.appendingPathComponent("index.json")
+    }
+
+    private var legacyRootDirectory: URL {
+        chatsDirectory.appendingPathComponent("legacy")
+    }
+
+    private var legacySessionsIndexURL: URL {
+        chatsDirectory.appendingPathComponent("sessions.json")
+    }
+
+    private func v3SessionFileURL(_ sessionID: UUID) -> URL {
+        v3Directory
+            .appendingPathComponent("sessions")
+            .appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
+    private func legacyMessageFileURL(_ sessionID: UUID) -> URL {
+        chatsDirectory.appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
+    private func removeIfExists(_ url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
     
     // Clean up files created during tests
     private func cleanup(sessions: [ChatSession]) {
-        Persistence.saveChatSessions([]) // Clear session list
+        Persistence.saveChatSessions([])
         for session in sessions {
-            let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(session.id.uuidString).json")
-            try? FileManager.default.removeItem(at: fileURL)
+            Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
+        removeIfExists(legacySessionsIndexURL)
+        removeIfExists(legacyRootDirectory)
     }
 
     @Test("Save and Load Chat Sessions")
@@ -1530,6 +1584,9 @@ fileprivate struct PersistenceTests {
         #expect(loadedSessions.first?.id == session1.id)
         #expect(loadedSessions.last?.name == session2.name)
         #expect(loadedSessions.last?.topicPrompt == "Test Topic")
+        #expect(FileManager.default.fileExists(atPath: v3IndexFileURL.path))
+        #expect(FileManager.default.fileExists(atPath: v3SessionFileURL(session1.id).path))
+        #expect(FileManager.default.fileExists(atPath: v3SessionFileURL(session2.id).path))
         
         // Teardown
         cleanup(sessions: sessionsToSave)
@@ -1552,40 +1609,86 @@ fileprivate struct PersistenceTests {
         #expect(loadedMessages.count == messagesToSave.count)
         #expect(loadedMessages.first?.content == "Hello")
         #expect(loadedMessages.last?.role == .assistant)
-        
-        // Teardown
-        let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(sessionId.uuidString).json")
-        try? FileManager.default.removeItem(at: fileURL)
-    }
 
-    @Test("Migrate Legacy Message Array To Envelope")
-    func testMigrateLegacyMessageArrayToEnvelope() throws {
-        struct Envelope: Decodable {
-            let schemaVersion: Int
-            let messages: [ChatMessage]
+        let v3FileURL = v3SessionFileURL(sessionId)
+        #expect(FileManager.default.fileExists(atPath: v3FileURL.path))
+        if let migratedData = try? Data(contentsOf: v3FileURL),
+           let record = try? JSONDecoder().decode(SessionRecordV3.self, from: migratedData) {
+            #expect(record.schemaVersion == 3)
+            #expect(record.messages.count == 2)
+            #expect(record.messages.first?.content == "Hello")
+        } else {
+            Issue.record("V3 会话文件不存在或格式不正确。")
         }
 
+        // Teardown
+        cleanup(sessions: [ChatSession(id: sessionId, name: "cleanup", isTemporary: false)])
+    }
+
+    @Test("Migrate Legacy Session Store To V3 And Archive Legacy Files")
+    func testMigrateLegacySessionStoreToV3AndArchiveLegacyFiles() throws {
         let sessionId = UUID()
+        let legacySession = ChatSession(
+            id: sessionId,
+            name: "Legacy Session",
+            topicPrompt: "legacy-topic",
+            enhancedPrompt: "legacy-enhanced",
+            isTemporary: false
+        )
         let legacyMessages = [
             ChatMessage(role: .user, content: "legacy-user"),
             ChatMessage(role: .assistant, content: "legacy-assistant")
         ]
-        let fileURL = Persistence.getChatsDirectory().appendingPathComponent("\(sessionId.uuidString).json")
 
-        let legacyData = try JSONEncoder().encode(legacyMessages)
-        try legacyData.write(to: fileURL, options: .atomic)
+        removeIfExists(v3Directory)
+        removeIfExists(legacyRootDirectory)
+        removeIfExists(legacySessionsIndexURL)
+        removeIfExists(legacyMessageFileURL(sessionId))
+
+        let legacySessionsData = try JSONEncoder().encode([legacySession])
+        try legacySessionsData.write(to: legacySessionsIndexURL, options: .atomic)
+        let legacyMessagesData = try JSONEncoder().encode(legacyMessages)
+        try legacyMessagesData.write(to: legacyMessageFileURL(sessionId), options: .atomic)
+
+        let loadedSessions = Persistence.loadChatSessions()
+        #expect(loadedSessions.count == 1)
+        #expect(loadedSessions.first?.id == sessionId)
+        #expect(loadedSessions.first?.topicPrompt == "legacy-topic")
+        #expect(loadedSessions.first?.enhancedPrompt == "legacy-enhanced")
 
         let loadedMessages = Persistence.loadMessages(for: sessionId)
-        #expect(loadedMessages.count == 2)
-        #expect(loadedMessages.first?.content == "legacy-user")
+        #expect(loadedMessages.map(\.content) == ["legacy-user", "legacy-assistant"])
 
-        let migratedData = try Data(contentsOf: fileURL)
-        let envelope = try JSONDecoder().decode(Envelope.self, from: migratedData)
-        #expect(envelope.schemaVersion == 2)
-        #expect(envelope.messages.count == 2)
-        #expect(envelope.messages.last?.content == "legacy-assistant")
+        let migratedFileURL = v3SessionFileURL(sessionId)
+        #expect(FileManager.default.fileExists(atPath: migratedFileURL.path))
+        let migratedData = try Data(contentsOf: migratedFileURL)
+        let record = try JSONDecoder().decode(SessionRecordV3.self, from: migratedData)
+        #expect(record.schemaVersion == 3)
+        #expect(record.session.id == sessionId)
+        #expect(record.session.name == "Legacy Session")
+        #expect(record.prompts.topicPrompt == "legacy-topic")
+        #expect(record.prompts.enhancedPrompt == "legacy-enhanced")
+        #expect(record.messages.last?.content == "legacy-assistant")
 
-        try? FileManager.default.removeItem(at: fileURL)
+        #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
+        #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionId).path))
+
+        let archivedDirectories = (try? FileManager.default.contentsOfDirectory(
+            at: legacyRootDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        let archiveContainsLegacyPayload = archivedDirectories.contains { directory in
+            let archivedIndex = directory.appendingPathComponent("sessions.json")
+            let archivedMessage = directory
+                .appendingPathComponent("messages")
+                .appendingPathComponent("\(sessionId.uuidString).json")
+            return FileManager.default.fileExists(atPath: archivedIndex.path)
+                && FileManager.default.fileExists(atPath: archivedMessage.path)
+        }
+        #expect(archiveContainsLegacyPayload)
+
+        cleanup(sessions: [legacySession])
     }
 }
 
