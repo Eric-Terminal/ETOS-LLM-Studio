@@ -501,7 +501,7 @@ struct ChatBubble: View {
 
     private func bubbleDecoratedBackground(standalone: Bool) -> some View {
         let shape = standalone ? standaloneBubbleShape : bubbleShape
-        ZStack(alignment: .top) {
+        return ZStack(alignment: .top) {
             bubbleBackground(for: shape)
             if !standalone && shouldShowMergedSeparator {
                 Rectangle()
