@@ -7,6 +7,9 @@
 import Foundation
 import Combine
 import os.log
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 private let mcpManagerLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPManager")
 
@@ -292,9 +295,12 @@ public final class MCPManager: ObservableObject {
     private var configSnapshotSignature: String = MCPServerStore.configurationSnapshotSignature()
     private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     private var autoConnectRetryAttempts: [UUID: Int] = [:]
+    private var autoConnectFailureNotifiedAt: [UUID: Date] = [:]
     private let autoConnectMaxRetries = 5
     private let autoConnectBaseDelay: TimeInterval = 1.0
     private let autoConnectMaxDelay: TimeInterval = 30.0
+    private let autoConnectHandshakeTimeout: TimeInterval = 12.0
+    private let autoConnectFailureNotificationCooldown: TimeInterval = 120.0
     private let configWatcherInterval: TimeInterval = 2.0
     private let defaultToolCallTimeout: TimeInterval = 60
     private let defaultChatToolCallTimeout: TimeInterval = 120
@@ -578,7 +584,14 @@ public final class MCPManager: ObservableObject {
         }
 
         do {
-            let info = try await client.initialize(capabilities: clientCapabilitiesForCurrentHandlers())
+            let handshakeTimeout = (retryOnFailure || keepReadyStateDuringHandshake)
+                ? autoConnectHandshakeTimeout
+                : nil
+            let info = try await initializeClient(
+                client,
+                timeout: handshakeTimeout,
+                capabilities: clientCapabilitiesForCurrentHandlers()
+            )
             mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
 
             let shouldSelectForChat = !preserveSelection && !status(for: server).isSelectedForChat
@@ -624,6 +637,9 @@ public final class MCPManager: ObservableObject {
                 $0.connectionState = .failed(reason: error.localizedDescription)
                 $0.isBusy = false
             }
+            if retryOnFailure || keepReadyStateDuringHandshake {
+                notifyAutoConnectFailureIfNeeded(for: server, error: error)
+            }
             lastOperationError = error.localizedDescription
             lastOperationOutput = nil
             clients[server.id] = nil
@@ -635,6 +651,36 @@ public final class MCPManager: ObservableObject {
             }
             appendGovernanceLog(level: .error, category: .lifecycle, serverID: server.id, message: "服务器连接失败：\(error.localizedDescription)")
             throw error
+        }
+    }
+
+    private func initializeClient(
+        _ client: MCPClient,
+        timeout: TimeInterval?,
+        capabilities: MCPClientCapabilities
+    ) async throws -> MCPServerInfo {
+        guard let timeout, timeout > 0 else {
+            return try await client.initialize(capabilities: capabilities)
+        }
+        let timeoutNanoseconds = UInt64(timeout * 1_000_000_000)
+        return try await withThrowingTaskGroup(of: MCPServerInfo.self) { group in
+            group.addTask {
+                try await client.initialize(capabilities: capabilities)
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw MCPClientError.requestTimedOut(method: "initialize", timeout: timeout)
+            }
+            do {
+                guard let first = try await group.next() else {
+                    throw MCPClientError.invalidResponse
+                }
+                group.cancelAll()
+                return first
+            } catch {
+                group.cancelAll()
+                throw error
+            }
         }
     }
 
@@ -701,6 +747,32 @@ public final class MCPManager: ObservableObject {
         let exponent = max(0, attempt - 1)
         let delay = autoConnectBaseDelay * pow(2.0, Double(exponent))
         return min(delay, autoConnectMaxDelay)
+    }
+
+    private func notifyAutoConnectFailureIfNeeded(for server: MCPServerConfiguration, error: Error) {
+        let now = Date()
+        if let lastNotifiedAt = autoConnectFailureNotifiedAt[server.id],
+           now.timeIntervalSince(lastNotifiedAt) < autoConnectFailureNotificationCooldown {
+            return
+        }
+        autoConnectFailureNotifiedAt[server.id] = now
+
+        let isHandshakeTimeout = isInitializeTimeoutError(error)
+        let reason = isHandshakeTimeout ? "握手超时" : error.localizedDescription
+        Task {
+            await MCPFailureNotificationCenter.shared.notifyMCPConnectionFailure(
+                serverDisplayName: server.displayName,
+                reason: reason,
+                isTimeout: isHandshakeTimeout
+            )
+        }
+    }
+
+    private func isInitializeTimeoutError(_ error: Error) -> Bool {
+        guard case let MCPClientError.requestTimedOut(method, _) = error else {
+            return false
+        }
+        return method == "initialize"
     }
 
     public func toggleSelection(for server: MCPServerConfiguration) {
@@ -1821,3 +1893,73 @@ private extension JSONValue {
         return "\(self)"
     }
 }
+
+#if canImport(UserNotifications)
+@MainActor
+private final class MCPFailureNotificationCenter: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = MCPFailureNotificationCenter()
+
+    private var didConfigure = false
+
+    private override init() {
+        super.init()
+    }
+
+    func notifyMCPConnectionFailure(serverDisplayName: String, reason: String, isTimeout: Bool) {
+        configureIfNeeded()
+
+        let content = UNMutableNotificationContent()
+        content.title = NSLocalizedString("MCP 连接异常", comment: "MCP connection failure notification title")
+        if isTimeout {
+            content.body = String(
+                format: NSLocalizedString("服务器“%@”握手超时，请检查网络或服务器状态。", comment: "MCP handshake timeout notification body"),
+                serverDisplayName
+            )
+        } else {
+            let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedReason.isEmpty {
+                content.body = String(
+                    format: NSLocalizedString("服务器“%@”握手失败，请稍后重试。", comment: "MCP handshake failure notification body"),
+                    serverDisplayName
+                )
+            } else {
+                content.body = String(
+                    format: NSLocalizedString("服务器“%@”握手失败：%@", comment: "MCP handshake failure notification body with reason"),
+                    serverDisplayName,
+                    trimmedReason
+                )
+            }
+        }
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "mcp.connection.failed.\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private func configureIfNeeded() {
+        guard !didConfigure else { return }
+        didConfigure = true
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+#if os(iOS)
+        completionHandler([.banner, .list, .sound])
+#elseif os(watchOS)
+        completionHandler([.sound])
+#else
+        completionHandler([.sound])
+#endif
+    }
+}
+#endif
