@@ -1334,9 +1334,6 @@ private struct SafeAreaBottomKey: PreferenceKey {
 private extension ChatView {
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
-        if isToolRelatedMessage(message) || isToolRelatedMessage(nextMessage) {
-            return false
-        }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
     }
 
@@ -1349,13 +1346,6 @@ private extension ChatView {
         @unknown default:
             return false
         }
-    }
-
-    func isToolRelatedMessage(_ message: ChatMessage) -> Bool {
-        if message.role == .tool {
-            return true
-        }
-        return !(message.toolCalls?.isEmpty ?? true)
     }
 
     func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {

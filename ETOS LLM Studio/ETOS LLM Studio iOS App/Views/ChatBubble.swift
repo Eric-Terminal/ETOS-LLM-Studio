@@ -314,26 +314,7 @@ struct ChatBubble: View {
                 // 气泡内容（仅当有非图片内容时显示）
                 if shouldShowTextBubble {
                     if shouldRenderToolCallsAsSeparateBubbles {
-                        if shouldShowToolCallsBeforeContent {
-                            toolCallsSection
-                        }
-
-                        if hasMainContentWhenToolCallsSeparated {
-                            bubbleContainer(standalone: true) {
-                                textContentStack(includeToolCalls: false)
-
-                                if message.hasMultipleVersions {
-                                    HStack(spacing: 6) {
-                                        compactVersionIndicator
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .trailing)
-                                }
-                            }
-                        }
-
-                        if shouldShowToolCallsAfterContent {
-                            toolCallsSection
-                        }
+                        separatedToolCallBubbleStack
                     } else {
                         bubbleContainer {
                             textContentStack(includeToolCalls: true)
@@ -481,6 +462,19 @@ struct ChatBubble: View {
         )
     }
 
+    private func connectedAssistantBubbleShape(isFirst: Bool, isLast: Bool) -> BubbleCornerShape {
+        let baseRadius: CGFloat = 18
+        let mergedRadius: CGFloat = 0
+        let topRadius = isFirst ? (mergeWithPrevious ? mergedRadius : baseRadius) : mergedRadius
+        let bottomRadius = isLast ? (mergeWithNext ? mergedRadius : baseRadius) : mergedRadius
+        return BubbleCornerShape(
+            topLeft: topRadius,
+            topRight: topRadius,
+            bottomLeft: bottomRadius,
+            bottomRight: bottomRadius
+        )
+    }
+
     @ViewBuilder
     private func bubbleBackground(for shape: BubbleCornerShape) -> some View {
         if enableLiquidGlass {
@@ -499,11 +493,10 @@ struct ChatBubble: View {
         }
     }
 
-    private func bubbleDecoratedBackground(standalone: Bool) -> some View {
-        let shape = standalone ? standaloneBubbleShape : bubbleShape
+    private func bubbleDecoratedBackground(shape: BubbleCornerShape, showMergedSeparator: Bool) -> some View {
         return ZStack(alignment: .top) {
             bubbleBackground(for: shape)
-            if !standalone && shouldShowMergedSeparator {
+            if showMergedSeparator {
                 Rectangle()
                     .fill(separatorColor)
                     .frame(height: separatorThickness)
@@ -513,8 +506,9 @@ struct ChatBubble: View {
     }
 
     @ViewBuilder
-    private func bubbleContainer<Content: View>(
-        standalone: Bool = false,
+    private func bubbleContainerCore<Content: View>(
+        shape: BubbleCornerShape,
+        showMergedSeparator: Bool,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -523,12 +517,97 @@ struct ChatBubble: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
-        .background(bubbleDecoratedBackground(standalone: standalone))
+        .background(
+            bubbleDecoratedBackground(
+                shape: shape,
+                showMergedSeparator: showMergedSeparator
+            )
+        )
         .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
+    }
+
+    @ViewBuilder
+    private func bubbleContainer<Content: View>(
+        standalone: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let shape = standalone ? standaloneBubbleShape : bubbleShape
+        bubbleContainerCore(
+            shape: shape,
+            showMergedSeparator: !standalone && shouldShowMergedSeparator,
+            content: content
+        )
+    }
+
+    @ViewBuilder
+    private func connectedToolBubbleContainer<Content: View>(
+        isFirst: Bool,
+        isLast: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        bubbleContainerCore(
+            shape: connectedAssistantBubbleShape(isFirst: isFirst, isLast: isLast),
+            showMergedSeparator: isFirst && shouldShowMergedSeparator,
+            content: content
+        )
     }
     
     // MARK: - Content
     
+    @ViewBuilder
+    private var separatedToolCallBubbleStack: some View {
+        let toolCalls = message.toolCalls ?? []
+        let hasMainBubble = hasMainContentWhenToolCallsSeparated
+        let totalBubbleCount = toolCalls.count + (hasMainBubble ? 1 : 0)
+
+        VStack(alignment: .leading, spacing: 0) {
+            if hasMainBubble {
+                connectedToolBubbleContainer(isFirst: true, isLast: totalBubbleCount == 1) {
+                    textContentStack(includeToolCalls: false)
+
+                    if message.hasMultipleVersions {
+                        HStack(spacing: 6) {
+                            compactVersionIndicator
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+            }
+
+            ForEach(Array(toolCalls.enumerated()), id: \.element.id) { offset, call in
+                let position = (hasMainBubble ? 1 : 0) + offset
+                let isFirst = position == 0
+                let isLast = position == (totalBubbleCount - 1)
+
+                connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast) {
+                    ToolCallsInlineView(
+                        toolCalls: [call],
+                        isOutgoing: isOutgoing
+                    )
+
+                    if let permissionRequest = activeToolPermissionRequest(for: call) {
+                        ToolPermissionInlineView(
+                            request: permissionRequest,
+                            onDecision: { decision in
+                                toolPermissionCenter.resolveActiveRequest(with: decision)
+                            }
+                        )
+                    }
+
+                    if shouldShowToolResult(for: call) {
+                        ToolResultsDisclosureView(
+                            toolCalls: [call],
+                            resultText: message.role == .tool ? message.content : "",
+                            isExpanded: toolResultExpansionBinding(for: call.id),
+                            isOutgoing: isOutgoing,
+                            isPending: isPendingToolResult(for: call)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func textContentStack(includeToolCalls: Bool) -> some View {
         // 思考过程 (Telegram 风格折叠)
@@ -583,59 +662,27 @@ struct ChatBubble: View {
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
-            if shouldRenderToolCallsAsSeparateBubbles {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(toolCalls, id: \.id) { call in
-                        bubbleContainer(standalone: true) {
-                            ToolCallsInlineView(
-                                toolCalls: [call],
-                                isOutgoing: isOutgoing
-                            )
-
-                            if let permissionRequest = activeToolPermissionRequest(for: call) {
-                                ToolPermissionInlineView(
-                                    request: permissionRequest,
-                                    onDecision: { decision in
-                                        toolPermissionCenter.resolveActiveRequest(with: decision)
-                                    }
-                                )
-                            }
-
-                            if shouldShowToolResult(for: call) {
-                                ToolResultsDisclosureView(
-                                    toolCalls: [call],
-                                    resultText: message.role == .tool ? message.content : "",
-                                    isExpanded: toolResultExpansionBinding(for: call.id),
-                                    isOutgoing: isOutgoing,
-                                    isPending: isPendingToolResult(for: call)
-                                )
-                            }
-                        }
+            ToolCallsInlineView(
+                toolCalls: toolCalls,
+                isOutgoing: isOutgoing
+            )
+            if let activeToolPermissionRequest {
+                ToolPermissionInlineView(
+                    request: activeToolPermissionRequest,
+                    onDecision: { decision in
+                        toolPermissionCenter.resolveActiveRequest(with: decision)
                     }
-                }
-            } else {
-                ToolCallsInlineView(
-                    toolCalls: toolCalls,
-                    isOutgoing: isOutgoing
                 )
-                if let activeToolPermissionRequest {
-                    ToolPermissionInlineView(
-                        request: activeToolPermissionRequest,
-                        onDecision: { decision in
-                            toolPermissionCenter.resolveActiveRequest(with: decision)
-                        }
-                    )
-                }
-                let shouldShowResults = hasToolResults || hasPendingToolResults
-                if shouldShowResults {
-                    ToolResultsDisclosureView(
-                        toolCalls: toolCalls,
-                        resultText: message.role == .tool ? message.content : "",
-                        isExpanded: $isToolCallsExpanded,
-                        isOutgoing: isOutgoing,
-                        isPending: hasPendingToolResults
-                    )
-                }
+            }
+            let shouldShowResults = hasToolResults || hasPendingToolResults
+            if shouldShowResults {
+                ToolResultsDisclosureView(
+                    toolCalls: toolCalls,
+                    resultText: message.role == .tool ? message.content : "",
+                    isExpanded: $isToolCallsExpanded,
+                    isOutgoing: isOutgoing,
+                    isPending: hasPendingToolResults
+                )
             }
         }
     }

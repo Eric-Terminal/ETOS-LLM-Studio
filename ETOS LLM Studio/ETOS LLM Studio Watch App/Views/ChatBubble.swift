@@ -198,6 +198,19 @@ struct ChatBubble: View {
         )
     }
 
+    private func connectedAssistantBubbleShape(isFirst: Bool, isLast: Bool) -> BubbleCornerShape {
+        let baseRadius: CGFloat = 12
+        let mergedRadius: CGFloat = 0
+        let topRadius = isFirst ? (mergeWithPrevious ? mergedRadius : baseRadius) : mergedRadius
+        let bottomRadius = isLast ? (mergeWithNext ? mergedRadius : baseRadius) : mergedRadius
+        return BubbleCornerShape(
+            topLeft: topRadius,
+            topRight: topRadius,
+            bottomLeft: bottomRadius,
+            bottomRight: bottomRadius
+        )
+    }
+
     private var shouldShowMergedSeparator: Bool {
         mergeWithPrevious && message.role != .user && message.role != .error
     }
@@ -373,34 +386,68 @@ struct ChatBubble: View {
     private var separatedAssistantBubbles: some View {
         let hasReasoning = message.reasoningContent != nil && !((message.reasoningContent ?? "").isEmpty)
         let isErrorVersion = message.content.hasPrefix("重试失败")
+        let toolCalls = message.toolCalls ?? []
+        let hasMainBubble = hasMainContentWhenToolCallsSeparated
+        let totalBubbleCount = toolCalls.count + (hasMainBubble ? 1 : 0)
 
-        if shouldShowToolCallsBeforeContent {
-            toolCallsSection
-        }
+        VStack(alignment: .leading, spacing: 0) {
+            if hasMainBubble {
+                let content = VStack(alignment: .leading, spacing: 8) {
+                    if let reasoning = message.reasoningContent, !reasoning.isEmpty {
+                        reasoningView(reasoning)
+                    }
 
-        if hasMainContentWhenToolCallsSeparated {
-            let content = VStack(alignment: .leading, spacing: 8) {
-                if let reasoning = message.reasoningContent, !reasoning.isEmpty {
-                    reasoningView(reasoning)
+                    if hasReasoning && hasNonPlaceholderText {
+                        Divider().background(Color.gray)
+                    }
+
+                    if message.role != .tool && hasNonPlaceholderText {
+                        renderContent(message.content)
+                            .foregroundColor(isErrorVersion ? .white : nil)
+                    }
                 }
+                .padding(10)
 
-                if hasReasoning && hasNonPlaceholderText {
-                    Divider().background(Color.gray)
+                connectedToolBubbleContainer(
+                    isFirst: true,
+                    isLast: totalBubbleCount == 1,
+                    isError: isErrorVersion
+                ) {
+                    content
                 }
-
-                if message.role != .tool && hasNonPlaceholderText {
-                    renderContent(message.content)
-                        .foregroundColor(isErrorVersion ? .white : nil)
-                }
-            }
-            .padding(10)
-
-            assistantBubbleContainer(content, isError: isErrorVersion, standalone: true)
                 .contentShape(Rectangle())
-        }
+            }
 
-        if shouldShowToolCallsAfterContent {
-            toolCallsSection
+            ForEach(Array(toolCalls.enumerated()), id: \.element.id) { offset, call in
+                let position = (hasMainBubble ? 1 : 0) + offset
+                let isFirst = position == 0
+                let isLast = position == (totalBubbleCount - 1)
+
+                let content = VStack(alignment: .leading, spacing: 6) {
+                    toolCallsInlineView([call])
+
+                    if let permissionRequest = activeToolPermissionRequest(for: call) {
+                        toolPermissionInlineView(request: permissionRequest, onDecision: { decision in
+                            toolPermissionCenter.resolveActiveRequest(with: decision)
+                        })
+                    }
+
+                    if shouldShowToolResult(for: call) {
+                        toolResultsDisclosureView(
+                            [call],
+                            resultText: message.role == .tool ? message.content : "",
+                            isPending: isPendingToolResult(for: call),
+                            expanded: toolResultExpansionBinding(for: call.id)
+                        )
+                    }
+                }
+                .padding(10)
+
+                connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast, isError: false) {
+                    content
+                }
+                .contentShape(Rectangle())
+            }
         }
     }
 
@@ -482,48 +529,19 @@ struct ChatBubble: View {
     @ViewBuilder
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-            if shouldRenderToolCallsAsSeparateBubbles {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(toolCalls, id: \.id) { call in
-                        let content = VStack(alignment: .leading, spacing: 6) {
-                            toolCallsInlineView([call])
-
-                            if let permissionRequest = activeToolPermissionRequest(for: call) {
-                                toolPermissionInlineView(request: permissionRequest, onDecision: { decision in
-                                    toolPermissionCenter.resolveActiveRequest(with: decision)
-                                })
-                            }
-
-                            if shouldShowToolResult(for: call) {
-                                toolResultsDisclosureView(
-                                    [call],
-                                    resultText: message.role == .tool ? message.content : "",
-                                    isPending: isPendingToolResult(for: call),
-                                    expanded: toolResultExpansionBinding(for: call.id)
-                                )
-                            }
-                        }
-                        .padding(10)
-
-                        assistantBubbleContainer(content, isError: false, standalone: true)
-                            .contentShape(Rectangle())
-                    }
-                }
-            } else {
-                toolCallsInlineView(toolCalls)
-                if let activeToolPermissionRequest {
-                    toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
-                        toolPermissionCenter.resolveActiveRequest(with: decision)
-                    })
-                }
-                let shouldShowResults = hasToolResults || hasPendingToolResults
-                if shouldShowResults {
-                    toolResultsDisclosureView(
-                        toolCalls,
-                        resultText: "",
-                        isPending: hasPendingToolResults
-                    )
-                }
+            toolCallsInlineView(toolCalls)
+            if let activeToolPermissionRequest {
+                toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
+                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                })
+            }
+            let shouldShowResults = hasToolResults || hasPendingToolResults
+            if shouldShowResults {
+                toolResultsDisclosureView(
+                    toolCalls,
+                    resultText: "",
+                    isPending: hasPendingToolResults
+                )
             }
         }
     }
@@ -1060,12 +1078,30 @@ struct ChatBubble: View {
     }
 
     @ViewBuilder
+    private func connectedToolBubbleContainer<Content: View>(
+        isFirst: Bool,
+        isLast: Bool,
+        isError: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        assistantBubbleContainer(
+            content(),
+            isError: isError,
+            shapeOverride: connectedAssistantBubbleShape(isFirst: isFirst, isLast: isLast),
+            showMergedSeparator: isFirst && shouldShowMergedSeparator
+        )
+    }
+
+    @ViewBuilder
     private func assistantBubbleContainer<Content: View>(
         _ content: Content,
         isError: Bool,
-        standalone: Bool = false
+        standalone: Bool = false,
+        shapeOverride: BubbleCornerShape? = nil,
+        showMergedSeparator: Bool? = nil
     ) -> some View {
-        let shape = standalone ? standaloneAssistantBubbleShape : assistantBubbleShape
+        let shape = shapeOverride ?? (standalone ? standaloneAssistantBubbleShape : assistantBubbleShape)
+        let shouldShowSeparator = showMergedSeparator ?? (!standalone && shouldShowMergedSeparator)
         let sizedContent = content
             .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
         
@@ -1083,7 +1119,7 @@ struct ChatBubble: View {
             }
         }
         .overlay(alignment: .top) {
-            if !standalone && shouldShowMergedSeparator {
+            if shouldShowSeparator {
                 separatorLine
             }
         }
