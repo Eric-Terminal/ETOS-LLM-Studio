@@ -67,6 +67,7 @@ public struct ChatMessagePart {
         public var index: Int?
         public var nameFragment: String?
         public var argumentsFragment: String?
+        public var providerSpecificFields: [String: JSONValue]? = nil
     }
 
     public var content: String?
@@ -233,11 +234,31 @@ public class OpenAIAdapter: APIAdapter {
         let id: String?
         let type: String
         let index: Int?
+        let providerSpecificFields: [String: JSONValue]?
         struct Function: Decodable {
             let name: String?
             let arguments: String?
         }
         let function: Function
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case type
+            case index
+            case function
+            case providerSpecificFields
+            case provider_specific_fields
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(String.self, forKey: .id)
+            type = try container.decode(String.self, forKey: .type)
+            index = try container.decodeIfPresent(Int.self, forKey: .index)
+            function = try container.decode(Function.self, forKey: .function)
+            providerSpecificFields = try container.decodeIfPresent([String: JSONValue].self, forKey: .providerSpecificFields)
+                ?? (try container.decodeIfPresent([String: JSONValue].self, forKey: .provider_specific_fields))
+        }
     }
     
     private struct OpenAIResponse: Decodable {
@@ -371,14 +392,18 @@ public class OpenAIAdapter: APIAdapter {
             
             if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 let apiToolCalls: [[String: Any]] = toolCalls.map { call in
-                    [
-                            "id": call.id,
-                            "type": "function",
-                            "function": [
+                    var apiToolCall: [String: Any] = [
+                        "id": call.id,
+                        "type": "function",
+                        "function": [
                             "name": sanitizedToolName(call.toolName),
                             "arguments": call.arguments
                         ]
                     ]
+                    if let providerSpecificFields = call.providerSpecificFields, !providerSpecificFields.isEmpty {
+                        apiToolCall["provider_specific_fields"] = providerSpecificFields.mapValues { $0.toAny() }
+                    }
+                    return apiToolCall
                 }
                 dict["tool_calls"] = apiToolCalls
             } else if msg.role == .tool, let toolCallId = msg.toolCalls?.first?.id {
@@ -532,7 +557,12 @@ public class OpenAIAdapter: APIAdapter {
                     return nil
                 }
                 let arguments = $0.function.arguments ?? ""
-                return InternalToolCall(id: id, toolName: name, arguments: arguments)
+                return InternalToolCall(
+                    id: id,
+                    toolName: name,
+                    arguments: arguments,
+                    providerSpecificFields: $0.providerSpecificFields
+                )
             }
         } else {
             internalToolCalls = nil
@@ -574,7 +604,8 @@ public class OpenAIAdapter: APIAdapter {
                         id: call.id,
                         index: call.index ?? idx,
                         nameFragment: call.function.name,
-                        argumentsFragment: call.function.arguments
+                        argumentsFragment: call.function.arguments,
+                        providerSpecificFields: call.providerSpecificFields
                     )
                 }
             } else {

@@ -165,7 +165,13 @@ public class ChatService {
         toolCalls.map { call in
             let resolvedName = resolveToolName(call.toolName, availableTools: availableTools)
             guard resolvedName != call.toolName else { return call }
-            return InternalToolCall(id: call.id, toolName: resolvedName, arguments: call.arguments, result: call.result)
+            return InternalToolCall(
+                id: call.id,
+                toolName: resolvedName,
+                arguments: call.arguments,
+                result: call.result,
+                providerSpecificFields: call.providerSpecificFields
+            )
         }
     }
 
@@ -1701,7 +1707,15 @@ public class ChatService {
         let message = ChatMessage(
             role: .tool,
             content: content,
-            toolCalls: [InternalToolCall(id: toolCall.id, toolName: toolCall.toolName, arguments: toolCall.arguments, result: displayResult)]
+            toolCalls: [
+                InternalToolCall(
+                    id: toolCall.id,
+                    toolName: toolCall.toolName,
+                    arguments: toolCall.arguments,
+                    result: displayResult,
+                    providerSpecificFields: toolCall.providerSpecificFields
+                )
+            ]
         )
         
         return ToolCallOutcome(message: message, toolResult: displayResult, shouldAwaitUserSupplement: shouldAwaitUserSupplement)
@@ -1772,12 +1786,14 @@ public class ChatService {
             if let existingIndex = existingCalls.firstIndex(where: { $0.id == call.id }) {
                 let existingResult = existingCalls[existingIndex].result
                 if existingCalls[existingIndex].toolName != call.toolName
-                    || existingCalls[existingIndex].arguments != call.arguments {
+                    || existingCalls[existingIndex].arguments != call.arguments
+                    || existingCalls[existingIndex].providerSpecificFields != call.providerSpecificFields {
                     existingCalls[existingIndex] = InternalToolCall(
                         id: call.id,
                         toolName: call.toolName,
                         arguments: call.arguments,
-                        result: existingResult
+                        result: existingResult,
+                        providerSpecificFields: call.providerSpecificFields
                     )
                     didChange = true
                 }
@@ -3164,7 +3180,7 @@ public class ChatService {
             let bytes = try await streamData(for: request)
 
             // 保存流式过程中逐步构建的工具调用，用于后续二次调用
-            var toolCallBuilders: [Int: (id: String?, name: String?, arguments: String)] = [:]
+            var toolCallBuilders: [Int: (id: String?, name: String?, arguments: String, providerSpecificFields: [String: JSONValue]?)] = [:]
             var toolCallOrder: [Int] = []
             var toolCallIndexByID: [String: Int] = [:]
             var latestTokenUsage: MessageTokenUsage?
@@ -3229,10 +3245,13 @@ public class ChatService {
                                     toolCallIndexByID[id] = resolvedIndex
                                 }
                             }
-                            var builder = toolCallBuilders[resolvedIndex] ?? (id: nil, name: nil, arguments: "")
+                            var builder = toolCallBuilders[resolvedIndex] ?? (id: nil, name: nil, arguments: "", providerSpecificFields: nil)
                             if let id = delta.id { builder.id = id }
                             if let nameFragment = delta.nameFragment, !nameFragment.isEmpty { builder.name = nameFragment }
                             if let argsFragment = delta.argumentsFragment, !argsFragment.isEmpty { builder.arguments += argsFragment }
+                            if let providerSpecificFields = delta.providerSpecificFields, !providerSpecificFields.isEmpty {
+                                builder.providerSpecificFields = providerSpecificFields
+                            }
                             toolCallBuilders[resolvedIndex] = builder
                             if !toolCallOrder.contains(resolvedIndex) {
                                 toolCallOrder.append(resolvedIndex)
@@ -3243,7 +3262,12 @@ public class ChatService {
                             guard let builder = toolCallBuilders[orderIdx], let name = builder.name else { return nil }
                             let id = builder.id ?? "tool-\(orderIdx)"
                             let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
-                            return InternalToolCall(id: id, toolName: resolvedName, arguments: builder.arguments)
+                            return InternalToolCall(
+                                id: id,
+                                toolName: resolvedName,
+                                arguments: builder.arguments,
+                                providerSpecificFields: builder.providerSpecificFields
+                            )
                         }
                         if !partialToolCalls.isEmpty {
                             if messages[index].toolCallsPlacement == nil {
@@ -3291,7 +3315,12 @@ public class ChatService {
                         }
                         let id = builder.id ?? "tool-\(orderIdx)"
                         let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
-                        return InternalToolCall(id: id, toolName: resolvedName, arguments: builder.arguments)
+                        return InternalToolCall(
+                            id: id,
+                            toolName: resolvedName,
+                            arguments: builder.arguments,
+                            providerSpecificFields: builder.providerSpecificFields
+                        )
                     }
                     if !finalToolCalls.isEmpty {
                         if messages[index].toolCallsPlacement == nil {

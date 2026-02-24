@@ -1375,12 +1375,20 @@ public struct InternalToolCall: Codable, Hashable, Sendable {
     public let toolName: String
     public let arguments: String // 参数通常是JSON字符串
     public var result: String? // 工具执行结果（用于展示）
+    public let providerSpecificFields: [String: JSONValue]? // 服务商专有字段（例如 Gemini thought_signature）
 
-    public init(id: String, toolName: String, arguments: String, result: String? = nil) {
+    public init(
+        id: String,
+        toolName: String,
+        arguments: String,
+        result: String? = nil,
+        providerSpecificFields: [String: JSONValue]? = nil
+    ) {
         self.id = id
         self.toolName = toolName
         self.arguments = arguments
         self.result = result
+        self.providerSpecificFields = providerSpecificFields
     }
 }
 

@@ -636,6 +636,90 @@ struct OpenAIAdapterTests {
         #expect(params["type"] as? String == "object")
         #expect(properties["content"] != nil)
     }
+
+    @Test("OpenAI 解析保留 provider_specific_fields")
+    func testParseResponsePreservesProviderSpecificFields() throws {
+        let json = """
+        {
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                      "name": "save_memory",
+                      "arguments": "{\\"content\\":\\"Hello\\"}"
+                    },
+                    "provider_specific_fields": {
+                      "thought_signature": "opaque-signature",
+                      "nested": {
+                        "trace_id": "trace-1"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let message = try adapter.parseResponse(data: data)
+        let call = try #require(message.toolCalls?.first)
+
+        #expect(call.providerSpecificFields?["thought_signature"] == .string("opaque-signature"))
+        #expect(call.providerSpecificFields?["nested"] == .dictionary(["trace_id": .string("trace-1")]))
+    }
+
+    @Test("OpenAI 请求保留 provider_specific_fields")
+    func testBuildRequestIncludesProviderSpecificFields() throws {
+        let toolCall = InternalToolCall(
+            id: "call_9",
+            toolName: "save_memory",
+            arguments: #"{"content":"test"}"#,
+            providerSpecificFields: [
+                "thought_signature": .string("sig-9"),
+                "routing": .dictionary([
+                    "provider": .string("gemini")
+                ])
+            ]
+        )
+        let messages = [
+            ChatMessage(role: .assistant, content: "", toolCalls: [toolCall])
+        ]
+
+        guard let request = adapter.buildChatRequest(for: dummyModel, commonPayload: [:], messages: messages, tools: nil, audioAttachments: [:], imageAttachments: [:], fileAttachments: [:]),
+              let httpBody = request.httpBody,
+              let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+              let payloadMessages = jsonPayload["messages"] as? [[String: Any]],
+              let firstMessage = payloadMessages.first,
+              let payloadToolCalls = firstMessage["tool_calls"] as? [[String: Any]],
+              let firstToolCall = payloadToolCalls.first,
+              let providerFields = firstToolCall["provider_specific_fields"] as? [String: Any],
+              let thoughtSignature = providerFields["thought_signature"] as? String,
+              let routing = providerFields["routing"] as? [String: Any],
+              let provider = routing["provider"] as? String else {
+            Issue.record("请求体中未找到 provider_specific_fields。")
+            return
+        }
+
+        #expect(thoughtSignature == "sig-9")
+        #expect(provider == "gemini")
+    }
+
+    @Test("OpenAI 流式增量保留 provider_specific_fields")
+    func testStreamingDeltaPreservesProviderSpecificFields() throws {
+        let line = """
+        data: {"choices":[{"delta":{"tool_calls":[{"id":"call_stream_1","index":0,"type":"function","function":{"name":"save_memory","arguments":"{}"},"provider_specific_fields":{"thought_signature":"sig-stream"}}]}}]}
+        """
+        let part = adapter.parseStreamingResponse(line: line)
+        let firstDelta = try #require(part?.toolCallDeltas?.first)
+        #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
+    }
 }
 
 // MARK: - ChatService Integration Tests
