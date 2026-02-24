@@ -214,6 +214,86 @@ public class OpenAIAdapter: APIAdapter {
         return capabilities
     }
 
+    private func normalizedOpenAIToolParameters(_ parameters: [String: Any]) -> [String: Any] {
+        normalizedOpenAISchemaValue(parameters) as? [String: Any] ?? parameters
+    }
+
+    private func normalizedOpenAISchemaValue(_ value: Any) -> Any {
+        if let dictionary = value as? [String: Any] {
+            return normalizedOpenAISchemaObject(dictionary)
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizedOpenAISchemaValue($0) }
+        }
+        return value
+    }
+
+    private func normalizedOpenAISchemaObject(_ object: [String: Any]) -> [String: Any] {
+        var normalized = object.mapValues { normalizedOpenAISchemaValue($0) }
+
+        if normalized["type"] == nil {
+            if normalized["properties"] is [String: Any]
+                || normalized["required"] is [Any]
+                || normalized["additionalProperties"] != nil {
+                normalized["type"] = "object"
+            } else if normalized["items"] != nil {
+                normalized["type"] = "array"
+            } else if let enumValues = normalized["enum"] as? [Any],
+                      let inferred = inferredOpenAISchemaType(fromEnum: enumValues) {
+                normalized["type"] = inferred
+            } else if let constValue = normalized["const"],
+                      let inferred = inferredOpenAISchemaType(fromValue: constValue) {
+                normalized["type"] = inferred
+            }
+        }
+
+        return normalized
+    }
+
+    private func inferredOpenAISchemaType(fromEnum values: [Any]) -> String? {
+        let nonNullValues = values.filter { !($0 is NSNull) }
+        guard let firstValue = nonNullValues.first else { return nil }
+        guard let inferred = inferredOpenAISchemaType(fromValue: firstValue) else { return nil }
+        for value in nonNullValues.dropFirst() where inferredOpenAISchemaType(fromValue: value) != inferred {
+            return nil
+        }
+        return inferred
+    }
+
+    private func inferredOpenAISchemaType(fromValue value: Any) -> String? {
+        if value is String {
+            return "string"
+        }
+        if value is Bool {
+            return "boolean"
+        }
+        if value is Int || value is Int8 || value is Int16 || value is Int32 || value is Int64
+            || value is UInt || value is UInt8 || value is UInt16 || value is UInt32 || value is UInt64 {
+            return "integer"
+        }
+        if value is Float || value is Double || value is Decimal {
+            return "number"
+        }
+        if value is [Any] {
+            return "array"
+        }
+        if value is [String: Any] {
+            return "object"
+        }
+        if let number = value as? NSNumber {
+            let objCType = String(cString: number.objCType)
+            if objCType == "c" || objCType == "B" {
+                return "boolean"
+            }
+            if ["q", "i", "s", "l", "Q", "I", "S", "L", "C"].contains(objCType) {
+                return "integer"
+            }
+            let doubleValue = number.doubleValue
+            return floor(doubleValue) == doubleValue ? "integer" : "number"
+        }
+        return nil
+    }
+
     private func sanitizedImageGenerationOverrides(_ overrides: [String: Any]) -> [String: Any] {
         let blockedKeys: Set<String> = [
             "messages",
@@ -428,7 +508,8 @@ public class OpenAIAdapter: APIAdapter {
         // **翻译官的核心工作 (工具翻译)**:
         if let tools = tools, !tools.isEmpty {
             let apiTools = tools.map { tool -> [String: Any] in
-                let functionParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
+                let rawParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
+                let functionParams = normalizedOpenAIToolParameters(rawParams)
                 let function: [String: Any] = ["name": sanitizedToolName(tool.name), "description": tool.description, "parameters": functionParams]
                 return ["type": "function", "function": function]
             }
