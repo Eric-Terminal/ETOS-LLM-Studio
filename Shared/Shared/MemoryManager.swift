@@ -132,7 +132,7 @@ public class MemoryManager {
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
         self.embeddingRetryPolicy = retryPolicy
-        logger.info("MemoryManager v2 (wrapper) 正在初始化...")
+        logger.info("MemoryManager 正在初始化...")
         self.initializationTask = Task {
             await self.setup()
         }
@@ -145,7 +145,7 @@ public class MemoryManager {
         chunkSize: Int = 200,
         retryPolicy: MemoryEmbeddingRetryPolicy = .default
     ) {
-        logger.info("MemoryManager v2 (wrapper) 正在使用测试索引进行初始化...")
+        logger.info("MemoryManager 正在使用测试索引进行初始化...")
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
         self.embeddingRetryPolicy = retryPolicy

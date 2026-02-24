@@ -253,7 +253,7 @@ public class ChatService {
         worldbookEngine: WorldbookEngine = WorldbookEngine(),
         urlSession: URLSession = .shared
     ) {
-        logger.info("ChatService 正在初始化 (v2.1 重构版)...")
+        logger.info("ChatService 正在初始化...")
         
         self.memoryManager = memoryManager
         self.worldbookStore = worldbookStore

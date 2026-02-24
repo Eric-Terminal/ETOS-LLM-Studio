@@ -17,8 +17,8 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persist
 public enum Persistence {
     private static let sessionStoreSchemaVersion = 3
     private static let messagesFileSchemaVersion = 2
-    private static let migrationLogPrefix = "[(迁移V3)]"
-    private static let compatibilityReminderPrefix = "[(迁移V3)][兼容提醒]"
+    private static let migrationLogPrefix = "[(迁移)]"
+    private static let compatibilityReminderPrefix = "[(迁移)][兼容提醒]"
     private static let compatibilityReminderLock = NSLock()
     private static var hasLoggedCompatibilityReminder = false
 
@@ -93,7 +93,7 @@ public enum Persistence {
     /// 保存所有聊天会话的列表
     public static func saveChatSessions(_ sessions: [ChatSession]) {
         let sessionsToSave = sessions.filter { !$0.isTemporary }
-        logger.info("准备保存 \(sessionsToSave.count) 个会话到 V3 会话索引。")
+        logger.info("准备保存 \(sessionsToSave.count) 个会话到会话索引。")
 
         do {
             for session in sessionsToSave {
@@ -113,9 +113,9 @@ public enum Persistence {
                 }
             )
             try writeSessionIndexV3(index)
-            logger.info("V3 会话索引保存成功。")
+            logger.info("会话索引保存成功。")
         } catch {
-            logger.error("保存 V3 会话索引失败: \(error.localizedDescription)")
+            logger.error("保存会话索引失败: \(error.localizedDescription)")
         }
     }
 
@@ -124,7 +124,7 @@ public enum Persistence {
         logCompatibilityReminderIfNeeded(trigger: "loadChatSessions")
 
         if let sessions = loadChatSessionsFromV3() {
-            logger.info("已从 V3 会话索引加载 \(sessions.count) 个会话。")
+            logger.info("已从会话索引加载 \(sessions.count) 个会话。")
             return sessions
         }
 
@@ -141,7 +141,7 @@ public enum Persistence {
                 logger.info("\(migrationLogPrefix) 已完成迁移，加载到 \(migratedSessions.count) 个会话。")
                 return migratedSessions
             }
-            logger.warning("\(migrationLogPrefix) 迁移后未读取到 V3 索引，回退返回旧会话列表。")
+            logger.warning("\(migrationLogPrefix) 迁移后未读取到会话索引，回退返回旧会话列表。")
             return legacySessions
         } catch {
             logger.error("\(migrationLogPrefix) 迁移失败，回退旧会话列表: \(error.localizedDescription)")
@@ -158,7 +158,7 @@ public enum Persistence {
             let sessionSnapshot = resolveSessionSnapshot(for: sessionID)
             let record = makeSessionRecordV3(session: sessionSnapshot, messages: normalized.messages)
             try writeSessionRecordV3(record, for: sessionID)
-            logger.info("会话 \(sessionID.uuidString) 的消息已保存到 V3（\(normalized.messages.count) 条）。")
+            logger.info("会话 \(sessionID.uuidString) 的消息已保存到会话存储（\(normalized.messages.count) 条）。")
         } catch {
             logger.error("保存会话 \(sessionID.uuidString) 消息失败: \(error.localizedDescription)")
         }
@@ -168,9 +168,9 @@ public enum Persistence {
     public static func loadMessages(for sessionID: UUID) -> [ChatMessage] {
         logCompatibilityReminderIfNeeded(trigger: "loadMessages")
 
-        if let v3Messages = loadMessagesFromV3(for: sessionID) {
-            logger.info("会话 \(sessionID.uuidString) 已从 V3 加载 \(v3Messages.count) 条消息。")
-            return v3Messages
+        if let loadedMessages = loadMessagesFromV3(for: sessionID) {
+            logger.info("会话 \(sessionID.uuidString) 已从会话存储加载 \(loadedMessages.count) 条消息。")
+            return loadedMessages
         }
 
         let legacyURL = legacyMessagesFileURL(for: sessionID)
@@ -249,7 +249,7 @@ public enum Persistence {
             }
             return loadedSessions
         } catch {
-            logger.warning("读取 V3 会话索引失败: \(error.localizedDescription)")
+            logger.warning("读取会话索引失败: \(error.localizedDescription)")
             return nil
         }
     }
@@ -288,7 +288,7 @@ public enum Persistence {
         for session in sessionsToSave {
             if let record = recordsByID[session.id] {
                 try writeSessionRecordV3(record, for: session.id)
-                logger.info("\(migrationLogPrefix) 会话 \(session.id.uuidString) 已改写为 V3。")
+                logger.info("\(migrationLogPrefix) 会话 \(session.id.uuidString) 已改写为新格式。")
             }
         }
 
@@ -348,12 +348,12 @@ public enum Persistence {
                     messages: normalized.messages
                 )
                 try writeSessionRecordV3(rewritten, for: sessionID)
-                logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 的 V3 消息文件已规范化。")
+                logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 的消息文件已规范化。")
             }
 
             return normalized.messages
         } catch {
-            logger.warning("读取 V3 会话文件失败 \(sessionID.uuidString): \(error.localizedDescription)")
+            logger.warning("读取会话文件失败 \(sessionID.uuidString): \(error.localizedDescription)")
             return nil
         }
     }
@@ -367,7 +367,7 @@ public enum Persistence {
             let normalized = normalizeToolCallsPlacement(in: envelope.messages, sessionID: sessionID)
             let didMigrateSchema = envelope.schemaVersion != messagesFileSchemaVersion
             if didMigrateSchema {
-                logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 旧 envelope 版本 \(envelope.schemaVersion) 将迁移到 V3。")
+                logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 检测到旧消息封装格式，将执行迁移。")
             }
             return LegacyMessagesReadResult(
                 messages: normalized.messages,
@@ -463,7 +463,7 @@ public enum Persistence {
             let data = try Data(contentsOf: fileURL)
             return try JSONDecoder().decode(SessionIndexFileV3.self, from: data)
         } catch {
-            logger.warning("读取 V3 索引文件失败: \(error.localizedDescription)")
+            logger.warning("读取会话索引文件失败: \(error.localizedDescription)")
             return nil
         }
     }
@@ -537,7 +537,7 @@ public enum Persistence {
         }
 
         logger.info("\(migrationLogPrefix) 旧版文件已归档到 \(archiveRoot.path)")
-        logger.info("\(compatibilityReminderPrefix) 旧版文件已归档，legacy 兼容读取仍保留，后续版本可移除旧分支。")
+        logger.info("\(compatibilityReminderPrefix) 旧版文件已归档，legacy 兼容读取仍保留。")
     }
 
     private static func moveItemIfExists(from source: URL, to destination: URL) throws {
@@ -555,7 +555,7 @@ public enum Persistence {
 
         guard !hasLoggedCompatibilityReminder else { return }
 
-        let hasV3Index = FileManager.default.fileExists(atPath: sessionIndexFileURLV3().path)
+        let hasCurrentIndex = FileManager.default.fileExists(atPath: sessionIndexFileURLV3().path)
         let hasLegacyIndex = FileManager.default.fileExists(atPath: legacySessionIndexFileURL().path)
         let hasLegacyMessages = hasLegacyMessageFiles()
 
@@ -566,7 +566,7 @@ public enum Persistence {
             legacyStatus = "当前未检测到 legacy 文件，但前向兼容读取逻辑仍保留。"
         }
 
-        logger.info("\(compatibilityReminderPrefix) 触发点=\(trigger)，存储状态: v3Index=\(hasV3Index), legacyIndex=\(hasLegacyIndex), legacyMessages=\(hasLegacyMessages)。\(legacyStatus)")
+        logger.info("\(compatibilityReminderPrefix) 触发点=\(trigger)，存储状态: currentIndex=\(hasCurrentIndex), legacyIndex=\(hasLegacyIndex), legacyMessages=\(hasLegacyMessages)。\(legacyStatus)")
         hasLoggedCompatibilityReminder = true
     }
 
