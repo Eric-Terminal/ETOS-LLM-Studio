@@ -345,7 +345,8 @@ public final class MCPManager: ObservableObject {
 
         var newStatuses: [UUID: MCPServerStatus] = serverStatuses.filter { serverIDs.contains($0.key) }
         for server in servers {
-            var status = newStatuses[server.id] ?? MCPServerStatus()
+            let existingStatus = newStatuses[server.id]
+            var status = existingStatus ?? MCPServerStatus()
             status.isSelectedForChat = server.isSelectedForChat
             if case .idle = status.connectionState, let cache = MCPServerStore.loadMetadata(for: server.id) {
                 if status.info == nil {
@@ -359,6 +360,11 @@ public final class MCPManager: ObservableObject {
                     status.roots = cache.roots
                 }
                 status.metadataCachedAt = cache.cachedAt
+                // 首次加载时，若服务器已加入聊天路由且有可用缓存，先乐观恢复为 ready。
+                // 后台会继续发起 initialize 握手校验，失败后再回落到 failed。
+                if existingStatus == nil, server.isSelectedForChat {
+                    status.connectionState = .ready
+                }
             }
             newStatuses[server.id] = status
         }
@@ -399,6 +405,16 @@ public final class MCPManager: ObservableObject {
             let status = status(for: server)
             switch status.connectionState {
             case .ready:
+                // ready 但尚未创建 client：说明是缓存恢复状态，后台补做握手。
+                if clients[server.id] == nil {
+                    connect(
+                        to: server,
+                        preserveSelection: true,
+                        retryOnFailure: true,
+                        keepReadyStateDuringHandshake: true
+                    )
+                    continue
+                }
                 if isMetadataStale(status.metadataCachedAt) {
                     appendGovernanceLog(level: .info, category: .cache, serverID: server.id, message: "检测到元数据缓存过期，触发刷新。")
                     refreshMetadata(for: server)
@@ -414,7 +430,12 @@ public final class MCPManager: ObservableObject {
         }
     }
 
-    public func connect(to server: MCPServerConfiguration, preserveSelection: Bool = false, retryOnFailure: Bool = false) {
+    public func connect(
+        to server: MCPServerConfiguration,
+        preserveSelection: Bool = false,
+        retryOnFailure: Bool = false,
+        keepReadyStateDuringHandshake: Bool = false
+    ) {
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -422,6 +443,7 @@ public final class MCPManager: ObservableObject {
                     for: server,
                     preserveSelection: preserveSelection,
                     retryOnFailure: retryOnFailure,
+                    keepReadyStateDuringHandshake: keepReadyStateDuringHandshake,
                     refreshMetadataIfCacheMissing: true
                 )
             } catch {
@@ -459,6 +481,7 @@ public final class MCPManager: ObservableObject {
         for server: MCPServerConfiguration,
         preserveSelection: Bool = true,
         retryOnFailure: Bool = false,
+        keepReadyStateDuringHandshake: Bool = false,
         refreshMetadataIfCacheMissing: Bool = false
     ) async throws -> MCPClient {
         if let client = clients[server.id], case .ready = status(for: server).connectionState {
@@ -475,6 +498,7 @@ public final class MCPManager: ObservableObject {
                 to: server,
                 preserveSelection: preserveSelection,
                 retryOnFailure: retryOnFailure,
+                keepReadyStateDuringHandshake: keepReadyStateDuringHandshake,
                 refreshMetadataIfCacheMissing: refreshMetadataIfCacheMissing
             )
         }
@@ -498,6 +522,7 @@ public final class MCPManager: ObservableObject {
             for: server,
             preserveSelection: true,
             retryOnFailure: false,
+            keepReadyStateDuringHandshake: false,
             refreshMetadataIfCacheMissing: refreshMetadataIfCacheMissing
         )
     }
@@ -506,6 +531,7 @@ public final class MCPManager: ObservableObject {
         to server: MCPServerConfiguration,
         preserveSelection: Bool,
         retryOnFailure: Bool,
+        keepReadyStateDuringHandshake: Bool,
         refreshMetadataIfCacheMissing: Bool
     ) async throws -> MCPClient {
         if retryOnFailure {
@@ -517,8 +543,11 @@ public final class MCPManager: ObservableObject {
         let cachedMetadata = MCPServerStore.loadMetadata(for: server.id)
         let shouldRefreshMetadata = refreshMetadataIfCacheMissing && (cachedMetadata == nil || isMetadataStale(cachedMetadata?.cachedAt))
         appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "开始连接服务器，传输=\(transportLabel(for: server))，将刷新元数据=\(shouldRefreshMetadata ? "是" : "否")")
+        let shouldKeepReadyState = keepReadyStateDuringHandshake
+            && clients[server.id] == nil
+            && status(for: server).connectionState == .ready
         updateStatus(for: server.id) {
-            $0.connectionState = .connecting
+            $0.connectionState = shouldKeepReadyState ? .ready : .connecting
             $0.isBusy = true
         }
 
