@@ -761,6 +761,59 @@ struct OpenAIAdapterTests {
         #expect(localeSchema["type"] as? String == "string")
     }
 
+    @Test("OpenAI 工具 schema 的 properties 允许字符串简写并自动包装为对象")
+    func testOpenAIPropertiesStringShorthandSchemaGetsWrapped() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "tavily_extract",
+                description: "提取网页内容",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "urls": .dictionary([
+                            "type": .string("array"),
+                            "items": .dictionary([
+                                "type": .string("string")
+                            ])
+                        ]),
+                        "type": .string("string"),
+                        "format": .dictionary([
+                            "type": .string("string"),
+                            "enum": .array([.string("markdown"), .string("text")]),
+                            "default": .string("markdown")
+                        ])
+                    ]),
+                    "required": .array([.string("urls")])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstTool = toolsPayload.first,
+        let function = firstTool["function"] as? [String: Any],
+        let parameters = function["parameters"] as? [String: Any],
+        let properties = parameters["properties"] as? [String: Any],
+        let typeSchema = properties["type"] as? [String: Any] else {
+            Issue.record("OpenAI 请求体中未找到 properties.type 的对象化 schema。")
+            return
+        }
+
+        #expect(typeSchema["type"] as? String == "string")
+        #expect(!(properties["type"] is String))
+    }
+
     @Test("OpenAI 解析保留 provider_specific_fields")
     func testParseResponsePreservesProviderSpecificFields() throws {
         let json = """
@@ -977,6 +1030,60 @@ struct GeminiAdapterTests {
 
         #expect(timeRangeSchema["type"] as? String == "string")
         #expect(localeSchema["type"] as? String == "string")
+    }
+
+    @Test("Gemini 工具 schema 的 properties 允许字符串简写并自动包装为对象")
+    func testGeminiPropertiesStringShorthandSchemaGetsWrapped() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "tavily_extract",
+                description: "提取网页内容",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "urls": .dictionary([
+                            "type": .string("array"),
+                            "items": .dictionary([
+                                "type": .string("string")
+                            ])
+                        ]),
+                        "type": .string("string"),
+                        "format": .dictionary([
+                            "type": .string("string"),
+                            "enum": .array([.string("markdown"), .string("text")]),
+                            "default": .string("markdown")
+                        ])
+                    ]),
+                    "required": .array([.string("urls")])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstToolGroup = toolsPayload.first,
+        let declarations = firstToolGroup["function_declarations"] as? [[String: Any]],
+        let firstDeclaration = declarations.first,
+        let parameters = firstDeclaration["parameters"] as? [String: Any],
+        let properties = parameters["properties"] as? [String: Any],
+        let typeSchema = properties["type"] as? [String: Any] else {
+            Issue.record("Gemini 请求体中未找到 properties.type 的对象化 schema。")
+            return
+        }
+
+        #expect(typeSchema["type"] as? String == "string")
+        #expect(!(properties["type"] is String))
     }
 }
 

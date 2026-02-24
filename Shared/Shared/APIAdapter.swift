@@ -230,6 +230,9 @@ public class OpenAIAdapter: APIAdapter {
 
     private func normalizedOpenAISchemaObject(_ object: [String: Any]) -> [String: Any] {
         var normalized = object.mapValues { normalizedOpenAISchemaValue($0) }
+        if let properties = normalized["properties"] as? [String: Any] {
+            normalized["properties"] = normalizedOpenAISchemaPropertiesMap(properties)
+        }
 
         if let normalizedType = normalizedOpenAISchemaTypeValue(normalized["type"]) {
             normalized["type"] = normalizedType
@@ -260,19 +263,48 @@ public class OpenAIAdapter: APIAdapter {
         return normalized
     }
 
+    private func normalizedOpenAISchemaPropertiesMap(_ properties: [String: Any]) -> [String: Any] {
+        var normalized: [String: Any] = [:]
+        normalized.reserveCapacity(properties.count)
+        for (key, value) in properties {
+            normalized[key] = normalizedOpenAISchemaPropertyValue(value)
+        }
+        return normalized
+    }
+
+    private func normalizedOpenAISchemaPropertyValue(_ value: Any) -> Any {
+        if let schema = value as? [String: Any] {
+            return normalizedOpenAISchemaObject(schema)
+        }
+        if let normalizedType = normalizedOpenAISchemaTypeValue(value) {
+            return ["type": normalizedType]
+        }
+        if let inferredType = inferredOpenAISchemaType(fromValue: value) {
+            return ["type": inferredType]
+        }
+        return ["type": "string"]
+    }
+
+    private func normalizedOpenAISchemaTypeKeyword(_ type: String) -> String? {
+        let lowered = type.lowercased()
+        guard lowered != "null" else { return nil }
+        let supportedTypes: Set<String> = ["string", "number", "integer", "boolean", "object", "array"]
+        guard supportedTypes.contains(lowered) else { return nil }
+        return lowered
+    }
+
     private func normalizedOpenAISchemaTypeValue(_ rawType: Any?) -> String? {
         guard let rawType else { return nil }
         if let type = rawType as? String {
-            let lowered = type.lowercased()
-            return lowered == "null" ? nil : lowered
+            return normalizedOpenAISchemaTypeKeyword(type)
         }
         if let typeArray = rawType as? [Any] {
-            let candidateTypes = typeArray.compactMap { value -> String? in
-                guard let type = value as? String else { return nil }
-                let lowered = type.lowercased()
-                return lowered == "null" ? nil : lowered
+            for value in typeArray {
+                guard let type = value as? String else { continue }
+                if let normalized = normalizedOpenAISchemaTypeKeyword(type) {
+                    return normalized
+                }
             }
-            return candidateTypes.first
         }
         return nil
     }
@@ -1107,6 +1139,9 @@ public class GeminiAdapter: APIAdapter {
 
     private func normalizedGeminiSchemaObject(_ object: [String: Any]) -> [String: Any] {
         var normalized = object.mapValues { normalizedGeminiSchemaValue($0) }
+        if let properties = normalized["properties"] as? [String: Any] {
+            normalized["properties"] = normalizedGeminiSchemaPropertiesMap(properties)
+        }
 
         if let normalizedType = normalizedGeminiSchemaTypeValue(normalized["type"]) {
             normalized["type"] = normalizedType
@@ -1137,19 +1172,48 @@ public class GeminiAdapter: APIAdapter {
         return normalized
     }
 
+    private func normalizedGeminiSchemaPropertiesMap(_ properties: [String: Any]) -> [String: Any] {
+        var normalized: [String: Any] = [:]
+        normalized.reserveCapacity(properties.count)
+        for (key, value) in properties {
+            normalized[key] = normalizedGeminiSchemaPropertyValue(value)
+        }
+        return normalized
+    }
+
+    private func normalizedGeminiSchemaPropertyValue(_ value: Any) -> Any {
+        if let schema = value as? [String: Any] {
+            return normalizedGeminiSchemaObject(schema)
+        }
+        if let normalizedType = normalizedGeminiSchemaTypeValue(value) {
+            return ["type": normalizedType]
+        }
+        if let inferredType = inferredGeminiSchemaType(fromValue: value) {
+            return ["type": inferredType]
+        }
+        return ["type": "string"]
+    }
+
+    private func normalizedGeminiSchemaTypeKeyword(_ type: String) -> String? {
+        let lowered = type.lowercased()
+        guard lowered != "null" else { return nil }
+        let supportedTypes: Set<String> = ["string", "number", "integer", "boolean", "object", "array"]
+        guard supportedTypes.contains(lowered) else { return nil }
+        return lowered
+    }
+
     private func normalizedGeminiSchemaTypeValue(_ rawType: Any?) -> String? {
         guard let rawType else { return nil }
         if let type = rawType as? String {
-            let lowered = type.lowercased()
-            return lowered == "null" ? nil : lowered
+            return normalizedGeminiSchemaTypeKeyword(type)
         }
         if let typeArray = rawType as? [Any] {
-            let candidateTypes = typeArray.compactMap { value -> String? in
-                guard let type = value as? String else { return nil }
-                let lowered = type.lowercased()
-                return lowered == "null" ? nil : lowered
+            for value in typeArray {
+                guard let type = value as? String else { continue }
+                if let normalized = normalizedGeminiSchemaTypeKeyword(type) {
+                    return normalized
+                }
             }
-            return candidateTypes.first
         }
         return nil
     }
