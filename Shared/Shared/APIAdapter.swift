@@ -67,6 +67,7 @@ public struct ChatMessagePart {
         public var index: Int?
         public var nameFragment: String?
         public var argumentsFragment: String?
+        public var providerSpecificFields: [String: JSONValue]? = nil
     }
 
     public var content: String?
@@ -213,6 +214,289 @@ public class OpenAIAdapter: APIAdapter {
         return capabilities
     }
 
+    private func normalizedOpenAIToolParameters(_ parameters: [String: Any]) -> [String: Any] {
+        normalizedOpenAISchemaValue(parameters) as? [String: Any] ?? parameters
+    }
+
+    private func normalizedOpenAISchemaValue(_ value: Any) -> Any {
+        if let dictionary = value as? [String: Any] {
+            return normalizedOpenAISchemaObject(dictionary)
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizedOpenAISchemaValue($0) }
+        }
+        return value
+    }
+
+    private func normalizedOpenAISchemaObject(_ object: [String: Any]) -> [String: Any] {
+        var normalized = object.mapValues { normalizedOpenAISchemaValue($0) }
+        normalized = flattenedOpenAISchemaCombinators(normalized)
+        if let properties = normalized["properties"] as? [String: Any] {
+            normalized["properties"] = normalizedOpenAISchemaPropertiesMap(properties)
+        }
+        if normalized["default"] is NSNull {
+            normalized.removeValue(forKey: "default")
+        }
+
+        if let normalizedType = normalizedOpenAISchemaTypeValue(normalized["type"]) {
+            normalized["type"] = normalizedType
+        } else if normalized["type"] != nil {
+            normalized.removeValue(forKey: "type")
+        }
+
+        if normalized["type"] == nil {
+            if normalized["properties"] is [String: Any]
+                || normalized["required"] is [Any]
+                || normalized["additionalProperties"] != nil {
+                normalized["type"] = "object"
+            } else if normalized["items"] != nil {
+                normalized["type"] = "array"
+            } else if let enumValues = normalized["enum"] as? [Any],
+                      let inferred = inferredOpenAISchemaType(fromEnum: enumValues) {
+                normalized["type"] = inferred
+            } else if let constValue = normalized["const"],
+                      let inferred = inferredOpenAISchemaType(fromValue: constValue) {
+                normalized["type"] = inferred
+            } else if let inferred = inferredOpenAISchemaTypeFromCombinators(normalized) {
+                normalized["type"] = inferred
+            } else if looksLikeOpenAILeafSchema(normalized) {
+                normalized["type"] = "string"
+            }
+        }
+
+        return normalized
+    }
+
+    private func flattenedOpenAISchemaCombinators(_ object: [String: Any]) -> [String: Any] {
+        var flattened = object
+
+        if let rawAnyOf = flattened["anyOf"] as? [Any] {
+            let options = normalizedOpenAISchemaOptions(from: rawAnyOf)
+            flattened.removeValue(forKey: "anyOf")
+            if let preferred = preferredOpenAISchemaOption(from: options) {
+                flattened = mergedOpenAISchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawOneOf = flattened["oneOf"] as? [Any] {
+            let options = normalizedOpenAISchemaOptions(from: rawOneOf)
+            flattened.removeValue(forKey: "oneOf")
+            if let preferred = preferredOpenAISchemaOption(from: options) {
+                flattened = mergedOpenAISchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawAllOf = flattened["allOf"] as? [Any] {
+            let options = normalizedOpenAISchemaOptions(from: rawAllOf)
+            flattened.removeValue(forKey: "allOf")
+            for option in options {
+                flattened = mergedOpenAISchema(base: flattened, overlay: option)
+            }
+        }
+
+        return flattened
+    }
+
+    private func normalizedOpenAISchemaOptions(from rawOptions: [Any]) -> [[String: Any]] {
+        rawOptions.compactMap { raw in
+            if let schema = raw as? [String: Any] {
+                return schema
+            }
+            if let normalizedType = normalizedOpenAISchemaTypeValue(raw) {
+                return ["type": normalizedType]
+            }
+            if let inferredType = inferredOpenAISchemaType(fromValue: raw) {
+                return ["type": inferredType]
+            }
+            return nil
+        }
+    }
+
+    private func preferredOpenAISchemaOption(from options: [[String: Any]]) -> [String: Any]? {
+        let candidates = options.filter { !$0.isEmpty }
+        if let typed = candidates.first(where: { normalizedOpenAISchemaTypeValue($0["type"]) != nil }) {
+            return typed
+        }
+        if let explicit = candidates.first(where: {
+            $0["enum"] != nil || $0["const"] != nil || $0["properties"] != nil || $0["items"] != nil
+        }) {
+            return explicit
+        }
+        return candidates.first
+    }
+
+    private func mergedOpenAISchema(base: [String: Any], overlay: [String: Any]) -> [String: Any] {
+        var merged = base
+        for (key, value) in overlay where merged[key] == nil {
+            merged[key] = value
+        }
+
+        if let baseRequired = merged["required"] as? [Any],
+           let overlayRequired = overlay["required"] as? [Any] {
+            var seen = Set<String>()
+            var mergedRequired: [Any] = []
+            for item in baseRequired + overlayRequired {
+                if let text = item as? String {
+                    if seen.insert(text).inserted {
+                        mergedRequired.append(text)
+                    }
+                } else {
+                    mergedRequired.append(item)
+                }
+            }
+            merged["required"] = mergedRequired
+        }
+
+        return merged
+    }
+
+    private func normalizedOpenAISchemaPropertiesMap(_ properties: [String: Any]) -> [String: Any] {
+        var normalized: [String: Any] = [:]
+        normalized.reserveCapacity(properties.count)
+        for (key, value) in properties {
+            normalized[key] = normalizedOpenAISchemaPropertyValue(value)
+        }
+        return normalized
+    }
+
+    private func normalizedOpenAISchemaPropertyValue(_ value: Any) -> Any {
+        if let schema = value as? [String: Any] {
+            return normalizedOpenAISchemaObject(schema)
+        }
+        if let normalizedType = normalizedOpenAISchemaTypeValue(value) {
+            return ["type": normalizedType]
+        }
+        if let inferredType = inferredOpenAISchemaType(fromValue: value) {
+            return ["type": inferredType]
+        }
+        return ["type": "string"]
+    }
+
+    private func normalizedOpenAISchemaTypeKeyword(_ type: String) -> String? {
+        let lowered = type.lowercased()
+        guard lowered != "null" else { return nil }
+        let supportedTypes: Set<String> = ["string", "number", "integer", "boolean", "object", "array"]
+        guard supportedTypes.contains(lowered) else { return nil }
+        return lowered
+    }
+
+    private func normalizedOpenAISchemaTypeValue(_ rawType: Any?) -> String? {
+        guard let rawType else { return nil }
+        if let type = rawType as? String {
+            return normalizedOpenAISchemaTypeKeyword(type)
+        }
+        if let typeArray = rawType as? [Any] {
+            for value in typeArray {
+                guard let type = value as? String else { continue }
+                if let normalized = normalizedOpenAISchemaTypeKeyword(type) {
+                    return normalized
+                }
+            }
+        }
+        return nil
+    }
+
+    private func inferredOpenAISchemaType(fromEnum values: [Any]) -> String? {
+        let nonNullValues = values.filter { !($0 is NSNull) }
+        guard let firstValue = nonNullValues.first else { return nil }
+        guard let inferred = inferredOpenAISchemaType(fromValue: firstValue) else { return nil }
+        for value in nonNullValues.dropFirst() where inferredOpenAISchemaType(fromValue: value) != inferred {
+            return nil
+        }
+        return inferred
+    }
+
+    private func inferredOpenAISchemaType(fromValue value: Any) -> String? {
+        if value is String {
+            return "string"
+        }
+        if value is Bool {
+            return "boolean"
+        }
+        if value is Int || value is Int8 || value is Int16 || value is Int32 || value is Int64
+            || value is UInt || value is UInt8 || value is UInt16 || value is UInt32 || value is UInt64 {
+            return "integer"
+        }
+        if value is Float || value is Double || value is Decimal {
+            return "number"
+        }
+        if value is [Any] {
+            return "array"
+        }
+        if value is [String: Any] {
+            return "object"
+        }
+        if let number = value as? NSNumber {
+            let objCType = String(cString: number.objCType)
+            if objCType == "c" || objCType == "B" {
+                return "boolean"
+            }
+            if ["q", "i", "s", "l", "Q", "I", "S", "L", "C"].contains(objCType) {
+                return "integer"
+            }
+            let doubleValue = number.doubleValue
+            return floor(doubleValue) == doubleValue ? "integer" : "number"
+        }
+        return nil
+    }
+
+    private func inferredOpenAISchemaTypeFromCombinators(_ object: [String: Any]) -> String? {
+        let combinatorKeys = ["anyOf", "oneOf", "allOf"]
+        for key in combinatorKeys {
+            guard let options = object[key] as? [Any], !options.isEmpty else { continue }
+            let inferredTypes = options.compactMap { option -> String? in
+                guard let schema = option as? [String: Any] else { return nil }
+                if let directType = normalizedOpenAISchemaTypeValue(schema["type"]) {
+                    return directType
+                }
+                if let enumValues = schema["enum"] as? [Any],
+                   let inferred = inferredOpenAISchemaType(fromEnum: enumValues) {
+                    return inferred
+                }
+                if let constValue = schema["const"],
+                   let inferred = inferredOpenAISchemaType(fromValue: constValue) {
+                    return inferred
+                }
+                return inferredOpenAISchemaTypeFromCombinators(schema)
+            }
+
+            guard let first = inferredTypes.first else { continue }
+            if inferredTypes.allSatisfy({ $0 == first }) {
+                return first
+            }
+        }
+        return nil
+    }
+
+    private func looksLikeOpenAILeafSchema(_ object: [String: Any]) -> Bool {
+        let leafHints: Set<String> = [
+            "description",
+            "title",
+            "default",
+            "examples",
+            "example",
+            "pattern",
+            "format",
+            "minLength",
+            "maxLength",
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+            "minItems",
+            "maxItems",
+            "uniqueItems",
+            "nullable",
+            "deprecated",
+            "readOnly",
+            "writeOnly",
+            "contentMediaType",
+            "contentEncoding"
+        ]
+        return !leafHints.isDisjoint(with: Set(object.keys))
+    }
+
     private func sanitizedImageGenerationOverrides(_ overrides: [String: Any]) -> [String: Any] {
         let blockedKeys: Set<String> = [
             "messages",
@@ -233,11 +517,31 @@ public class OpenAIAdapter: APIAdapter {
         let id: String?
         let type: String
         let index: Int?
+        let providerSpecificFields: [String: JSONValue]?
         struct Function: Decodable {
             let name: String?
             let arguments: String?
         }
         let function: Function
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case type
+            case index
+            case function
+            case providerSpecificFields
+            case provider_specific_fields
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(String.self, forKey: .id)
+            type = try container.decode(String.self, forKey: .type)
+            index = try container.decodeIfPresent(Int.self, forKey: .index)
+            function = try container.decode(Function.self, forKey: .function)
+            providerSpecificFields = try container.decodeIfPresent([String: JSONValue].self, forKey: .providerSpecificFields)
+                ?? (try container.decodeIfPresent([String: JSONValue].self, forKey: .provider_specific_fields))
+        }
     }
     
     private struct OpenAIResponse: Decodable {
@@ -371,14 +675,18 @@ public class OpenAIAdapter: APIAdapter {
             
             if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 let apiToolCalls: [[String: Any]] = toolCalls.map { call in
-                    [
-                            "id": call.id,
-                            "type": "function",
-                            "function": [
+                    var apiToolCall: [String: Any] = [
+                        "id": call.id,
+                        "type": "function",
+                        "function": [
                             "name": sanitizedToolName(call.toolName),
                             "arguments": call.arguments
                         ]
                     ]
+                    if let providerSpecificFields = call.providerSpecificFields, !providerSpecificFields.isEmpty {
+                        apiToolCall["provider_specific_fields"] = providerSpecificFields.mapValues { $0.toAny() }
+                    }
+                    return apiToolCall
                 }
                 dict["tool_calls"] = apiToolCalls
             } else if msg.role == .tool, let toolCallId = msg.toolCalls?.first?.id {
@@ -403,7 +711,8 @@ public class OpenAIAdapter: APIAdapter {
         // **翻译官的核心工作 (工具翻译)**:
         if let tools = tools, !tools.isEmpty {
             let apiTools = tools.map { tool -> [String: Any] in
-                let functionParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
+                let rawParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
+                let functionParams = normalizedOpenAIToolParameters(rawParams)
                 let function: [String: Any] = ["name": sanitizedToolName(tool.name), "description": tool.description, "parameters": functionParams]
                 return ["type": "function", "function": function]
             }
@@ -532,7 +841,12 @@ public class OpenAIAdapter: APIAdapter {
                     return nil
                 }
                 let arguments = $0.function.arguments ?? ""
-                return InternalToolCall(id: id, toolName: name, arguments: arguments)
+                return InternalToolCall(
+                    id: id,
+                    toolName: name,
+                    arguments: arguments,
+                    providerSpecificFields: $0.providerSpecificFields
+                )
             }
         } else {
             internalToolCalls = nil
@@ -574,7 +888,8 @@ public class OpenAIAdapter: APIAdapter {
                         id: call.id,
                         index: call.index ?? idx,
                         nameFragment: call.function.name,
-                        argumentsFragment: call.function.arguments
+                        argumentsFragment: call.function.arguments,
+                        providerSpecificFields: call.providerSpecificFields
                     )
                 }
             } else {
@@ -893,6 +1208,289 @@ public class GeminiAdapter: APIAdapter {
             capabilities.append(.imageGeneration)
         }
         return capabilities
+    }
+
+    private func normalizedGeminiToolParameters(_ parameters: [String: Any]) -> [String: Any] {
+        normalizedGeminiSchemaValue(parameters) as? [String: Any] ?? parameters
+    }
+
+    private func normalizedGeminiSchemaValue(_ value: Any) -> Any {
+        if let dictionary = value as? [String: Any] {
+            return normalizedGeminiSchemaObject(dictionary)
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizedGeminiSchemaValue($0) }
+        }
+        return value
+    }
+
+    private func normalizedGeminiSchemaObject(_ object: [String: Any]) -> [String: Any] {
+        var normalized = object.mapValues { normalizedGeminiSchemaValue($0) }
+        normalized = flattenedGeminiSchemaCombinators(normalized)
+        if let properties = normalized["properties"] as? [String: Any] {
+            normalized["properties"] = normalizedGeminiSchemaPropertiesMap(properties)
+        }
+        if normalized["default"] is NSNull {
+            normalized.removeValue(forKey: "default")
+        }
+
+        if let normalizedType = normalizedGeminiSchemaTypeValue(normalized["type"]) {
+            normalized["type"] = normalizedType
+        } else if normalized["type"] != nil {
+            normalized.removeValue(forKey: "type")
+        }
+
+        if normalized["type"] == nil {
+            if normalized["properties"] is [String: Any]
+                || normalized["required"] is [Any]
+                || normalized["additionalProperties"] != nil {
+                normalized["type"] = "object"
+            } else if normalized["items"] != nil {
+                normalized["type"] = "array"
+            } else if let enumValues = normalized["enum"] as? [Any],
+                      let inferred = inferredGeminiSchemaType(fromEnum: enumValues) {
+                normalized["type"] = inferred
+            } else if let constValue = normalized["const"],
+                      let inferred = inferredGeminiSchemaType(fromValue: constValue) {
+                normalized["type"] = inferred
+            } else if let inferred = inferredGeminiSchemaTypeFromCombinators(normalized) {
+                normalized["type"] = inferred
+            } else if looksLikeGeminiLeafSchema(normalized) {
+                normalized["type"] = "string"
+            }
+        }
+
+        return normalized
+    }
+
+    private func flattenedGeminiSchemaCombinators(_ object: [String: Any]) -> [String: Any] {
+        var flattened = object
+
+        if let rawAnyOf = flattened["anyOf"] as? [Any] {
+            let options = normalizedGeminiSchemaOptions(from: rawAnyOf)
+            flattened.removeValue(forKey: "anyOf")
+            if let preferred = preferredGeminiSchemaOption(from: options) {
+                flattened = mergedGeminiSchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawOneOf = flattened["oneOf"] as? [Any] {
+            let options = normalizedGeminiSchemaOptions(from: rawOneOf)
+            flattened.removeValue(forKey: "oneOf")
+            if let preferred = preferredGeminiSchemaOption(from: options) {
+                flattened = mergedGeminiSchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawAllOf = flattened["allOf"] as? [Any] {
+            let options = normalizedGeminiSchemaOptions(from: rawAllOf)
+            flattened.removeValue(forKey: "allOf")
+            for option in options {
+                flattened = mergedGeminiSchema(base: flattened, overlay: option)
+            }
+        }
+
+        return flattened
+    }
+
+    private func normalizedGeminiSchemaOptions(from rawOptions: [Any]) -> [[String: Any]] {
+        rawOptions.compactMap { raw in
+            if let schema = raw as? [String: Any] {
+                return schema
+            }
+            if let normalizedType = normalizedGeminiSchemaTypeValue(raw) {
+                return ["type": normalizedType]
+            }
+            if let inferredType = inferredGeminiSchemaType(fromValue: raw) {
+                return ["type": inferredType]
+            }
+            return nil
+        }
+    }
+
+    private func preferredGeminiSchemaOption(from options: [[String: Any]]) -> [String: Any]? {
+        let candidates = options.filter { !$0.isEmpty }
+        if let typed = candidates.first(where: { normalizedGeminiSchemaTypeValue($0["type"]) != nil }) {
+            return typed
+        }
+        if let explicit = candidates.first(where: {
+            $0["enum"] != nil || $0["const"] != nil || $0["properties"] != nil || $0["items"] != nil
+        }) {
+            return explicit
+        }
+        return candidates.first
+    }
+
+    private func mergedGeminiSchema(base: [String: Any], overlay: [String: Any]) -> [String: Any] {
+        var merged = base
+        for (key, value) in overlay where merged[key] == nil {
+            merged[key] = value
+        }
+
+        if let baseRequired = merged["required"] as? [Any],
+           let overlayRequired = overlay["required"] as? [Any] {
+            var seen = Set<String>()
+            var mergedRequired: [Any] = []
+            for item in baseRequired + overlayRequired {
+                if let text = item as? String {
+                    if seen.insert(text).inserted {
+                        mergedRequired.append(text)
+                    }
+                } else {
+                    mergedRequired.append(item)
+                }
+            }
+            merged["required"] = mergedRequired
+        }
+
+        return merged
+    }
+
+    private func normalizedGeminiSchemaPropertiesMap(_ properties: [String: Any]) -> [String: Any] {
+        var normalized: [String: Any] = [:]
+        normalized.reserveCapacity(properties.count)
+        for (key, value) in properties {
+            normalized[key] = normalizedGeminiSchemaPropertyValue(value)
+        }
+        return normalized
+    }
+
+    private func normalizedGeminiSchemaPropertyValue(_ value: Any) -> Any {
+        if let schema = value as? [String: Any] {
+            return normalizedGeminiSchemaObject(schema)
+        }
+        if let normalizedType = normalizedGeminiSchemaTypeValue(value) {
+            return ["type": normalizedType]
+        }
+        if let inferredType = inferredGeminiSchemaType(fromValue: value) {
+            return ["type": inferredType]
+        }
+        return ["type": "string"]
+    }
+
+    private func normalizedGeminiSchemaTypeKeyword(_ type: String) -> String? {
+        let lowered = type.lowercased()
+        guard lowered != "null" else { return nil }
+        let supportedTypes: Set<String> = ["string", "number", "integer", "boolean", "object", "array"]
+        guard supportedTypes.contains(lowered) else { return nil }
+        return lowered
+    }
+
+    private func normalizedGeminiSchemaTypeValue(_ rawType: Any?) -> String? {
+        guard let rawType else { return nil }
+        if let type = rawType as? String {
+            return normalizedGeminiSchemaTypeKeyword(type)
+        }
+        if let typeArray = rawType as? [Any] {
+            for value in typeArray {
+                guard let type = value as? String else { continue }
+                if let normalized = normalizedGeminiSchemaTypeKeyword(type) {
+                    return normalized
+                }
+            }
+        }
+        return nil
+    }
+
+    private func inferredGeminiSchemaType(fromEnum values: [Any]) -> String? {
+        let nonNullValues = values.filter { !($0 is NSNull) }
+        guard let firstValue = nonNullValues.first else { return nil }
+        guard let inferred = inferredGeminiSchemaType(fromValue: firstValue) else { return nil }
+        for value in nonNullValues.dropFirst() where inferredGeminiSchemaType(fromValue: value) != inferred {
+            return nil
+        }
+        return inferred
+    }
+
+    private func inferredGeminiSchemaType(fromValue value: Any) -> String? {
+        if value is String {
+            return "string"
+        }
+        if value is Bool {
+            return "boolean"
+        }
+        if value is Int || value is Int8 || value is Int16 || value is Int32 || value is Int64
+            || value is UInt || value is UInt8 || value is UInt16 || value is UInt32 || value is UInt64 {
+            return "integer"
+        }
+        if value is Float || value is Double || value is Decimal {
+            return "number"
+        }
+        if value is [Any] {
+            return "array"
+        }
+        if value is [String: Any] {
+            return "object"
+        }
+        if let number = value as? NSNumber {
+            let objCType = String(cString: number.objCType)
+            if objCType == "c" || objCType == "B" {
+                return "boolean"
+            }
+            if ["q", "i", "s", "l", "Q", "I", "S", "L", "C"].contains(objCType) {
+                return "integer"
+            }
+            let doubleValue = number.doubleValue
+            return floor(doubleValue) == doubleValue ? "integer" : "number"
+        }
+        return nil
+    }
+
+    private func inferredGeminiSchemaTypeFromCombinators(_ object: [String: Any]) -> String? {
+        let combinatorKeys = ["anyOf", "oneOf", "allOf"]
+        for key in combinatorKeys {
+            guard let options = object[key] as? [Any], !options.isEmpty else { continue }
+            let inferredTypes = options.compactMap { option -> String? in
+                guard let schema = option as? [String: Any] else { return nil }
+                if let directType = normalizedGeminiSchemaTypeValue(schema["type"]) {
+                    return directType
+                }
+                if let enumValues = schema["enum"] as? [Any],
+                   let inferred = inferredGeminiSchemaType(fromEnum: enumValues) {
+                    return inferred
+                }
+                if let constValue = schema["const"],
+                   let inferred = inferredGeminiSchemaType(fromValue: constValue) {
+                    return inferred
+                }
+                return inferredGeminiSchemaTypeFromCombinators(schema)
+            }
+
+            guard let first = inferredTypes.first else { continue }
+            if inferredTypes.allSatisfy({ $0 == first }) {
+                return first
+            }
+        }
+        return nil
+    }
+
+    private func looksLikeGeminiLeafSchema(_ object: [String: Any]) -> Bool {
+        let leafHints: Set<String> = [
+            "description",
+            "title",
+            "default",
+            "examples",
+            "example",
+            "pattern",
+            "format",
+            "minLength",
+            "maxLength",
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+            "minItems",
+            "maxItems",
+            "uniqueItems",
+            "nullable",
+            "deprecated",
+            "readOnly",
+            "writeOnly",
+            "contentMediaType",
+            "contentEncoding"
+        ]
+        return !leafHints.isDisjoint(with: Set(object.keys))
     }
 
     // MARK: - 内部解码模型
@@ -1218,7 +1816,7 @@ public class GeminiAdapter: APIAdapter {
                     "description": tool.description
                 ]
                 if let params = tool.parameters.toAny() as? [String: Any] {
-                    funcDef["parameters"] = params
+                    funcDef["parameters"] = normalizedGeminiToolParameters(params)
                 }
                 return funcDef
             }

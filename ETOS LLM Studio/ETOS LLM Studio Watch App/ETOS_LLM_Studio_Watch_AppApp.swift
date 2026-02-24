@@ -17,6 +17,7 @@ import os.log
 @main
 struct ETOS_LLM_Studio_Watch_AppApp: App {
     @StateObject private var syncManager = WatchSyncManager.shared
+    @StateObject private var mcpManager = MCPManager.shared
     
     init() {
         // 在 App 启动时预先触发本地网络权限
@@ -40,6 +41,8 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                 .onAppear {
                     // 启动时自动同步（静默模式）
                     syncManager.performAutoSyncIfEnabled()
+                    // 启动时自动重连已加入聊天路由的 MCP 服务器
+                    mcpManager.connectSelectedServersIfNeeded()
                 }
         }
     }

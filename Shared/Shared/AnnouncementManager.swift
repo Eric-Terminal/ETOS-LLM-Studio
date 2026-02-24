@@ -343,7 +343,7 @@ public class AnnouncementManager: ObservableObject {
 
         let english = restricted.filter { $0.language == "en" }
         if !english.isEmpty {
-            logger.info("回退到英文版本")
+            logger.info("回退到英文文案")
             return english
         }
 
@@ -382,7 +382,7 @@ public class AnnouncementManager: ObservableObject {
             hidden.formUnion(announcements.map { $0.uniqueKey })
             hiddenAnnouncementKeys = hidden
             hideAnnouncementSection = false
-            logger.info("检测到旧版本隐藏标记，已迁移为按条目隐藏")
+            logger.info("检测到旧隐藏标记格式，已迁移为按条目隐藏")
         }
         
         let visible = filterHidden(announcements)
@@ -419,15 +419,15 @@ public class AnnouncementManager: ObservableObject {
         // 获取当前App的Build版本号
         guard let buildString = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
               let currentBuild = Int(buildString) else {
-            logger.warning("无法获取当前Build版本号")
-            return true // 如果无法获取版本号，默认显示
+            logger.warning("无法获取当前构建号")
+            return true // 如果无法获取构建号，默认显示
         }
         
         // 检查最低版本要求
         if let minBuildString = announcement.minBuild,
            let minBuild = Int(minBuildString),
            currentBuild < minBuild {
-            logger.info("当前版本 \(currentBuild) 低于最低要求 \(minBuild)")
+            logger.info("当前构建号 \(currentBuild) 低于最低要求 \(minBuild)")
             return false
         }
         
@@ -435,7 +435,7 @@ public class AnnouncementManager: ObservableObject {
         if let maxBuildString = announcement.maxBuild,
            let maxBuild = Int(maxBuildString),
            currentBuild > maxBuild {
-            logger.info("当前版本 \(currentBuild) 高于最高限制 \(maxBuild)")
+            logger.info("当前构建号 \(currentBuild) 高于最高限制 \(maxBuild)")
             return false
         }
         

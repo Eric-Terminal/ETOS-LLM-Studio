@@ -221,6 +221,36 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decoded.tokenUsage?.totalTokens, 30)
     }
 
+    /// 测试工具调用的服务商专有字段在序列化往返中不丢失
+    func testToolCallProviderSpecificFieldsRoundTrip() throws {
+        let toolCall = InternalToolCall(
+            id: "call_provider_1",
+            toolName: "save_memory",
+            arguments: #"{"content":"keep signature"}"#,
+            result: nil,
+            providerSpecificFields: [
+                "thought_signature": .string("opaque-binary-signature"),
+                "provider": .string("gemini")
+            ]
+        )
+        let original = ChatMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [toolCall]
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(original)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ChatMessage.self, from: data)
+        let decodedCall = try XCTUnwrap(decoded.toolCalls?.first)
+
+        XCTAssertEqual(decodedCall.id, "call_provider_1")
+        XCTAssertEqual(decodedCall.providerSpecificFields?["thought_signature"], .string("opaque-binary-signature"))
+        XCTAssertEqual(decodedCall.providerSpecificFields?["provider"], .string("gemini"))
+    }
+
     /// 测试响应测速字段的序列化和反序列化
     func testResponseMetricsRoundTrip() throws {
         let metrics = MessageResponseMetrics(
