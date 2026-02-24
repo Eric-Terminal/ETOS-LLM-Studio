@@ -761,6 +761,65 @@ struct OpenAIAdapterTests {
         #expect(localeSchema["type"] as? String == "string")
     }
 
+    @Test("OpenAI 工具 schema 的 anyOf 会扁平化并移除 default:null")
+    func testOpenAISchemaFlattensAnyOfAndDropsNullDefault() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "tavily_search",
+                description: "搜索网络内容",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "time_range": .dictionary([
+                            "default": .null,
+                            "anyOf": .array([
+                                .dictionary([
+                                    "type": .string("string"),
+                                    "enum": .array([
+                                        .string("day"),
+                                        .string("week"),
+                                        .string("month"),
+                                        .string("year")
+                                    ])
+                                ]),
+                                .dictionary([:])
+                            ]),
+                            "description": .string("可选时间范围")
+                        ])
+                    ])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstTool = toolsPayload.first,
+        let function = firstTool["function"] as? [String: Any],
+        let parameters = function["parameters"] as? [String: Any],
+        let properties = parameters["properties"] as? [String: Any],
+        let timeRangeSchema = properties["time_range"] as? [String: Any] else {
+            Issue.record("OpenAI 请求体中未找到 time_range schema。")
+            return
+        }
+
+        #expect(timeRangeSchema["type"] as? String == "string")
+        #expect(timeRangeSchema["anyOf"] == nil)
+        #expect(timeRangeSchema["oneOf"] == nil)
+        #expect(timeRangeSchema["allOf"] == nil)
+        #expect(timeRangeSchema["default"] == nil)
+    }
+
     @Test("OpenAI 工具 schema 的 properties 允许字符串简写并自动包装为对象")
     func testOpenAIPropertiesStringShorthandSchemaGetsWrapped() throws {
         let tools = [
@@ -1030,6 +1089,66 @@ struct GeminiAdapterTests {
 
         #expect(timeRangeSchema["type"] as? String == "string")
         #expect(localeSchema["type"] as? String == "string")
+    }
+
+    @Test("Gemini 工具 schema 的 anyOf 会扁平化并移除 default:null")
+    func testGeminiSchemaFlattensAnyOfAndDropsNullDefault() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "tavily_search",
+                description: "搜索网络内容",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "time_range": .dictionary([
+                            "default": .null,
+                            "anyOf": .array([
+                                .dictionary([
+                                    "type": .string("string"),
+                                    "enum": .array([
+                                        .string("day"),
+                                        .string("week"),
+                                        .string("month"),
+                                        .string("year")
+                                    ])
+                                ]),
+                                .dictionary([:])
+                            ]),
+                            "description": .string("可选时间范围")
+                        ])
+                    ])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstToolGroup = toolsPayload.first,
+        let declarations = firstToolGroup["function_declarations"] as? [[String: Any]],
+        let firstDeclaration = declarations.first,
+        let parameters = firstDeclaration["parameters"] as? [String: Any],
+        let properties = parameters["properties"] as? [String: Any],
+        let timeRangeSchema = properties["time_range"] as? [String: Any] else {
+            Issue.record("Gemini 请求体中未找到 time_range schema。")
+            return
+        }
+
+        #expect(timeRangeSchema["type"] as? String == "string")
+        #expect(timeRangeSchema["anyOf"] == nil)
+        #expect(timeRangeSchema["oneOf"] == nil)
+        #expect(timeRangeSchema["allOf"] == nil)
+        #expect(timeRangeSchema["default"] == nil)
     }
 
     @Test("Gemini 工具 schema 的 properties 允许字符串简写并自动包装为对象")

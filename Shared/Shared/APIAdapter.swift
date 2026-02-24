@@ -230,8 +230,12 @@ public class OpenAIAdapter: APIAdapter {
 
     private func normalizedOpenAISchemaObject(_ object: [String: Any]) -> [String: Any] {
         var normalized = object.mapValues { normalizedOpenAISchemaValue($0) }
+        normalized = flattenedOpenAISchemaCombinators(normalized)
         if let properties = normalized["properties"] as? [String: Any] {
             normalized["properties"] = normalizedOpenAISchemaPropertiesMap(properties)
+        }
+        if normalized["default"] is NSNull {
+            normalized.removeValue(forKey: "default")
         }
 
         if let normalizedType = normalizedOpenAISchemaTypeValue(normalized["type"]) {
@@ -261,6 +265,89 @@ public class OpenAIAdapter: APIAdapter {
         }
 
         return normalized
+    }
+
+    private func flattenedOpenAISchemaCombinators(_ object: [String: Any]) -> [String: Any] {
+        var flattened = object
+
+        if let rawAnyOf = flattened["anyOf"] as? [Any] {
+            let options = normalizedOpenAISchemaOptions(from: rawAnyOf)
+            flattened.removeValue(forKey: "anyOf")
+            if let preferred = preferredOpenAISchemaOption(from: options) {
+                flattened = mergedOpenAISchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawOneOf = flattened["oneOf"] as? [Any] {
+            let options = normalizedOpenAISchemaOptions(from: rawOneOf)
+            flattened.removeValue(forKey: "oneOf")
+            if let preferred = preferredOpenAISchemaOption(from: options) {
+                flattened = mergedOpenAISchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawAllOf = flattened["allOf"] as? [Any] {
+            let options = normalizedOpenAISchemaOptions(from: rawAllOf)
+            flattened.removeValue(forKey: "allOf")
+            for option in options {
+                flattened = mergedOpenAISchema(base: flattened, overlay: option)
+            }
+        }
+
+        return flattened
+    }
+
+    private func normalizedOpenAISchemaOptions(from rawOptions: [Any]) -> [[String: Any]] {
+        rawOptions.compactMap { raw in
+            if let schema = raw as? [String: Any] {
+                return schema
+            }
+            if let normalizedType = normalizedOpenAISchemaTypeValue(raw) {
+                return ["type": normalizedType]
+            }
+            if let inferredType = inferredOpenAISchemaType(fromValue: raw) {
+                return ["type": inferredType]
+            }
+            return nil
+        }
+    }
+
+    private func preferredOpenAISchemaOption(from options: [[String: Any]]) -> [String: Any]? {
+        let candidates = options.filter { !$0.isEmpty }
+        if let typed = candidates.first(where: { normalizedOpenAISchemaTypeValue($0["type"]) != nil }) {
+            return typed
+        }
+        if let explicit = candidates.first(where: {
+            $0["enum"] != nil || $0["const"] != nil || $0["properties"] != nil || $0["items"] != nil
+        }) {
+            return explicit
+        }
+        return candidates.first
+    }
+
+    private func mergedOpenAISchema(base: [String: Any], overlay: [String: Any]) -> [String: Any] {
+        var merged = base
+        for (key, value) in overlay where merged[key] == nil {
+            merged[key] = value
+        }
+
+        if let baseRequired = merged["required"] as? [Any],
+           let overlayRequired = overlay["required"] as? [Any] {
+            var seen = Set<String>()
+            var mergedRequired: [Any] = []
+            for item in baseRequired + overlayRequired {
+                if let text = item as? String {
+                    if seen.insert(text).inserted {
+                        mergedRequired.append(text)
+                    }
+                } else {
+                    mergedRequired.append(item)
+                }
+            }
+            merged["required"] = mergedRequired
+        }
+
+        return merged
     }
 
     private func normalizedOpenAISchemaPropertiesMap(_ properties: [String: Any]) -> [String: Any] {
@@ -1139,8 +1226,12 @@ public class GeminiAdapter: APIAdapter {
 
     private func normalizedGeminiSchemaObject(_ object: [String: Any]) -> [String: Any] {
         var normalized = object.mapValues { normalizedGeminiSchemaValue($0) }
+        normalized = flattenedGeminiSchemaCombinators(normalized)
         if let properties = normalized["properties"] as? [String: Any] {
             normalized["properties"] = normalizedGeminiSchemaPropertiesMap(properties)
+        }
+        if normalized["default"] is NSNull {
+            normalized.removeValue(forKey: "default")
         }
 
         if let normalizedType = normalizedGeminiSchemaTypeValue(normalized["type"]) {
@@ -1170,6 +1261,89 @@ public class GeminiAdapter: APIAdapter {
         }
 
         return normalized
+    }
+
+    private func flattenedGeminiSchemaCombinators(_ object: [String: Any]) -> [String: Any] {
+        var flattened = object
+
+        if let rawAnyOf = flattened["anyOf"] as? [Any] {
+            let options = normalizedGeminiSchemaOptions(from: rawAnyOf)
+            flattened.removeValue(forKey: "anyOf")
+            if let preferred = preferredGeminiSchemaOption(from: options) {
+                flattened = mergedGeminiSchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawOneOf = flattened["oneOf"] as? [Any] {
+            let options = normalizedGeminiSchemaOptions(from: rawOneOf)
+            flattened.removeValue(forKey: "oneOf")
+            if let preferred = preferredGeminiSchemaOption(from: options) {
+                flattened = mergedGeminiSchema(base: flattened, overlay: preferred)
+            }
+        }
+
+        if let rawAllOf = flattened["allOf"] as? [Any] {
+            let options = normalizedGeminiSchemaOptions(from: rawAllOf)
+            flattened.removeValue(forKey: "allOf")
+            for option in options {
+                flattened = mergedGeminiSchema(base: flattened, overlay: option)
+            }
+        }
+
+        return flattened
+    }
+
+    private func normalizedGeminiSchemaOptions(from rawOptions: [Any]) -> [[String: Any]] {
+        rawOptions.compactMap { raw in
+            if let schema = raw as? [String: Any] {
+                return schema
+            }
+            if let normalizedType = normalizedGeminiSchemaTypeValue(raw) {
+                return ["type": normalizedType]
+            }
+            if let inferredType = inferredGeminiSchemaType(fromValue: raw) {
+                return ["type": inferredType]
+            }
+            return nil
+        }
+    }
+
+    private func preferredGeminiSchemaOption(from options: [[String: Any]]) -> [String: Any]? {
+        let candidates = options.filter { !$0.isEmpty }
+        if let typed = candidates.first(where: { normalizedGeminiSchemaTypeValue($0["type"]) != nil }) {
+            return typed
+        }
+        if let explicit = candidates.first(where: {
+            $0["enum"] != nil || $0["const"] != nil || $0["properties"] != nil || $0["items"] != nil
+        }) {
+            return explicit
+        }
+        return candidates.first
+    }
+
+    private func mergedGeminiSchema(base: [String: Any], overlay: [String: Any]) -> [String: Any] {
+        var merged = base
+        for (key, value) in overlay where merged[key] == nil {
+            merged[key] = value
+        }
+
+        if let baseRequired = merged["required"] as? [Any],
+           let overlayRequired = overlay["required"] as? [Any] {
+            var seen = Set<String>()
+            var mergedRequired: [Any] = []
+            for item in baseRequired + overlayRequired {
+                if let text = item as? String {
+                    if seen.insert(text).inserted {
+                        mergedRequired.append(text)
+                    }
+                } else {
+                    mergedRequired.append(item)
+                }
+            }
+            merged["required"] = mergedRequired
+        }
+
+        return merged
     }
 
     private func normalizedGeminiSchemaPropertiesMap(_ properties: [String: Any]) -> [String: Any] {
