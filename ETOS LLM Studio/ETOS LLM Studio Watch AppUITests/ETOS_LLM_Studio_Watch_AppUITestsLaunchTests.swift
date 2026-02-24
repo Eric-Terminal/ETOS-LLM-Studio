@@ -1,3 +1,11 @@
+// ============================================================================
+// ETOS_LLM_Studio_Watch_AppUITestsLaunchTests.swift
+// ============================================================================
+// ETOS_LLM_Studio_Watch_AppUITestsLaunchTests 测试文件
+// - 覆盖相关模块的行为与回归测试
+// - 保障迭代过程中的稳定性
+// ============================================================================
+
 //
 //  ETOS_LLM_Studio_Watch_AppUITestsLaunchTests.swift
 //  ETOS LLM Studio Watch AppUITests
