@@ -231,6 +231,12 @@ public class OpenAIAdapter: APIAdapter {
     private func normalizedOpenAISchemaObject(_ object: [String: Any]) -> [String: Any] {
         var normalized = object.mapValues { normalizedOpenAISchemaValue($0) }
 
+        if let normalizedType = normalizedOpenAISchemaTypeValue(normalized["type"]) {
+            normalized["type"] = normalizedType
+        } else if normalized["type"] != nil {
+            normalized.removeValue(forKey: "type")
+        }
+
         if normalized["type"] == nil {
             if normalized["properties"] is [String: Any]
                 || normalized["required"] is [Any]
@@ -244,10 +250,31 @@ public class OpenAIAdapter: APIAdapter {
             } else if let constValue = normalized["const"],
                       let inferred = inferredOpenAISchemaType(fromValue: constValue) {
                 normalized["type"] = inferred
+            } else if let inferred = inferredOpenAISchemaTypeFromCombinators(normalized) {
+                normalized["type"] = inferred
+            } else if looksLikeOpenAILeafSchema(normalized) {
+                normalized["type"] = "string"
             }
         }
 
         return normalized
+    }
+
+    private func normalizedOpenAISchemaTypeValue(_ rawType: Any?) -> String? {
+        guard let rawType else { return nil }
+        if let type = rawType as? String {
+            let lowered = type.lowercased()
+            return lowered == "null" ? nil : lowered
+        }
+        if let typeArray = rawType as? [Any] {
+            let candidateTypes = typeArray.compactMap { value -> String? in
+                guard let type = value as? String else { return nil }
+                let lowered = type.lowercased()
+                return lowered == "null" ? nil : lowered
+            }
+            return candidateTypes.first
+        }
+        return nil
     }
 
     private func inferredOpenAISchemaType(fromEnum values: [Any]) -> String? {
@@ -292,6 +319,63 @@ public class OpenAIAdapter: APIAdapter {
             return floor(doubleValue) == doubleValue ? "integer" : "number"
         }
         return nil
+    }
+
+    private func inferredOpenAISchemaTypeFromCombinators(_ object: [String: Any]) -> String? {
+        let combinatorKeys = ["anyOf", "oneOf", "allOf"]
+        for key in combinatorKeys {
+            guard let options = object[key] as? [Any], !options.isEmpty else { continue }
+            let inferredTypes = options.compactMap { option -> String? in
+                guard let schema = option as? [String: Any] else { return nil }
+                if let directType = normalizedOpenAISchemaTypeValue(schema["type"]) {
+                    return directType
+                }
+                if let enumValues = schema["enum"] as? [Any],
+                   let inferred = inferredOpenAISchemaType(fromEnum: enumValues) {
+                    return inferred
+                }
+                if let constValue = schema["const"],
+                   let inferred = inferredOpenAISchemaType(fromValue: constValue) {
+                    return inferred
+                }
+                return inferredOpenAISchemaTypeFromCombinators(schema)
+            }
+
+            guard let first = inferredTypes.first else { continue }
+            if inferredTypes.allSatisfy({ $0 == first }) {
+                return first
+            }
+        }
+        return nil
+    }
+
+    private func looksLikeOpenAILeafSchema(_ object: [String: Any]) -> Bool {
+        let leafHints: Set<String> = [
+            "description",
+            "title",
+            "default",
+            "examples",
+            "example",
+            "pattern",
+            "format",
+            "minLength",
+            "maxLength",
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+            "minItems",
+            "maxItems",
+            "uniqueItems",
+            "nullable",
+            "deprecated",
+            "readOnly",
+            "writeOnly",
+            "contentMediaType",
+            "contentEncoding"
+        ]
+        return !leafHints.isDisjoint(with: Set(object.keys))
     }
 
     private func sanitizedImageGenerationOverrides(_ overrides: [String: Any]) -> [String: Any] {
@@ -1024,6 +1108,12 @@ public class GeminiAdapter: APIAdapter {
     private func normalizedGeminiSchemaObject(_ object: [String: Any]) -> [String: Any] {
         var normalized = object.mapValues { normalizedGeminiSchemaValue($0) }
 
+        if let normalizedType = normalizedGeminiSchemaTypeValue(normalized["type"]) {
+            normalized["type"] = normalizedType
+        } else if normalized["type"] != nil {
+            normalized.removeValue(forKey: "type")
+        }
+
         if normalized["type"] == nil {
             if normalized["properties"] is [String: Any]
                 || normalized["required"] is [Any]
@@ -1037,10 +1127,31 @@ public class GeminiAdapter: APIAdapter {
             } else if let constValue = normalized["const"],
                       let inferred = inferredGeminiSchemaType(fromValue: constValue) {
                 normalized["type"] = inferred
+            } else if let inferred = inferredGeminiSchemaTypeFromCombinators(normalized) {
+                normalized["type"] = inferred
+            } else if looksLikeGeminiLeafSchema(normalized) {
+                normalized["type"] = "string"
             }
         }
 
         return normalized
+    }
+
+    private func normalizedGeminiSchemaTypeValue(_ rawType: Any?) -> String? {
+        guard let rawType else { return nil }
+        if let type = rawType as? String {
+            let lowered = type.lowercased()
+            return lowered == "null" ? nil : lowered
+        }
+        if let typeArray = rawType as? [Any] {
+            let candidateTypes = typeArray.compactMap { value -> String? in
+                guard let type = value as? String else { return nil }
+                let lowered = type.lowercased()
+                return lowered == "null" ? nil : lowered
+            }
+            return candidateTypes.first
+        }
+        return nil
     }
 
     private func inferredGeminiSchemaType(fromEnum values: [Any]) -> String? {
@@ -1085,6 +1196,63 @@ public class GeminiAdapter: APIAdapter {
             return floor(doubleValue) == doubleValue ? "integer" : "number"
         }
         return nil
+    }
+
+    private func inferredGeminiSchemaTypeFromCombinators(_ object: [String: Any]) -> String? {
+        let combinatorKeys = ["anyOf", "oneOf", "allOf"]
+        for key in combinatorKeys {
+            guard let options = object[key] as? [Any], !options.isEmpty else { continue }
+            let inferredTypes = options.compactMap { option -> String? in
+                guard let schema = option as? [String: Any] else { return nil }
+                if let directType = normalizedGeminiSchemaTypeValue(schema["type"]) {
+                    return directType
+                }
+                if let enumValues = schema["enum"] as? [Any],
+                   let inferred = inferredGeminiSchemaType(fromEnum: enumValues) {
+                    return inferred
+                }
+                if let constValue = schema["const"],
+                   let inferred = inferredGeminiSchemaType(fromValue: constValue) {
+                    return inferred
+                }
+                return inferredGeminiSchemaTypeFromCombinators(schema)
+            }
+
+            guard let first = inferredTypes.first else { continue }
+            if inferredTypes.allSatisfy({ $0 == first }) {
+                return first
+            }
+        }
+        return nil
+    }
+
+    private func looksLikeGeminiLeafSchema(_ object: [String: Any]) -> Bool {
+        let leafHints: Set<String> = [
+            "description",
+            "title",
+            "default",
+            "examples",
+            "example",
+            "pattern",
+            "format",
+            "minLength",
+            "maxLength",
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+            "minItems",
+            "maxItems",
+            "uniqueItems",
+            "nullable",
+            "deprecated",
+            "readOnly",
+            "writeOnly",
+            "contentMediaType",
+            "contentEncoding"
+        ]
+        return !leafHints.isDisjoint(with: Set(object.keys))
     }
 
     // MARK: - 内部解码模型
