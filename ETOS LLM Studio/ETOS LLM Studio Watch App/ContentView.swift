@@ -290,6 +290,9 @@ struct ContentView: View {
 
     private func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
+        if isToolRelatedMessage(message) || isToolRelatedMessage(nextMessage) {
+            return false
+        }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
     }
 
@@ -306,6 +309,13 @@ struct ContentView: View {
         @unknown default:
             return false
         }
+    }
+
+    private func isToolRelatedMessage(_ message: ChatMessage) -> Bool {
+        if message.role == .tool {
+            return true
+        }
+        return !(message.toolCalls?.isEmpty ?? true)
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {

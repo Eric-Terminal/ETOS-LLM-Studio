@@ -89,6 +89,7 @@ struct ChatBubble: View {
     @StateObject private var audioPlayer = WatchAudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
     @State private var availableWidth: CGFloat = 0
+    @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.displayScale) private var displayScale
@@ -174,6 +175,16 @@ struct ChatBubble: View {
         hasToolCalls && resolvedToolCallsPlacement == .afterContent
     }
 
+    private var shouldRenderToolCallsAsSeparateBubbles: Bool {
+        hasToolCalls && message.role != .user && message.role != .error
+    }
+
+    private var hasMainContentWhenToolCallsSeparated: Bool {
+        let hasReasoning = message.reasoningContent != nil && !(message.reasoningContent ?? "").isEmpty
+        let hasVisibleContent = hasNonPlaceholderText && message.role != .tool
+        return hasReasoning || hasVisibleContent
+    }
+
     private var assistantBubbleShape: BubbleCornerShape {
         let baseRadius: CGFloat = 12
         let mergedRadius: CGFloat = 0
@@ -215,17 +226,8 @@ struct ChatBubble: View {
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
-        guard message.role != .user,
-              let request = toolPermissionCenter.activeRequest,
-              let toolCalls = message.toolCalls else {
-            return nil
-        }
-        let trimmedArgs = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches = toolCalls.contains { call in
-            call.toolName == request.toolName
-                && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedArgs
-        }
-        return matches ? request : nil
+        guard let toolCalls = message.toolCalls else { return nil }
+        return toolCalls.compactMap(activeToolPermissionRequest(for:)).first
     }
 
 
@@ -326,7 +328,11 @@ struct ChatBubble: View {
             }
 
             if shouldShowAssistantBubble {
-                assistantTextBubble
+                if shouldRenderToolCallsAsSeparateBubbles {
+                    separatedAssistantBubbles
+                } else {
+                    assistantTextBubble
+                }
             }
 
             if shouldPlaceAssistantImagesAfterText,
@@ -360,6 +366,41 @@ struct ChatBubble: View {
             }
         } else {
             userBubbleFallback(content)
+        }
+    }
+
+    @ViewBuilder
+    private var separatedAssistantBubbles: some View {
+        let hasReasoning = message.reasoningContent != nil && !((message.reasoningContent ?? "").isEmpty)
+        let isErrorVersion = message.content.hasPrefix("重试失败")
+
+        if shouldShowToolCallsBeforeContent {
+            toolCallsSection
+        }
+
+        if hasMainContentWhenToolCallsSeparated {
+            let content = VStack(alignment: .leading, spacing: 8) {
+                if let reasoning = message.reasoningContent, !reasoning.isEmpty {
+                    reasoningView(reasoning)
+                }
+
+                if hasReasoning && hasNonPlaceholderText {
+                    Divider().background(Color.gray)
+                }
+
+                if message.role != .tool && hasNonPlaceholderText {
+                    renderContent(message.content)
+                        .foregroundColor(isErrorVersion ? .white : nil)
+                }
+            }
+            .padding(10)
+
+            assistantBubbleContainer(content, isError: isErrorVersion, standalone: true)
+                .contentShape(Rectangle())
+        }
+
+        if shouldShowToolCallsAfterContent {
+            toolCallsSection
         }
     }
 
@@ -441,21 +482,81 @@ struct ChatBubble: View {
     @ViewBuilder
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-            toolCallsInlineView(toolCalls)
-            if let activeToolPermissionRequest {
-                toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
-                    toolPermissionCenter.resolveActiveRequest(with: decision)
-                })
-            }
-            let shouldShowResults = hasToolResults || hasPendingToolResults
-            if shouldShowResults {
-                toolResultsDisclosureView(
-                    toolCalls,
-                    resultText: "",
-                    isPending: hasPendingToolResults
-                )
+            if shouldRenderToolCallsAsSeparateBubbles {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(toolCalls, id: \.id) { call in
+                        let content = VStack(alignment: .leading, spacing: 6) {
+                            toolCallsInlineView([call])
+
+                            if let permissionRequest = activeToolPermissionRequest(for: call) {
+                                toolPermissionInlineView(request: permissionRequest, onDecision: { decision in
+                                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                                })
+                            }
+
+                            if shouldShowToolResult(for: call) {
+                                toolResultsDisclosureView(
+                                    [call],
+                                    resultText: message.role == .tool ? message.content : "",
+                                    isPending: isPendingToolResult(for: call),
+                                    expanded: toolResultExpansionBinding(for: call.id)
+                                )
+                            }
+                        }
+                        .padding(10)
+
+                        assistantBubbleContainer(content, isError: false, standalone: true)
+                            .contentShape(Rectangle())
+                    }
+                }
+            } else {
+                toolCallsInlineView(toolCalls)
+                if let activeToolPermissionRequest {
+                    toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
+                        toolPermissionCenter.resolveActiveRequest(with: decision)
+                    })
+                }
+                let shouldShowResults = hasToolResults || hasPendingToolResults
+                if shouldShowResults {
+                    toolResultsDisclosureView(
+                        toolCalls,
+                        resultText: "",
+                        isPending: hasPendingToolResults
+                    )
+                }
             }
         }
+    }
+
+    private func toolResultExpansionBinding(for toolCallID: String) -> Binding<Bool> {
+        Binding(
+            get: { toolCallResultExpandedState[toolCallID, default: isToolCallsExpanded] },
+            set: { toolCallResultExpandedState[toolCallID] = $0 }
+        )
+    }
+
+    private func resolvedToolResultText(for call: InternalToolCall) -> String {
+        let fallback = message.role == .tool ? message.content : ""
+        return (call.result ?? fallback).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isPendingToolResult(for call: InternalToolCall) -> Bool {
+        hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
+    }
+
+    private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
+        !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
+    }
+
+    private func activeToolPermissionRequest(for call: InternalToolCall) -> ToolPermissionRequest? {
+        guard message.role != .user,
+              let request = toolPermissionCenter.activeRequest else {
+            return nil
+        }
+        let trimmedArgs = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let callArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isMatch = call.toolName == request.toolName && callArgs == trimmedArgs
+        return isMatch ? request : nil
     }
 
     private var shouldShowUserBubble: Bool {
@@ -684,9 +785,11 @@ struct ChatBubble: View {
     private func toolResultsDisclosureView(
         _ toolCalls: [InternalToolCall],
         resultText: String,
-        isPending: Bool
+        isPending: Bool,
+        expanded: Binding<Bool>? = nil
     ) -> some View {
         let toolNames = toolCalls.map { toolDisplayLabel(for: $0.toolName) }
+        let expansion = expanded ?? $isToolCallsExpanded
         VStack(alignment: .leading, spacing: 5) {
             if isPending {
                 HStack {
@@ -706,7 +809,7 @@ struct ChatBubble: View {
             } else {
                 Button(action: {
                     withAnimation {
-                        isToolCallsExpanded.toggle()
+                        expansion.wrappedValue.toggle()
                     }
                 }) {
                     HStack {
@@ -715,7 +818,7 @@ struct ChatBubble: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                         Spacer()
-                        Image(systemName: isToolCallsExpanded ? "chevron.down" : "chevron.right")
+                        Image(systemName: expansion.wrappedValue ? "chevron.down" : "chevron.right")
                             .font(.caption)
                     }
                     .foregroundColor(.secondary)
@@ -723,7 +826,7 @@ struct ChatBubble: View {
                 .buttonStyle(.plain)
             }
 
-            if isToolCallsExpanded && !isPending {
+            if expansion.wrappedValue && !isPending {
                 ForEach(toolCalls, id: \.id) { toolCall in
                     let result = (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
                     let label = toolDisplayLabel(for: toolCall.toolName)
@@ -937,14 +1040,32 @@ struct ChatBubble: View {
     }
     
     @ViewBuilder
-    private func assistantBubbleFallback<Content: View>(_ content: Content, isError: Bool = false) -> some View {
+    private func assistantBubbleFallback<Content: View>(
+        _ content: Content,
+        isError: Bool = false,
+        shape: BubbleCornerShape
+    ) -> some View {
         content
             .background(isError ? Color.red.opacity(0.7) : (enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)))
-            .clipShape(assistantBubbleShape)
+            .clipShape(shape)
+    }
+
+    private var standaloneAssistantBubbleShape: BubbleCornerShape {
+        BubbleCornerShape(
+            topLeft: 12,
+            topRight: 12,
+            bottomLeft: 12,
+            bottomRight: 12
+        )
     }
 
     @ViewBuilder
-    private func assistantBubbleContainer<Content: View>(_ content: Content, isError: Bool) -> some View {
+    private func assistantBubbleContainer<Content: View>(
+        _ content: Content,
+        isError: Bool,
+        standalone: Bool = false
+    ) -> some View {
+        let shape = standalone ? standaloneAssistantBubbleShape : assistantBubbleShape
         let sizedContent = content
             .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
         
@@ -952,21 +1073,21 @@ struct ChatBubble: View {
             if enableLiquidGlass {
                 if #available(watchOS 26.0, *) {
                     sizedContent
-                        .glassEffect(.clear, in: assistantBubbleShape)
+                        .glassEffect(.clear, in: shape)
                         .background(isError ? Color.red.opacity(0.5) : nil)
                 } else {
-                    assistantBubbleFallback(sizedContent, isError: isError)
+                    assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
                 }
             } else {
-                assistantBubbleFallback(sizedContent, isError: isError)
+                assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
             }
         }
         .overlay(alignment: .top) {
-            if shouldShowMergedSeparator {
+            if !standalone && shouldShowMergedSeparator {
                 separatorLine
             }
         }
-        .clipShape(assistantBubbleShape)
+        .clipShape(shape)
     }
 }
 
