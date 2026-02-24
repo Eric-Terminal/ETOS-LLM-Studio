@@ -918,7 +918,7 @@ public class ChatService {
                 messages[loadingIndex] = targetMessage
                 
                 retryTargetMessageID = nil
-                logger.error("重试失败，已更新当前版本: \(content)")
+                logger.error("重试失败，已更新当前消息内容: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(
@@ -3479,7 +3479,7 @@ public class ChatService {
             messagesForSessionSubject.send(messages)
             Persistence.saveMessages(messages, for: sessionID)
             
-            logger.info("已将新内容添加为版本到消息 \(targetID)")
+            logger.info("已将新内容追加到消息历史: \(targetID)")
         } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
             // 正常流程：替换loading message
             let preservedToolCalls = messages[index].toolCalls
