@@ -730,6 +730,83 @@ struct OpenAIAdapterTests {
     }
 }
 
+@Suite("GeminiAdapter Tests")
+struct GeminiAdapterTests {
+
+    private let adapter = GeminiAdapter()
+    private let dummyModel = RunnableModel(
+        provider: Provider(
+            id: UUID(),
+            name: "Gemini Test Provider",
+            baseURL: "https://generativelanguage.googleapis.com/v1beta",
+            apiKeys: ["test-key"],
+            apiFormat: "gemini"
+        ),
+        model: Model(modelName: "gemini-2.5-pro")
+    )
+
+    @Test("Gemini 工具 schema 缺失 type 时自动补全")
+    func testGeminiToolSchemaTypeInferenceForEnumField() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "tavily_search",
+                description: "搜索网络内容",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "query": .dictionary([
+                            "type": .string("string")
+                        ]),
+                        "time_range": .dictionary([
+                            "description": .string("可选时间范围"),
+                            "enum": .array([
+                                .string("day"),
+                                .string("week"),
+                                .string("month")
+                            ])
+                        ]),
+                        "filters": .dictionary([
+                            "properties": .dictionary([
+                                "safe": .dictionary([
+                                    "type": .string("boolean")
+                                ])
+                            ])
+                        ])
+                    ]),
+                    "required": .array([.string("query")])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstToolGroup = toolsPayload.first,
+        let declarations = firstToolGroup["function_declarations"] as? [[String: Any]],
+        let firstDeclaration = declarations.first,
+        let parameters = firstDeclaration["parameters"] as? [String: Any],
+        let properties = parameters["properties"] as? [String: Any],
+        let timeRangeSchema = properties["time_range"] as? [String: Any],
+        let filtersSchema = properties["filters"] as? [String: Any] else {
+            Issue.record("Gemini 请求体中未找到工具参数 schema。")
+            return
+        }
+
+        #expect(timeRangeSchema["type"] as? String == "string")
+        #expect(filtersSchema["type"] as? String == "object")
+    }
+}
+
 // MARK: - ChatService Integration Tests
 
 /// 用于测试的模拟 API 适配器
