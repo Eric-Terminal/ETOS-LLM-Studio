@@ -305,6 +305,7 @@ public final class MCPManager: ObservableObject {
     private init() {
         reloadServers()
         startConfigWatcherIfNeeded()
+        connectSelectedServersIfNeeded()
     }
 
     deinit {

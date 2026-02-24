@@ -17,6 +17,7 @@ import Shared
 struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var syncManager = WatchSyncManager.shared
+    @StateObject private var mcpManager = MCPManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -31,6 +32,8 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                 .onAppear {
                     // 启动时自动同步（静默模式）
                     syncManager.performAutoSyncIfEnabled()
+                    // 启动时自动重连已加入聊天路由的 MCP 服务器
+                    mcpManager.connectSelectedServersIfNeeded()
                 }
         }
     }
