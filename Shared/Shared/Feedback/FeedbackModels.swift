@@ -419,3 +419,78 @@ public enum FeedbackSignature {
 #endif
     }
 }
+
+// MARK: - PoW 辅助
+
+public struct FeedbackPoWSolution: Sendable {
+    public let nonce: String
+    public let hashHex: String
+    public let bits: Int
+
+    public init(nonce: String, hashHex: String, bits: Int) {
+        self.nonce = nonce
+        self.hashHex = hashHex
+        self.bits = bits
+    }
+}
+
+public enum FeedbackProofOfWork {
+    public static func solve(
+        method: String,
+        path: String,
+        timestamp: String,
+        bodyHashHex: String,
+        challengeID: String,
+        powSalt: String,
+        bits: Int,
+        maxIterations: Int = 4_000_000
+    ) -> FeedbackPoWSolution? {
+        guard bits > 0 else { return nil }
+        guard maxIterations > 0 else { return nil }
+
+#if canImport(CryptoKit)
+        let upperMethod = method.uppercased()
+        for counter in 0..<maxIterations {
+            let nonce = String(counter, radix: 16, uppercase: false)
+            let message = [
+                upperMethod,
+                path,
+                timestamp,
+                bodyHashHex,
+                challengeID,
+                powSalt,
+                nonce,
+            ].joined(separator: "\n")
+            let digest = SHA256.hash(data: Data(message.utf8))
+            if hasLeadingZeroBits(digest: digest, bits: bits) {
+                let hashHex = digest.map { String(format: "%02x", $0) }.joined()
+                return FeedbackPoWSolution(nonce: nonce, hashHex: hashHex, bits: bits)
+            }
+        }
+#endif
+        return nil
+    }
+
+#if canImport(CryptoKit)
+    private static func hasLeadingZeroBits(digest: SHA256.Digest, bits: Int) -> Bool {
+        var remainingBits = bits
+        for byte in digest {
+            if remainingBits <= 0 {
+                return true
+            }
+            if remainingBits >= 8 {
+                if byte != 0 {
+                    return false
+                }
+                remainingBits -= 8
+                continue
+            }
+
+            let shift = UInt8(8 - remainingBits)
+            let mask = UInt8(0xFF) << shift
+            return (byte & mask) == 0
+        }
+        return remainingBits <= 0
+    }
+#endif
+}
