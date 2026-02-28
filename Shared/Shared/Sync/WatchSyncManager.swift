@@ -120,16 +120,23 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     /// 从用户设置构建同步选项
     private func buildSyncOptionsFromSettings() -> SyncOptions {
         var options: SyncOptions = []
-        if UserDefaults.standard.bool(forKey: "sync.options.providers") { options.insert(.providers) }
-        if UserDefaults.standard.bool(forKey: "sync.options.sessions") { options.insert(.sessions) }
-        if UserDefaults.standard.bool(forKey: "sync.options.backgrounds") { options.insert(.backgrounds) }
-        if UserDefaults.standard.bool(forKey: "sync.options.memories") { options.insert(.memories) }
-        if UserDefaults.standard.bool(forKey: "sync.options.mcpServers") { options.insert(.mcpServers) }
-        if UserDefaults.standard.bool(forKey: "sync.options.imageFiles") { options.insert(.imageFiles) }
-        if UserDefaults.standard.bool(forKey: "sync.options.shortcutTools") { options.insert(.shortcutTools) }
-        if UserDefaults.standard.bool(forKey: "sync.options.worldbooks") { options.insert(.worldbooks) }
-        if UserDefaults.standard.bool(forKey: "sync.options.feedbackTickets") { options.insert(.feedbackTickets) }
+        if isSyncOptionEnabled(key: "sync.options.providers", defaultValue: true) { options.insert(.providers) }
+        if isSyncOptionEnabled(key: "sync.options.sessions", defaultValue: true) { options.insert(.sessions) }
+        if isSyncOptionEnabled(key: "sync.options.backgrounds", defaultValue: true) { options.insert(.backgrounds) }
+        if isSyncOptionEnabled(key: "sync.options.memories", defaultValue: false) { options.insert(.memories) }
+        if isSyncOptionEnabled(key: "sync.options.mcpServers", defaultValue: true) { options.insert(.mcpServers) }
+        if isSyncOptionEnabled(key: "sync.options.imageFiles", defaultValue: true) { options.insert(.imageFiles) }
+        if isSyncOptionEnabled(key: "sync.options.shortcutTools", defaultValue: true) { options.insert(.shortcutTools) }
+        if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
+        if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
+        if isSyncOptionEnabled(key: "sync.options.globalPrompt", defaultValue: true) { options.insert(.globalSystemPrompt) }
         return options
+    }
+
+    private func isSyncOptionEnabled(key: String, defaultValue: Bool) -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        return defaults.bool(forKey: key)
     }
     
     // MARK: - Notifications
@@ -167,6 +174,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }
         if summary.importedWorldbooks > 0 { parts.append("世界书 +\(summary.importedWorldbooks)") }
         if summary.importedFeedbackTickets > 0 { parts.append("工单 +\(summary.importedFeedbackTickets)") }
+        if summary.importedGlobalSystemPrompt > 0 { parts.append("全局提示词 +\(summary.importedGlobalSystemPrompt)") }
         return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
     }
     
