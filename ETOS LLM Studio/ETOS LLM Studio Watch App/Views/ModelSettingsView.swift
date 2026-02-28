@@ -51,6 +51,7 @@ struct ModelSettingsView: View {
                     Text("表达式").tag(Model.RequestBodyOverrideMode.expression)
                     Text("原始 JSON").tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
+                .pickerStyle(.navigationLink)
             }
 
             if requestBodyMode == .expression {
