@@ -31,6 +31,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let shortcutTools = SyncOptions(rawValue: 1 << 7) // 快捷指令工具同步选项
     public static let worldbooks = SyncOptions(rawValue: 1 << 8) // 世界书同步选项
     public static let feedbackTickets = SyncOptions(rawValue: 1 << 9) // 反馈工单同步选项
+    public static let globalSystemPrompt = SyncOptions(rawValue: 1 << 10) // 全局系统提示词同步选项
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -108,9 +109,10 @@ public struct SyncPackage: Codable {
     public var shortcutTools: [ShortcutToolDefinition]
     public var worldbooks: [Worldbook]
     public var feedbackTickets: [FeedbackTicket]
+    public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, globalSystemPrompt
     }
     
     public init(
@@ -124,7 +126,8 @@ public struct SyncPackage: Codable {
         imageFiles: [SyncedImage] = [],
         shortcutTools: [ShortcutToolDefinition] = [],
         worldbooks: [Worldbook] = [],
-        feedbackTickets: [FeedbackTicket] = []
+        feedbackTickets: [FeedbackTicket] = [],
+        globalSystemPrompt: String? = nil
     ) {
         self.options = options
         self.providers = providers
@@ -137,6 +140,7 @@ public struct SyncPackage: Codable {
         self.shortcutTools = shortcutTools
         self.worldbooks = worldbooks
         self.feedbackTickets = feedbackTickets
+        self.globalSystemPrompt = globalSystemPrompt
     }
     
     public init(from decoder: Decoder) throws {
@@ -152,6 +156,7 @@ public struct SyncPackage: Codable {
         shortcutTools = try container.decodeIfPresent([ShortcutToolDefinition].self, forKey: .shortcutTools) ?? []
         worldbooks = try container.decodeIfPresent([Worldbook].self, forKey: .worldbooks) ?? []
         feedbackTickets = try container.decodeIfPresent([FeedbackTicket].self, forKey: .feedbackTickets) ?? []
+        globalSystemPrompt = try container.decodeIfPresent(String.self, forKey: .globalSystemPrompt)
     }
 }
 
@@ -177,6 +182,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedWorldbooks: Int
     public var importedFeedbackTickets: Int
     public var skippedFeedbackTickets: Int
+    public var importedGlobalSystemPrompt: Int
+    public var skippedGlobalSystemPrompt: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -198,7 +205,9 @@ public struct SyncMergeSummary: Equatable {
         importedWorldbooks: 0,
         skippedWorldbooks: 0,
         importedFeedbackTickets: 0,
-        skippedFeedbackTickets: 0
+        skippedFeedbackTickets: 0,
+        importedGlobalSystemPrompt: 0,
+        skippedGlobalSystemPrompt: 0
     )
 }
 

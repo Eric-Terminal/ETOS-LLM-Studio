@@ -10,13 +10,15 @@ import Foundation
 import Combine
 
 public enum SyncEngine {
+    private static let globalSystemPromptKey = "systemPrompt"
     
     // MARK: - 打包导出
     
     /// 根据同步选项构建完整同步包
     public static func buildPackage(
         options: SyncOptions,
-        chatService: ChatService = .shared
+        chatService: ChatService = .shared,
+        userDefaults: UserDefaults = .standard
     ) -> SyncPackage {
         var providers: [Provider] = []
         var sessions: [SyncedSession] = []
@@ -28,6 +30,7 @@ public enum SyncEngine {
         var shortcutTools: [ShortcutToolDefinition] = []
         var worldbooks: [Worldbook] = []
         var feedbackTickets: [FeedbackTicket] = []
+        var globalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
         
@@ -83,6 +86,11 @@ public enum SyncEngine {
         if options.contains(.feedbackTickets) {
             feedbackTickets = FeedbackStore.loadTickets()
         }
+
+        if options.contains(.globalSystemPrompt) {
+            // 使用空字符串表示“显式清空”全局系统提示词。
+            globalSystemPrompt = userDefaults.string(forKey: globalSystemPromptKey) ?? ""
+        }
         
         // 音频文件同步：会话引用的音频 + 可选全量音频文件
         var audioFileNamesToInclude = referencedAudioFileNames
@@ -131,7 +139,8 @@ public enum SyncEngine {
             imageFiles: imageFiles,
             shortcutTools: shortcutTools,
             worldbooks: worldbooks,
-            feedbackTickets: feedbackTickets
+            feedbackTickets: feedbackTickets,
+            globalSystemPrompt: globalSystemPrompt
         )
     }
     
@@ -142,7 +151,8 @@ public enum SyncEngine {
     public static func apply(
         package: SyncPackage,
         chatService: ChatService = .shared,
-        memoryManager: MemoryManager? = nil
+        memoryManager: MemoryManager? = nil,
+        userDefaults: UserDefaults = .standard
     ) async -> SyncMergeSummary {
         var summary = SyncMergeSummary.empty
         
@@ -212,6 +222,12 @@ public enum SyncEngine {
             let result = mergeImageFiles(package.imageFiles)
             summary.importedImageFiles = result.imported
             summary.skippedImageFiles = result.skipped
+        }
+
+        if package.options.contains(.globalSystemPrompt) {
+            let result = mergeGlobalSystemPrompt(package.globalSystemPrompt, userDefaults: userDefaults)
+            summary.importedGlobalSystemPrompt = result.imported
+            summary.skippedGlobalSystemPrompt = result.skipped
         }
         
         return summary
@@ -376,6 +392,22 @@ public enum SyncEngine {
 
     private static func mergeFeedbackTickets(_ incoming: [FeedbackTicket]) -> (imported: Int, skipped: Int) {
         FeedbackStore.mergeTickets(incoming)
+    }
+
+    // MARK: - Global System Prompt
+
+    private static func mergeGlobalSystemPrompt(
+        _ incoming: String?,
+        userDefaults: UserDefaults
+    ) -> (imported: Int, skipped: Int) {
+        guard let incoming else { return (0, 1) }
+        let local = userDefaults.string(forKey: globalSystemPromptKey) ?? ""
+        if local == incoming {
+            return (0, 1)
+        }
+
+        userDefaults.set(incoming, forKey: globalSystemPromptKey)
+        return (1, 0)
     }
     
     // MARK: - Memories

@@ -21,6 +21,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.shortcutTools") private var syncShortcutTools = true
     @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
     @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
+    @AppStorage("sync.options.globalPrompt") private var syncGlobalPrompt = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     
     var body: some View {
@@ -39,6 +40,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("快捷指令", isOn: $syncShortcutTools)
                 Toggle("世界书", isOn: $syncWorldbooks)
                 Toggle("反馈工单", isOn: $syncFeedbackTickets)
+                Toggle("全局提示词", isOn: $syncGlobalPrompt)
             }
             
             Section {
@@ -76,6 +78,7 @@ struct DeviceSyncSettingsView: View {
         if syncShortcutTools { option.insert(.shortcutTools) }
         if syncWorldbooks { option.insert(.worldbooks) }
         if syncFeedbackTickets { option.insert(.feedbackTickets) }
+        if syncGlobalPrompt { option.insert(.globalSystemPrompt) }
         return option
     }
     
@@ -147,6 +150,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedFeedbackTickets > 0 {
             parts.append(String(format: NSLocalizedString("工单 +%d", comment: ""), summary.importedFeedbackTickets))
+        }
+        if summary.importedGlobalSystemPrompt > 0 {
+            parts.append(String(format: NSLocalizedString("全局提示词 +%d", comment: ""), summary.importedGlobalSystemPrompt))
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
