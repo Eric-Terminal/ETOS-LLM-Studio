@@ -760,7 +760,7 @@ public final class MCPManager: ObservableObject {
         let isHandshakeTimeout = isInitializeTimeoutError(error)
         let reason = isHandshakeTimeout ? "握手超时" : error.localizedDescription
         Task {
-            await MCPFailureNotificationCenter.shared.notifyMCPConnectionFailure(
+            MCPFailureNotificationCenter.shared.notifyMCPConnectionFailure(
                 serverDisplayName: server.displayName,
                 reason: reason,
                 isTimeout: isHandshakeTimeout

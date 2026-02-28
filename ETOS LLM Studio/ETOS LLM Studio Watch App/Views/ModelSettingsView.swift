@@ -199,6 +199,13 @@ extension ModelSettingsView {
             } catch {
                 rawJSONError = error.localizedDescription
             }
+        @unknown default:
+            let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: true)
+            expressionEntries = result.entries
+            rawJSONError = nil
+            if !result.hasError {
+                model.overrideParameters = result.parameters
+            }
         }
 
         onSave()
@@ -239,6 +246,9 @@ extension ModelSettingsView {
             } catch {
                 return (parameters: [:], hasError: true)
             }
+        @unknown default:
+            let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: false)
+            return (parameters: result.parameters, hasError: result.hasError)
         }
     }
 
