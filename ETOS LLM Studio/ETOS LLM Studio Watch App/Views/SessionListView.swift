@@ -164,5 +164,14 @@ private struct SessionRowView: View {
             }
             .tint(.gray)
         }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
+                sessionIndexToDelete = IndexSet(integer: index)
+                showDeleteSessionConfirm = true
+            } label: {
+                Label("删除会话", systemImage: "trash")
+            }
+        }
     }
 }
