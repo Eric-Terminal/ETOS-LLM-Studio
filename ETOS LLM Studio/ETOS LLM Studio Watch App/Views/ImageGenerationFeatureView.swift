@@ -56,6 +56,17 @@ struct ImageGenerationFeatureView: View {
         generatedImageItems(from: viewModel.allMessagesForSession).count
     }
 
+    private func selectedImageModelLabel(in models: [RunnableModel]) -> String {
+        if let selected = selectedImageModel,
+           models.contains(where: { $0.id == selected.id }) {
+            return "\(selected.model.displayName) | \(selected.provider.name)"
+        }
+        guard let first = models.first else {
+            return NSLocalizedString("未选择", comment: "No image generation model selected")
+        }
+        return "\(first.model.displayName) | \(first.provider.name)"
+    }
+
     private var galleryDestination: some View {
         WatchImageGenerationGalleryView(
             onReusePrompt: { reusedPrompt in
@@ -82,10 +93,22 @@ struct ImageGenerationFeatureView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker(NSLocalizedString("生图模型", comment: "Image generation model picker title"), selection: $imageGenerationModelIdentifier) {
-                        ForEach(availableImageModels) { model in
-                            Text("\(model.model.displayName) | \(model.provider.name)")
-                                .tag(model.id)
+                    NavigationLink {
+                        WatchImageModelSelectionListView(
+                            models: availableImageModels,
+                            selectedModelIdentifier: $imageGenerationModelIdentifier
+                        )
+                    } label: {
+                        HStack {
+                            Text(NSLocalizedString("生图模型", comment: "Image generation model picker title"))
+                            Spacer(minLength: 8)
+                            MarqueeText(
+                                content: selectedImageModelLabel(in: availableImageModels),
+                                uiFont: .preferredFont(forTextStyle: .footnote)
+                            )
+                            .foregroundStyle(.secondary)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                 }
@@ -546,6 +569,48 @@ struct ImageGenerationFeatureView: View {
             return
         }
         imageGenerationParameterExpressionsByModel = string
+    }
+}
+
+private struct WatchImageModelSelectionListView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let models: [RunnableModel]
+    @Binding var selectedModelIdentifier: String
+
+    var body: some View {
+        List {
+            ForEach(models) { model in
+                Button {
+                    select(model)
+                } label: {
+                    selectionRow(
+                        title: "\(model.model.displayName) | \(model.provider.name)",
+                        isSelected: selectedModelIdentifier == model.id
+                    )
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("生图模型", comment: "Image generation model picker title"))
+    }
+
+    private func select(_ model: RunnableModel) {
+        selectedModelIdentifier = model.id
+        dismiss()
+    }
+
+    @ViewBuilder
+    private func selectionRow(title: String, isSelected: Bool) -> some View {
+        HStack {
+            MarqueeText(content: title, uiFont: .preferredFont(forTextStyle: .body))
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.footnote)
+                    .foregroundColor(.accentColor)
+            }
+        }
     }
 }
 
