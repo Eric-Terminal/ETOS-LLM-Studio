@@ -7,10 +7,12 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     
     var body: some View {
@@ -28,6 +30,8 @@ struct SettingsView: View {
                 
                 Button {
                     viewModel.createNewSession()
+                    dismiss()
+                    NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
                 } label: {
                     Label("开启新对话", systemImage: "plus.message")
                 }

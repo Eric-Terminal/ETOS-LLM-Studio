@@ -27,6 +27,8 @@ struct SessionListView: View {
                 Button {
                     viewModel.createNewSession()
                     focusOnLatest()
+                    dismiss()
+                    NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
                 } label: {
                     Label("开启新对话", systemImage: "plus.circle.fill")
                 }
