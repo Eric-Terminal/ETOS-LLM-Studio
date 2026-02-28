@@ -16,6 +16,9 @@ struct ModelSettingsView: View {
     let provider: Provider
     let onSave: () -> Void
     @State private var expressionEntries: [ExpressionEntry] = []
+    @State private var requestBodyMode: Model.RequestBodyOverrideMode = .expression
+    @State private var rawJSONInput: String = "{}"
+    @State private var rawJSONError: String?
 
     init(model: Binding<Model>, provider: Provider, onSave: @escaping () -> Void = {}) {
         _model = model
@@ -43,25 +46,59 @@ struct ModelSettingsView: View {
                 Toggle("生图", isOn: capabilityBinding(.imageGeneration))
             }
 
-            Section(header: Text("参数表达式")) {
-                ForEach($expressionEntries) { $entry in
-                    ExpressionRow(entry: $entry)
-                        .onChange(of: entry.text, initial: false) { _, _ in
-                            validateEntry(withId: entry.id)
-                        }
-                }
-                .onDelete(perform: deleteEntries)
-                
-                Button {
-                    addEmptyEntry()
-                } label: {
-                    Label("添加", systemImage: "plus")
+            Section(header: Text("请求体编辑方式")) {
+                Picker("编辑方式", selection: $requestBodyMode) {
+                    Text("表达式").tag(Model.RequestBodyOverrideMode.expression)
+                    Text("原始 JSON").tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
             }
-            
-            Section(header: Text("写法提示")) {
-                Text("使用 key = value 格式，例如 thinking_budget = 128")
-                Text("嵌套用 { }，例如 chat_template_kwargs = {thinking = false}")
+
+            if requestBodyMode == .expression {
+                Section(header: Text("参数表达式")) {
+                    ForEach($expressionEntries) { $entry in
+                        ExpressionRow(entry: $entry)
+                            .onChange(of: entry.text, initial: false) { _, _ in
+                                validateEntry(withId: entry.id)
+                            }
+                    }
+                    .onDelete(perform: deleteEntries)
+                    
+                    Button {
+                        addEmptyEntry()
+                    } label: {
+                        Label("添加", systemImage: "plus")
+                    }
+                }
+                
+                Section(header: Text("写法提示")) {
+                    Text("使用 key = value 格式，例如 thinking_budget = 128")
+                    Text("嵌套用 { }，例如 chat_template_kwargs = {thinking = false}")
+                }
+            } else {
+                Section(header: Text("原始 JSON")) {
+                    TextField(
+                        "填写 JSON 对象",
+                        text: $rawJSONInput.watchKeyboardNewlineBinding(),
+                        axis: .vertical
+                    )
+                    .font(.footnote.monospaced())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(6...16)
+                    .onChange(of: rawJSONInput, initial: false) { _, newValue in
+                        validateRawJSON(newValue)
+                    }
+
+                    Text("示例：{\"extra_body\":{\"abc\":\"123\"}}")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    if let rawJSONError {
+                        Text(rawJSONError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
             }
 
             Section(header: Text("请求体预览")) {
@@ -71,8 +108,8 @@ struct ModelSettingsView: View {
             }
         }
         .navigationTitle("编辑模型信息")
-        .onAppear(perform: loadExpressions)
-        .onDisappear(perform: saveExpressions)
+        .onAppear(perform: loadEditorState)
+        .onDisappear(perform: saveEditorState)
     }
 }
 
@@ -91,7 +128,19 @@ extension ModelSettingsView {
         }
     }
     
-    private func loadExpressions() {
+    private func loadEditorState() {
+        requestBodyMode = model.requestBodyOverrideMode
+        loadExpressionEntriesFromModel()
+        if let savedRawJSON = model.rawRequestBodyJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !savedRawJSON.isEmpty {
+            rawJSONInput = savedRawJSON
+        } else {
+            rawJSONInput = ParameterExpressionParser.serializeRawJSONObject(parameters: model.overrideParameters)
+        }
+        validateRawJSON(rawJSONInput)
+    }
+
+    private func loadExpressionEntriesFromModel() {
         let serialized = ParameterExpressionParser.serialize(parameters: model.overrideParameters)
         if serialized.isEmpty {
             expressionEntries = [ExpressionEntry(text: "")]
@@ -130,34 +179,27 @@ extension ModelSettingsView {
         expressionEntries[index] = entry
     }
     
-    private func saveExpressions() {
-        var updatedEntries = expressionEntries
-        var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
-        var hasError = false
-        
-        for index in updatedEntries.indices {
-            let trimmed = updatedEntries[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                updatedEntries[index].error = nil
-                continue
+    private func saveEditorState() {
+        model.requestBodyOverrideMode = requestBodyMode
+        model.rawRequestBodyJSON = rawJSONInput
+
+        switch requestBodyMode {
+        case .expression:
+            let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: true)
+            expressionEntries = result.entries
+            rawJSONError = nil
+            if !result.hasError {
+                model.overrideParameters = result.parameters
             }
-            
+        case .rawJSON:
             do {
-                let parsed = try ParameterExpressionParser.parse(trimmed)
-                parsedExpressions.append(parsed)
-                updatedEntries[index].error = nil
+                model.overrideParameters = try parseRawJSONInput(rawJSONInput)
+                rawJSONError = nil
             } catch {
-                updatedEntries[index].error = error.localizedDescription
-                hasError = true
+                rawJSONError = error.localizedDescription
             }
         }
-        
-        expressionEntries = updatedEntries
-        
-        if !hasError {
-            let merged = ParameterExpressionParser.buildParameters(from: parsedExpressions)
-            model.overrideParameters = merged
-        }
+
         onSave()
     }
 
@@ -165,7 +207,9 @@ extension ModelSettingsView {
         let result = previewOverrideParameters()
         if result.hasError {
             return RequestBodyPreview(
-                text: NSLocalizedString("表达式有误，无法预览", comment: ""),
+                text: requestBodyMode == .expression
+                    ? NSLocalizedString("表达式有误，无法预览", comment: "")
+                    : NSLocalizedString("JSON 有误，无法预览", comment: ""),
                 isPlaceholder: true
             )
         }
@@ -183,22 +227,70 @@ extension ModelSettingsView {
     }
 
     private func previewOverrideParameters() -> (parameters: [String: JSONValue], hasError: Bool) {
+        switch requestBodyMode {
+        case .expression:
+            let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: false)
+            return (parameters: result.parameters, hasError: result.hasError)
+        case .rawJSON:
+            do {
+                let parsed = try parseRawJSONInput(rawJSONInput)
+                return (parameters: parsed, hasError: false)
+            } catch {
+                return (parameters: [:], hasError: true)
+            }
+        }
+    }
+
+    private func parseExpressionEntries(
+        entries: [ExpressionEntry],
+        shouldAnnotateErrors: Bool
+    ) -> (parameters: [String: JSONValue], hasError: Bool, entries: [ExpressionEntry]) {
+        var updatedEntries = entries
         var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
         var hasError = false
 
-        for entry in expressionEntries {
-            let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
+        for index in updatedEntries.indices {
+            let trimmed = updatedEntries[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                if shouldAnnotateErrors {
+                    updatedEntries[index].error = nil
+                }
+                continue
+            }
+
             do {
                 let parsed = try ParameterExpressionParser.parse(trimmed)
                 parsedExpressions.append(parsed)
+                if shouldAnnotateErrors {
+                    updatedEntries[index].error = nil
+                }
             } catch {
                 hasError = true
+                if shouldAnnotateErrors {
+                    updatedEntries[index].error = error.localizedDescription
+                }
             }
         }
 
         let parameters = ParameterExpressionParser.buildParameters(from: parsedExpressions)
-        return (parameters: parameters, hasError: hasError)
+        return (parameters: parameters, hasError: hasError, entries: updatedEntries)
+    }
+
+    private func parseRawJSONInput(_ rawJSON: String) throws -> [String: JSONValue] {
+        try ParameterExpressionParser.parseRawJSONObject(rawJSON)
+    }
+
+    private func validateRawJSON(_ rawJSON: String) {
+        guard requestBodyMode == .rawJSON else {
+            rawJSONError = nil
+            return
+        }
+        do {
+            _ = try parseRawJSONInput(rawJSON)
+            rawJSONError = nil
+        } catch {
+            rawJSONError = error.localizedDescription
+        }
     }
 
     private func buildRequestPreviewPayload(

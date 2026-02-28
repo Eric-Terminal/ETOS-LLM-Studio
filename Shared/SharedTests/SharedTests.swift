@@ -186,6 +186,78 @@ struct ModelOrderIndexTests {
     }
 }
 
+@Suite("Request Body Override Mode Tests")
+struct RequestBodyOverrideModeTests {
+    @Test("原始 JSON 对象可解析为覆盖参数")
+    func testParseRawJSONObject() throws {
+        let rawJSON = """
+        {
+          "temperature": 0.7,
+          "stream": true,
+          "extra_body": {
+            "abc": "123",
+            "tags": ["x", 1, false]
+          }
+        }
+        """
+        let parsed = try ParameterExpressionParser.parseRawJSONObject(rawJSON)
+        #expect(parsed["temperature"] == .double(0.7))
+        #expect(parsed["stream"] == .bool(true))
+
+        guard case .dictionary(let extraBody)? = parsed["extra_body"] else {
+            Issue.record("extra_body 未按预期解析为对象")
+            return
+        }
+        #expect(extraBody["abc"] == .string("123"))
+        guard case .array(let tags)? = extraBody["tags"] else {
+            Issue.record("extra_body.tags 未按预期解析为数组")
+            return
+        }
+        #expect(tags.count == 3)
+    }
+
+    @Test("原始 JSON 顶层非对象时返回错误")
+    func testParseRawJSONObjectRejectsNonObject() {
+        do {
+            _ = try ParameterExpressionParser.parseRawJSONObject("[1, 2, 3]")
+            Issue.record("顶层为数组时应当解析失败")
+        } catch {
+            #expect(error.localizedDescription.contains("顶层必须是 JSON 对象"))
+        }
+    }
+
+    @Test("Model 编解码保留请求体编辑模式和原始 JSON 文本")
+    func testModelCodingPreservesRequestBodyMode() throws {
+        let source = Model(
+            modelName: "test-model",
+            overrideParameters: ["temperature": .double(0.8)],
+            requestBodyOverrideMode: .rawJSON,
+            rawRequestBodyJSON: "{\"temperature\":0.8}"
+        )
+        let data = try JSONEncoder().encode(source)
+        let decoded = try JSONDecoder().decode(Model.self, from: data)
+
+        #expect(decoded.requestBodyOverrideMode == .rawJSON)
+        #expect(decoded.rawRequestBodyJSON == "{\"temperature\":0.8}")
+    }
+
+    @Test("旧配置缺少新字段时使用默认编辑模式")
+    func testModelDecodingDefaultsForLegacyPayload() throws {
+        let legacyJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000123",
+          "modelName": "legacy-model",
+          "isActivated": false
+        }
+        """
+        let data = Data(legacyJSON.utf8)
+        let decoded = try JSONDecoder().decode(Model.self, from: data)
+
+        #expect(decoded.requestBodyOverrideMode == .expression)
+        #expect(decoded.rawRequestBodyJSON == nil)
+    }
+}
+
 
 // MARK: - MemoryManager Tests
 

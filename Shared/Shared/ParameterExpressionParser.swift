@@ -40,6 +40,20 @@ public enum ParameterExpressionParser {
             }
         }
     }
+
+    public enum RawJSONError: LocalizedError {
+        case rootMustBeObject
+        case invalidJSON(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .rootMustBeObject:
+                return "顶层必须是 JSON 对象（例如 {\"a\": 1}）"
+            case .invalidJSON(let reason):
+                return "JSON 格式无效：\(reason)"
+            }
+        }
+    }
     
     // MARK: - 对外接口
     
@@ -92,6 +106,47 @@ public enum ParameterExpressionParser {
         parameters
             .sorted(by: { $0.key < $1.key })
             .map { "\($0.key)=\(serializeValue($0.value))" }
+    }
+
+    /// 解析用户输入的原始 JSON 对象（顶层必须是对象）。
+    public static func parseRawJSONObject(_ rawJSON: String) throws -> [String: JSONValue] {
+        let cleaned = rawJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else {
+            return [:]
+        }
+
+        guard let data = cleaned.data(using: .utf8) else {
+            throw RawJSONError.invalidJSON("无法按 UTF-8 读取文本")
+        }
+
+        do {
+            return try JSONDecoder().decode([String: JSONValue].self, from: data)
+        } catch let decodingError as DecodingError {
+            switch decodingError {
+            case .typeMismatch:
+                throw RawJSONError.rootMustBeObject
+            case .dataCorrupted(let context):
+                throw RawJSONError.invalidJSON(context.debugDescription)
+            case .keyNotFound(_, let context),
+                 .valueNotFound(_, let context):
+                throw RawJSONError.invalidJSON(context.debugDescription)
+            @unknown default:
+                throw RawJSONError.invalidJSON(decodingError.localizedDescription)
+            }
+        } catch {
+            throw RawJSONError.invalidJSON(error.localizedDescription)
+        }
+    }
+
+    /// 将覆盖参数转换成可编辑的 JSON 文本。
+    public static func serializeRawJSONObject(parameters: [String: JSONValue]) -> String {
+        let object = parameters.mapValues { $0.toAny() }
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
     }
     
     // MARK: - 值解析
