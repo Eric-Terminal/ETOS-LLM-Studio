@@ -2029,7 +2029,6 @@ fileprivate struct ChatSessionTests {
     @Test("Create New Session")
     func testCreateNewSession() {
         // Arrange: The init() already provides a clean state with 1 session.
-        let initialSessionCount = chatService.chatSessionsSubject.value.count
         let initialCurrentSession = chatService.currentSessionSubject.value
         
         chatService.messagesForSessionSubject.send([ChatMessage(role: .user, content: "dummy message")])
@@ -2043,18 +2042,50 @@ fileprivate struct ChatSessionTests {
         let newCurrentSession = chatService.currentSessionSubject.value
         let newMessages = chatService.messagesForSessionSubject.value
 
-        #expect(newSessions.count == initialSessionCount + 1)
+        #expect(newSessions.count == 1)
+        #expect(newSessions.filter(\.isTemporary).count == 1)
         #expect(newSessions.first?.id == newCurrentSession?.id)
         #expect(newCurrentSession?.isTemporary == true)
-        #expect(newCurrentSession?.id != initialCurrentSession?.id)
+        #expect(newCurrentSession?.id == initialCurrentSession?.id)
         #expect(newMessages.isEmpty == true)
+    }
+
+    @Test("Create New Session when no temporary session exists")
+    func testCreateNewSessionWhenNoTemporarySessionExists() {
+        // Arrange: 将初始临时会话“转正”，模拟已经在历史中有永久会话的场景。
+        guard var onlySession = chatService.chatSessionsSubject.value.first else {
+            Issue.record("缺少初始会话")
+            return
+        }
+        onlySession.isTemporary = false
+        chatService.chatSessionsSubject.send([onlySession])
+        chatService.setCurrentSession(onlySession)
+        Persistence.saveChatSessions([onlySession])
+
+        // Act
+        chatService.createNewSession()
+
+        // Assert
+        let sessions = chatService.chatSessionsSubject.value
+        let temporarySessions = sessions.filter(\.isTemporary)
+        #expect(sessions.count == 2)
+        #expect(temporarySessions.count == 1)
+        #expect(sessions.first?.isTemporary == true)
+        #expect(chatService.currentSessionSubject.value?.id == sessions.first?.id)
     }
     
     @Test("Switch Session")
     func testSwitchSession() {
         // Arrange
         // The service starts with one session. Create a second one.
-        let session1 = chatService.currentSessionSubject.value!
+        guard var session1 = chatService.currentSessionSubject.value else {
+            Issue.record("缺少初始会话")
+            return
+        }
+        session1.isTemporary = false
+        chatService.chatSessionsSubject.send([session1])
+        chatService.setCurrentSession(session1)
+        Persistence.saveChatSessions([session1])
         chatService.createNewSession()
         
         // Save a dummy message to session 1 to test if it loads correctly
@@ -2076,7 +2107,14 @@ fileprivate struct ChatSessionTests {
     @Test("Delete Session")
     func testDeleteSession() {
         // Arrange
-        let session1 = chatService.currentSessionSubject.value!
+        guard var session1 = chatService.currentSessionSubject.value else {
+            Issue.record("缺少初始会话")
+            return
+        }
+        session1.isTemporary = false
+        chatService.chatSessionsSubject.send([session1])
+        chatService.setCurrentSession(session1)
+        Persistence.saveChatSessions([session1])
         chatService.createNewSession() // Session 2 is now current
         let session2 = chatService.currentSessionSubject.value!
         let initialCount = chatService.chatSessionsSubject.value.count

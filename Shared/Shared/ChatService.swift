@@ -550,8 +550,49 @@ public class ChatService {
     // MARK: - 公开方法 (会话管理)
     
     public func createNewSession() {
-        let newSession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
         var updatedSessions = chatSessionsSubject.value
+
+        // 约束：最多只保留一个临时会话，重复点击“新建对话”时复用现有临时会话。
+        let temporarySessions = updatedSessions.filter(\.isTemporary)
+        if let reusableTemporary = temporarySessions.first {
+            var didMutateList = false
+
+            // 若历史遗留了多个临时会话，清理多余项并删除其会话文件。
+            if temporarySessions.count > 1 {
+                let removableIDs = Set(temporarySessions.dropFirst().map(\.id))
+                for sessionID in removableIDs {
+                    Persistence.deleteSessionArtifacts(sessionID: sessionID)
+                }
+                updatedSessions.removeAll { removableIDs.contains($0.id) }
+                didMutateList = true
+                logger.info("检测到多个临时会话，已清理多余会话: \(removableIDs.count) 个。")
+            }
+
+            // 将唯一临时会话放到顶部，保证列表行为一致。
+            if let index = updatedSessions.firstIndex(where: { $0.id == reusableTemporary.id }), index > 0 {
+                let temporary = updatedSessions.remove(at: index)
+                updatedSessions.insert(temporary, at: 0)
+                didMutateList = true
+            }
+
+            if didMutateList {
+                chatSessionsSubject.send(updatedSessions)
+                Persistence.saveChatSessions(updatedSessions)
+            }
+
+            // 始终切换到复用的临时会话，并刷新其消息列表（通常为空）。
+            if let target = updatedSessions.first(where: { $0.id == reusableTemporary.id }) {
+                if currentSessionSubject.value?.id == target.id {
+                    messagesForSessionSubject.send(Persistence.loadMessages(for: target.id))
+                } else {
+                    setCurrentSession(target)
+                }
+                logger.info("复用了已有临时会话。")
+            }
+            return
+        }
+
+        let newSession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
         currentSessionSubject.send(newSession)
