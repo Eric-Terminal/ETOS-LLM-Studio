@@ -156,6 +156,11 @@ public struct Model: Codable, Identifiable, Hashable {
         case embedding
         case imageGeneration
     }
+
+    public enum RequestBodyOverrideMode: String, Codable, Hashable {
+        case expression
+        case rawJSON
+    }
     
     public var id: UUID
     public var modelName: String // 模型ID，例如: "deepseek-chat"
@@ -163,6 +168,8 @@ public struct Model: Codable, Identifiable, Hashable {
     public var isActivated: Bool
     public var overrideParameters: [String: JSONValue]
     public var capabilities: [Capability]
+    public var requestBodyOverrideMode: RequestBodyOverrideMode
+    public var rawRequestBodyJSON: String?
 
     public init(
         id: UUID = UUID(),
@@ -170,7 +177,9 @@ public struct Model: Codable, Identifiable, Hashable {
         displayName: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
-        capabilities: [Capability] = [.chat]
+        capabilities: [Capability] = [.chat],
+        requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
+        rawRequestBodyJSON: String? = nil
     ) {
         self.id = id
         self.modelName = modelName
@@ -178,10 +187,14 @@ public struct Model: Codable, Identifiable, Hashable {
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
         self.capabilities = capabilities.isEmpty ? [.chat] : capabilities
+        self.requestBodyOverrideMode = requestBodyOverrideMode
+        self.rawRequestBodyJSON = rawRequestBodyJSON
     }
     
     enum CodingKeys: String, CodingKey {
         case id, modelName, displayName, isActivated, overrideParameters, capabilities
+        case requestBodyOverrideMode
+        case rawRequestBodyJSON
     }
     
     public init(from decoder: Decoder) throws {
@@ -193,6 +206,8 @@ public struct Model: Codable, Identifiable, Hashable {
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
         let decodedCapabilities = try container.decodeIfPresent([Capability].self, forKey: .capabilities) ?? [.chat]
         self.capabilities = decodedCapabilities.isEmpty ? [.chat] : decodedCapabilities
+        self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .expression
+        self.rawRequestBodyJSON = try container.decodeIfPresent(String.self, forKey: .rawRequestBodyJSON)
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -208,6 +223,12 @@ public struct Model: Codable, Identifiable, Hashable {
         }
         if !(capabilities.count == 1 && capabilities.first == .chat) {
             try container.encode(capabilities, forKey: .capabilities)
+        }
+        if requestBodyOverrideMode != .expression {
+            try container.encode(requestBodyOverrideMode, forKey: .requestBodyOverrideMode)
+        }
+        if let rawRequestBodyJSON, !rawRequestBodyJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try container.encode(rawRequestBodyJSON, forKey: .rawRequestBodyJSON)
         }
     }
 }

@@ -186,6 +186,78 @@ struct ModelOrderIndexTests {
     }
 }
 
+@Suite("Request Body Override Mode Tests")
+struct RequestBodyOverrideModeTests {
+    @Test("原始 JSON 对象可解析为覆盖参数")
+    func testParseRawJSONObject() throws {
+        let rawJSON = """
+        {
+          "temperature": 0.7,
+          "stream": true,
+          "extra_body": {
+            "abc": "123",
+            "tags": ["x", 1, false]
+          }
+        }
+        """
+        let parsed = try ParameterExpressionParser.parseRawJSONObject(rawJSON)
+        #expect(parsed["temperature"] == .double(0.7))
+        #expect(parsed["stream"] == .bool(true))
+
+        guard case .dictionary(let extraBody)? = parsed["extra_body"] else {
+            Issue.record("extra_body 未按预期解析为对象")
+            return
+        }
+        #expect(extraBody["abc"] == .string("123"))
+        guard case .array(let tags)? = extraBody["tags"] else {
+            Issue.record("extra_body.tags 未按预期解析为数组")
+            return
+        }
+        #expect(tags.count == 3)
+    }
+
+    @Test("原始 JSON 顶层非对象时返回错误")
+    func testParseRawJSONObjectRejectsNonObject() {
+        do {
+            _ = try ParameterExpressionParser.parseRawJSONObject("[1, 2, 3]")
+            Issue.record("顶层为数组时应当解析失败")
+        } catch {
+            #expect(error.localizedDescription.contains("顶层必须是 JSON 对象"))
+        }
+    }
+
+    @Test("Model 编解码保留请求体编辑模式和原始 JSON 文本")
+    func testModelCodingPreservesRequestBodyMode() throws {
+        let source = Model(
+            modelName: "test-model",
+            overrideParameters: ["temperature": .double(0.8)],
+            requestBodyOverrideMode: .rawJSON,
+            rawRequestBodyJSON: "{\"temperature\":0.8}"
+        )
+        let data = try JSONEncoder().encode(source)
+        let decoded = try JSONDecoder().decode(Model.self, from: data)
+
+        #expect(decoded.requestBodyOverrideMode == .rawJSON)
+        #expect(decoded.rawRequestBodyJSON == "{\"temperature\":0.8}")
+    }
+
+    @Test("旧配置缺少新字段时使用默认编辑模式")
+    func testModelDecodingDefaultsForLegacyPayload() throws {
+        let legacyJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000123",
+          "modelName": "legacy-model",
+          "isActivated": false
+        }
+        """
+        let data = Data(legacyJSON.utf8)
+        let decoded = try JSONDecoder().decode(Model.self, from: data)
+
+        #expect(decoded.requestBodyOverrideMode == .expression)
+        #expect(decoded.rawRequestBodyJSON == nil)
+    }
+}
+
 
 // MARK: - MemoryManager Tests
 
@@ -1957,7 +2029,6 @@ fileprivate struct ChatSessionTests {
     @Test("Create New Session")
     func testCreateNewSession() {
         // Arrange: The init() already provides a clean state with 1 session.
-        let initialSessionCount = chatService.chatSessionsSubject.value.count
         let initialCurrentSession = chatService.currentSessionSubject.value
         
         chatService.messagesForSessionSubject.send([ChatMessage(role: .user, content: "dummy message")])
@@ -1971,18 +2042,50 @@ fileprivate struct ChatSessionTests {
         let newCurrentSession = chatService.currentSessionSubject.value
         let newMessages = chatService.messagesForSessionSubject.value
 
-        #expect(newSessions.count == initialSessionCount + 1)
+        #expect(newSessions.count == 1)
+        #expect(newSessions.filter(\.isTemporary).count == 1)
         #expect(newSessions.first?.id == newCurrentSession?.id)
         #expect(newCurrentSession?.isTemporary == true)
-        #expect(newCurrentSession?.id != initialCurrentSession?.id)
+        #expect(newCurrentSession?.id == initialCurrentSession?.id)
         #expect(newMessages.isEmpty == true)
+    }
+
+    @Test("Create New Session when no temporary session exists")
+    func testCreateNewSessionWhenNoTemporarySessionExists() {
+        // Arrange: 将初始临时会话“转正”，模拟已经在历史中有永久会话的场景。
+        guard var onlySession = chatService.chatSessionsSubject.value.first else {
+            Issue.record("缺少初始会话")
+            return
+        }
+        onlySession.isTemporary = false
+        chatService.chatSessionsSubject.send([onlySession])
+        chatService.setCurrentSession(onlySession)
+        Persistence.saveChatSessions([onlySession])
+
+        // Act
+        chatService.createNewSession()
+
+        // Assert
+        let sessions = chatService.chatSessionsSubject.value
+        let temporarySessions = sessions.filter(\.isTemporary)
+        #expect(sessions.count == 2)
+        #expect(temporarySessions.count == 1)
+        #expect(sessions.first?.isTemporary == true)
+        #expect(chatService.currentSessionSubject.value?.id == sessions.first?.id)
     }
     
     @Test("Switch Session")
     func testSwitchSession() {
         // Arrange
         // The service starts with one session. Create a second one.
-        let session1 = chatService.currentSessionSubject.value!
+        guard var session1 = chatService.currentSessionSubject.value else {
+            Issue.record("缺少初始会话")
+            return
+        }
+        session1.isTemporary = false
+        chatService.chatSessionsSubject.send([session1])
+        chatService.setCurrentSession(session1)
+        Persistence.saveChatSessions([session1])
         chatService.createNewSession()
         
         // Save a dummy message to session 1 to test if it loads correctly
@@ -2004,7 +2107,14 @@ fileprivate struct ChatSessionTests {
     @Test("Delete Session")
     func testDeleteSession() {
         // Arrange
-        let session1 = chatService.currentSessionSubject.value!
+        guard var session1 = chatService.currentSessionSubject.value else {
+            Issue.record("缺少初始会话")
+            return
+        }
+        session1.isTemporary = false
+        chatService.chatSessionsSubject.send([session1])
+        chatService.setCurrentSession(session1)
+        Persistence.saveChatSessions([session1])
         chatService.createNewSession() // Session 2 is now current
         let session2 = chatService.currentSessionSubject.value!
         let initialCount = chatService.chatSessionsSubject.value.count

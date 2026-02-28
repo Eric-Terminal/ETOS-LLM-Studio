@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct ContentView: View {
@@ -46,6 +47,11 @@ struct ContentView: View {
             }
             .tag(Tab.settings)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selection = .chat
+            }
+        }
         .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
             Button("确定", role: .cancel) {}
         } message: {
@@ -72,4 +78,8 @@ struct ContentView: View {
 enum ChatNavigationDestination: Hashable {
     case sessions
     case settings
+}
+
+extension Notification.Name {
+    static let requestSwitchToChatTab = Notification.Name("ios.requestSwitchToChatTab")
 }

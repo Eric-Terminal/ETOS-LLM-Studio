@@ -46,6 +46,7 @@ public enum FeedbackServiceError: LocalizedError {
     case serverError(String)
     case invalidResponse
     case decodeFailed
+    case proofOfWorkFailed
     case signatureRejected
 
     public var errorDescription: String? {
@@ -60,8 +61,10 @@ public enum FeedbackServiceError: LocalizedError {
             return NSLocalizedString("反馈服务返回了无效响应。", comment: "Feedback invalid response")
         case .decodeFailed:
             return NSLocalizedString("反馈服务数据解析失败。", comment: "Feedback decode failed")
+        case .proofOfWorkFailed:
+            return NSLocalizedString("反馈计算验证失败，请稍后重试。", comment: "Feedback proof of work failed")
         case .signatureRejected:
-            return NSLocalizedString("反馈签名校验失败，请重试。", comment: "Feedback signature rejected")
+            return NSLocalizedString("反馈签名或验证校验失败，请重试。", comment: "Feedback signature rejected")
         }
     }
 }
@@ -154,12 +157,35 @@ public final class FeedbackService: ObservableObject {
         let bodyHash = FeedbackSignature.bodyHashHex(bodyData)
         let signingText = "POST\n\(submitPath)\n\(timestamp)\n\(bodyHash)\n\(challenge.nonce)"
         let signature = FeedbackSignature.hmacSHA256Hex(message: signingText, secret: challenge.clientSecret)
+        let powBits = max(challenge.powBits ?? 0, 0)
+        let powSalt = challenge.powSalt ?? ""
+        let challengeID = challenge.challengeID
+        let powSolution = await Task.detached(priority: .userInitiated) {
+            FeedbackProofOfWork.solve(
+                method: "POST",
+                path: submitPath,
+                timestamp: timestamp,
+                bodyHashHex: bodyHash,
+                challengeID: challengeID,
+                powSalt: powSalt,
+                bits: powBits
+            )
+        }.value
+
+        if powBits > 0 && powSolution == nil {
+            throw FeedbackServiceError.proofOfWorkFailed
+        }
 
         request.httpBody = bodyData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(challenge.challengeID, forHTTPHeaderField: "X-ELS-Challenge-Id")
+        request.setValue(challengeID, forHTTPHeaderField: "X-ELS-Challenge-Id")
         request.setValue(timestamp, forHTTPHeaderField: "X-ELS-Timestamp")
         request.setValue(signature, forHTTPHeaderField: "X-ELS-Signature")
+        if let powSolution {
+            request.setValue(powSolution.nonce, forHTTPHeaderField: "X-ELS-PoW-Nonce")
+            request.setValue(powSolution.hashHex, forHTTPHeaderField: "X-ELS-PoW-Hash")
+            request.setValue(String(powSolution.bits), forHTTPHeaderField: "X-ELS-PoW-Bits")
+        }
 
         let (data, response) = try await session.data(for: request)
         try validateHTTPResponse(response, data: data)
@@ -341,12 +367,16 @@ private struct ChallengeResponse: Decodable {
     let challengeID: String
     let clientSecret: String
     let nonce: String
+    let powBits: Int?
+    let powSalt: String?
     let expiresAt: Date
 
     enum CodingKeys: String, CodingKey {
         case challengeID = "challenge_id"
         case clientSecret = "client_secret"
         case nonce
+        case powBits = "pow_bits"
+        case powSalt = "pow_salt"
         case expiresAt = "expires_at"
     }
 }

@@ -66,6 +66,38 @@ struct FeedbackSignatureTests {
     }
 }
 
+@Suite("FeedbackProofOfWork Tests")
+struct FeedbackProofOfWorkTests {
+    @Test("低难度 PoW 可求解")
+    func lowDifficultyCanBeSolved() {
+        let solution = FeedbackProofOfWork.solve(
+            method: "POST",
+            path: "/v1/feedback/issues",
+            timestamp: "1730000000",
+            bodyHashHex: String(repeating: "a", count: 64),
+            challengeID: "challenge-demo",
+            powSalt: "salt-demo",
+            bits: 8,
+            maxIterations: 100_000
+        )
+        #expect(solution != nil)
+    }
+
+    @Test("零难度 PoW 直接跳过")
+    func zeroDifficultyReturnsNil() {
+        let solution = FeedbackProofOfWork.solve(
+            method: "POST",
+            path: "/v1/feedback/issues",
+            timestamp: "1730000000",
+            bodyHashHex: String(repeating: "b", count: 64),
+            challengeID: "challenge-demo",
+            powSalt: "salt-demo",
+            bits: 0
+        )
+        #expect(solution == nil)
+    }
+}
+
 @Suite("FeedbackDraft Tests")
 struct FeedbackDraftTests {
     @Test("标题与描述会先去空白再判断有效性")
