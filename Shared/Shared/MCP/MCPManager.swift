@@ -296,10 +296,10 @@ public final class MCPManager: ObservableObject {
     private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     private var autoConnectRetryAttempts: [UUID: Int] = [:]
     private var autoConnectFailureNotifiedAt: [UUID: Date] = [:]
-    private let autoConnectMaxRetries = 5
+    private let autoConnectMaxRetries = 1
     private let autoConnectBaseDelay: TimeInterval = 1.0
     private let autoConnectMaxDelay: TimeInterval = 30.0
-    private let autoConnectHandshakeTimeout: TimeInterval = 12.0
+    private let autoConnectHandshakeTimeout: TimeInterval = 60.0
     private let autoConnectFailureNotificationCooldown: TimeInterval = 120.0
     private let configWatcherInterval: TimeInterval = 2.0
     private let defaultToolCallTimeout: TimeInterval = 60
