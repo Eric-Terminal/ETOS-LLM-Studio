@@ -98,7 +98,7 @@ struct MCPIntegrationView: View {
             }
 
             Section(
-                "审批自动化",
+                header: Text("审批自动化"),
                 footer: Text("倒计时范围 1-30 秒，超出会自动修正。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -467,7 +467,7 @@ private struct MCPToolSettingsDetailView: View {
             }
 
             Section(
-                "审批策略",
+                header: Text("审批策略"),
                 footer: Text("默认“每次询问”，可按工具单独设置。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
