@@ -19,6 +19,13 @@ struct MCPIntegrationView: View {
     @StateObject private var manager = MCPManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
     
+    private var countdownNumberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+    
     var body: some View {
         List {
             Section("关于 MCP") {
@@ -90,7 +97,12 @@ struct MCPIntegrationView: View {
                 }
             }
 
-            Section("审批自动化") {
+            Section(
+                "审批自动化",
+                footer: Text("倒计时范围 1-30 秒，超出会自动修正。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
                 Toggle(
                     "自动批准",
                     isOn: Binding(
@@ -98,14 +110,20 @@ struct MCPIntegrationView: View {
                         set: { toolPermissionCenter.setAutoApproveEnabled($0) }
                     )
                 )
-                Stepper(
-                    value: Binding(
-                        get: { toolPermissionCenter.autoApproveCountdownSeconds },
-                        set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
-                    ),
-                    in: 1...30
-                ) {
-                    Text("\(toolPermissionCenter.autoApproveCountdownSeconds)s")
+                
+                HStack {
+                    Text("倒计时秒数")
+                    Spacer()
+                    TextField(
+                        "数量",
+                        value: Binding(
+                            get: { toolPermissionCenter.autoApproveCountdownSeconds },
+                            set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
+                        ),
+                        formatter: countdownNumberFormatter
+                    )
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 52)
                 }
                 .disabled(!toolPermissionCenter.autoApproveEnabled)
             }
