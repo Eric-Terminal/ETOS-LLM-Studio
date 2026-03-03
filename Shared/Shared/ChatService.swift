@@ -1923,7 +1923,6 @@ public class ChatService {
         let finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
             topic: sessionForRequest?.topicPrompt,
-            enhanced: enhancedPrompt,
             memories: memories,
             includeSystemTime: includeSystemTime,
             worldbookBefore: worldbookResult.before,
@@ -1952,6 +1951,10 @@ public class ChatService {
         messagesToSend.append(contentsOf: emTopMessages)
         messagesToSend.append(contentsOf: chatHistory)
         messagesToSend.append(contentsOf: emBottomMessages)
+
+        if let enhancedPromptMessage = makeEnhancedPromptSystemMessage(enhancedPrompt) {
+            messagesToSend.append(enhancedPromptMessage)
+        }
         
         // 构建音频附件字典：从历史消息中加载已保存的音频文件
         var audioAttachments: [UUID: AudioAttachment] = [:]
@@ -3765,7 +3768,6 @@ public class ChatService {
     private func buildFinalSystemPrompt(
         global: String?,
         topic: String?,
-        enhanced: String?,
         memories: [MemoryItem],
         includeSystemTime: Bool,
         worldbookBefore: [WorldbookInjection] = [],
@@ -3782,16 +3784,6 @@ public class ChatService {
 
         if let topic, !topic.isEmpty {
             parts.append("<topic_prompt>\n\(topic)\n</topic_prompt>")
-        }
-
-        if let enhanced, !enhanced.isEmpty {
-            let metaInstruction = NSLocalizedString("这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。", comment: "Meta instruction appended with enhanced prompt.")
-            parts.append("""
-<enhanced_prompt>
-\(metaInstruction)
-\(enhanced)
-</enhanced_prompt>
-""")
         }
         
         if includeSystemTime {
@@ -3835,6 +3827,20 @@ public class ChatService {
         }
 
         return parts.joined(separator: "\n\n")
+    }
+
+    private func makeEnhancedPromptSystemMessage(_ enhancedPrompt: String?) -> ChatMessage? {
+        guard let enhancedPrompt else { return nil }
+        let trimmed = enhancedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let metaInstruction = NSLocalizedString("这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。", comment: "Meta instruction appended with enhanced prompt.")
+        let content = """
+<enhanced_prompt>
+\(metaInstruction)
+\(trimmed)
+</enhanced_prompt>
+"""
+        return ChatMessage(role: .system, content: content)
     }
 
     private func makeWorldbookPromptBlock(

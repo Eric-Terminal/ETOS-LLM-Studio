@@ -1690,14 +1690,18 @@ fileprivate struct ChatServiceTests {
         )
 
         let sentMessages = mockAdapter.receivedMessages ?? []
-        let systemMessage = sentMessages.first(where: { $0.role == .system })
-        let systemContent = systemMessage?.content ?? ""
+        let lastMessage = sentMessages.last
+        let enhancedSystemMessage = sentMessages.last(where: { $0.role == .system && $0.content.contains("<enhanced_prompt>") })
+        let systemContent = enhancedSystemMessage?.content ?? ""
+        let firstSystemMessage = sentMessages.first(where: { $0.role == .system })
+        let firstSystemContent = firstSystemMessage?.content ?? ""
         let userMessage = sentMessages.last(where: { $0.role == .user })
         let userContent = userMessage?.content ?? ""
 
+        #expect(lastMessage?.role == .system, "Enhanced prompt system message should be appended at the end of messages.")
         #expect(systemContent.contains("<enhanced_prompt>"), "System message should contain enhanced prompt tag.")
         #expect(systemContent.contains(enhancedPrompt), "System message should contain enhanced prompt content.")
-        #expect(!systemContent.contains("<instruction>"), "Enhanced prompt should no longer use user instruction wrapper.")
+        #expect(!firstSystemContent.contains("<enhanced_prompt>"), "Enhanced prompt should not be merged into the first system prompt block.")
         #expect(userContent == userText, "User message should remain unchanged.")
         #expect(!userContent.contains("<user_input>"), "User message should not be wrapped by <user_input>.")
 

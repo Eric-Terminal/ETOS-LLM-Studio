@@ -1649,15 +1649,15 @@ public class GeminiAdapter: APIAdapter {
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         // 分离系统消息和普通消息
-        var systemInstruction: [String: Any]? = nil
+        var systemInstructionParts: [[String: Any]] = []
         var geminiContents: [[String: Any]] = []
         
         for msg in messages {
             if msg.role == .system {
-                // Gemini 的 system_instruction 格式
-                systemInstruction = [
-                    "parts": [["text": msg.content]]
-                ]
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if shouldSendText(trimmed) {
+                    systemInstructionParts.append(["text": msg.content])
+                }
                 continue
             }
             
@@ -1781,8 +1781,8 @@ public class GeminiAdapter: APIAdapter {
         payload["contents"] = geminiContents
         
         // 设置 system_instruction
-        if let systemInstruction = systemInstruction {
-            payload["system_instruction"] = systemInstruction
+        if !systemInstructionParts.isEmpty {
+            payload["system_instruction"] = ["parts": systemInstructionParts]
         }
         
         // 构建 generationConfig
@@ -2372,12 +2372,15 @@ public class AnthropicAdapter: APIAdapter {
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         // 分离系统消息和普通消息
-        var systemPrompt: String? = nil
+        var systemPrompts: [String] = []
         var anthropicMessages: [[String: Any]] = []
         
         for msg in messages {
             if msg.role == .system {
-                systemPrompt = msg.content
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if shouldSendText(trimmed) {
+                    systemPrompts.append(msg.content)
+                }
                 continue
             }
             
@@ -2502,8 +2505,8 @@ public class AnthropicAdapter: APIAdapter {
         payload["messages"] = anthropicMessages
         
         // 设置 system
-        if let systemPrompt = systemPrompt {
-            payload["system"] = systemPrompt
+        if !systemPrompts.isEmpty {
+            payload["system"] = systemPrompts.joined(separator: "\n\n")
         }
         
         // 设置生成参数
