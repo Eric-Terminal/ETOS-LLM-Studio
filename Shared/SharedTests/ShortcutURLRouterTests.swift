@@ -22,6 +22,14 @@ struct ShortcutURLRouterTests {
     }
 
     @MainActor
+    @Test("single-slash callback route is recognized")
+    func testSingleSlashCallbackRoute() async {
+        let url = URL(string: "etosllmstudio:/shortcuts/callback?request_id=dummy&status=success")!
+        let handled = await ShortcutURLRouter.shared.handleIncomingURL(url)
+        #expect(handled == true)
+    }
+
+    @MainActor
     @Test("unknown scheme is ignored")
     func testUnknownSchemeIgnored() async {
         let url = URL(string: "https://example.com/shortcuts/callback")!
@@ -33,6 +41,14 @@ struct ShortcutURLRouterTests {
     @Test("template status route is recognized")
     func testTemplateStatusRoute() async {
         let url = URL(string: "etosllmstudio://shortcuts/template-status?status=error&stage=run")!
+        let handled = await ShortcutURLRouter.shared.handleIncomingURL(url)
+        #expect(handled == true)
+    }
+
+    @MainActor
+    @Test("legacy host import route is recognized")
+    func testLegacyHostImportRoute() async {
+        let url = URL(string: "etosllmstudio://shortcut/import?source=clipboard")!
         let handled = await ShortcutURLRouter.shared.handleIncomingURL(url)
         #expect(handled == true)
     }
