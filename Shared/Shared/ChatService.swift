@@ -1923,6 +1923,7 @@ public class ChatService {
         let finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
             topic: sessionForRequest?.topicPrompt,
+            enhanced: enhancedPrompt,
             memories: memories,
             includeSystemTime: includeSystemTime,
             worldbookBefore: worldbookResult.before,
@@ -1939,16 +1940,6 @@ public class ChatService {
         var chatHistory = messages.filter { $0.role != .error && $0.id != loadingMessageID }
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
             chatHistory = Array(chatHistory.suffix(maxChatHistory))
-        }
-        
-        if let enhanced = enhancedPrompt, !enhanced.isEmpty, let lastUserMsgIndex = chatHistory.lastIndex(where: { $0.role == .user }) {
-            // 优化2：如果存在增强指令，则用 <user_input> 包裹用户的原始输入
-            let originalUserInput = chatHistory[lastUserMsgIndex].content
-            chatHistory[lastUserMsgIndex].content = "<user_input>\n\(originalUserInput)\n</user_input>"
-            
-            // 优化1：为增强指令添加“默默执行”的元指令
-            let metaInstruction = NSLocalizedString("这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。", comment: "Meta instruction appended with enhanced prompt.")
-            chatHistory[lastUserMsgIndex].content += "\n\n---\n\n<instruction>\n\(metaInstruction)\n\n\(enhanced)\n</instruction>"
         }
 
         if !worldbookResult.atDepth.isEmpty {
@@ -3774,6 +3765,7 @@ public class ChatService {
     private func buildFinalSystemPrompt(
         global: String?,
         topic: String?,
+        enhanced: String?,
         memories: [MemoryItem],
         includeSystemTime: Bool,
         worldbookBefore: [WorldbookInjection] = [],
@@ -3790,6 +3782,16 @@ public class ChatService {
 
         if let topic, !topic.isEmpty {
             parts.append("<topic_prompt>\n\(topic)\n</topic_prompt>")
+        }
+
+        if let enhanced, !enhanced.isEmpty {
+            let metaInstruction = NSLocalizedString("这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。", comment: "Meta instruction appended with enhanced prompt.")
+            parts.append("""
+<enhanced_prompt>
+\(metaInstruction)
+\(enhanced)
+</enhanced_prompt>
+""")
         }
         
         if includeSystemTime {

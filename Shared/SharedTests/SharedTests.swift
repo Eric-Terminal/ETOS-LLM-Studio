@@ -1668,6 +1668,41 @@ fileprivate struct ChatServiceTests {
         
         await cleanup()
     }
+
+    @Test("Enhanced prompt is sent via system message without rewriting user message")
+    func testEnhancedPrompt_AsSystemMessageWithoutUserRewrite() async throws {
+        await cleanup()
+
+        let userText = "请保持原始用户内容"
+        let enhancedPrompt = "你需要先给出结论，再给出步骤。"
+
+        await chatService.sendAndProcessMessage(
+            content: userText,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: enhancedPrompt,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let systemMessage = sentMessages.first(where: { $0.role == .system })
+        let systemContent = systemMessage?.content ?? ""
+        let userMessage = sentMessages.last(where: { $0.role == .user })
+        let userContent = userMessage?.content ?? ""
+
+        #expect(systemContent.contains("<enhanced_prompt>"), "System message should contain enhanced prompt tag.")
+        #expect(systemContent.contains(enhancedPrompt), "System message should contain enhanced prompt content.")
+        #expect(!systemContent.contains("<instruction>"), "Enhanced prompt should no longer use user instruction wrapper.")
+        #expect(userContent == userText, "User message should remain unchanged.")
+        #expect(!userContent.contains("<user_input>"), "User message should not be wrapped by <user_input>.")
+
+        await cleanup()
+    }
     
     @Test("Time tag is injected when preference is enabled")
     func testSystemTimePromptInjection() async throws {
