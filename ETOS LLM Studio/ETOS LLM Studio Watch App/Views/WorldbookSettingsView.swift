@@ -85,7 +85,7 @@ struct WorldbookSettingsView: View {
             }
 
             Section(NSLocalizedString("导入", comment: "Import section")) {
-                TextField(NSLocalizedString("世界书链接", comment: "Worldbook URL field"), text: $importURLText)
+                TextField(NSLocalizedString("世界书链接", comment: "Worldbook URL field"), text: $importURLText.watchKeyboardNewlineBinding())
 
                 Button {
                     importFromURL()
@@ -783,7 +783,7 @@ private struct WatchWorldbookEntryDraft: Identifiable {
         let normalizedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedKeys = parseKeywordList(keysText.normalizedPlainQuotes())
-        WorldbookEntry(
+        return WorldbookEntry(
             id: entryID,
             comment: normalizedComment,
             content: normalizedContent,
@@ -917,6 +917,8 @@ private func worldbookPositionLabel(_ position: WorldbookPosition) -> String {
 
 private func worldbookEntryRoleLabel(_ role: WorldbookEntryRole) -> String {
     switch role {
+    case .system:
+        return NSLocalizedString("系统", comment: "Worldbook role system")
     case .user:
         return NSLocalizedString("用户", comment: "Worldbook role user")
     case .assistant:

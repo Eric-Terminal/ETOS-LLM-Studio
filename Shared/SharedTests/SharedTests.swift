@@ -1668,6 +1668,45 @@ fileprivate struct ChatServiceTests {
         
         await cleanup()
     }
+
+    @Test("Enhanced prompt is sent via system message without rewriting user message")
+    func testEnhancedPrompt_AsSystemMessageWithoutUserRewrite() async throws {
+        await cleanup()
+
+        let userText = "请保持原始用户内容"
+        let enhancedPrompt = "你需要先给出结论，再给出步骤。"
+
+        await chatService.sendAndProcessMessage(
+            content: userText,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: enhancedPrompt,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let lastMessage = sentMessages.last
+        let enhancedSystemMessage = sentMessages.last(where: { $0.role == .system && $0.content.contains("<enhanced_prompt>") })
+        let systemContent = enhancedSystemMessage?.content ?? ""
+        let firstSystemMessage = sentMessages.first(where: { $0.role == .system })
+        let firstSystemContent = firstSystemMessage?.content ?? ""
+        let userMessage = sentMessages.last(where: { $0.role == .user })
+        let userContent = userMessage?.content ?? ""
+
+        #expect(lastMessage?.role == .system, "Enhanced prompt system message should be appended at the end of messages.")
+        #expect(systemContent.contains("<enhanced_prompt>"), "System message should contain enhanced prompt tag.")
+        #expect(systemContent.contains(enhancedPrompt), "System message should contain enhanced prompt content.")
+        #expect(!firstSystemContent.contains("<enhanced_prompt>"), "Enhanced prompt should not be merged into the first system prompt block.")
+        #expect(userContent == userText, "User message should remain unchanged.")
+        #expect(!userContent.contains("<user_input>"), "User message should not be wrapped by <user_input>.")
+
+        await cleanup()
+    }
     
     @Test("Time tag is injected when preference is enabled")
     func testSystemTimePromptInjection() async throws {
@@ -1895,7 +1934,8 @@ fileprivate struct ChatServiceTests {
                 WorldbookEntry(content: "em-top", keys: ["hero"], position: .emTop, order: 5),
                 WorldbookEntry(content: "em-bottom", keys: ["hero"], position: .emBottom, order: 6),
                 WorldbookEntry(content: "depth-user", keys: ["hero"], position: .atDepth, order: 7, depth: 1, role: .user),
-                WorldbookEntry(content: "depth-assistant", keys: ["hero"], position: .atDepth, order: 8, depth: 1, role: .assistant)
+                WorldbookEntry(content: "depth-assistant", keys: ["hero"], position: .atDepth, order: 8, depth: 1, role: .assistant),
+                WorldbookEntry(content: "depth-system", keys: ["hero"], position: .atDepth, order: 9, depth: 1, role: .system)
             ]
         )
         store.saveWorldbooks([book])
@@ -1926,6 +1966,7 @@ fileprivate struct ChatServiceTests {
 
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_em_top>") }))
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_em_bottom>") }))
+        #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .system }))
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .assistant }))
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .user }))
 

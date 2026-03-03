@@ -927,11 +927,14 @@ public enum WorldbookSelectiveLogic: String, Codable, CaseIterable, Hashable, Se
 }
 
 public enum WorldbookEntryRole: String, Codable, CaseIterable, Hashable, Sendable {
+    case system = "SYSTEM"
     case user = "USER"
     case assistant = "ASSISTANT"
 
     public init(rawOrLegacyValue: String?) {
         switch rawOrLegacyValue?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "SYSTEM":
+            self = .system
         case "ASSISTANT":
             self = .assistant
         default:

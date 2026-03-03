@@ -1940,16 +1940,6 @@ public class ChatService {
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
             chatHistory = Array(chatHistory.suffix(maxChatHistory))
         }
-        
-        if let enhanced = enhancedPrompt, !enhanced.isEmpty, let lastUserMsgIndex = chatHistory.lastIndex(where: { $0.role == .user }) {
-            // 优化2：如果存在增强指令，则用 <user_input> 包裹用户的原始输入
-            let originalUserInput = chatHistory[lastUserMsgIndex].content
-            chatHistory[lastUserMsgIndex].content = "<user_input>\n\(originalUserInput)\n</user_input>"
-            
-            // 优化1：为增强指令添加“默默执行”的元指令
-            let metaInstruction = NSLocalizedString("这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。", comment: "Meta instruction appended with enhanced prompt.")
-            chatHistory[lastUserMsgIndex].content += "\n\n---\n\n<instruction>\n\(metaInstruction)\n\n\(enhanced)\n</instruction>"
-        }
 
         if !worldbookResult.atDepth.isEmpty {
             chatHistory = injectAtDepthMessages(worldbookResult.atDepth, into: chatHistory)
@@ -1961,6 +1951,10 @@ public class ChatService {
         messagesToSend.append(contentsOf: emTopMessages)
         messagesToSend.append(contentsOf: chatHistory)
         messagesToSend.append(contentsOf: emBottomMessages)
+
+        if let enhancedPromptMessage = makeEnhancedPromptSystemMessage(enhancedPrompt) {
+            messagesToSend.append(enhancedPromptMessage)
+        }
         
         // 构建音频附件字典：从历史消息中加载已保存的音频文件
         var audioAttachments: [UUID: AudioAttachment] = [:]
@@ -3835,6 +3829,20 @@ public class ChatService {
         return parts.joined(separator: "\n\n")
     }
 
+    private func makeEnhancedPromptSystemMessage(_ enhancedPrompt: String?) -> ChatMessage? {
+        guard let enhancedPrompt else { return nil }
+        let trimmed = enhancedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let metaInstruction = NSLocalizedString("这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。", comment: "Meta instruction appended with enhanced prompt.")
+        let content = """
+<enhanced_prompt>
+\(metaInstruction)
+\(trimmed)
+</enhanced_prompt>
+"""
+        return ChatMessage(role: .system, content: content)
+    }
+
     private func makeWorldbookPromptBlock(
         tag: String,
         entries: [WorldbookInjection],
@@ -3889,6 +3897,11 @@ public class ChatService {
         guard !entries.isEmpty else { return [] }
         let grouped = Dictionary(grouping: entries, by: \.role)
         var messages: [ChatMessage] = []
+
+        if let systemEntries = grouped[.system], !systemEntries.isEmpty {
+            let content = makeWorldbookPromptBlock(tag: tag, entries: systemEntries)
+            messages.append(ChatMessage(role: .system, content: content))
+        }
 
         if let assistantEntries = grouped[.assistant], !assistantEntries.isEmpty {
             let content = makeWorldbookPromptBlock(tag: tag, entries: assistantEntries)
