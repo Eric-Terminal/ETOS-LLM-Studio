@@ -85,7 +85,7 @@ struct WorldbookSettingsView: View {
             }
 
             Section(NSLocalizedString("导入", comment: "Import section")) {
-                TextField(NSLocalizedString("世界书链接", comment: "Worldbook URL field"), text: $importURLText)
+                TextField(NSLocalizedString("世界书链接", comment: "Worldbook URL field"), text: $importURLText.watchKeyboardNewlineBinding())
 
                 Button {
                     importFromURL()
