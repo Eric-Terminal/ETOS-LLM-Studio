@@ -238,7 +238,7 @@ public struct WorldbookEngine {
     }
 
     public func evaluate(_ context: Context) -> WorldbookEvaluationResult {
-        let activeBooks = context.worldbooks.filter { $0.isEnabled }
+        let activeBooks = context.worldbooks
         guard !activeBooks.isEmpty else { return .empty }
 
         let turn = runtimeStore.nextTurn(for: context.sessionID)

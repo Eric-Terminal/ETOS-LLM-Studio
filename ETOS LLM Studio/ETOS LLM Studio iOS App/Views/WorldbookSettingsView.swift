@@ -116,19 +116,12 @@ struct WorldbookSettingsView: View {
                             WorldbookDetailView(worldbookID: book.id)
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(book.name)
-                                        .font(.headline)
-                                    Spacer()
-                                    Text(book.isEnabled
-                                         ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
-                                         : NSLocalizedString("已停用", comment: "Worldbook disabled status"))
-                                        .font(.caption)
-                                        .foregroundStyle(book.isEnabled ? .green : .secondary)
-                                }
+                                Text(book.name)
+                                    .font(.headline)
 
                                 HStack(spacing: 8) {
                                     Text(String(format: NSLocalizedString("条目 %d", comment: "Entry count short"), book.entries.count))
+                                    Text(enabledEntrySummary(for: book))
                                     Text(book.updatedAt.formatted(date: .abbreviated, time: .shortened))
                                 }
                                 .font(.caption)
@@ -317,6 +310,15 @@ struct WorldbookSettingsView: View {
             format: NSLocalizedString("%d/%d 本", comment: "Bound worldbook count summary"),
             boundBookCount,
             totalBookCount
+        )
+    }
+
+    private func enabledEntrySummary(for book: Worldbook) -> String {
+        let enabledCount = book.entries.filter(\.isEnabled).count
+        return String(
+            format: NSLocalizedString("启用条目 %d/%d", comment: "Enabled worldbook entry summary"),
+            enabledCount,
+            book.entries.count
         )
     }
 
@@ -513,10 +515,6 @@ private struct WorldbookDetailView: View {
     var body: some View {
         List {
             if let worldbook {
-                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
-                    Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: enabledBinding)
-                }
-
                 Section(NSLocalizedString("基本信息", comment: "Basic info")) {
                     TextField(NSLocalizedString("世界书名称", comment: "Worldbook name field"), text: $nameDraft)
                         .onSubmit {
@@ -704,15 +702,6 @@ private struct WorldbookDetailView: View {
             }
             book.description = trimmedDescription
         }
-    }
-
-    private var enabledBinding: Binding<Bool> {
-        Binding(
-            get: { worldbook?.isEnabled ?? false },
-            set: { enabled in
-                updateWorldbook { $0.isEnabled = enabled }
-            }
-        )
     }
 
     private var settingsScanDepthBinding: Binding<Int> {

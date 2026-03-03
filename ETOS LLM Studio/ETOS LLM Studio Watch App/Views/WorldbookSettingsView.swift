@@ -53,15 +53,11 @@ struct WorldbookSettingsView: View {
                             WatchWorldbookDetailView(worldbookID: book.id)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(book.name)
-                                    Spacer()
-                                    Text(book.isEnabled
-                                         ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
-                                         : NSLocalizedString("已停用", comment: "Worldbook disabled status"))
-                                        .font(.caption2)
-                                        .foregroundStyle(book.isEnabled ? .green : .secondary)
-                                }
+                                Text(book.name)
+
+                                Text(enabledEntrySummary(for: book))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
 
                                 if !book.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Text(book.description)
@@ -199,6 +195,15 @@ struct WorldbookSettingsView: View {
         )
     }
 
+    private func enabledEntrySummary(for book: Worldbook) -> String {
+        let enabledCount = book.entries.filter(\.isEnabled).count
+        return String(
+            format: NSLocalizedString("启用条目 %d/%d", comment: "Enabled worldbook entry summary"),
+            enabledCount,
+            book.entries.count
+        )
+    }
+
     private func confirmDeleteWorldbook() {
         guard let target = worldbookToDelete else { return }
         ChatService.shared.deleteWorldbook(id: target.id)
@@ -325,10 +330,6 @@ private struct WatchWorldbookDetailView: View {
     var body: some View {
         List {
             if let worldbook {
-                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
-                    Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: enabledBinding)
-                }
-
                 Section(NSLocalizedString("基本信息", comment: "Basic info")) {
                     TextField(
                         NSLocalizedString("名称", comment: "Worldbook name field"),
@@ -443,21 +444,6 @@ private struct WatchWorldbookDetailView: View {
         worldbook = ChatService.shared.loadWorldbooks().first(where: { $0.id == worldbookID })
         nameDraft = worldbook?.name ?? ""
         descriptionDraft = worldbook?.description ?? ""
-    }
-
-    private var enabledBinding: Binding<Bool> {
-        Binding(
-            get: { worldbook?.isEnabled ?? false },
-            set: { setEnabled($0) }
-        )
-    }
-
-    private func setEnabled(_ enabled: Bool) {
-        guard var worldbook else { return }
-        worldbook.isEnabled = enabled
-        worldbook.updatedAt = Date()
-        ChatService.shared.saveWorldbook(worldbook)
-        self.worldbook = worldbook
     }
 
     private func saveBasicInfo() {
