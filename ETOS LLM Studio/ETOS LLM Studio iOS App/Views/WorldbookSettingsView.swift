@@ -503,8 +503,8 @@ private struct WorldbookDetailView: View {
     @State private var worldbook: Worldbook?
     @State private var nameDraft: String = ""
     @State private var descriptionDraft: String = ""
-    @State private var expandedEntryIDs = Set<UUID>()
     @State private var editingEntryDraft: WorldbookEntryDraft?
+    @State private var entryToDelete: WorldbookEntry?
 
     private var orderedEntries: [WorldbookEntry] {
         worldbook?.entries ?? []
@@ -573,56 +573,42 @@ private struct WorldbookDetailView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(orderedEntries) { entry in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
+                            NavigationLink {
+                                WorldbookEntryDetailView(
+                                    entry: entry,
+                                    onSave: { updatedEntry in
+                                        upsertEntry(updatedEntry)
+                                    }
+                                )
+                            } label: {
+                                VStack(alignment: .leading, spacing: 6) {
                                     Text(entry.comment.isEmpty ? NSLocalizedString("(无注释)", comment: "No comment") : entry.comment)
                                         .font(.subheadline)
-                                    Spacer()
-                                    Text(worldbookPositionLabel(entry.position))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
+                                        .lineLimit(1)
 
-                                Text(entry.content)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(expandedEntryIDs.contains(entry.id) ? nil : 4)
-
-                                HStack {
-                                    Button(
-                                        expandedEntryIDs.contains(entry.id)
-                                        ? NSLocalizedString("点击收起", comment: "Tap to collapse")
-                                        : NSLocalizedString("点击展开全文", comment: "Tap to expand full text")
-                                    ) {
-                                        toggleEntryExpansion(entry.id)
-                                    }
-                                    .font(.caption2)
-
-                                    Spacer()
-
-                                    Button(NSLocalizedString("编辑", comment: "Edit")) {
-                                        editingEntryDraft = WorldbookEntryDraft(entry: entry)
-                                    }
-                                    .font(.caption2)
-                                }
-
-                                Text(String(format: NSLocalizedString("关键词：%@", comment: "Keywords"), entry.keys.joined(separator: "，")))
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-
-                                Text(
-                                    String(
-                                        format: NSLocalizedString("角色：%@", comment: "Entry role label"),
-                                        worldbookEntryRoleLabel(entry.role)
+                                    Text(
+                                        entry.isEnabled
+                                        ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
+                                        : NSLocalizedString("已停用", comment: "Worldbook disabled status")
                                     )
-                                )
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                    .font(.caption)
+                                    .foregroundStyle(entry.isEnabled ? .green : .secondary)
+
+                                    if let preview = entryPreview(entry) {
+                                        Text(preview)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(3)
+                                    }
+                                }
                             }
-                            .padding(.vertical, 2)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
+                                    entryToDelete = entry
+                                }
+                            }
                         }
                         .onMove(perform: moveEntries)
-                        .onDelete(perform: deleteEntries)
                     }
                 }
             } else {
@@ -639,16 +625,38 @@ private struct WorldbookDetailView: View {
             NavigationStack {
                 WorldbookEntryEditView(
                     draft: draft,
-                    isNew: !entryExists(draft.entryID),
+                    isNew: true,
                     onSave: { updatedEntry in
                         upsertEntry(updatedEntry)
                     },
-                    onDelete: entryExists(draft.entryID) ? {
-                        deleteEntry(id: draft.entryID)
-                    } : nil
+                    onDelete: nil
                 )
             }
         }
+        .alert(
+            NSLocalizedString("确认删除条目", comment: "Confirm deleting entry"),
+            isPresented: Binding(
+                get: { entryToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        entryToDelete = nil
+                    }
+                }
+            ),
+            actions: {
+                Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
+                    guard let entryToDelete else { return }
+                    deleteEntry(id: entryToDelete.id)
+                    self.entryToDelete = nil
+                }
+                Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {
+                    entryToDelete = nil
+                }
+            },
+            message: {
+                Text(NSLocalizedString("删除后不可恢复。", comment: "Delete entry irreversible"))
+            }
+        )
     }
 
     private func reload() {
@@ -664,10 +672,6 @@ private struct WorldbookDetailView: View {
         descriptionDraft = book.description
     }
 
-    private func entryExists(_ entryID: UUID) -> Bool {
-        worldbook?.entries.contains(where: { $0.id == entryID }) ?? false
-    }
-
     private func updateWorldbook(_ mutate: (inout Worldbook) -> Void) {
         guard var worldbook else { return }
         mutate(&worldbook)
@@ -677,7 +681,7 @@ private struct WorldbookDetailView: View {
     }
 
     private func saveName() {
-        let trimmed = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         guard !trimmed.isEmpty else {
             nameDraft = worldbook?.name ?? ""
             return
@@ -686,14 +690,14 @@ private struct WorldbookDetailView: View {
     }
 
     private func saveDescription() {
-        let trimmed = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         updateWorldbook { $0.description = trimmed }
     }
 
     private func persistPendingBasicInfo() {
         guard worldbook != nil else { return }
-        let trimmedName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedDescription = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+        let trimmedDescription = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         updateWorldbook { book in
             if !trimmedName.isEmpty {
                 book.name = trimmedName
@@ -768,24 +772,11 @@ private struct WorldbookDetailView: View {
         reload()
     }
 
-    private func deleteEntries(_ offsets: IndexSet) {
-        let ids = offsets.map { orderedEntries[$0].id }
-        updateWorldbook { worldbook in
-            worldbook.entries.removeAll { ids.contains($0.id) }
-            worldbook.entries = normalizedEntryOrder(worldbook.entries)
-        }
-        for id in ids {
-            expandedEntryIDs.remove(id)
-        }
-        reload()
-    }
-
     private func deleteEntry(id: UUID) {
         updateWorldbook { worldbook in
             worldbook.entries.removeAll { $0.id == id }
             worldbook.entries = normalizedEntryOrder(worldbook.entries)
         }
-        expandedEntryIDs.remove(id)
         reload()
     }
 
@@ -813,12 +804,88 @@ private struct WorldbookDetailView: View {
         return normalized
     }
 
-    private func toggleEntryExpansion(_ entryID: UUID) {
-        if expandedEntryIDs.contains(entryID) {
-            expandedEntryIDs.remove(entryID)
-        } else {
-            expandedEntryIDs.insert(entryID)
+    private func entryPreview(_ entry: WorldbookEntry) -> String? {
+        let trimmed = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private struct WorldbookEntryDetailView: View {
+    @State private var entry: WorldbookEntry
+
+    let onSave: (WorldbookEntry) -> Void
+
+    init(entry: WorldbookEntry, onSave: @escaping (WorldbookEntry) -> Void) {
+        _entry = State(initialValue: entry)
+        self.onSave = onSave
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { entry.isEnabled },
+            set: { enabled in
+                entry.isEnabled = enabled
+                onSave(entry)
+            }
+        )
+    }
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: enabledBinding)
+            }
+
+            Section(NSLocalizedString("编辑", comment: "Edit")) {
+                NavigationLink {
+                    WorldbookEntryEditView(
+                        draft: WorldbookEntryDraft(entry: entry),
+                        isNew: false,
+                        onSave: { updatedEntry in
+                            entry = updatedEntry
+                            onSave(updatedEntry)
+                        },
+                        onDelete: nil
+                    )
+                } label: {
+                    Label(NSLocalizedString("编辑条目", comment: "Edit entry"), systemImage: "square.and.pencil")
+                }
+            }
+
+            Section(NSLocalizedString("内容", comment: "Content field")) {
+                if !entry.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(entry.comment)
+                        .font(.headline)
+                }
+
+                if !entry.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(entry.content)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if !entry.keys.isEmpty {
+                    Text(entry.keys.joined(separator: "，"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(worldbookPositionLabel(entry.position))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text(
+                    String(
+                        format: NSLocalizedString("角色：%@", comment: "Entry role label"),
+                        worldbookEntryRoleLabel(entry.role)
+                    )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
         }
+        .navigationTitle(NSLocalizedString("条目", comment: "Entries section"))
     }
 }
 
@@ -1151,17 +1218,21 @@ private struct WorldbookEntryDraft: Identifiable {
     }
 
     func toEntry() -> WorldbookEntry {
+        let normalizedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+        let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+        let normalizedOutletName = outletName.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+        let normalizedGroupName = groupName.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         WorldbookEntry(
             id: entryID,
-            comment: comment.trimmingCharacters(in: .whitespacesAndNewlines),
-            content: content.trimmingCharacters(in: .whitespacesAndNewlines),
+            comment: normalizedComment,
+            content: normalizedContent,
             keys: primaryKeys,
             secondaryKeys: secondaryKeys,
             selectiveLogic: selectiveLogic,
             isEnabled: isEnabled,
             constant: constant,
             position: position,
-            outletName: outletName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : outletName.trimmingCharacters(in: .whitespacesAndNewlines),
+            outletName: normalizedOutletName.isEmpty ? nil : normalizedOutletName,
             order: order,
             depth: position == .atDepth ? depth : nil,
             scanDepth: enableEntryScanDepth ? scanDepth : nil,
@@ -1170,7 +1241,7 @@ private struct WorldbookEntryDraft: Identifiable {
             useRegex: useRegex,
             useProbability: useProbability,
             probability: max(1, min(100, probability)),
-            group: groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : groupName.trimmingCharacters(in: .whitespacesAndNewlines),
+            group: normalizedGroupName.isEmpty ? nil : normalizedGroupName,
             groupOverride: groupOverride,
             groupWeight: groupWeight,
             useGroupScoring: useGroupScoring,
@@ -1402,7 +1473,9 @@ private func worldbookEntryRoleLabel(_ role: WorldbookEntryRole) -> String {
 }
 
 private func parseKeywordList(_ raw: String) -> [String] {
-    let normalized = raw.replacingOccurrences(of: "，", with: ",")
+    let normalized = raw
+        .normalizedPlainQuotes()
+        .replacingOccurrences(of: "，", with: ",")
     let components = normalized.components(separatedBy: CharacterSet(charactersIn: ",\n"))
     var seen = Set<String>()
     var result: [String] = []
@@ -1417,6 +1490,22 @@ private func parseKeywordList(_ raw: String) -> [String] {
     }
 
     return result
+}
+
+private extension String {
+    func normalizedPlainQuotes() -> String {
+        self
+            .replacingOccurrences(of: "“", with: "\"")
+            .replacingOccurrences(of: "”", with: "\"")
+            .replacingOccurrences(of: "„", with: "\"")
+            .replacingOccurrences(of: "‟", with: "\"")
+            .replacingOccurrences(of: "＂", with: "\"")
+            .replacingOccurrences(of: "‘", with: "'")
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "‚", with: "'")
+            .replacingOccurrences(of: "‛", with: "'")
+            .replacingOccurrences(of: "＇", with: "'")
+    }
 }
 
 private struct WorldbookExportDocument: FileDocument {
