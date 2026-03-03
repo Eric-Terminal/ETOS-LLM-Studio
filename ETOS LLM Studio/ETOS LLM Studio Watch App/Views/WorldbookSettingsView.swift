@@ -783,7 +783,7 @@ private struct WatchWorldbookEntryDraft: Identifiable {
         let normalizedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedKeys = parseKeywordList(keysText.normalizedPlainQuotes())
-        WorldbookEntry(
+        return WorldbookEntry(
             id: entryID,
             comment: normalizedComment,
             content: normalizedContent,
