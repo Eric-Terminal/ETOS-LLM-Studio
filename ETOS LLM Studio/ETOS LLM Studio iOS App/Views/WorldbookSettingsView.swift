@@ -1211,7 +1211,7 @@ private struct WorldbookEntryDraft: Identifiable {
         let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedOutletName = outletName.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedGroupName = groupName.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
-        WorldbookEntry(
+        return WorldbookEntry(
             id: entryID,
             comment: normalizedComment,
             content: normalizedContent,
