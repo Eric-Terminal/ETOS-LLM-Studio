@@ -599,6 +599,22 @@ private struct WatchWorldbookEntryEditView: View {
         return true
     }
 
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var orderBinding: Binding<Int> {
+        Binding(
+            get: { draft.order },
+            set: { newValue in
+                draft.order = min(1000, max(0, newValue))
+            }
+        )
+    }
+
     var body: some View {
         Form {
             Section(NSLocalizedString("基础", comment: "Entry base section")) {
@@ -640,11 +656,13 @@ private struct WatchWorldbookEntryEditView: View {
                         Text(worldbookEntryRoleLabel(role)).tag(role)
                     }
                 }
-                Stepper(
-                    String(format: NSLocalizedString("优先级：%d", comment: "Order value"), draft.order),
-                    value: $draft.order,
-                    in: 0...1000
-                )
+                HStack {
+                    Text(String(format: NSLocalizedString("优先级：%d", comment: "Order value"), draft.order))
+                    Spacer()
+                    TextField("数量", value: orderBinding, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                }
                 if draft.position == .atDepth {
                     Stepper(
                         String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth),
