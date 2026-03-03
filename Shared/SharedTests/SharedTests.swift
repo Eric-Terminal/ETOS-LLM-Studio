@@ -2246,12 +2246,20 @@ fileprivate struct PersistenceTests {
         Persistence.getChatsDirectory()
     }
 
-    private var v3Directory: URL {
+    private var currentSessionsDirectory: URL {
+        chatsDirectory.appendingPathComponent("sessions")
+    }
+
+    private var currentIndexFileURL: URL {
+        chatsDirectory.appendingPathComponent("index.json")
+    }
+
+    private var legacyV3Directory: URL {
         chatsDirectory.appendingPathComponent("v3")
     }
 
-    private var v3IndexFileURL: URL {
-        v3Directory.appendingPathComponent("index.json")
+    private var legacyV3IndexFileURL: URL {
+        legacyV3Directory.appendingPathComponent("index.json")
     }
 
     private var legacyRootDirectory: URL {
@@ -2262,8 +2270,13 @@ fileprivate struct PersistenceTests {
         chatsDirectory.appendingPathComponent("sessions.json")
     }
 
-    private func v3SessionFileURL(_ sessionID: UUID) -> URL {
-        v3Directory
+    private func currentSessionFileURL(_ sessionID: UUID) -> URL {
+        currentSessionsDirectory
+            .appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
+    private func legacyV3SessionFileURL(_ sessionID: UUID) -> URL {
+        legacyV3Directory
             .appendingPathComponent("sessions")
             .appendingPathComponent("\(sessionID.uuidString).json")
     }
@@ -2283,6 +2296,9 @@ fileprivate struct PersistenceTests {
         for session in sessions {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
+        removeIfExists(currentIndexFileURL)
+        removeIfExists(currentSessionsDirectory)
+        removeIfExists(legacyV3Directory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyRootDirectory)
     }
@@ -2303,9 +2319,9 @@ fileprivate struct PersistenceTests {
         #expect(loadedSessions.first?.id == session1.id)
         #expect(loadedSessions.last?.name == session2.name)
         #expect(loadedSessions.last?.topicPrompt == "Test Topic")
-        #expect(FileManager.default.fileExists(atPath: v3IndexFileURL.path))
-        #expect(FileManager.default.fileExists(atPath: v3SessionFileURL(session1.id).path))
-        #expect(FileManager.default.fileExists(atPath: v3SessionFileURL(session2.id).path))
+        #expect(FileManager.default.fileExists(atPath: currentIndexFileURL.path))
+        #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session1.id).path))
+        #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session2.id).path))
         
         // Teardown
         cleanup(sessions: sessionsToSave)
@@ -2329,23 +2345,23 @@ fileprivate struct PersistenceTests {
         #expect(loadedMessages.first?.content == "Hello")
         #expect(loadedMessages.last?.role == .assistant)
 
-        let v3FileURL = v3SessionFileURL(sessionId)
-        #expect(FileManager.default.fileExists(atPath: v3FileURL.path))
-        if let migratedData = try? Data(contentsOf: v3FileURL),
+        let sessionFileURL = currentSessionFileURL(sessionId)
+        #expect(FileManager.default.fileExists(atPath: sessionFileURL.path))
+        if let migratedData = try? Data(contentsOf: sessionFileURL),
            let record = try? JSONDecoder().decode(SessionRecordV3.self, from: migratedData) {
             #expect(record.schemaVersion == 3)
             #expect(record.messages.count == 2)
             #expect(record.messages.first?.content == "Hello")
         } else {
-            Issue.record("V3 会话文件不存在或格式不正确。")
+            Issue.record("会话文件不存在或格式不正确。")
         }
 
         // Teardown
         cleanup(sessions: [ChatSession(id: sessionId, name: "cleanup", isTemporary: false)])
     }
 
-    @Test("Migrate Legacy Session Store To V3 And Archive Legacy Files")
-    func testMigrateLegacySessionStoreToV3AndArchiveLegacyFiles() throws {
+    @Test("Migrate Legacy Session Store To Current Layout And Cleanup Legacy Files")
+    func testMigrateLegacySessionStoreToCurrentLayoutAndCleanupLegacyFiles() throws {
         let sessionId = UUID()
         let legacySession = ChatSession(
             id: sessionId,
@@ -2359,7 +2375,9 @@ fileprivate struct PersistenceTests {
             ChatMessage(role: .assistant, content: "legacy-assistant")
         ]
 
-        removeIfExists(v3Directory)
+        removeIfExists(currentIndexFileURL)
+        removeIfExists(currentSessionsDirectory)
+        removeIfExists(legacyV3Directory)
         removeIfExists(legacyRootDirectory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyMessageFileURL(sessionId))
@@ -2378,7 +2396,7 @@ fileprivate struct PersistenceTests {
         let loadedMessages = Persistence.loadMessages(for: sessionId)
         #expect(loadedMessages.map(\.content) == ["legacy-user", "legacy-assistant"])
 
-        let migratedFileURL = v3SessionFileURL(sessionId)
+        let migratedFileURL = currentSessionFileURL(sessionId)
         #expect(FileManager.default.fileExists(atPath: migratedFileURL.path))
         let migratedData = try Data(contentsOf: migratedFileURL)
         let record = try JSONDecoder().decode(SessionRecordV3.self, from: migratedData)
@@ -2391,23 +2409,95 @@ fileprivate struct PersistenceTests {
 
         #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
         #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionId).path))
-
-        let archivedDirectories = (try? FileManager.default.contentsOfDirectory(
-            at: legacyRootDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )) ?? []
-        let archiveContainsLegacyPayload = archivedDirectories.contains { directory in
-            let archivedIndex = directory.appendingPathComponent("sessions.json")
-            let archivedMessage = directory
-                .appendingPathComponent("messages")
-                .appendingPathComponent("\(sessionId.uuidString).json")
-            return FileManager.default.fileExists(atPath: archivedIndex.path)
-                && FileManager.default.fileExists(atPath: archivedMessage.path)
-        }
-        #expect(archiveContainsLegacyPayload)
+        #expect(!FileManager.default.fileExists(atPath: legacyRootDirectory.path))
 
         cleanup(sessions: [legacySession])
+    }
+
+    @Test("Migrate Legacy v3 Directory To Root Layout And Delete v3 Folder")
+    func testMigrateLegacyV3DirectoryToRootLayoutAndDeleteV3Folder() throws {
+        struct LegacyV3IndexFile: Encodable {
+            struct Item: Encodable {
+                let id: UUID
+                let name: String
+                let updatedAt: String
+            }
+
+            let schemaVersion: Int
+            let updatedAt: String
+            let sessions: [Item]
+        }
+
+        struct LegacyV3SessionRecord: Encodable {
+            struct SessionMeta: Encodable {
+                let id: UUID
+                let name: String
+                let lorebookIDs: [UUID]
+            }
+
+            struct Prompts: Encodable {
+                let topicPrompt: String?
+                let enhancedPrompt: String?
+            }
+
+            let schemaVersion: Int
+            let session: SessionMeta
+            let prompts: Prompts
+            let messages: [ChatMessage]
+        }
+
+        let sessionId = UUID()
+        let sessionName = "V3 Session"
+        let now = ISO8601DateFormatter().string(from: Date())
+        let messages = [
+            ChatMessage(role: .user, content: "from-v3-user"),
+            ChatMessage(role: .assistant, content: "from-v3-assistant")
+        ]
+
+        removeIfExists(currentIndexFileURL)
+        removeIfExists(currentSessionsDirectory)
+        removeIfExists(legacyV3Directory)
+        removeIfExists(legacySessionsIndexURL)
+        removeIfExists(legacyRootDirectory)
+        removeIfExists(legacyMessageFileURL(sessionId))
+
+        try FileManager.default.createDirectory(
+            at: legacyV3SessionFileURL(sessionId).deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        let index = LegacyV3IndexFile(
+            schemaVersion: 3,
+            updatedAt: now,
+            sessions: [.init(id: sessionId, name: sessionName, updatedAt: now)]
+        )
+        let indexData = try JSONEncoder().encode(index)
+        try indexData.write(to: legacyV3IndexFileURL, options: .atomic)
+
+        let recordData = try JSONEncoder().encode(
+            LegacyV3SessionRecord(
+                schemaVersion: 3,
+                session: .init(id: sessionId, name: sessionName, lorebookIDs: []),
+                prompts: .init(topicPrompt: nil, enhancedPrompt: nil),
+                messages: messages
+            )
+        )
+        try recordData.write(to: legacyV3SessionFileURL(sessionId), options: .atomic)
+
+        let loadedSessions = Persistence.loadChatSessions()
+        #expect(loadedSessions.count == 1)
+        #expect(loadedSessions.first?.id == sessionId)
+        #expect(loadedSessions.first?.name == sessionName)
+
+        let loadedMessages = Persistence.loadMessages(for: sessionId)
+        #expect(loadedMessages.map(\.content) == ["from-v3-user", "from-v3-assistant"])
+
+        #expect(FileManager.default.fileExists(atPath: currentIndexFileURL.path))
+        #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(sessionId).path))
+        #expect(!FileManager.default.fileExists(atPath: legacyV3Directory.path))
+
+        cleanup(sessions: [ChatSession(id: sessionId, name: sessionName, isTemporary: false)])
     }
 }
 
