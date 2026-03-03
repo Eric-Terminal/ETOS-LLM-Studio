@@ -335,6 +335,30 @@ struct WorldbookImportTests {
         #expect(worldbook.entries.first?.keys == ["array-key"])
     }
 
+    @Test("import native role SYSTEM")
+    func testImportNativeSystemRole() throws {
+        let json = """
+        {
+          "name": "系统角色测试",
+          "entries": [
+            {
+              "uid": 99,
+              "key": ["system-key"],
+              "content": "system role entry",
+              "position": "atDepth",
+              "depth": 1,
+              "role": "SYSTEM"
+            }
+          ]
+        }
+        """
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "system-role.json")
+        #expect(worldbook.entries.count == 1)
+        #expect(worldbook.entries.first?.role == .system)
+    }
+
     @Test("import character card book JSON with character_book entries")
     func testImportCharacterBookJSON() throws {
         let json = """

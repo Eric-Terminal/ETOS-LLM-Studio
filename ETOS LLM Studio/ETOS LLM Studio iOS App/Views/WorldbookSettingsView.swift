@@ -1452,6 +1452,8 @@ private func worldbookSelectiveLogicLabel(_ logic: WorldbookSelectiveLogic) -> S
 
 private func worldbookEntryRoleLabel(_ role: WorldbookEntryRole) -> String {
     switch role {
+    case .system:
+        return NSLocalizedString("系统", comment: "Worldbook role system")
     case .user:
         return NSLocalizedString("用户", comment: "Worldbook role user")
     case .assistant:

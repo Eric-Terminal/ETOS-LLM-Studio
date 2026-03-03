@@ -3890,6 +3890,11 @@ public class ChatService {
         let grouped = Dictionary(grouping: entries, by: \.role)
         var messages: [ChatMessage] = []
 
+        if let systemEntries = grouped[.system], !systemEntries.isEmpty {
+            let content = makeWorldbookPromptBlock(tag: tag, entries: systemEntries)
+            messages.append(ChatMessage(role: .system, content: content))
+        }
+
         if let assistantEntries = grouped[.assistant], !assistantEntries.isEmpty {
             let content = makeWorldbookPromptBlock(tag: tag, entries: assistantEntries)
             messages.append(ChatMessage(role: .assistant, content: content))

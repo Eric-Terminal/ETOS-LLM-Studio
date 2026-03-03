@@ -1895,7 +1895,8 @@ fileprivate struct ChatServiceTests {
                 WorldbookEntry(content: "em-top", keys: ["hero"], position: .emTop, order: 5),
                 WorldbookEntry(content: "em-bottom", keys: ["hero"], position: .emBottom, order: 6),
                 WorldbookEntry(content: "depth-user", keys: ["hero"], position: .atDepth, order: 7, depth: 1, role: .user),
-                WorldbookEntry(content: "depth-assistant", keys: ["hero"], position: .atDepth, order: 8, depth: 1, role: .assistant)
+                WorldbookEntry(content: "depth-assistant", keys: ["hero"], position: .atDepth, order: 8, depth: 1, role: .assistant),
+                WorldbookEntry(content: "depth-system", keys: ["hero"], position: .atDepth, order: 9, depth: 1, role: .system)
             ]
         )
         store.saveWorldbooks([book])
@@ -1926,6 +1927,7 @@ fileprivate struct ChatServiceTests {
 
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_em_top>") }))
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_em_bottom>") }))
+        #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .system }))
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .assistant }))
         #expect(allMessages.contains(where: { $0.content.contains("<worldbook_at_depth_1>") && $0.role == .user }))
 
