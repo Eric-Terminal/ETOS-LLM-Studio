@@ -72,7 +72,6 @@ struct ChatView: View {
     @FocusState private var composerFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
-    @Namespace private var sessionPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
@@ -87,7 +86,6 @@ struct ChatView: View {
     private let modelPickerMorphID = "modelPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
-    private let sessionPickerMorphID = "sessionPickerMorph"
     private var tabBarCompensation: CGFloat {
         guard keyboardHeight == 0 else { return 0 }
         let measuredTabBarHeight = UITabBarController().tabBar.frame.height
@@ -570,68 +568,35 @@ struct ChatView: View {
     }
 
     private var sessionPickerButtonBackground: some View {
-        sessionPickerMorphBackground(isExpanded: false, isSource: !showSessionPickerPanel)
+        navBarIconBackground
     }
 
     private var sessionPickerPanelBackground: some View {
-        sessionPickerMorphBackground(isExpanded: true, isSource: showSessionPickerPanel)
-    }
+        ZStack {
+            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                .fill(modelPickerPanelBaseTint)
 
-    @ViewBuilder
-    private func sessionPickerMorphBackground(isExpanded: Bool, isSource: Bool) -> some View {
-        if isExpanded {
-            ZStack {
-                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                    .fill(modelPickerPanelBaseTint)
-
-                if isLiquidGlassEnabled {
-                    if #available(iOS 26.0, *) {
-                        RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                            .fill(Color.clear)
-                            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                                    .fill(navBarGlassOverlayColor)
-                            )
-                    } else {
-                        RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                                    .fill(navBarGlassOverlayColor)
-                            )
-                    }
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
                 } else {
                     RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
                         .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
                 }
+            } else {
+                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
             }
-            .matchedGeometryEffect(id: sessionPickerMorphID, in: sessionPickerNamespace, isSource: isSource)
-        } else {
-            ZStack {
-                if isLiquidGlassEnabled {
-                    if #available(iOS 26.0, *) {
-                        Circle()
-                            .fill(Color.clear)
-                            .glassEffect(.clear, in: Circle())
-                            .overlay(
-                                Circle()
-                                    .fill(navBarGlassOverlayColor)
-                            )
-                    } else {
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                Circle()
-                                    .fill(navBarGlassOverlayColor)
-                            )
-                    }
-                } else {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                }
-            }
-            .matchedGeometryEffect(id: sessionPickerMorphID, in: sessionPickerNamespace, isSource: isSource)
         }
     }
 

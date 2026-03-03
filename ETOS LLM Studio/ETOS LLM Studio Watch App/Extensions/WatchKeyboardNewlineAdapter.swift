@@ -14,13 +14,30 @@ extension String {
     func watchKeyboardUnescapedNewlines() -> String {
         replacingOccurrences(of: "\\n", with: "\n")
     }
+
+    func normalizedPlainQuotes() -> String {
+        self
+            .replacingOccurrences(of: "“", with: "\"")
+            .replacingOccurrences(of: "”", with: "\"")
+            .replacingOccurrences(of: "„", with: "\"")
+            .replacingOccurrences(of: "‟", with: "\"")
+            .replacingOccurrences(of: "＂", with: "\"")
+            .replacingOccurrences(of: "‘", with: "'")
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "‚", with: "'")
+            .replacingOccurrences(of: "‛", with: "'")
+            .replacingOccurrences(of: "＇", with: "'")
+    }
 }
 
 extension Binding where Value == String {
-    func watchKeyboardNewlineBinding() -> Binding<String> {
+    func watchKeyboardNewlineBinding(normalizeSmartQuotes: Bool = false) -> Binding<String> {
         Binding(
             get: { wrappedValue.watchKeyboardEscapedNewlines() },
-            set: { wrappedValue = $0.watchKeyboardUnescapedNewlines() }
+            set: { newValue in
+                let unescaped = newValue.watchKeyboardUnescapedNewlines()
+                wrappedValue = normalizeSmartQuotes ? unescaped.normalizedPlainQuotes() : unescaped
+            }
         )
     }
 }

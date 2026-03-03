@@ -11,6 +11,12 @@ public final class ShortcutURLRouter {
     public static let shared = ShortcutURLRouter()
     public static let appScheme = "etosllmstudio"
 
+    private enum Route: String {
+        case importRoute = "import"
+        case callback = "callback"
+        case templateStatus = "template-status"
+    }
+
     private init() {}
 
     @discardableResult
@@ -18,21 +24,54 @@ public final class ShortcutURLRouter {
         guard let scheme = url.scheme?.lowercased(), scheme == Self.appScheme else {
             return false
         }
-        guard url.host?.lowercased() == "shortcuts" else {
+        guard let route = resolveRoute(from: url) else {
             return false
         }
 
-        let path = url.path.lowercased()
-        switch path {
-        case "/import":
-            _ = await ShortcutToolManager.shared.importFromClipboard(triggerURL: url)
+        let normalizedURL = normalizedShortcutURL(for: route, original: url)
+        switch route {
+        case .importRoute:
+            _ = await ShortcutToolManager.shared.importFromClipboard(triggerURL: normalizedURL)
             return true
-        case "/callback":
-            return ShortcutToolManager.shared.handleCallbackURL(url)
-        case "/template-status":
-            return ShortcutToolManager.shared.handleOfficialTemplateStatusURL(url)
-        default:
-            return false
+        case .callback:
+            return ShortcutToolManager.shared.handleCallbackURL(normalizedURL)
+        case .templateStatus:
+            return ShortcutToolManager.shared.handleOfficialTemplateStatusURL(normalizedURL)
         }
+    }
+
+    private func resolveRoute(from url: URL) -> Route? {
+        let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let pathComponents = url.path
+            .split(separator: "/")
+            .map { $0.lowercased() }
+        let acceptedShortcutHosts: Set<String> = ["shortcut", "shortcuts"]
+
+        if let host, acceptedShortcutHosts.contains(host) {
+            return pathComponents.first.flatMap(Route.init(rawValue:))
+        }
+
+        if host == nil || host?.isEmpty == true {
+            guard pathComponents.count >= 2,
+                  acceptedShortcutHosts.contains(pathComponents[0]) else {
+                return nil
+            }
+            return Route(rawValue: pathComponents[1])
+        }
+
+        if let host, pathComponents.isEmpty {
+            return Route(rawValue: host)
+        }
+
+        return nil
+    }
+
+    private func normalizedShortcutURL(for route: Route, original url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        components.host = "shortcuts"
+        components.path = "/\(route.rawValue)"
+        return components.url ?? url
     }
 }

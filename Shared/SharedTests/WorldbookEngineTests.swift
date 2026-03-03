@@ -126,6 +126,40 @@ struct WorldbookEngineTests {
         #expect(result.outlet.contains(where: { $0.outletName == "character_sheet" && $0.content == "outlet" }))
     }
 
+    @Test("engine ignores worldbook-level enabled switch and relies on binding + entry toggles")
+    func testEngineIgnoresWorldbookEnabledSwitch() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-book-enabled-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+
+        let entry = WorldbookEntry(
+            comment: "禁用书也应触发",
+            content: "book-level switch ignored",
+            keys: ["trigger"],
+            isEnabled: true,
+            position: .after
+        )
+        let book = Worldbook(
+            name: "book-level switch",
+            isEnabled: false,
+            entries: [entry]
+        )
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [book],
+                messages: [ChatMessage(role: .user, content: "trigger")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.contains(where: { $0.content == "book-level switch ignored" }))
+    }
+
     @Test("engine supports all secondary selective logic branches")
     func testEngineSecondarySelectiveLogicMatrix() {
         let tempURL = FileManager.default.temporaryDirectory

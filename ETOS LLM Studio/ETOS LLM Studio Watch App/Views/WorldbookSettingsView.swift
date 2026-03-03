@@ -53,15 +53,11 @@ struct WorldbookSettingsView: View {
                             WatchWorldbookDetailView(worldbookID: book.id)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(book.name)
-                                    Spacer()
-                                    Text(book.isEnabled
-                                         ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
-                                         : NSLocalizedString("已停用", comment: "Worldbook disabled status"))
-                                        .font(.caption2)
-                                        .foregroundStyle(book.isEnabled ? .green : .secondary)
-                                }
+                                Text(book.name)
+
+                                Text(enabledEntrySummary(for: book))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
 
                                 if !book.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Text(book.description)
@@ -199,6 +195,15 @@ struct WorldbookSettingsView: View {
         )
     }
 
+    private func enabledEntrySummary(for book: Worldbook) -> String {
+        let enabledCount = book.entries.filter(\.isEnabled).count
+        return String(
+            format: NSLocalizedString("启用条目 %d/%d", comment: "Enabled worldbook entry summary"),
+            enabledCount,
+            book.entries.count
+        )
+    }
+
     private func confirmDeleteWorldbook() {
         guard let target = worldbookToDelete else { return }
         ChatService.shared.deleteWorldbook(id: target.id)
@@ -307,21 +312,33 @@ private struct WatchWorldbookDetailView: View {
     let worldbookID: UUID
 
     @State private var worldbook: Worldbook?
-    @State private var expandedEntryIDs = Set<UUID>()
     @State private var editingEntryDraft: WatchWorldbookEntryDraft?
+    @State private var entryToDelete: WorldbookEntry?
     @State private var nameDraft: String = ""
     @State private var descriptionDraft: String = ""
+
+    private var orderedEntries: [WorldbookEntry] {
+        guard let worldbook else { return [] }
+        return worldbook.entries.sorted { lhs, rhs in
+            if lhs.order == rhs.order {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.order > rhs.order
+        }
+    }
 
     var body: some View {
         List {
             if let worldbook {
-                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
-                    Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: enabledBinding)
-                }
-
                 Section(NSLocalizedString("基本信息", comment: "Basic info")) {
-                    TextField(NSLocalizedString("名称", comment: "Worldbook name field"), text: $nameDraft)
-                    TextField(NSLocalizedString("描述", comment: "Worldbook description field"), text: $descriptionDraft)
+                    TextField(
+                        NSLocalizedString("名称", comment: "Worldbook name field"),
+                        text: $nameDraft.watchKeyboardNewlineBinding(normalizeSmartQuotes: true)
+                    )
+                    TextField(
+                        NSLocalizedString("描述", comment: "Worldbook description field"),
+                        text: $descriptionDraft.watchKeyboardNewlineBinding(normalizeSmartQuotes: true)
+                    )
                     Button(NSLocalizedString("保存信息", comment: "Save basic info")) {
                         saveBasicInfo()
                     }
@@ -341,64 +358,40 @@ private struct WatchWorldbookDetailView: View {
                         Text(NSLocalizedString("暂无条目", comment: "No entries"))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(worldbook.entries.sorted(by: { lhs, rhs in
-                            if lhs.order == rhs.order {
-                                return lhs.id.uuidString < rhs.id.uuidString
-                            }
-                            return lhs.order > rhs.order
-                        })) { entry in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
+                        ForEach(orderedEntries) { entry in
+                            NavigationLink {
+                                WatchWorldbookEntryDetailView(
+                                    entry: entry,
+                                    onSave: { updatedEntry in
+                                        upsertEntry(updatedEntry)
+                                    }
+                                )
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
                                     Text(entry.comment.isEmpty ? NSLocalizedString("(无注释)", comment: "No comment") : entry.comment)
                                         .font(.footnote)
-                                    Spacer()
-                                    Text(worldbookPositionLabel(entry.position))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
+                                        .lineLimit(1)
 
-                                Text(entry.content)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(expandedEntryIDs.contains(entry.id) ? nil : 3)
-
-                                Text(
-                                    expandedEntryIDs.contains(entry.id)
-                                    ? NSLocalizedString("点击收起", comment: "Tap to collapse")
-                                    : NSLocalizedString("点击展开全文", comment: "Tap to expand full text")
-                                )
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-
-                                Text(
-                                    String(
-                                        format: NSLocalizedString("角色：%@", comment: "Entry role label"),
-                                        worldbookEntryRoleLabel(entry.role)
+                                    Text(
+                                        entry.isEnabled
+                                        ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
+                                        : NSLocalizedString("已停用", comment: "Worldbook disabled status")
                                     )
-                                )
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-
-                                HStack {
-                                    Button(NSLocalizedString("编辑", comment: "Edit")) {
-                                        editingEntryDraft = WatchWorldbookEntryDraft(entry: entry)
-                                    }
                                     .font(.caption2)
-                                    .buttonStyle(.plain)
+                                    .foregroundStyle(entry.isEnabled ? .green : .secondary)
 
-                                    Spacer()
-
-                                    Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
-                                        deleteEntry(entry.id)
+                                    if let preview = entryPreview(entry) {
+                                        Text(preview)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
                                     }
-                                    .font(.caption2)
-                                    .buttonStyle(.plain)
                                 }
                             }
-                            .padding(.vertical, 2)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                toggleEntryExpansion(entry.id)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
+                                    entryToDelete = entry
+                                }
                             }
                         }
                     }
@@ -418,12 +411,32 @@ private struct WatchWorldbookDetailView: View {
                     draft: draft,
                     onSave: { entry in
                         upsertEntry(entry)
-                    },
-                    onDelete: {
-                        deleteEntry(draft.entryID)
                     }
                 )
             }
+        }
+        .confirmationDialog(
+            NSLocalizedString("确认删除条目", comment: "Confirm deleting entry"),
+            isPresented: Binding(
+                get: { entryToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        entryToDelete = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
+                guard let entryToDelete else { return }
+                deleteEntry(entryToDelete.id)
+                self.entryToDelete = nil
+            }
+            Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {
+                entryToDelete = nil
+            }
+        } message: {
+            Text(NSLocalizedString("删除后不可恢复。", comment: "Delete entry irreversible"))
         }
     }
 
@@ -433,28 +446,13 @@ private struct WatchWorldbookDetailView: View {
         descriptionDraft = worldbook?.description ?? ""
     }
 
-    private var enabledBinding: Binding<Bool> {
-        Binding(
-            get: { worldbook?.isEnabled ?? false },
-            set: { setEnabled($0) }
-        )
-    }
-
-    private func setEnabled(_ enabled: Bool) {
-        guard var worldbook else { return }
-        worldbook.isEnabled = enabled
-        worldbook.updatedAt = Date()
-        ChatService.shared.saveWorldbook(worldbook)
-        self.worldbook = worldbook
-    }
-
     private func saveBasicInfo() {
         guard var worldbook else { return }
-        let trimmedName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         if !trimmedName.isEmpty {
             worldbook.name = trimmedName
         }
-        worldbook.description = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        worldbook.description = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         worldbook.updatedAt = Date()
         ChatService.shared.saveWorldbook(worldbook)
         self.worldbook = worldbook
@@ -497,12 +495,85 @@ private struct WatchWorldbookDetailView: View {
         return normalized
     }
 
-    private func toggleEntryExpansion(_ entryID: UUID) {
-        if expandedEntryIDs.contains(entryID) {
-            expandedEntryIDs.remove(entryID)
-        } else {
-            expandedEntryIDs.insert(entryID)
+    private func entryPreview(_ entry: WorldbookEntry) -> String? {
+        let trimmed = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private struct WatchWorldbookEntryDetailView: View {
+    @State private var entry: WorldbookEntry
+
+    let onSave: (WorldbookEntry) -> Void
+
+    init(entry: WorldbookEntry, onSave: @escaping (WorldbookEntry) -> Void) {
+        _entry = State(initialValue: entry)
+        self.onSave = onSave
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { entry.isEnabled },
+            set: { enabled in
+                entry.isEnabled = enabled
+                onSave(entry)
+            }
+        )
+    }
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: enabledBinding)
+            }
+
+            Section(NSLocalizedString("编辑", comment: "Edit")) {
+                NavigationLink {
+                    WatchWorldbookEntryEditView(
+                        draft: WatchWorldbookEntryDraft(entry: entry),
+                        onSave: { updatedEntry in
+                            entry = updatedEntry
+                            onSave(updatedEntry)
+                        }
+                    )
+                } label: {
+                    Label(NSLocalizedString("编辑条目", comment: "Edit entry"), systemImage: "square.and.pencil")
+                }
+            }
+
+            Section(NSLocalizedString("内容", comment: "Content field")) {
+                if !entry.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(entry.comment)
+                        .font(.footnote)
+                }
+
+                if !entry.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(entry.content)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !entry.keys.isEmpty {
+                    Text(entry.keys.joined(separator: "，"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(worldbookPositionLabel(entry.position))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Text(
+                    String(
+                        format: NSLocalizedString("角色：%@", comment: "Entry role label"),
+                        worldbookEntryRoleLabel(entry.role)
+                    )
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
         }
+        .navigationTitle(NSLocalizedString("条目", comment: "Entries section"))
     }
 }
 
@@ -512,9 +583,10 @@ private struct WatchWorldbookEntryEditView: View {
     @State private var draft: WatchWorldbookEntryDraft
 
     let onSave: (WorldbookEntry) -> Void
-    let onDelete: () -> Void
 
-    init(draft: WatchWorldbookEntryDraft, onSave: @escaping (WorldbookEntry) -> Void, onDelete: @escaping () -> Void) {
+    let onDelete: (() -> Void)?
+
+    init(draft: WatchWorldbookEntryDraft, onSave: @escaping (WorldbookEntry) -> Void, onDelete: (() -> Void)? = nil) {
         _draft = State(initialValue: draft)
         self.onSave = onSave
         self.onDelete = onDelete
@@ -527,16 +599,47 @@ private struct WatchWorldbookEntryEditView: View {
         return true
     }
 
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var orderBinding: Binding<Int> {
+        Binding(
+            get: { draft.order },
+            set: { newValue in
+                draft.order = min(1000, max(0, newValue))
+            }
+        )
+    }
+
     var body: some View {
         Form {
             Section(NSLocalizedString("基础", comment: "Entry base section")) {
-                TextField(NSLocalizedString("注释", comment: "Comment field"), text: $draft.comment)
-                TextField(NSLocalizedString("内容", comment: "Content field"), text: $draft.content)
+                TextField(
+                    NSLocalizedString("注释", comment: "Comment field"),
+                    text: $draft.comment.watchKeyboardNewlineBinding(normalizeSmartQuotes: true),
+                    axis: .vertical
+                )
+                .lineLimit(1...4)
+                TextField(
+                    NSLocalizedString("内容", comment: "Content field"),
+                    text: $draft.content.watchKeyboardNewlineBinding(normalizeSmartQuotes: true),
+                    axis: .vertical
+                )
+                .lineLimit(4...12)
                 Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: $draft.isEnabled)
             }
 
             Section(NSLocalizedString("触发", comment: "Entry trigger section")) {
-                TextField(NSLocalizedString("关键词（逗号分隔）", comment: "Keywords field"), text: $draft.keysText)
+                TextField(
+                    NSLocalizedString("关键词（逗号分隔）", comment: "Keywords field"),
+                    text: $draft.keysText.watchKeyboardNewlineBinding(normalizeSmartQuotes: true),
+                    axis: .vertical
+                )
+                .lineLimit(2...6)
                 Toggle(NSLocalizedString("常驻激活", comment: "Constant active"), isOn: $draft.constant)
                 Toggle(NSLocalizedString("正则匹配", comment: "Regex match"), isOn: $draft.useRegex)
                 Toggle(NSLocalizedString("区分大小写", comment: "Case sensitive"), isOn: $draft.caseSensitive)
@@ -553,11 +656,13 @@ private struct WatchWorldbookEntryEditView: View {
                         Text(worldbookEntryRoleLabel(role)).tag(role)
                     }
                 }
-                Stepper(
-                    String(format: NSLocalizedString("优先级：%d", comment: "Order value"), draft.order),
-                    value: $draft.order,
-                    in: 0...1000
-                )
+                HStack {
+                    Text(String(format: NSLocalizedString("优先级：%d", comment: "Order value"), draft.order))
+                    Spacer()
+                    TextField("数量", value: orderBinding, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                }
                 if draft.position == .atDepth {
                     Stepper(
                         String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth),
@@ -567,10 +672,12 @@ private struct WatchWorldbookEntryEditView: View {
                 }
             }
 
-            Section {
-                Button(NSLocalizedString("删除条目", comment: "Delete entry"), role: .destructive) {
-                    onDelete()
-                    dismiss()
+            if let onDelete {
+                Section {
+                    Button(NSLocalizedString("删除条目", comment: "Delete entry"), role: .destructive) {
+                        onDelete()
+                        dismiss()
+                    }
                 }
             }
         }
@@ -673,11 +780,14 @@ private struct WatchWorldbookEntryDraft: Identifiable {
     }
 
     func toEntry() -> WorldbookEntry {
+        let normalizedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+        let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+        let normalizedKeys = parseKeywordList(keysText.normalizedPlainQuotes())
         WorldbookEntry(
             id: entryID,
-            comment: comment.trimmingCharacters(in: .whitespacesAndNewlines),
-            content: content.trimmingCharacters(in: .whitespacesAndNewlines),
-            keys: parseKeywordList(keysText),
+            comment: normalizedComment,
+            content: normalizedContent,
+            keys: normalizedKeys,
             isEnabled: isEnabled,
             constant: constant,
             position: position,
@@ -817,7 +927,9 @@ private func worldbookEntryRoleLabel(_ role: WorldbookEntryRole) -> String {
 }
 
 private func parseKeywordList(_ raw: String) -> [String] {
-    let normalized = raw.replacingOccurrences(of: "，", with: ",")
+    let normalized = raw
+        .normalizedPlainQuotes()
+        .replacingOccurrences(of: "，", with: ",")
     let components = normalized.components(separatedBy: CharacterSet(charactersIn: ",\n"))
     var seen = Set<String>()
     var result: [String] = []
