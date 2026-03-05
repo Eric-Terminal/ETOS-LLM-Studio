@@ -1028,6 +1028,20 @@ struct OpenAIAdapterTests {
         let firstDelta = try #require(part?.toolCallDeltas?.first)
         #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
     }
+
+    @Test("OpenAI 流式 usage-only 片段可解析 token 用量")
+    func testStreamingUsageOnlyChunkParsesTokenUsage() throws {
+        let line = """
+        data: {"id":"chatcmpl-usage","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":11,"completion_tokens":29,"total_tokens":40}}
+        """
+        let part = try #require(adapter.parseStreamingResponse(line: line))
+        let usage = try #require(part.tokenUsage)
+        #expect(usage.promptTokens == 11)
+        #expect(usage.completionTokens == 29)
+        #expect(usage.totalTokens == 40)
+        #expect(part.content == nil)
+        #expect(part.reasoningContent == nil)
+    }
 }
 
 @Suite("GeminiAdapter Tests")
@@ -2044,6 +2058,43 @@ fileprivate struct ChatServiceTests {
         // Assert
         #expect(secondRequestMessages?.last?.content == firstUserMessage)
         #expect(secondRequestMessages?.count == firstRequestMessages?.count)
+    }
+}
+
+@Suite("ChatService 响应测速计算 Tests")
+fileprivate struct ChatServiceResponseMetricsTests {
+    @Test("流式 token/s 使用总时长减首字时间")
+    func testStreamingTokenPerSecondUsesPostFirstTokenDuration() {
+        let service = ChatService()
+        let requestStartedAt = Date(timeIntervalSince1970: 1_000)
+        let firstTokenAt = Date(timeIntervalSince1970: 1_002)
+        let completedAt = Date(timeIntervalSince1970: 1_010)
+
+        let speed = service.streamingTokenPerSecond(
+            tokens: 80,
+            requestStartedAt: requestStartedAt,
+            firstTokenAt: firstTokenAt,
+            snapshotAt: completedAt
+        )
+
+        #expect(speed != nil)
+        #expect(abs((speed ?? 0) - 10.0) < 0.0001)
+    }
+
+    @Test("流式 token/s 在无首字时间时返回空")
+    func testStreamingTokenPerSecondReturnsNilWithoutFirstToken() {
+        let service = ChatService()
+        let requestStartedAt = Date(timeIntervalSince1970: 1_000)
+        let snapshotAt = Date(timeIntervalSince1970: 1_010)
+
+        let speed = service.streamingTokenPerSecond(
+            tokens: 80,
+            requestStartedAt: requestStartedAt,
+            firstTokenAt: nil,
+            snapshotAt: snapshotAt
+        )
+
+        #expect(speed == nil)
     }
 }
 

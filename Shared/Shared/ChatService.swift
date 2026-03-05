@@ -2765,6 +2765,29 @@ public class ChatService {
         return Double(tokens) / elapsed
     }
 
+    /// 合并流式返回的 token 使用量分片，避免后续分片覆盖掉前面字段（例如先返回 prompt，后返回 completion）。
+    private func mergeTokenUsage(existing: MessageTokenUsage?, incoming: MessageTokenUsage) -> MessageTokenUsage {
+        MessageTokenUsage(
+            promptTokens: incoming.promptTokens ?? existing?.promptTokens,
+            completionTokens: incoming.completionTokens ?? existing?.completionTokens,
+            totalTokens: incoming.totalTokens ?? existing?.totalTokens
+        )
+    }
+
+    /// 流式速度计算：按照“总时长 - 首字时间”得到生成阶段时长，再计算 token/s。
+    func streamingTokenPerSecond(
+        tokens: Int?,
+        requestStartedAt: Date,
+        firstTokenAt: Date?,
+        snapshotAt: Date
+    ) -> Double? {
+        guard let firstTokenAt else { return nil }
+        let totalDuration = max(0, snapshotAt.timeIntervalSince(requestStartedAt))
+        let timeToFirstToken = max(0, firstTokenAt.timeIntervalSince(requestStartedAt))
+        let generationDuration = totalDuration - timeToFirstToken
+        return tokenPerSecond(tokens: tokens, elapsed: generationDuration)
+    }
+
     private func makeResponseMetrics(
         requestStartedAt: Date,
         responseCompletedAt: Date?,
@@ -3229,9 +3252,10 @@ public class ChatService {
                 var messages = messagesForSessionSubject.value
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                     if let usage = part.tokenUsage {
-                        latestTokenUsage = usage
-                        messages[index].tokenUsage = usage
-                        if let completionTokens = usage.completionTokens, completionTokens > 0 {
+                        let mergedUsage = mergeTokenUsage(existing: latestTokenUsage, incoming: usage)
+                        latestTokenUsage = mergedUsage
+                        messages[index].tokenUsage = mergedUsage
+                        if let completionTokens = mergedUsage.completionTokens, completionTokens > 0 {
                             latestOfficialCompletionTokens = completionTokens
                         }
                     }
@@ -3316,7 +3340,6 @@ public class ChatService {
                         if didReceiveTextDelta, firstTokenAt == nil {
                             firstTokenAt = now
                         }
-                        let elapsed = max(0, now.timeIntervalSince(requestStartedAt))
                         let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                         let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
                         messages[index].responseMetrics = makeResponseMetrics(
@@ -3325,7 +3348,12 @@ public class ChatService {
                             totalResponseDuration: nil,
                             timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
                             completionTokensForSpeed: completionTokensForSpeed,
-                            tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: elapsed),
+                            tokenPerSecond: streamingTokenPerSecond(
+                                tokens: completionTokensForSpeed,
+                                requestStartedAt: requestStartedAt,
+                                firstTokenAt: firstTokenAt,
+                                snapshotAt: now
+                            ),
                             isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
                         )
                     }
@@ -3381,7 +3409,12 @@ public class ChatService {
                         totalResponseDuration: totalDuration,
                         timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
                         completionTokensForSpeed: completionTokensForSpeed,
-                        tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: totalDuration),
+                        tokenPerSecond: streamingTokenPerSecond(
+                            tokens: completionTokensForSpeed,
+                            requestStartedAt: requestStartedAt,
+                            firstTokenAt: firstTokenAt,
+                            snapshotAt: responseCompletedAt
+                        ),
                         isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
                     )
                 }

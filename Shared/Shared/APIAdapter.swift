@@ -878,7 +878,15 @@ public class OpenAIAdapter: APIAdapter {
         
         do {
             let chunk = try JSONDecoder().decode(OpenAIResponse.self, from: data)
-            guard let delta = chunk.choices.first?.delta else { return nil }
+            let tokenUsage = makeTokenUsage(from: chunk.usage)
+
+            // include_usage 场景下，OpenAI 最后一包可能只有 usage（choices 为空）。
+            guard let delta = chunk.choices.first?.delta else {
+                if tokenUsage != nil {
+                    return ChatMessagePart(tokenUsage: tokenUsage)
+                }
+                return nil
+            }
             
             // 解析流式响应中的工具调用增量 (采用 Append 模式)
             let toolCallDeltas: [ChatMessagePart.ToolCallDelta]?
@@ -896,7 +904,6 @@ public class OpenAIAdapter: APIAdapter {
                 toolCallDeltas = nil
             }
             
-            let tokenUsage = makeTokenUsage(from: chunk.usage)
             return ChatMessagePart(
                 content: delta.content,
                 reasoningContent: delta.reasoning_content,
