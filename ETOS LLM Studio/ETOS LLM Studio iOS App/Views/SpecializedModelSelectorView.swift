@@ -197,9 +197,14 @@ private struct RunnableModelIdentifierSelectionView: View {
                 Button {
                     select(runnable.id)
                 } label: {
-                    MarqueeSelectionRow(
-                        title: "\(runnable.model.displayName) | \(runnable.provider.name)",
-                        isSelected: selectionID.wrappedValue == runnable.id
+                    MarqueeTitleSubtitleSelectionRow(
+                        title: runnable.model.displayName,
+                        subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                        isSelected: selectionID.wrappedValue == runnable.id,
+                        subtitleUIFont: .monospacedSystemFont(
+                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                            weight: .regular
+                        )
                     )
                 }
             }

@@ -272,9 +272,14 @@ private struct CurrentModelSelectionView: View {
                 Button {
                     select(model)
                 } label: {
-                    MarqueeSelectionRow(
-                        title: "\(model.model.displayName) | \(model.provider.name)",
-                        isSelected: selectedModel?.id == model.id
+                    MarqueeTitleSubtitleSelectionRow(
+                        title: model.model.displayName,
+                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
+                        isSelected: selectedModel?.id == model.id,
+                        subtitleUIFont: .monospacedSystemFont(
+                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                            weight: .regular
+                        )
                     )
                 }
             }

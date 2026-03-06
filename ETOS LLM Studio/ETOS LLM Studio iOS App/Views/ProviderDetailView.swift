@@ -22,6 +22,15 @@ struct ProviderDetailView: View {
 
     var body: some View {
         List {
+            Section("提供商信息") {
+                MarqueeTitleSubtitleLabel(
+                    title: provider.name,
+                    subtitle: provider.baseURL,
+                    titleUIFont: .preferredFont(forTextStyle: .body),
+                    subtitleUIFont: .preferredFont(forTextStyle: .caption1)
+                )
+            }
+
             Section("列表设置") {
                 Toggle("按模型家族分组", isOn: $groupByFamilySection)
                 if groupByFamilySection {

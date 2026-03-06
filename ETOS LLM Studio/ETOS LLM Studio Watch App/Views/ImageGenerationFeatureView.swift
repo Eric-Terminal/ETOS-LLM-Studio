@@ -585,7 +585,8 @@ private struct WatchImageModelSelectionListView: View {
                     select(model)
                 } label: {
                     selectionRow(
-                        title: "\(model.model.displayName) | \(model.provider.name)",
+                        title: model.model.displayName,
+                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
                         isSelected: selectedModelIdentifier == model.id
                     )
                 }
@@ -600,17 +601,16 @@ private struct WatchImageModelSelectionListView: View {
     }
 
     @ViewBuilder
-    private func selectionRow(title: String, isSelected: Bool) -> some View {
-        HStack {
-            MarqueeText(content: title, uiFont: .preferredFont(forTextStyle: .body))
-                .allowsHitTesting(false)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.footnote)
-                    .foregroundColor(.accentColor)
-            }
-        }
+    private func selectionRow(title: String, subtitle: String? = nil, isSelected: Bool) -> some View {
+        MarqueeTitleSubtitleSelectionRow(
+            title: title,
+            subtitle: subtitle,
+            isSelected: isSelected,
+            subtitleUIFont: .monospacedSystemFont(
+                ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                weight: .regular
+            )
+        )
     }
 }
 

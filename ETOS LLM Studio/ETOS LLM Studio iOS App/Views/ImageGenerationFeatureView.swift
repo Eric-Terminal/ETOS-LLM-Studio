@@ -655,9 +655,14 @@ private struct ImageGenerationModelSelectionView: View {
                 Button {
                     select(model.id)
                 } label: {
-                    MarqueeSelectionRow(
-                        title: "\(model.model.displayName) | \(model.provider.name)",
-                        isSelected: selectedModelIdentifier == model.id
+                    MarqueeTitleSubtitleSelectionRow(
+                        title: model.model.displayName,
+                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
+                        isSelected: selectedModelIdentifier == model.id,
+                        subtitleUIFont: .monospacedSystemFont(
+                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                            weight: .regular
+                        )
                     )
                 }
             }

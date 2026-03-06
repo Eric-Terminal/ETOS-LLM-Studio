@@ -764,17 +764,16 @@ struct ChatView: View {
             viewModel.setSelectedModel(runnable)
             dismissModelPickerPanel()
         } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(runnable.model.displayName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(TelegramColors.navBarText)
-                    Text(runnable.provider.name)
-                        .font(.system(size: 12))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                }
-
-                Spacer()
+            HStack(alignment: .top, spacing: 12) {
+                MarqueeTitleSubtitleLabel(
+                    title: runnable.model.displayName,
+                    subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                    titleUIFont: .systemFont(ofSize: 15, weight: .semibold),
+                    subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                    subtitleColor: TelegramColors.navBarSubtitle
+                )
+                .foregroundColor(TelegramColors.navBarText)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 16, weight: .semibold))

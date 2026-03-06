@@ -28,6 +28,16 @@ struct ProviderDetailView: View {
     var body: some View {
         ZStack {
             List {
+                Section("提供商信息") {
+                    MarqueeTitleSubtitleLabel(
+                        title: provider.name,
+                        subtitle: provider.baseURL,
+                        titleUIFont: .preferredFont(forTextStyle: .body),
+                        subtitleUIFont: .preferredFont(forTextStyle: .caption2),
+                        spacing: 2
+                    )
+                }
+
                 if isSearchPresented {
                     Section {
                         HStack(spacing: 6) {
