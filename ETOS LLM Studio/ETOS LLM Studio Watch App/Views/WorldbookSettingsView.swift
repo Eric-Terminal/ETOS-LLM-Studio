@@ -619,7 +619,7 @@ private struct WatchWorldbookEntryEditView: View {
         Binding(
             get: { draft.depth },
             set: { newValue in
-                draft.depth = min(64, max(0, newValue))
+                draft.depth = max(0, newValue)
             }
         )
     }

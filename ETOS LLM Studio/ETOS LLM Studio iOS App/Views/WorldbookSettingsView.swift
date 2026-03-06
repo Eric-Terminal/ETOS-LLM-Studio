@@ -964,11 +964,13 @@ private struct WorldbookEntryEditView: View {
                 }
 
                 if draft.position == .atDepth {
-                    Stepper(
-                        String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth),
-                        value: $draft.depth,
-                        in: 0...64
-                    )
+                    Stepper {
+                        Text(String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth))
+                    } onIncrement: {
+                        draft.depth += 1
+                    } onDecrement: {
+                        draft.depth = max(0, draft.depth - 1)
+                    }
                 }
 
                 if draft.position == .outlet {
