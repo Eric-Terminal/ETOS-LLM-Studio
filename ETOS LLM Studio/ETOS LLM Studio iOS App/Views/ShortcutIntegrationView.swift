@@ -13,9 +13,8 @@ import Shared
 struct ShortcutIntegrationView: View {
     @Environment(\.openURL) private var openURL
     @StateObject private var manager = ShortcutToolManager.shared
+    @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var localError: String?
-    @State private var editingTool: ShortcutToolDefinition?
-    @State private var descriptionDraft: String = ""
     @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
     var body: some View {
@@ -171,6 +170,35 @@ struct ShortcutIntegrationView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("审批自动化") {
+                Toggle(
+                    "启用倒计时自动批准",
+                    isOn: Binding(
+                        get: { toolPermissionCenter.autoApproveEnabled },
+                        set: { toolPermissionCenter.setAutoApproveEnabled($0) }
+                    )
+                )
+                Stepper(
+                    value: Binding(
+                        get: { toolPermissionCenter.autoApproveCountdownSeconds },
+                        set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
+                    ),
+                    in: 1...30
+                ) {
+                    Text("倒计时：\(toolPermissionCenter.autoApproveCountdownSeconds)s")
+                }
+                .disabled(!toolPermissionCenter.autoApproveEnabled)
+                let disabledCount = toolPermissionCenter.disabledAutoApproveTools.count
+                Text("已禁用自动批准工具：\(disabledCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if disabledCount > 0 {
+                    Button("清空禁用列表", role: .destructive) {
+                        toolPermissionCenter.clearDisabledAutoApproveTools()
+                    }
+                }
+            }
+
             if let summary = manager.lastImportSummary {
                 Section("最近导入结果") {
                     row(title: "新增", value: "\(summary.importedCount)")
@@ -207,62 +235,39 @@ struct ShortcutIntegrationView: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(manager.tools) { tool in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(tool.displayName)
-                                    .font(.headline)
-                                Spacer()
-                                Toggle(
-                                    "启用",
-                                    isOn: Binding(
-                                        get: { tool.isEnabled },
-                                        set: { manager.setToolEnabled(id: tool.id, isEnabled: $0) }
+                        NavigationLink {
+                            ShortcutToolDetailView(toolID: tool.id)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(tool.displayName)
+                                        .font(.headline)
+                                    Spacer()
+                                    Text(
+                                        tool.isEnabled
+                                        ? NSLocalizedString("已启用", comment: "Shortcut tool enabled status")
+                                        : NSLocalizedString("已停用", comment: "Shortcut tool disabled status")
                                     )
-                                )
-                                .labelsHidden()
-                            }
+                                    .font(.caption)
+                                    .foregroundStyle(tool.isEnabled ? .green : .secondary)
+                                }
 
-                            Text(tool.effectiveDescription)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                Text(tool.effectiveDescription)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
 
-                            if let importStatusText = importStatusText(for: tool) {
-                                Text(importStatusText)
+                                Text("运行模式：\(runModeLabel(for: tool.runModeHint))")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
-                            }
 
-                            Picker(
-                                "运行模式",
-                                selection: Binding(
-                                    get: { tool.runModeHint },
-                                    set: { manager.setRunModeHint(id: tool.id, runModeHint: $0) }
-                                )
-                            ) {
-                                Text("直连优先").tag(ShortcutRunModeHint.direct)
-                                Text("桥接优先").tag(ShortcutRunModeHint.bridge)
-                            }
-                            .pickerStyle(.segmented)
-
-                            HStack {
-                                Button {
-                                    editingTool = tool
-                                    descriptionDraft = tool.userDescription ?? ""
-                                } label: {
-                                    Label("编辑描述", systemImage: "square.and.pencil")
-                                }
-
-                                Button {
-                                    Task {
-                                        await manager.regenerateDescriptionWithLLM(for: tool.id)
-                                    }
-                                } label: {
-                                    Label("重新生成", systemImage: "arrow.clockwise")
+                                if let importStatusText = importStatusText(for: tool) {
+                                    Text(importStatusText)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
-                            .buttonStyle(.borderless)
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 manager.deleteTool(id: tool.id)
@@ -275,37 +280,6 @@ struct ShortcutIntegrationView: View {
             }
         }
         .navigationTitle("快捷指令工具箱")
-        .sheet(item: $editingTool) { tool in
-            NavigationStack {
-                Form {
-                    Section("工具") {
-                        Text(tool.displayName)
-                        Text(tool.name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Section("自定义描述") {
-                        TextEditor(text: $descriptionDraft)
-                            .frame(minHeight: 180)
-                    }
-                }
-                .navigationTitle("编辑描述")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") {
-                            editingTool = nil
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("保存") {
-                            manager.updateUserDescription(id: tool.id, description: descriptionDraft)
-                            editingTool = nil
-                        }
-                    }
-                }
-            }
-        }
     }
 
     private func row(title: String, value: String) -> some View {
@@ -314,6 +288,151 @@ struct ShortcutIntegrationView: View {
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func importStatusText(for tool: ShortcutToolDefinition) -> String? {
+        guard let importMode = stringMetadata(of: tool, key: "importMode") else { return nil }
+        if importMode == "light" {
+            return NSLocalizedString("导入方式：轻度导入（仅名称）", comment: "")
+        }
+        if importMode == "deep" {
+            let scanStatus = stringMetadata(of: tool, key: "scanStatus")
+            if scanStatus == "parsed" {
+                return NSLocalizedString("导入方式：深度导入（已解析流程）", comment: "")
+            }
+            return NSLocalizedString("导入方式：深度导入（仅链接，未解析）", comment: "")
+        }
+        return nil
+    }
+
+    private func stringMetadata(of tool: ShortcutToolDefinition, key: String) -> String? {
+        guard let value = tool.metadata[key],
+              case .string(let text) = value else {
+            return nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func runModeLabel(for runModeHint: ShortcutRunModeHint) -> String {
+        switch runModeHint {
+        case .direct:
+            return "直连优先"
+        case .bridge:
+            return "桥接优先"
+        }
+    }
+}
+
+private struct ShortcutToolDetailView: View {
+    let toolID: UUID
+    @ObservedObject private var manager = ShortcutToolManager.shared
+    @State private var isEditingDescription = false
+    @State private var descriptionDraft = ""
+
+    private var tool: ShortcutToolDefinition? {
+        manager.tools.first(where: { $0.id == toolID })
+    }
+
+    var body: some View {
+        List {
+            if let tool {
+                Section("工具信息") {
+                    Text(tool.displayName)
+                        .font(.headline)
+                    Text(tool.name)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let importStatusText = importStatusText(for: tool) {
+                        Text(importStatusText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                    Toggle(
+                        NSLocalizedString("启用", comment: "Enable"),
+                        isOn: Binding(
+                            get: { tool.isEnabled },
+                            set: { manager.setToolEnabled(id: tool.id, isEnabled: $0) }
+                        )
+                    )
+                }
+
+                Section("运行设置") {
+                    Picker(
+                        "运行模式",
+                        selection: Binding(
+                            get: { tool.runModeHint },
+                            set: { manager.setRunModeHint(id: tool.id, runModeHint: $0) }
+                        )
+                    ) {
+                        Text("直连优先").tag(ShortcutRunModeHint.direct)
+                        Text("桥接优先").tag(ShortcutRunModeHint.bridge)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("工具描述") {
+                    Text(tool.effectiveDescription)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        descriptionDraft = tool.userDescription ?? ""
+                        isEditingDescription = true
+                    } label: {
+                        Label("编辑描述", systemImage: "square.and.pencil")
+                    }
+
+                    Button {
+                        Task {
+                            await manager.regenerateDescriptionWithLLM(for: tool.id)
+                        }
+                    } label: {
+                        Label("重新生成", systemImage: "arrow.clockwise")
+                    }
+                }
+            } else {
+                Text("快捷指令不存在或已被删除。")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("工具设置")
+        .sheet(isPresented: $isEditingDescription) {
+            if let tool {
+                NavigationStack {
+                    Form {
+                        Section("工具") {
+                            Text(tool.displayName)
+                            Text(tool.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Section("自定义描述") {
+                            TextEditor(text: $descriptionDraft)
+                                .frame(minHeight: 180)
+                        }
+                    }
+                    .navigationTitle("编辑描述")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("取消") {
+                                isEditingDescription = false
+                            }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("保存") {
+                                manager.updateUserDescription(id: tool.id, description: descriptionDraft)
+                                isEditingDescription = false
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
