@@ -125,6 +125,14 @@ public final class WorldbookStore {
         }
     }
 
+    public func invalidateCache() {
+        queue.sync {
+            cachedWorldbooks = nil
+            cacheByID = [:]
+            cacheNormalizedContents = []
+        }
+    }
+
     public func upsertWorldbook(_ worldbook: Worldbook) {
         queue.sync {
             var all = loadWorldbooksUnlocked()

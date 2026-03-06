@@ -268,6 +268,7 @@ public enum StorageUtility {
     public static func deleteFile(at url: URL) throws {
         logger.info("Deleting file: \(url.path)")
         try FileManager.default.removeItem(at: url)
+        invalidateRelatedCaches(for: url)
         logger.info("File deleted successfully: \(url.lastPathComponent)")
     }
     
@@ -300,6 +301,8 @@ public enum StorageUtility {
         for url in contents {
             try fileManager.removeItem(at: url)
         }
+
+        invalidateRelatedCaches(for: directory)
         
         logger.info("Category cleared: \(category.rawValue)")
     }
@@ -668,17 +671,25 @@ public enum StorageUtility {
     public static func readJSONFile(at url: URL) -> String? {
         do {
             let data = try Data(contentsOf: url)
-            if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                let prettyData = try JSONSerialization.data(withJSONObject: jsonObject, options: .prettyPrinted)
-                return String(data: prettyData, encoding: .utf8)
-            } else if let jsonArray = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-                let prettyData = try JSONSerialization.data(withJSONObject: jsonArray, options: .prettyPrinted)
+            let jsonObject = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+            if JSONSerialization.isValidJSONObject(jsonObject) {
+                let prettyData = try JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys])
                 return String(data: prettyData, encoding: .utf8)
             }
             return String(data: data, encoding: .utf8)
         } catch {
             logger.warning("Failed to read JSON file: \(error.localizedDescription)")
             return nil
+        }
+    }
+
+    private static func invalidateRelatedCaches(for url: URL) {
+        let worldbookDirectory = getDirectory(for: .worldbooks).standardizedFileURL.path
+        let targetPath = url.standardizedFileURL.path
+        let isWorldbookPath = targetPath == worldbookDirectory || targetPath.hasPrefix(worldbookDirectory + "/")
+
+        if isWorldbookPath {
+            WorldbookStore.shared.invalidateCache()
         }
     }
 }
