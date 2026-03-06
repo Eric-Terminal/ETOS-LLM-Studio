@@ -26,6 +26,21 @@ struct ShortcutIntegrationView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(
+                header: Text("聊天工具总开关"),
+                footer: Text("关闭后不会向模型暴露任何快捷指令工具，但导入和单项配置仍会保留。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    "向模型暴露快捷指令工具",
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+            }
+
             Section("官方导入快捷指令") {
                 Text("内置官方快捷指令，可一键下载并触发导入流程。")
                     .font(.caption2)
@@ -132,6 +147,11 @@ struct ShortcutIntegrationView: View {
                     Text("暂无工具")
                         .foregroundStyle(.secondary)
                 } else {
+                    if !manager.chatToolsEnabled {
+                        Text("当前总开关已关闭，以下快捷指令仅用于管理，不会参与聊天调用。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(manager.tools) { tool in
                         VStack(alignment: .leading, spacing: 6) {
                             Toggle(

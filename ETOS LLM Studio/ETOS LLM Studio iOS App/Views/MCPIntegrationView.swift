@@ -37,6 +37,19 @@ struct MCPIntegrationView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section("聊天工具总开关") {
+                Toggle(
+                    "向模型暴露 MCP 工具",
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+                Text("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             
             Section("已配置服务器") {
                 if manager.servers.isEmpty {
@@ -139,6 +152,11 @@ struct MCPIntegrationView: View {
                 Section(
                     String(format: NSLocalizedString("已公布工具 (%d)", comment: ""), manager.tools.count)
                 ) {
+                    if !manager.chatToolsEnabled {
+                        Text("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(manager.tools) { available in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(available.tool.toolId)

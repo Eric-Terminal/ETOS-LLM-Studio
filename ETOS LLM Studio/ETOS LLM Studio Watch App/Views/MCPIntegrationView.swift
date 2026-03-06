@@ -33,6 +33,21 @@ struct MCPIntegrationView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section(
+                header: Text("聊天工具总开关"),
+                footer: Text("关闭后不会向模型暴露任何 MCP 工具，但你仍可继续管理服务器和手动调试。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    "向模型暴露 MCP 工具",
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+            }
             
             Section("服务器管理") {
                 if manager.servers.isEmpty {
@@ -526,6 +541,11 @@ private struct MCPToolListView: View {
     
     var body: some View {
         List {
+            if !manager.chatToolsEnabled {
+                Text("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if manager.tools.isEmpty {
                 Text("当前服务器尚未公布任何工具。")
                     .foregroundStyle(.secondary)

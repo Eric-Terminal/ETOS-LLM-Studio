@@ -1806,6 +1806,13 @@ public class ChatService {
 
         case _ where ShortcutToolManager.isShortcutToolName(toolCall.toolName):
             let toolLabel = await ShortcutToolManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
+            let shortcutToolsEnabled = await MainActor.run { ShortcutToolManager.shared.chatToolsEnabled }
+            guard shortcutToolsEnabled else {
+                content = "快捷指令工具总开关已关闭。"
+                displayResult = content
+                logger.info("  - 快捷指令工具调用被总开关拒绝: \(toolCall.toolName)")
+                break
+            }
             let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                 toolName: toolCall.toolName,
                 displayName: toolLabel,
