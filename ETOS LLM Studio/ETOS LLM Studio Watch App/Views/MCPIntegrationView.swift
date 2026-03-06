@@ -348,7 +348,7 @@ private struct MCPServerDetailView: View {
                                     HStack(alignment: .firstTextBaseline) {
                                         Text(tool.toolId)
                                         Spacer()
-                                        Text(manager.isToolEnabled(serverID: server.id, toolId: tool.toolId) ? "已启用" : "已禁用")
+                                        Text(manager.isToolEnabled(serverID: server.id, toolId: tool.toolId) ? "已启用" : "已停用")
                                             .font(.caption2)
                                             .foregroundStyle(
                                                 manager.isToolEnabled(serverID: server.id, toolId: tool.toolId)
@@ -478,7 +478,7 @@ private struct MCPToolSettingsDetailView: View {
             }
 
             Section("启用状态") {
-                Toggle("用于聊天", isOn: toolBinding)
+                Toggle("启用", isOn: toolBinding)
             }
 
             Section(
