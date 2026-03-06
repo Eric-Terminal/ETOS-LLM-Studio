@@ -615,6 +615,15 @@ private struct WatchWorldbookEntryEditView: View {
         )
     }
 
+    private var depthBinding: Binding<Int> {
+        Binding(
+            get: { draft.depth },
+            set: { newValue in
+                draft.depth = min(64, max(0, newValue))
+            }
+        )
+    }
+
     var body: some View {
         Form {
             Section(NSLocalizedString("基础", comment: "Entry base section")) {
@@ -664,11 +673,13 @@ private struct WatchWorldbookEntryEditView: View {
                         .frame(width: 60)
                 }
                 if draft.position == .atDepth {
-                    Stepper(
-                        String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth),
-                        value: $draft.depth,
-                        in: 0...64
-                    )
+                    HStack {
+                        Text(String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth))
+                        Spacer()
+                        TextField("数量", value: depthBinding, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
                 }
             }
 
