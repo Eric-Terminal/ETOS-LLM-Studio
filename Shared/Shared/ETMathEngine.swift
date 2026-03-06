@@ -50,7 +50,7 @@ public enum ETMathContentSegment: Equatable {
 
 public enum ETMathContentParser {
     public static func containsMath(in source: String) -> Bool {
-        parseSegments(in: source).contains { segment in
+        cachedSegments(for: source).contains { segment in
             switch segment {
             case .text:
                 return false
@@ -61,6 +61,16 @@ public enum ETMathContentParser {
     }
 
     public static func parseSegments(in source: String) -> [ETMathContentSegment] {
+        cachedSegments(for: source)
+    }
+
+    private static func cachedSegments(for source: String) -> [ETMathContentSegment] {
+        ETMathContentParseCache.segments(for: source) {
+            parseSegmentsUncached(in: source)
+        }
+    }
+
+    private static func parseSegmentsUncached(in source: String) -> [ETMathContentSegment] {
         var segments: [ETMathContentSegment] = []
         var buffer = ""
         var index = source.startIndex
@@ -156,6 +166,36 @@ public enum ETMathContentParser {
             cursor = source.index(after: cursor)
         }
         return nil
+    }
+}
+
+private final class ETMathContentSegmentsBox: NSObject {
+    let segments: [ETMathContentSegment]
+
+    init(segments: [ETMathContentSegment]) {
+        self.segments = segments
+    }
+}
+
+private enum ETMathContentParseCache {
+    private static let cache: NSCache<NSString, ETMathContentSegmentsBox> = {
+        let cache = NSCache<NSString, ETMathContentSegmentsBox>()
+        cache.countLimit = 256
+        return cache
+    }()
+
+    static func segments(
+        for source: String,
+        loader: () -> [ETMathContentSegment]
+    ) -> [ETMathContentSegment] {
+        let key = source as NSString
+        if let cached = cache.object(forKey: key) {
+            return cached.segments
+        }
+
+        let segments = loader()
+        cache.setObject(ETMathContentSegmentsBox(segments: segments), forKey: key)
+        return segments
     }
 }
 

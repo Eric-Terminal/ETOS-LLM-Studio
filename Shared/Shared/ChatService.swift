@@ -122,11 +122,106 @@ public class ChatService {
     private let worldbookExportService: WorldbookExportService
     private let worldbookEngine: WorldbookEngine
     private let urlSession: URLSession
+    private let audioAttachmentDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 24
+        cache.totalCostLimit = 32 * 1024 * 1024
+        return cache
+    }()
+    private let imageAttachmentDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 96
+        cache.totalCostLimit = 64 * 1024 * 1024
+        return cache
+    }()
+    private let fileAttachmentDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 32
+        cache.totalCostLimit = 64 * 1024 * 1024
+        return cache
+    }()
 
     private struct ImageGenerationContext {
         let sessionID: UUID
         let loadingMessageID: UUID
         let prompt: String
+    }
+
+    private func cachedAttachmentData(
+        for fileName: String,
+        cache: NSCache<NSString, NSData>,
+        loader: (String) -> Data?
+    ) -> Data? {
+        let key = fileName as NSString
+        if let cached = cache.object(forKey: key) {
+            return Data(referencing: cached)
+        }
+
+        guard let data = loader(fileName) else { return nil }
+        cache.setObject(data as NSData, forKey: key, cost: data.count)
+        return data
+    }
+
+    private func loadAudioAttachmentFromStorage(fileName: String) -> AudioAttachment? {
+        guard let audioData = cachedAttachmentData(
+            for: fileName,
+            cache: audioAttachmentDataCache,
+            loader: { Persistence.loadAudio(fileName: $0) }
+        ) else {
+            return nil
+        }
+
+        let fileExtension = (fileName as NSString).pathExtension.lowercased()
+        let mimeType = "audio/\(fileExtension)"
+        return AudioAttachment(
+            data: audioData,
+            mimeType: mimeType,
+            format: fileExtension,
+            fileName: fileName
+        )
+    }
+
+    private func loadImageAttachmentFromStorage(fileName: String) -> ImageAttachment? {
+        guard let imageData = cachedAttachmentData(
+            for: fileName,
+            cache: imageAttachmentDataCache,
+            loader: { Persistence.loadImage(fileName: $0) }
+        ) else {
+            return nil
+        }
+
+        let fileExtension = (fileName as NSString).pathExtension.lowercased()
+        let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+        return ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+    }
+
+    private func loadFileAttachmentFromStorage(fileName: String) -> FileAttachment? {
+        guard let fileData = cachedAttachmentData(
+            for: fileName,
+            cache: fileAttachmentDataCache,
+            loader: { Persistence.loadFile(fileName: $0) }
+        ) else {
+            return nil
+        }
+
+        let mimeType = resolvedMimeType(for: fileName)
+        return FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+    }
+
+    private func invalidateAttachmentCache(for message: ChatMessage) {
+        if let audioFileName = message.audioFileName {
+            audioAttachmentDataCache.removeObject(forKey: audioFileName as NSString)
+        }
+        if let imageFileNames = message.imageFileNames {
+            for fileName in imageFileNames {
+                imageAttachmentDataCache.removeObject(forKey: fileName as NSString)
+            }
+        }
+        if let fileFileNames = message.fileFileNames {
+            for fileName in fileFileNames {
+                fileAttachmentDataCache.removeObject(forKey: fileName as NSString)
+            }
+        }
     }
 
     private func sanitizedToolName(_ name: String) -> String {
@@ -778,6 +873,7 @@ public class ChatService {
         var messages = Persistence.loadMessages(for: session.id)
         if !messages.isEmpty {
             let lastMessage = messages.removeLast()
+            invalidateAttachmentCache(for: lastMessage)
             // 清理被删除消息关联的音频文件
             if let audioFileName = lastMessage.audioFileName {
                 Persistence.deleteAudio(fileName: audioFileName)
@@ -821,6 +917,7 @@ public class ChatService {
         }
         if !relatedToolMessageIDs.isEmpty {
             for candidate in messages where relatedToolMessageIDs.contains(candidate.id) {
+                invalidateAttachmentCache(for: candidate)
                 if let audioFileName = candidate.audioFileName {
                     Persistence.deleteAudio(fileName: audioFileName)
                 }
@@ -838,6 +935,7 @@ public class ChatService {
         }
         
         // 清理被删除消息关联的音频文件
+        invalidateAttachmentCache(for: message)
         if let audioFileName = message.audioFileName {
             Persistence.deleteAudio(fileName: audioFileName)
         }
@@ -1963,11 +2061,7 @@ public class ChatService {
             if let currentAudio = currentAudioAttachment, msg.id == userMessage?.id {
                 audioAttachments[msg.id] = currentAudio
             } else if let audioFileName = msg.audioFileName,
-                      let audioData = Persistence.loadAudio(fileName: audioFileName) {
-                // 从文件名推断格式
-                let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
-                let mimeType = "audio/\(fileExtension)"
-                let attachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+                      let attachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
                 audioAttachments[msg.id] = attachment
                 logger.info("已加载历史音频: \(audioFileName) 用于消息 \(msg.id)")
             }
@@ -1979,11 +2073,7 @@ public class ChatService {
             guard let imageFileNames = msg.imageFileNames, !imageFileNames.isEmpty else { continue }
             var attachments: [ImageAttachment] = []
             for fileName in imageFileNames {
-                if let imageData = Persistence.loadImage(fileName: fileName) {
-                    // 从文件名推断 MIME 类型
-                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
-                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
-                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
                     attachments.append(attachment)
                     logger.info("已加载历史图片: \(fileName) 用于消息 \(msg.id)")
                 }
@@ -2003,9 +2093,7 @@ public class ChatService {
             guard let fileFileNames = msg.fileFileNames, !fileFileNames.isEmpty else { continue }
             var attachments: [FileAttachment] = []
             for fileName in fileFileNames {
-                if let fileData = Persistence.loadFile(fileName: fileName) {
-                    let mimeType = resolvedMimeType(for: fileName)
-                    let attachment = FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
                     attachments.append(attachment)
                     logger.info("已加载历史文件附件: \(fileName) 用于消息 \(msg.id)")
                 }
@@ -2236,10 +2324,8 @@ public class ChatService {
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
         if let audioFileName = messageToSend.audioFileName,
-           let audioData = Persistence.loadAudio(fileName: audioFileName) {
-            let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
-            let mimeType = "audio/\(fileExtension)"
-            audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+           let restoredAudioAttachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
+            audioAttachment = restoredAudioAttachment
             logger.info("重试时恢复音频附件: \(audioFileName)")
         }
         
@@ -2247,10 +2333,7 @@ public class ChatService {
         var imageAttachments: [ImageAttachment] = []
         if let imageFileNames = messageToSend.imageFileNames {
             for fileName in imageFileNames {
-                if let imageData = Persistence.loadImage(fileName: fileName) {
-                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
-                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
-                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
                     imageAttachments.append(attachment)
                     logger.info("重试时恢复图片附件: \(fileName)")
                 }
@@ -2261,9 +2344,7 @@ public class ChatService {
         var fileAttachments: [FileAttachment] = []
         if let fileFileNames = messageToSend.fileFileNames {
             for fileName in fileFileNames {
-                if let fileData = Persistence.loadFile(fileName: fileName) {
-                    let mimeType = resolvedMimeType(for: fileName)
-                    let attachment = FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
                     fileAttachments.append(attachment)
                     logger.info("重试时恢复文件附件: \(fileName)")
                 }
@@ -2413,10 +2494,8 @@ public class ChatService {
         // 4. 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
         if let audioFileName = lastUserMessage.audioFileName,
-           let audioData = Persistence.loadAudio(fileName: audioFileName) {
-            let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
-            let mimeType = "audio/\(fileExtension)"
-            audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+           let restoredAudioAttachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
+            audioAttachment = restoredAudioAttachment
             logger.info("重试时恢复音频附件: \(audioFileName)")
         }
         
@@ -2424,10 +2503,7 @@ public class ChatService {
         var imageAttachments: [ImageAttachment] = []
         if let imageFileNames = lastUserMessage.imageFileNames {
             for fileName in imageFileNames {
-                if let imageData = Persistence.loadImage(fileName: fileName) {
-                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
-                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
-                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
                     imageAttachments.append(attachment)
                     logger.info("重试时恢复图片附件: \(fileName)")
                 }
@@ -2438,9 +2514,7 @@ public class ChatService {
         var fileAttachments: [FileAttachment] = []
         if let fileFileNames = lastUserMessage.fileFileNames {
             for fileName in fileFileNames {
-                if let fileData = Persistence.loadFile(fileName: fileName) {
-                    let mimeType = resolvedMimeType(for: fileName)
-                    let attachment = FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
                     fileAttachments.append(attachment)
                     logger.info("重试时恢复文件附件: \(fileName)")
                 }

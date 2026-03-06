@@ -743,41 +743,14 @@ struct ChatBubble: View {
             
             LazyVGrid(columns: columns, alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 ForEach(fileNames, id: \.self) { fileName in
-                    if let image = loadImage(fileName: fileName) {
-                        Button {
-                            imagePreview = ImagePreviewPayload(image: image)
-                        } label: {
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(
-                                    minWidth: minWidth,
-                                    maxWidth: maxWidth
-                                )
-                                .frame(height: itemHeight)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                .shadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.secondary.opacity(0.15))
-                            .frame(
-                                minWidth: minWidth,
-                                maxWidth: maxWidth
-                            )
-                            .frame(height: itemHeight)
-                            .overlay(
-                                VStack(spacing: 4) {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 20))
-                                        .foregroundStyle(.secondary)
-                                    Text("图片丢失")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            )
-                            .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+                    AttachmentImageView(
+                        fileName: fileName,
+                        minWidth: minWidth,
+                        maxWidth: maxWidth,
+                        height: itemHeight,
+                        cornerRadius: 16
+                    ) { image in
+                        imagePreview = ImagePreviewPayload(image: image)
                     }
                 }
             }
@@ -812,15 +785,6 @@ struct ChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
-    }
-    
-    private func loadImage(fileName: String) -> UIImage? {
-        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
-        if let image = UIImage(contentsOfFile: fileURL.path) {
-            return image
-        }
-        guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
-        return UIImage(data: data)
     }
     
     @ViewBuilder
@@ -946,6 +910,99 @@ struct ImagePreviewWrapper: Identifiable {
 private struct ImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+private enum ChatAttachmentImageCache {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 160
+        return cache
+    }()
+
+    static func image(for fileName: String) -> UIImage? {
+        cache.object(forKey: fileName as NSString)
+    }
+
+    static func store(_ image: UIImage, for fileName: String) {
+        let pixelCost = Int(image.size.width * image.size.height * image.scale * image.scale)
+        cache.setObject(image, forKey: fileName as NSString, cost: max(1, pixelCost))
+    }
+}
+
+private struct AttachmentImageView: View {
+    let fileName: String
+    let minWidth: CGFloat
+    let maxWidth: CGFloat
+    let height: CGFloat
+    let cornerRadius: CGFloat
+    let onPreview: (UIImage) -> Void
+
+    @State private var image: UIImage?
+    @State private var didAttemptLoad = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Button {
+                    onPreview(image)
+                } label: {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(minWidth: minWidth, maxWidth: maxWidth)
+                        .frame(height: height)
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.secondary.opacity(0.15))
+                    .frame(minWidth: minWidth, maxWidth: maxWidth)
+                    .frame(height: height)
+                    .overlay(
+                        VStack(spacing: 4) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 20))
+                                .foregroundStyle(.secondary)
+                            Text("图片丢失")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    )
+                    .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+            }
+        }
+        .task(id: fileName) {
+            guard !didAttemptLoad else { return }
+            didAttemptLoad = true
+            await loadImage()
+        }
+    }
+
+    private func loadImage() async {
+        if let cached = ChatAttachmentImageCache.image(for: fileName) {
+            await MainActor.run {
+                image = cached
+            }
+            return
+        }
+
+        let loadedImage = await Task.detached(priority: .userInitiated) {
+            let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+            if let image = UIImage(contentsOfFile: fileURL.path) {
+                return image
+            }
+            guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
+            return UIImage(data: data)
+        }.value
+
+        guard let loadedImage else { return }
+        ChatAttachmentImageCache.store(loadedImage, for: fileName)
+        await MainActor.run {
+            image = loadedImage
+        }
+    }
 }
 
 // MARK: - Audio Player Manager

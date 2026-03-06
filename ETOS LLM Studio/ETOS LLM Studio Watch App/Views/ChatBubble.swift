@@ -1152,6 +1152,7 @@ private struct AttachmentImageView: View {
     let onPreview: (UIImage) -> Void
 
     @State private var image: UIImage?
+    @State private var didAttemptLoad = false
 
     var body: some View {
         Group {
@@ -1182,18 +1183,28 @@ private struct AttachmentImageView: View {
                     )
             }
         }
-        .task {
-            if image == nil {
-                await loadImage()
-            }
+        .task(id: fileName) {
+            guard !didAttemptLoad else { return }
+            didAttemptLoad = true
+            await loadImage()
         }
     }
 
     private func loadImage() async {
-        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
-        let uiImage = UIImage(contentsOfFile: fileURL.path)
-            ?? Persistence.loadImage(fileName: fileName).flatMap { UIImage(data: $0) }
+        if let cached = ChatAttachmentImageCache.image(for: fileName) {
+            await MainActor.run {
+                image = cached
+            }
+            return
+        }
+
+        let uiImage = await Task.detached(priority: .userInitiated) {
+            let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+            return UIImage(contentsOfFile: fileURL.path)
+                ?? Persistence.loadImage(fileName: fileName).flatMap { UIImage(data: $0) }
+        }.value
         guard let uiImage else { return }
+        ChatAttachmentImageCache.store(uiImage, for: fileName)
         await MainActor.run {
             image = uiImage
         }
@@ -1203,6 +1214,23 @@ private struct AttachmentImageView: View {
 private struct ImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+private enum ChatAttachmentImageCache {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 96
+        return cache
+    }()
+
+    static func image(for fileName: String) -> UIImage? {
+        cache.object(forKey: fileName as NSString)
+    }
+
+    static func store(_ image: UIImage, for fileName: String) {
+        let pixelCost = Int(image.size.width * image.size.height * image.scale * image.scale)
+        cache.setObject(image, forKey: fileName as NSString, cost: max(1, pixelCost))
+    }
 }
 
 // MARK: - Watch Audio Player Manager
