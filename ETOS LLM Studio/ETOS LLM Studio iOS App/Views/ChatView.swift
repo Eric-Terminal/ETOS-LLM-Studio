@@ -147,6 +147,7 @@ struct ChatView: View {
                                 let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
                                 let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
                                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                                let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
                                 ChatBubble(
                                     messageState: state,
                                     isReasoningExpanded: Binding(
@@ -162,8 +163,15 @@ struct ChatView: View {
                                     enableLiquidGlass: isLiquidGlassEnabled,
                                     enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
                                     enableMathRendering: viewModel.enableAdvancedRenderer,
+                                    showsStreamingIndicators: showsStreamingIndicators,
                                     mergeWithPrevious: mergeWithPrevious,
-                                    mergeWithNext: mergeWithNext
+                                    mergeWithNext: mergeWithNext,
+                                    onSwitchToPreviousVersion: {
+                                        viewModel.switchToPreviousVersion(of: message)
+                                    },
+                                    onSwitchToNextVersion: {
+                                        viewModel.switchToNextVersion(of: message)
+                                    }
                                 )
                                 .id(state.id)
                                 .contextMenu {

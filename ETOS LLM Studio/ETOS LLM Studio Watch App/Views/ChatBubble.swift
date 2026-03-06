@@ -83,6 +83,7 @@ struct ChatBubble: View {
     let enableLiquidGlass: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
     
@@ -91,7 +92,6 @@ struct ChatBubble: View {
     @State private var availableWidth: CGFloat = 0
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
-    @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
 
@@ -104,6 +104,7 @@ struct ChatBubble: View {
         enableLiquidGlass: Bool,
         enableAdvancedRenderer: Bool = false,
         enableMathRendering: Bool = false,
+        showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
         mergeWithNext: Bool
     ) {
@@ -115,6 +116,7 @@ struct ChatBubble: View {
         self.enableLiquidGlass = enableLiquidGlass
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
+        self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
     }
@@ -155,8 +157,8 @@ struct ChatBubble: View {
     }
 
     private var shouldShimmerReasoningHeader: Bool {
-        guard viewModel.isSendingMessage, message.role == .assistant else { return false }
-        return viewModel.latestAssistantMessageID == message.id
+        guard showsStreamingIndicators, message.role == .assistant else { return false }
+        return true
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
@@ -505,7 +507,7 @@ struct ChatBubble: View {
                 }
 
                 if shouldShowThinkingIndicator {
-                    if viewModel.isSendingMessage {
+                    if showsStreamingIndicators {
                         ShimmeringText(
                             text: currentThinkingText,
                             font: .caption,

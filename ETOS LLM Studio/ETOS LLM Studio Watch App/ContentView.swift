@@ -200,6 +200,7 @@ struct ContentView: View {
             get: { viewModel.toolCallsExpandedState[message.id, default: false] },
             set: { viewModel.toolCallsExpandedState[message.id] = $0 }
         )
+        let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
         
         return ChatBubble(
             messageState: state,
@@ -210,10 +211,10 @@ struct ContentView: View {
             enableLiquidGlass: isLiquidGlassEnabled,
             enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
             enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
+            showsStreamingIndicators: showsStreamingIndicators,
             mergeWithPrevious: mergeWithPrevious,
             mergeWithNext: mergeWithNext
         )
-        .environmentObject(viewModel)
         .id(state.id)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)

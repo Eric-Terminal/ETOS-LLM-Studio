@@ -148,7 +148,6 @@ final class ChatViewModel: ObservableObject {
     private var lastSessionID: UUID?
     private let incrementalHistoryBatchSize = 5
     private var cancellables = Set<AnyCancellable>()
-    private var allMessageStates: [ChatMessageRenderState] = []
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
@@ -818,56 +817,23 @@ final class ChatViewModel: ObservableObject {
     }
     
     private func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
+        let previousMessages = allMessagesForSession
         allMessagesForSession = incomingMessages
-        
-        var newStates: [ChatMessageRenderState] = []
-        newStates.reserveCapacity(incomingMessages.count)
-        var newIDs = Set<UUID>()
-        var newToolCallResultIDs = Set<String>()
-        var newestAssistantID: UUID?
-        
-        for message in incomingMessages {
-            newIDs.insert(message.id)
-            
-            let state: ChatMessageRenderState
-            if let existing = messageStateByID[message.id] {
-                state = existing
-            } else {
-                let created = ChatMessageRenderState(message: message)
-                messageStateByID[message.id] = created
-                state = created
-            }
-            state.update(with: message)
-            newStates.append(state)
-            
-            if message.role != .tool, let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-                for call in toolCalls {
-                    let trimmedResult = (call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmedResult.isEmpty {
-                        newToolCallResultIDs.insert(call.id)
-                    }
-                }
-            }
-            
-            if message.role == .assistant {
-                newestAssistantID = message.id
-            }
+
+        if hasMatchingMessageIdentity(previousMessages, incomingMessages) {
+            applyIncrementalMessageUpdates(previousMessages: previousMessages, incomingMessages: incomingMessages)
+            return
         }
-        
-        if messageStateByID.count != newIDs.count {
-            messageStateByID = messageStateByID.filter { newIDs.contains($0.key) }
+
+        let metadata = collectMessageMetadata(from: incomingMessages)
+        if toolCallResultIDs != metadata.toolCallResultIDs {
+            toolCallResultIDs = metadata.toolCallResultIDs
         }
-        
-        allMessageStates = newStates
+        if latestAssistantMessageID != metadata.latestAssistantID {
+            latestAssistantMessageID = metadata.latestAssistantID
+        }
+
         updateDisplayedMessages()
-        
-        if toolCallResultIDs != newToolCallResultIDs {
-            toolCallResultIDs = newToolCallResultIDs
-            updateDisplayMessagesIfNeeded()
-        }
-        if latestAssistantMessageID != newestAssistantID {
-            latestAssistantMessageID = newestAssistantID
-        }
     }
 
     private func applyImageGenerationStatus(_ status: ChatService.ImageGenerationStatus) {
@@ -922,7 +888,7 @@ final class ChatViewModel: ObservableObject {
     }
     
     func updateDisplayedMessages() {
-        let filtered = visibleMessages(from: allMessageStates)
+        let filtered = visibleMessages(from: allMessagesForSession)
         
         if lastSessionID != currentSession?.id {
             lastSessionID = currentSession?.id
@@ -949,7 +915,7 @@ final class ChatViewModel: ObservableObject {
     }
     
     func loadEntireHistory() {
-        let filtered = visibleMessages(from: allMessageStates)
+        let filtered = visibleMessages(from: allMessagesForSession)
         additionalHistoryLoaded = max(0, filtered.count - lazyLoadMessageCount)
         updateDisplayedStatesIfNeeded(filtered)
         updateHistoryFullyLoadedIfNeeded(true)
@@ -1007,12 +973,37 @@ final class ChatViewModel: ObservableObject {
         refreshBlurredBackgroundImage()
     }
 
-    private func updateDisplayedStatesIfNeeded(_ newStates: [ChatMessageRenderState]) {
+    private func updateDisplayedStatesIfNeeded(_ newMessages: [ChatMessage]) {
         let currentIDs = messages.map(\.id)
-        let newIDs = newStates.map(\.id)
-        guard currentIDs != newIDs else { return }
-        messages = newStates
-        updateDisplayMessagesIfNeeded(with: newStates)
+        let newIDs = newMessages.map(\.id)
+        let visibleIDSet = Set(newIDs)
+
+        var newStates: [ChatMessageRenderState] = []
+        newStates.reserveCapacity(newMessages.count)
+
+        for message in newMessages {
+            let state: ChatMessageRenderState
+            if let existing = messageStateByID[message.id] {
+                state = existing
+            } else {
+                let created = ChatMessageRenderState(message: message)
+                messageStateByID[message.id] = created
+                state = created
+            }
+            state.update(with: message)
+            newStates.append(state)
+        }
+
+        if !messageStateByID.isEmpty {
+            messageStateByID = messageStateByID.filter { visibleIDSet.contains($0.key) }
+        }
+
+        if currentIDs != newIDs {
+            messages = newStates
+            updateDisplayMessagesIfNeeded(with: newStates)
+        } else {
+            updateDisplayMessagesIfNeeded()
+        }
     }
     
     private func updateHistoryFullyLoadedIfNeeded(_ newValue: Bool) {
@@ -1020,7 +1011,7 @@ final class ChatViewModel: ObservableObject {
         isHistoryFullyLoaded = newValue
     }
     
-    private func visibleMessages(from source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
+    private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
         source
     }
 
@@ -1041,6 +1032,90 @@ final class ChatViewModel: ObservableObject {
             guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
             return toolCalls.allSatisfy { !toolCallResultIDs.contains($0.id) }
         }
+    }
+
+    private func hasMatchingMessageIdentity(_ lhs: [ChatMessage], _ rhs: [ChatMessage]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        return zip(lhs, rhs).allSatisfy { $0.id == $1.id }
+    }
+
+    private func applyIncrementalMessageUpdates(previousMessages: [ChatMessage], incomingMessages: [ChatMessage]) {
+        guard !previousMessages.isEmpty, !messages.isEmpty else {
+            let metadata = collectMessageMetadata(from: incomingMessages)
+            if toolCallResultIDs != metadata.toolCallResultIDs {
+                toolCallResultIDs = metadata.toolCallResultIDs
+            }
+            if latestAssistantMessageID != metadata.latestAssistantID {
+                latestAssistantMessageID = metadata.latestAssistantID
+            }
+            updateDisplayedMessages()
+            return
+        }
+
+        let visibleIDs = Set(messages.map(\.id))
+        var updatedToolCallResultIDs = toolCallResultIDs
+        var updatedLatestAssistantID = latestAssistantMessageID
+        var needsDisplayRefilter = false
+
+        for (oldMessage, newMessage) in zip(previousMessages, incomingMessages) where oldMessage != newMessage {
+            if visibleIDs.contains(newMessage.id) {
+                messageStateByID[newMessage.id]?.update(with: newMessage)
+            }
+
+            let oldResultIDs = toolCallResultIDs(for: oldMessage)
+            let newResultIDs = toolCallResultIDs(for: newMessage)
+            if oldResultIDs != newResultIDs {
+                updatedToolCallResultIDs.subtract(oldResultIDs)
+                updatedToolCallResultIDs.formUnion(newResultIDs)
+                needsDisplayRefilter = true
+            }
+
+            if updatedLatestAssistantID == oldMessage.id {
+                if newMessage.role != .assistant {
+                    updatedLatestAssistantID = incomingMessages.last(where: { $0.role == .assistant })?.id
+                }
+            } else if oldMessage.role != .assistant && newMessage.role == .assistant {
+                updatedLatestAssistantID = newMessage.id
+            } else if updatedLatestAssistantID == nil && newMessage.role == .assistant {
+                updatedLatestAssistantID = newMessage.id
+            }
+        }
+
+        if toolCallResultIDs != updatedToolCallResultIDs {
+            toolCallResultIDs = updatedToolCallResultIDs
+        }
+        if latestAssistantMessageID != updatedLatestAssistantID {
+            latestAssistantMessageID = updatedLatestAssistantID
+        }
+        if needsDisplayRefilter {
+            updateDisplayMessagesIfNeeded()
+        }
+    }
+
+    private func collectMessageMetadata(from messages: [ChatMessage]) -> (toolCallResultIDs: Set<String>, latestAssistantID: UUID?) {
+        var resultIDs = Set<String>()
+        var latestAssistantID: UUID?
+
+        for message in messages {
+            resultIDs.formUnion(toolCallResultIDs(for: message))
+            if message.role == .assistant {
+                latestAssistantID = message.id
+            }
+        }
+
+        return (resultIDs, latestAssistantID)
+    }
+
+    private func toolCallResultIDs(for message: ChatMessage) -> Set<String> {
+        guard message.role != .tool, let toolCalls = message.toolCalls, !toolCalls.isEmpty else {
+            return []
+        }
+        return Set(
+            toolCalls.compactMap { call in
+                let trimmedResult = (call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmedResult.isEmpty ? nil : call.id
+            }
+        )
     }
 
     private func loadBackgroundImage(named name: String) -> UIImage? {

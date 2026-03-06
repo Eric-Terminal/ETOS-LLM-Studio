@@ -95,15 +95,17 @@ struct ChatBubble: View {
     let enableLiquidGlass: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
+    let onSwitchToPreviousVersion: () -> Void
+    let onSwitchToNextVersion: () -> Void
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
     @State private var availableWidth: CGFloat = 0
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
-    @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
 
     init(
@@ -115,8 +117,11 @@ struct ChatBubble: View {
         enableLiquidGlass: Bool,
         enableAdvancedRenderer: Bool = false,
         enableMathRendering: Bool = false,
+        showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
-        mergeWithNext: Bool
+        mergeWithNext: Bool,
+        onSwitchToPreviousVersion: @escaping () -> Void,
+        onSwitchToNextVersion: @escaping () -> Void
     ) {
         self.messageState = messageState
         self._isReasoningExpanded = isReasoningExpanded
@@ -126,8 +131,11 @@ struct ChatBubble: View {
         self.enableLiquidGlass = enableLiquidGlass
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
+        self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
+        self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
+        self.onSwitchToNextVersion = onSwitchToNextVersion
     }
     
     private var message: ChatMessage {
@@ -226,8 +234,8 @@ struct ChatBubble: View {
     }
 
     private var shouldShimmerReasoningHeader: Bool {
-        guard viewModel.isSendingMessage, message.role == .assistant else { return false }
-        return viewModel.latestAssistantMessageID == message.id
+        guard showsStreamingIndicators, message.role == .assistant else { return false }
+        return true
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
@@ -381,7 +389,7 @@ struct ChatBubble: View {
     private var compactVersionIndicator: some View {
         HStack(spacing: 4) {
             Button {
-                viewModel.switchToPreviousVersion(of: message)
+                onSwitchToPreviousVersion()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .bold))
@@ -395,7 +403,7 @@ struct ChatBubble: View {
                 .monospacedDigit()
             
             Button {
-                viewModel.switchToNextVersion(of: message)
+                onSwitchToNextVersion()
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .bold))
@@ -639,7 +647,7 @@ struct ChatBubble: View {
                   (message.reasoningContent ?? "").isEmpty,
                   (message.toolCalls ?? []).isEmpty {
             // 加载指示器
-            if viewModel.isSendingMessage {
+            if showsStreamingIndicators {
                 ShimmeringText(
                     text: "正在思考...",
                     font: .subheadline,
