@@ -162,9 +162,13 @@ struct ModelAdvancedSettingsView: View {
                         } label: {
                             HStack {
                                 Text("语音识别模型")
-                                Spacer()
-                                Text(selectedSpeechModelLabel)
+                                MarqueeText(
+                                    content: selectedSpeechModelLabel,
+                                    uiFont: .preferredFont(forTextStyle: .body)
+                                )
                                     .foregroundStyle(.secondary)
+                                    .allowsHitTesting(false)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                         }
                     
@@ -226,13 +230,6 @@ private struct SpeechModelSelectionView: View {
     
     @ViewBuilder
     private func selectionRow(title: String, isSelected: Bool) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.tint)
-            }
-        }
+        MarqueeSelectionRow(title: title, isSelected: isSelected)
     }
 }

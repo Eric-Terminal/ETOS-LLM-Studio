@@ -18,14 +18,29 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section("当前模型") {
-                Picker("模型", selection: $viewModel.selectedModel) {
-                    ForEach(viewModel.activatedModels) { model in
-                        Text("\(model.model.displayName) | \(model.provider.name)")
-                            .tag(model as RunnableModel?)
+                let options = viewModel.activatedModels
+                if options.isEmpty {
+                    Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    NavigationLink {
+                        CurrentModelSelectionView(
+                            models: options,
+                            selectedModel: selectedModelBinding
+                        )
+                    } label: {
+                        HStack {
+                            Text("模型")
+                            MarqueeText(
+                                content: selectedModelLabel(in: options),
+                                uiFont: .preferredFont(forTextStyle: .body)
+                            )
+                            .foregroundStyle(.secondary)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
                     }
-                }
-                .onChange(of: viewModel.selectedModel) { _, newValue in
-                    ChatService.shared.setSelectedModel(newValue)
                 }
                 
                 Button {
@@ -180,6 +195,12 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("设置")
+        .onAppear {
+            ensureSelectedModel(in: viewModel.activatedModels)
+        }
+        .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
+            ensureSelectedModel(in: viewModel.activatedModels)
+        }
         .onChange(of: viewModel.enableMarkdown) { _, isEnabled in
             if !isEnabled, viewModel.enableAdvancedRenderer {
                 viewModel.enableAdvancedRenderer = false
@@ -206,5 +227,63 @@ struct SettingsView: View {
             Image(systemName: "bell.fill")
                 .foregroundColor(.gray)
         }
+    }
+
+    private func ensureSelectedModel(in options: [RunnableModel]) {
+        guard let first = options.first else { return }
+        guard let selectedID = viewModel.selectedModel?.id,
+              options.contains(where: { $0.id == selectedID }) else {
+            viewModel.selectedModel = first
+            ChatService.shared.setSelectedModel(first)
+            return
+        }
+    }
+
+    private var selectedModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedModel },
+            set: { model in
+                viewModel.selectedModel = model
+                ChatService.shared.setSelectedModel(model)
+            }
+        )
+    }
+
+    private func selectedModelLabel(in options: [RunnableModel]) -> String {
+        if let selected = viewModel.selectedModel,
+           options.contains(where: { $0.id == selected.id }) {
+            return "\(selected.model.displayName) | \(selected.provider.name)"
+        }
+
+        guard let first = options.first else { return "" }
+        return "\(first.model.displayName) | \(first.provider.name)"
+    }
+}
+
+private struct CurrentModelSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let models: [RunnableModel]
+    @Binding var selectedModel: RunnableModel?
+
+    var body: some View {
+        List {
+            ForEach(models) { model in
+                Button {
+                    select(model)
+                } label: {
+                    MarqueeSelectionRow(
+                        title: "\(model.model.displayName) | \(model.provider.name)",
+                        isSelected: selectedModel?.id == model.id
+                    )
+                }
+            }
+        }
+        .navigationTitle("当前模型")
+    }
+
+    private func select(_ model: RunnableModel) {
+        selectedModel = model
+        dismiss()
     }
 }

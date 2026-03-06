@@ -60,6 +60,11 @@ struct ImageGenerationFeatureView: View {
         generatedImageItems(from: viewModel.allMessagesForSession).count
     }
 
+    private var selectedImageModelLabel: String {
+        guard let selectedImageModel else { return "" }
+        return "\(selectedImageModel.model.displayName) | \(selectedImageModel.provider.name)"
+    }
+
     private var galleryDestination: some View {
         ImageGenerationGalleryView(
             onReusePrompt: { reusedPrompt in
@@ -81,10 +86,21 @@ struct ImageGenerationFeatureView: View {
                     Text(NSLocalizedString("请先在模型管理中启用至少一个生图模型。", comment: "No image generation model is available"))
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker(NSLocalizedString("生图模型", comment: "Image generation model picker title"), selection: $imageGenerationModelIdentifier) {
-                        ForEach(availableImageModels) { model in
-                            Text("\(model.model.displayName) · \(model.provider.name)")
-                                .tag(model.id)
+                    NavigationLink {
+                        ImageGenerationModelSelectionView(
+                            models: availableImageModels,
+                            selectedModelIdentifier: $imageGenerationModelIdentifier
+                        )
+                    } label: {
+                        HStack {
+                            Text(NSLocalizedString("生图模型", comment: "Image generation model picker title"))
+                            MarqueeText(
+                                content: selectedImageModelLabel,
+                                uiFont: .preferredFont(forTextStyle: .body)
+                            )
+                            .foregroundStyle(.secondary)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                 }
@@ -624,6 +640,34 @@ struct ImageGenerationFeatureView: View {
             return
         }
         imageGenerationParameterExpressionsByModel = string
+    }
+}
+
+private struct ImageGenerationModelSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let models: [RunnableModel]
+    @Binding var selectedModelIdentifier: String
+
+    var body: some View {
+        List {
+            ForEach(models) { model in
+                Button {
+                    select(model.id)
+                } label: {
+                    MarqueeSelectionRow(
+                        title: "\(model.model.displayName) | \(model.provider.name)",
+                        isSelected: selectedModelIdentifier == model.id
+                    )
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("生图模型", comment: "Image generation model picker title"))
+    }
+
+    private func select(_ identifier: String) {
+        selectedModelIdentifier = identifier
+        dismiss()
     }
 }
 

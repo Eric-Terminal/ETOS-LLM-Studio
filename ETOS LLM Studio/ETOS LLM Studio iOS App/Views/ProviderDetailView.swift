@@ -310,14 +310,15 @@ struct ProviderDetailView: View {
     }
 
     private func modelLabel(for model: Model) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(model.displayName)
-                .lineLimit(1)
-            Text(model.modelName)
-                .font(.caption2.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
+        MarqueeTitleSubtitleLabel(
+            title: model.displayName,
+            subtitle: model.modelName,
+            titleUIFont: .preferredFont(forTextStyle: .body),
+            subtitleUIFont: .monospacedSystemFont(
+                ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                weight: .regular
+            )
+        )
     }
 }
 

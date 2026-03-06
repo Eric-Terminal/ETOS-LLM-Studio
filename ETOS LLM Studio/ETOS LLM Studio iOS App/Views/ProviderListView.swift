@@ -105,12 +105,12 @@ private struct ProviderManagementContentView: View {
                     NavigationLink {
                         ProviderDetailView(provider: provider)
                     } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(provider.name)
-                            Text(provider.baseURL)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        MarqueeTitleSubtitleLabel(
+                            title: provider.name,
+                            subtitle: provider.baseURL,
+                            titleUIFont: .preferredFont(forTextStyle: .body),
+                            subtitleUIFont: .preferredFont(forTextStyle: .caption1)
+                        )
                     }
                     .contextMenu {
                         Button {
@@ -184,19 +184,22 @@ private struct ProviderModelOrderContentView: View {
 
     @ViewBuilder
     private func modelOrderRow(runnable: RunnableModel) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(runnable.model.displayName)
-                    .lineLimit(1)
-                Text("\(runnable.provider.name) · \(runnable.model.modelName)")
+        HStack(alignment: .top, spacing: 10) {
+            MarqueeTitleSubtitleLabel(
+                title: runnable.model.displayName,
+                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                titleUIFont: .preferredFont(forTextStyle: .body),
+                subtitleUIFont: .monospacedSystemFont(
+                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                    weight: .regular
+                )
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !runnable.model.isActivated {
+                Text("未启用")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                if !runnable.model.isActivated {
-                    Text("未启用")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
             }
         }
     }
