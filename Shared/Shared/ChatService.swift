@@ -400,6 +400,20 @@ public class ChatService {
         
         logger.info("  - 初始选中模型为: \(initialModel?.model.displayName ?? "无")")
         logger.info("  - 初始化完成。")
+        AppLog.developer(
+            category: "chat_service",
+            action: "initialize",
+            message: "ChatService 初始化完成",
+            payload: [
+                "providerCount": "\(self.providers.count)",
+                "selectedModel": initialModel?.model.displayName ?? "无"
+            ]
+        )
+        AppLog.userOperation(
+            category: "应用",
+            action: "初始化聊天服务",
+            payload: ["providerCount": "\(self.providers.count)"]
+        )
     }
     
     // MARK: - 公开方法 (配置管理)
@@ -437,6 +451,14 @@ public class ChatService {
         selectedModelSubject.send(model)
         UserDefaults.standard.set(model?.id, forKey: "selectedRunnableModelID")
         logger.info("已将模型切换为: \(model?.model.displayName ?? "无")")
+        AppLog.userOperation(
+            category: "模型",
+            action: "切换模型",
+            payload: [
+                "provider": model?.provider.name ?? "无",
+                "model": model?.model.displayName ?? "无"
+            ]
+        )
     }
 
     // MARK: - 世界书管理
@@ -713,6 +735,11 @@ public class ChatService {
                     setCurrentSession(target)
                 }
                 logger.info("复用了已有临时会话。")
+                AppLog.userOperation(
+                    category: "会话",
+                    action: "复用临时会话",
+                    payload: ["sessionID": target.id.uuidString]
+                )
             }
             return
         }
@@ -723,6 +750,11 @@ public class ChatService {
         currentSessionSubject.send(newSession)
         publishMessages([])
         logger.info("创建了新的临时会话。")
+        AppLog.userOperation(
+            category: "会话",
+            action: "创建新会话",
+            payload: ["sessionID": newSession.id.uuidString]
+        )
     }
     
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
@@ -754,6 +786,11 @@ public class ChatService {
         }
         Persistence.saveChatSessions(currentSessions)
         logger.info("删除后已保存会话列表。")
+        AppLog.userOperation(
+            category: "会话",
+            action: "删除会话",
+            payload: ["count": "\(sessionsToDelete.count)"]
+        )
     }
     
     @discardableResult
@@ -1051,6 +1088,11 @@ public class ChatService {
         let messages = session != nil ? Persistence.loadMessages(for: session!.id) : []
         publishMessages(messages)
         logger.info("已切换到会话: \(session?.name ?? "无")")
+        AppLog.userOperation(
+            category: "会话",
+            action: "切换会话",
+            payload: ["sessionID": session?.id.uuidString ?? "无"]
+        )
     }
 
     /// 当老会话重新变为活跃状态时，将其移动到列表顶部以保持最近使用的排序

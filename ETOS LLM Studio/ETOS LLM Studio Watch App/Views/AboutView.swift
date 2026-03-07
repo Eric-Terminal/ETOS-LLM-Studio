@@ -9,9 +9,14 @@
 
 import SwiftUI
 import Foundation
+import Shared
+import WatchKit
 
 struct AboutView: View {
     private let privacyURL = URL(string: "http://privacy.els.ericterminal.com/")!
+    @State private var versionTapCount = 0
+    @State private var lastVersionTapAt: Date = .distantPast
+    @State private var showAppLogs = false
     
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "N/A"
@@ -45,7 +50,18 @@ struct AboutView: View {
 
                 // MARK: - App Info
                 VStack(alignment: .leading, spacing: 6) {
-                    InfoRow(title: "版本", value: appVersion)
+                    HStack {
+                        Text("版本")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(appVersion)
+                            .font(.caption)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        handleVersionTap()
+                    }
                     InfoRow(title: "开发者", value: "Eric-Terminal")
                     InfoRow(title: "平台支持", value: "iOS / watchOS")
                 }
@@ -115,6 +131,26 @@ struct AboutView: View {
             .padding(.horizontal)
         }
         .navigationTitle("关于")
+        .sheet(isPresented: $showAppLogs) {
+            NavigationStack {
+                WatchAppLogsView()
+            }
+        }
+    }
+
+    private func handleVersionTap() {
+        let now = Date()
+        if now.timeIntervalSince(lastVersionTapAt) > 1.5 {
+            versionTapCount = 0
+        }
+        lastVersionTapAt = now
+        versionTapCount += 1
+
+        guard versionTapCount >= 7 else { return }
+        versionTapCount = 0
+        showAppLogs = true
+        AppLog.userOperation(category: "调试入口", action: "打开应用日志页")
+        WKInterfaceDevice.current().play(.success)
     }
 }
 
