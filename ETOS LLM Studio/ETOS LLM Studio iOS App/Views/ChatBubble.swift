@@ -94,6 +94,7 @@ struct ChatBubble: View {
     let enableBackground: Bool
     let enableLiquidGlass: Bool
     let enableAdvancedRenderer: Bool
+    let enableExperimentalToolResultDisplay: Bool
     let enableMathRendering: Bool
     let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
@@ -116,6 +117,7 @@ struct ChatBubble: View {
         enableBackground: Bool,
         enableLiquidGlass: Bool,
         enableAdvancedRenderer: Bool = false,
+        enableExperimentalToolResultDisplay: Bool = true,
         enableMathRendering: Bool = false,
         showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
@@ -130,6 +132,7 @@ struct ChatBubble: View {
         self.enableBackground = enableBackground
         self.enableLiquidGlass = enableLiquidGlass
         self.enableAdvancedRenderer = enableAdvancedRenderer
+        self.enableExperimentalToolResultDisplay = enableExperimentalToolResultDisplay
         self.enableMathRendering = enableMathRendering
         self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
@@ -608,7 +611,8 @@ struct ChatBubble: View {
                             resultText: message.role == .tool ? message.content : "",
                             isExpanded: toolResultExpansionBinding(for: call.id),
                             isOutgoing: isOutgoing,
-                            isPending: isPendingToolResult(for: call)
+                            isPending: isPendingToolResult(for: call),
+                            enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay
                         )
                     }
                 }
@@ -689,7 +693,8 @@ struct ChatBubble: View {
                     resultText: message.role == .tool ? message.content : "",
                     isExpanded: $isToolCallsExpanded,
                     isOutgoing: isOutgoing,
-                    isPending: hasPendingToolResults
+                    isPending: hasPendingToolResults,
+                    enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay
                 )
             }
         }
@@ -1333,6 +1338,7 @@ struct ToolResultsDisclosureView: View, Equatable {
     @Binding var isExpanded: Bool
     let isOutgoing: Bool
     let isPending: Bool
+    let enableExperimentalToolResultDisplay: Bool
     
     static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
         lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
@@ -1340,6 +1346,7 @@ struct ToolResultsDisclosureView: View, Equatable {
             && lhs.isOutgoing == rhs.isOutgoing
             && lhs.resultText == rhs.resultText
             && lhs.isPending == rhs.isPending
+            && lhs.enableExperimentalToolResultDisplay == rhs.enableExperimentalToolResultDisplay
     }
 
     private func displayName(for toolName: String) -> String {
@@ -1380,6 +1387,7 @@ struct ToolResultsDisclosureView: View, Equatable {
     }
 
     private var disclosureSummaryText: String? {
+        guard enableExperimentalToolResultDisplay else { return nil }
         let summaries = toolCalls
             .map { displayModel(for: $0) }
             .map(\.summaryText)
@@ -1443,39 +1451,7 @@ struct ToolResultsDisclosureView: View, Equatable {
             if isExpanded && !isPending {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(toolCalls, id: \.id) { call in
-                        let display = displayModel(for: call)
-                        let label = displayName(for: call.toolName)
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(label)
-                                .font(.caption.weight(.semibold))
-                            if let primaryContentText = display.primaryContentText,
-                               !primaryContentText.isEmpty {
-                                toolResultSection(
-                                    title: display.shouldShowRawSection ? "主要内容" : "结果内容",
-                                    text: primaryContentText,
-                                    font: .caption,
-                                    enableSelection: true
-                                )
-                            }
-                            if display.shouldShowRawSection {
-                                if display.primaryContentText != nil {
-                                    Divider()
-                                        .background(sectionBackgroundColor.opacity(0.7))
-                                }
-                                toolResultSection(
-                                    title: "原始返回",
-                                    text: display.rawDisplayText,
-                                    font: .system(.caption, design: .monospaced),
-                                    enableSelection: true
-                                )
-                            }
-                        }
-                        .foregroundStyle(sectionForegroundColor)
-                        .padding(6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(sectionBackgroundColor)
-                        )
+                        toolResultContent(for: call)
                     }
                 }
                 .padding(.top, 8)
@@ -1483,6 +1459,75 @@ struct ToolResultsDisclosureView: View, Equatable {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+
+    @ViewBuilder
+    private func toolResultContent(for call: InternalToolCall) -> some View {
+        if enableExperimentalToolResultDisplay {
+            experimentalToolResultContent(for: call)
+        } else {
+            legacyToolResultContent(for: call)
+        }
+    }
+
+    private func experimentalToolResultContent(for call: InternalToolCall) -> some View {
+        let display = displayModel(for: call)
+        let label = displayName(for: call.toolName)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+            if let primaryContentText = display.primaryContentText,
+               !primaryContentText.isEmpty {
+                toolResultSection(
+                    title: display.shouldShowRawSection ? "主要内容" : "结果内容",
+                    text: primaryContentText,
+                    font: .caption,
+                    enableSelection: true
+                )
+            }
+            if display.shouldShowRawSection {
+                if display.primaryContentText != nil {
+                    Divider()
+                        .background(sectionBackgroundColor.opacity(0.7))
+                }
+                toolResultSection(
+                    title: "原始返回",
+                    text: display.rawDisplayText,
+                    font: .system(.caption, design: .monospaced),
+                    enableSelection: true
+                )
+            }
+        }
+        .foregroundStyle(sectionForegroundColor)
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(sectionBackgroundColor)
+        )
+    }
+
+    private func legacyToolResultContent(for call: InternalToolCall) -> some View {
+        let result = resolvedResult(for: call)
+        let label = displayName(for: call.toolName)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+            if !result.isEmpty {
+                CappedScrollableText(
+                    text: result,
+                    maxHeight: 200,
+                    font: .caption,
+                    foreground: sectionForegroundColor,
+                    enableSelection: true
+                )
+            }
+        }
+        .foregroundStyle(sectionForegroundColor)
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(sectionBackgroundColor)
+        )
     }
 
     private func toolResultSection(

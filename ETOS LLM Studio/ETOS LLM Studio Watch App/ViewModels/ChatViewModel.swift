@@ -81,6 +81,7 @@ class ChatViewModel: ObservableObject {
             }
         }
     }
+    @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }

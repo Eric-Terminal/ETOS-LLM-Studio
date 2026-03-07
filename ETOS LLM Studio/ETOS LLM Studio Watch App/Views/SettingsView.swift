@@ -134,6 +134,7 @@ struct SettingsView: View {
                         backgroundContentMode: $viewModel.backgroundContentMode,
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
+                        enableExperimentalToolResultDisplay: $viewModel.enableExperimentalToolResultDisplay,
                         allBackgrounds: viewModel.backgroundImages
                     )) {
                         Label("显示与外观", systemImage: "photo.on.rectangle")

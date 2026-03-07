@@ -70,6 +70,7 @@ final class ChatViewModel: ObservableObject {
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
     @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false
+    @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }

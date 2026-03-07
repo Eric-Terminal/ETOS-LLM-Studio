@@ -57,6 +57,7 @@ struct ShortcutSyncTests {
 
         defaults.set("这是同步测试提示词", forKey: "systemPrompt")
         defaults.set(true, forKey: "enableMarkdown")
+        defaults.set(false, forKey: "enableExperimentalToolResultDisplay")
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
 
         #expect(package.globalSystemPrompt == "这是同步测试提示词")
@@ -68,6 +69,7 @@ struct ShortcutSyncTests {
         let snapshot = decodeSnapshot(snapshotData)
         #expect(snapshot["systemPrompt"] as? String == "这是同步测试提示词")
         #expect((snapshot["enableMarkdown"] as? NSNumber)?.boolValue == true)
+        #expect((snapshot["enableExperimentalToolResultDisplay"] as? NSNumber)?.boolValue == false)
     }
 
     @Test("appStorage snapshot is merged into local defaults")
@@ -88,7 +90,8 @@ struct ShortcutSyncTests {
         let incomingSnapshot: [String: Any] = [
             "systemPrompt": "新提示词",
             "enableStreaming": true,
-            "maxChatHistory": 256
+            "maxChatHistory": 256,
+            "enableExperimentalToolResultDisplay": false
         ]
         let snapshotData = encodeSnapshot(incomingSnapshot)
         let package = SyncPackage(
@@ -100,12 +103,13 @@ struct ShortcutSyncTests {
         #expect(defaults.string(forKey: "systemPrompt") == "新提示词")
         #expect(defaults.bool(forKey: "enableStreaming") == true)
         #expect(defaults.integer(forKey: "maxChatHistory") == 256)
-        #expect(summary.importedAppStorageValues == 3)
+        #expect(defaults.bool(forKey: "enableExperimentalToolResultDisplay") == false)
+        #expect(summary.importedAppStorageValues == 4)
         #expect(summary.skippedAppStorageValues == 0)
 
         let summary2 = await SyncEngine.apply(package: package, userDefaults: defaults)
         #expect(summary2.importedAppStorageValues == 0)
-        #expect(summary2.skippedAppStorageValues == 3)
+        #expect(summary2.skippedAppStorageValues == 4)
     }
 
     @Test("legacy global prompt payload is still merged")
