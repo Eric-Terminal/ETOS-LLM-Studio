@@ -749,7 +749,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
@@ -792,7 +792,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
