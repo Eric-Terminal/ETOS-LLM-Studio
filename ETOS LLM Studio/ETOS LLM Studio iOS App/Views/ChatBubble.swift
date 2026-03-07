@@ -1131,14 +1131,15 @@ private struct AttachmentImageView: View {
             return
         }
 
-        let loadedImage = await Task.detached(priority: .userInitiated) {
+        let loadTask = Task.detached(priority: .userInitiated) { () -> UIImage? in
             let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
             if let image = UIImage(contentsOfFile: fileURL.path) {
                 return image
             }
             guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
             return UIImage(data: data)
-        }.value
+        }
+        let loadedImage = await loadTask.value
 
         guard let loadedImage else { return }
         ChatAttachmentImageCache.store(loadedImage, for: fileName)

@@ -163,10 +163,12 @@ private struct StorageDirectoryBrowserView: View {
                 infoRow(title: "文件总大小", value: StorageUtility.formatSize(totalFileSize))
             }
 
-            Section("内容") {
+            Section {
                 ForEach(files) { file in
                     row(for: file)
                 }
+            } header: {
+                Text("内容")
             } footer: {
                 if let footerText {
                     Text(footerText)
