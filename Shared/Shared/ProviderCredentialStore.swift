@@ -83,6 +83,8 @@ public final class ProviderCredentialStore {
 private struct KeychainProviderCredentialBackingStore: ProviderCredentialBackingStore {
     private static let service = "com.ericterminal.els.provider-credentials"
     private static let sharedGroupSuffix = "com.ericterminal.els.shared"
+    private static let accessGroupInfoKey = "ETKeychainAccessGroup"
+    private static let appIdentifierPrefixInfoKey = "AppIdentifierPrefix"
     private static let resolvedAccessGroup = resolveAccessGroup()
 
     func loadAPIKeys(for providerID: UUID) -> [String] {
@@ -156,15 +158,22 @@ private struct KeychainProviderCredentialBackingStore: ProviderCredentialBacking
     }
 
     private static func resolveAccessGroup() -> String? {
-        guard let task = SecTaskCreateFromSelf(nil) else { return nil }
-        guard let entitlementValue = SecTaskCopyValueForEntitlement(
-            task,
-            "keychain-access-groups" as CFString,
-            nil
-        ) as? [String] else {
-            return nil
+        if let configuredGroup = Bundle.main.object(forInfoDictionaryKey: accessGroupInfoKey) as? String {
+            let trimmed = configuredGroup.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !trimmed.contains("$(") {
+                return trimmed
+            }
         }
-        return entitlementValue.first(where: { $0.hasSuffix(sharedGroupSuffix) }) ?? entitlementValue.first
+
+        if let rawPrefix = Bundle.main.object(forInfoDictionaryKey: appIdentifierPrefixInfoKey) as? String {
+            let trimmedPrefix = rawPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedPrefix.isEmpty, !trimmedPrefix.contains("$(") {
+                return trimmedPrefix + sharedGroupSuffix
+            }
+        }
+
+        providerCredentialLogger.error("未能从 Info.plist 解析共享 Keychain 访问组，将回退到默认访问组。")
+        return nil
     }
 }
 #else
