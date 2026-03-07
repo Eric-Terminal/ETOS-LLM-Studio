@@ -12,6 +12,7 @@ import Shared
 
 struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
+    @EnvironmentObject private var cloudSyncManager: CloudSyncManager
     @AppStorage("sync.options.providers") private var syncProviders = true
     @AppStorage("sync.options.sessions") private var syncSessions = true
     @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
@@ -24,13 +25,10 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
+    @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
     
     var body: some View {
         List {
-            Section {
-                Toggle("启动时自动同步", isOn: $autoSyncEnabled)
-            }
-            
             Section("同步内容") {
                 Toggle("提供商", isOn: $syncProviders)
                 Toggle("会话", isOn: $syncSessions)
@@ -43,8 +41,10 @@ struct DeviceSyncSettingsView: View {
                 Toggle("反馈工单", isOn: $syncFeedbackTickets)
                 Toggle("软件设置", isOn: $syncAppStorage)
             }
-            
-            Section {
+
+            Section("Apple Watch 同步") {
+                Toggle("启动时自动同步", isOn: $autoSyncEnabled)
+
                 Button {
                     syncManager.performSync(options: selectedSyncOptions)
                 } label: {
@@ -61,8 +61,33 @@ struct DeviceSyncSettingsView: View {
                 .disabled(selectedSyncOptions.isEmpty || isSyncing)
             }
             
-            Section("状态") {
+            Section("Apple Watch 状态") {
                 syncStatusView
+            }
+
+            Section("iCloud 同步") {
+                Toggle("启动时自动同步", isOn: $cloudAutoSyncEnabled)
+
+                Button {
+                    Task {
+                        await cloudSyncManager.performSync(options: selectedSyncOptions)
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isCloudSyncing {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label("同步到 iCloud", systemImage: "icloud")
+                        Spacer()
+                    }
+                }
+                .disabled(selectedSyncOptions.isEmpty || isCloudSyncing)
+            }
+
+            Section("iCloud 状态") {
+                cloudSyncStatusView
             }
         }
         .navigationTitle("设备同步")
@@ -90,10 +115,50 @@ struct DeviceSyncSettingsView: View {
         }
         return false
     }
+
+    private var isCloudSyncing: Bool {
+        if case .syncing = cloudSyncManager.state {
+            return true
+        }
+        return false
+    }
     
     @ViewBuilder
     private var syncStatusView: some View {
         switch syncManager.state {
+        case .idle:
+            Text("未同步").font(.caption).foregroundStyle(.secondary)
+        case .syncing(let message):
+            HStack {
+                ProgressView()
+                Text(message).font(.caption)
+            }
+        case .success(let summary):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("成功", systemImage: "checkmark.circle")
+                    .foregroundStyle(.green)
+                Text(summaryDescription(summary))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let reason):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("失败", systemImage: "xmark.circle")
+                    .foregroundStyle(.red)
+                Text(reason)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        @unknown default:
+            Text("未知状态")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var cloudSyncStatusView: some View {
+        switch cloudSyncManager.state {
         case .idle:
             Text("未同步").font(.caption).foregroundStyle(.secondary)
         case .syncing(let message):

@@ -17,6 +17,7 @@ import os.log
 @main
 struct ETOS_LLM_Studio_Watch_AppApp: App {
     @StateObject private var syncManager = WatchSyncManager.shared
+    @StateObject private var cloudSyncManager = CloudSyncManager.shared
     @StateObject private var mcpManager = MCPManager.shared
     
     init() {
@@ -33,6 +34,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(syncManager)
+                .environmentObject(cloudSyncManager)
                 .onOpenURL { url in
                     Task {
                         _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
@@ -41,6 +43,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                 .onAppear {
                     // 启动时自动同步（静默模式）
                     syncManager.performAutoSyncIfEnabled()
+                    cloudSyncManager.performAutoSyncIfEnabled()
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
                 }
