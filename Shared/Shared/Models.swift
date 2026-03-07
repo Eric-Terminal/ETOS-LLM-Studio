@@ -470,6 +470,17 @@ public enum ToolCallsPlacement: String, Codable, Sendable {
 
 /// 单次 API 请求的响应测速信息
 public struct MessageResponseMetrics: Codable, Hashable, Sendable {
+    /// 流式速度采样点（按秒记录 token/s）。
+    public struct SpeedSample: Codable, Hashable, Sendable {
+        public var elapsedSecond: Int
+        public var tokenPerSecond: Double
+
+        public init(elapsedSecond: Int, tokenPerSecond: Double) {
+            self.elapsedSecond = max(0, elapsedSecond)
+            self.tokenPerSecond = max(0, tokenPerSecond)
+        }
+    }
+
     public static let currentSchemaVersion = 1
 
     public var schemaVersion: Int
@@ -480,6 +491,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
     public var completionTokensForSpeed: Int?
     public var tokenPerSecond: Double?
     public var isTokenPerSecondEstimated: Bool
+    public var speedSamples: [SpeedSample]?
 
     public init(
         schemaVersion: Int = MessageResponseMetrics.currentSchemaVersion,
@@ -489,7 +501,8 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         timeToFirstToken: TimeInterval? = nil,
         completionTokensForSpeed: Int? = nil,
         tokenPerSecond: Double? = nil,
-        isTokenPerSecondEstimated: Bool = false
+        isTokenPerSecondEstimated: Bool = false,
+        speedSamples: [SpeedSample]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.requestStartedAt = requestStartedAt
@@ -499,6 +512,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         self.completionTokensForSpeed = completionTokensForSpeed
         self.tokenPerSecond = tokenPerSecond
         self.isTokenPerSecondEstimated = isTokenPerSecondEstimated
+        self.speedSamples = speedSamples
     }
 }
 

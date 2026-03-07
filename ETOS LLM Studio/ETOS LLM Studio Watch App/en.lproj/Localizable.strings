@@ -764,6 +764,9 @@
 "测速 Tokens" = "Speed tokens";
 "响应速度" = "Response speed";
 "token/s" = "token/s";
+"流式速度曲线" = "Streaming speed chart";
+"每秒采样" = "Per-second sampling";
+"波动" = "Volatility";
 "估算" = "Estimated";
 "生图状态" = "Generation status";
 "等待时可取消，完成后可复用提示词。" = "You can cancel while waiting. After completion, reuse the prompt.";

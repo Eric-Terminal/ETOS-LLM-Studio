@@ -3053,6 +3053,29 @@ public class ChatService {
         return tokenPerSecond(tokens: tokens, elapsed: generationDuration)
     }
 
+    /// 将流式速度按“整秒”采样并追加到序列中，用于实时曲线展示。
+    private func appendSpeedSample(
+        to samples: inout [MessageResponseMetrics.SpeedSample],
+        elapsed: TimeInterval,
+        speed: Double?
+    ) {
+        guard let speed, speed.isFinite, speed > 0 else { return }
+        let second = max(0, Int(elapsed.rounded(.down)))
+        let sample = MessageResponseMetrics.SpeedSample(elapsedSecond: second, tokenPerSecond: speed)
+
+        if let lastIndex = samples.indices.last {
+            let last = samples[lastIndex]
+            if sample.elapsedSecond == last.elapsedSecond {
+                samples[lastIndex] = sample
+                return
+            }
+            if sample.elapsedSecond < last.elapsedSecond {
+                return
+            }
+        }
+        samples.append(sample)
+    }
+
     private func makeResponseMetrics(
         requestStartedAt: Date,
         responseCompletedAt: Date?,
@@ -3060,7 +3083,8 @@ public class ChatService {
         timeToFirstToken: TimeInterval?,
         completionTokensForSpeed: Int?,
         tokenPerSecond: Double?,
-        isEstimated: Bool
+        isEstimated: Bool,
+        speedSamples: [MessageResponseMetrics.SpeedSample]? = nil
     ) -> MessageResponseMetrics {
         MessageResponseMetrics(
             requestStartedAt: requestStartedAt,
@@ -3069,7 +3093,8 @@ public class ChatService {
             timeToFirstToken: timeToFirstToken,
             completionTokensForSpeed: completionTokensForSpeed,
             tokenPerSecond: tokenPerSecond,
-            isTokenPerSecondEstimated: isEstimated
+            isTokenPerSecondEstimated: isEstimated,
+            speedSamples: speedSamples
         )
     }
 
@@ -3576,6 +3601,7 @@ public class ChatService {
             var latestOfficialCompletionTokens: Int?
             var accumulatedOutputText = ""
             var firstTokenAt: Date?
+            var speedSamples: [MessageResponseMetrics.SpeedSample] = []
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
@@ -3673,19 +3699,26 @@ public class ChatService {
                         }
                         let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                         let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                        let speed = streamingTokenPerSecond(
+                            tokens: completionTokensForSpeed,
+                            requestStartedAt: requestStartedAt,
+                            firstTokenAt: firstTokenAt,
+                            snapshotAt: now
+                        )
+                        appendSpeedSample(
+                            to: &speedSamples,
+                            elapsed: max(0, now.timeIntervalSince(requestStartedAt)),
+                            speed: speed
+                        )
                         messages[index].responseMetrics = makeResponseMetrics(
                             requestStartedAt: requestStartedAt,
                             responseCompletedAt: nil,
                             totalResponseDuration: nil,
                             timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
                             completionTokensForSpeed: completionTokensForSpeed,
-                            tokenPerSecond: streamingTokenPerSecond(
-                                tokens: completionTokensForSpeed,
-                                requestStartedAt: requestStartedAt,
-                                firstTokenAt: firstTokenAt,
-                                snapshotAt: now
-                            ),
-                            isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                            tokenPerSecond: speed,
+                            isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
+                            speedSamples: speedSamples.isEmpty ? nil : speedSamples
                         )
                     }
                     messagesForSessionSubject.send(messages)
@@ -3734,19 +3767,26 @@ public class ChatService {
                     let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                     let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                     let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                    let finalSpeed = streamingTokenPerSecond(
+                        tokens: completionTokensForSpeed,
+                        requestStartedAt: requestStartedAt,
+                        firstTokenAt: firstTokenAt,
+                        snapshotAt: responseCompletedAt
+                    )
+                    appendSpeedSample(
+                        to: &speedSamples,
+                        elapsed: totalDuration,
+                        speed: finalSpeed
+                    )
                     messages[index].responseMetrics = makeResponseMetrics(
                         requestStartedAt: requestStartedAt,
                         responseCompletedAt: responseCompletedAt,
                         totalResponseDuration: totalDuration,
                         timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
                         completionTokensForSpeed: completionTokensForSpeed,
-                        tokenPerSecond: streamingTokenPerSecond(
-                            tokens: completionTokensForSpeed,
-                            requestStartedAt: requestStartedAt,
-                            firstTokenAt: firstTokenAt,
-                            snapshotAt: responseCompletedAt
-                        ),
-                        isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                        tokenPerSecond: finalSpeed,
+                        isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
+                        speedSamples: speedSamples.isEmpty ? nil : speedSamples
                     )
                 }
                 finalAssistantMessage = messages[index]
