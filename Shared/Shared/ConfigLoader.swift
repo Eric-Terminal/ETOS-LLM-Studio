@@ -32,6 +32,11 @@ public struct ConfigLoader {
     private static let downloadOnceStateQueue = DispatchQueue(label: "com.ETOS.LLM.Studio.downloadOnce")
     private static var downloadOnceInProgress = false
 
+    private struct CredentialHydrationResult {
+        let apiKeys: [String]
+        let shouldRewriteProviderFile: Bool
+    }
+
     /// 获取用户专属的根目录 URL
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -105,6 +110,7 @@ public struct ConfigLoader {
                 do {
                     let data = try Data(contentsOf: url)
                     var provider = try JSONDecoder().decode(Provider.self, from: data)
+                    let legacyAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
                     var didRepair = false
 
                     // 修复同一个 Provider 内部重复的模型 ID，避免 SwiftUI 列表 diff 异常。
@@ -121,7 +127,23 @@ public struct ConfigLoader {
                         let existingIsCanonical = existingSource.map { isSameFileURL($0, canonicalURL) } ?? false
 
                         // 完全重复配置：保留规范文件，清理非规范重复文件。
-                        if existingProvider == provider {
+                        if providersShareSamePersistentConfiguration(existingProvider, provider) {
+                            let mergedAPIKeys = mergeAPIKeysPreservingOrder(
+                                existingProvider.apiKeys,
+                                legacyAPIKeys
+                            )
+                            let didStoreMergedAPIKeys = mergedAPIKeys == existingProvider.apiKeys
+                                || ProviderCredentialStore.shared.saveAPIKeys(
+                                    mergedAPIKeys,
+                                    for: provider.id
+                                )
+
+                            if didStoreMergedAPIKeys {
+                                providers[existingIndex].apiKeys = mergedAPIKeys
+                            } else {
+                                logger.error("  - 合并重复提供商的 API Key 失败: \(provider.id.uuidString)")
+                            }
+
                             if !currentIsCanonical {
                                 removeFileIfExists(at: url)
                                 logger.warning("  - 发现重复配置并已清理冗余文件: \(url.lastPathComponent)")
@@ -129,6 +151,13 @@ public struct ConfigLoader {
                                 removeFileIfExists(at: existingSource)
                                 seenProviderSourceByID[provider.id] = url
                                 logger.warning("  - 发现重复配置，已保留规范文件并清理旧文件。")
+                            }
+
+                            if currentIsCanonical && !legacyAPIKeys.isEmpty && didStoreMergedAPIKeys {
+                                var normalizedProvider = providers[existingIndex]
+                                normalizedProvider.apiKeys = mergedAPIKeys
+                                saveProvider(normalizedProvider)
+                                seenProviderSourceByID[provider.id] = canonicalURL
                             }
                             continue
                         }
@@ -140,13 +169,17 @@ public struct ConfigLoader {
                         logger.warning("  - 提供商 ID 冲突，已重建 ID: \(oldID.uuidString) -> \(provider.id.uuidString)")
                     }
 
+                    let hydration = hydrateProviderCredentials(for: provider)
+                    provider.apiKeys = hydration.apiKeys
                     providers.append(provider)
                     seenProviderIndexByID[provider.id] = providers.count - 1
-                    seenProviderSourceByID[provider.id] = url
 
                     let canonicalURL = canonicalProviderFileURL(for: provider.id)
-                    if didRepair || !isSameFileURL(url, canonicalURL) {
+                    if didRepair || hydration.shouldRewriteProviderFile || !isSameFileURL(url, canonicalURL) {
                         persistNormalizedProvider(provider, sourceURL: url)
+                        seenProviderSourceByID[provider.id] = canonicalURL
+                    } else {
+                        seenProviderSourceByID[provider.id] = url
                     }
 
                     logger.info("  - 成功加载: \(url.lastPathComponent)")
@@ -202,17 +235,29 @@ public struct ConfigLoader {
     /// 将单个提供商的配置保存（或更新）到其对应的 JSON 文件。
     /// - Parameter provider: 需要保存的 `Provider` 对象。
     public static func saveProvider(_ provider: Provider) {
+        setupInitialProviderConfigs()
+
         // 使用 provider 的 ID 作为文件名以确保唯一性
         let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
         logger.info("正在保存提供商 \(provider.name) 到 \(fileURL.path)")
         
         do {
+            let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+            if normalizedAPIKeys.isEmpty {
+                _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
+            } else if !ProviderCredentialStore.shared.saveAPIKeys(normalizedAPIKeys, for: provider.id) {
+                logger.error("  - 保存失败: 无法写入共享 Keychain。")
+                return
+            }
+
             // 使用“先删再写”模式，确保能覆盖文件
             try? FileManager.default.removeItem(at: fileURL)
             
+            var persistedProvider = provider
+            persistedProvider.apiKeys = normalizedAPIKeys
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(provider)
+            let data = try encoder.encode(persistedProvider)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             logger.info("  - 保存成功。")
         } catch {
@@ -225,13 +270,55 @@ public struct ConfigLoader {
     public static func deleteProvider(_ provider: Provider) {
         let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
         logger.info("正在删除提供商 \(provider.name) 的配置文件: \(fileURL.path)")
+        removeFileIfExists(at: fileURL)
+        _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
+        logger.info("  - 删除成功。")
+    }
 
-        do {
-            try FileManager.default.removeItem(at: fileURL)
-            logger.info("  - 删除成功。")
-        } catch {
-            logger.error("  - 删除失败: \(error.localizedDescription)")
+    private static func providersShareSamePersistentConfiguration(_ lhs: Provider, _ rhs: Provider) -> Bool {
+        lhs.name == rhs.name &&
+        lhs.baseURL == rhs.baseURL &&
+        lhs.apiFormat == rhs.apiFormat &&
+        lhs.models == rhs.models &&
+        lhs.headerOverrides == rhs.headerOverrides
+    }
+
+    private static func hydrateProviderCredentials(for provider: Provider) -> CredentialHydrationResult {
+        let normalizedLegacyAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+        let storedAPIKeys = ProviderCredentialStore.shared.loadAPIKeys(for: provider.id)
+        let mergedAPIKeys = mergeAPIKeysPreservingOrder(storedAPIKeys, normalizedLegacyAPIKeys)
+
+        guard !normalizedLegacyAPIKeys.isEmpty else {
+            return CredentialHydrationResult(
+                apiKeys: storedAPIKeys,
+                shouldRewriteProviderFile: false
+            )
         }
+
+        if mergedAPIKeys == storedAPIKeys {
+            return CredentialHydrationResult(
+                apiKeys: mergedAPIKeys,
+                shouldRewriteProviderFile: true
+            )
+        }
+
+        guard ProviderCredentialStore.shared.saveAPIKeys(mergedAPIKeys, for: provider.id) else {
+            logger.error("  - 迁移提供商 \(provider.name) 的 API Key 到共享 Keychain 失败。")
+            return CredentialHydrationResult(
+                apiKeys: mergedAPIKeys.isEmpty ? normalizedLegacyAPIKeys : mergedAPIKeys,
+                shouldRewriteProviderFile: false
+            )
+        }
+
+        logger.info("  - 已迁移提供商 \(provider.name) 的 API Key 到共享 Keychain。")
+        return CredentialHydrationResult(
+            apiKeys: mergedAPIKeys,
+            shouldRewriteProviderFile: true
+        )
+    }
+
+    private static func mergeAPIKeysPreservingOrder(_ primary: [String], _ additional: [String]) -> [String] {
+        ProviderCredentialStore.normalizeAPIKeys(primary + additional)
     }
     
     // MARK: - 背景图片管理

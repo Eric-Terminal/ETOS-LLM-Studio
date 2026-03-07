@@ -2920,6 +2920,15 @@ fileprivate struct PersistenceTests {
 
 @Suite("ConfigLoader Tests")
 fileprivate struct ConfigLoaderTests {
+    private struct LegacyProviderSnapshot: Encodable {
+        let id: UUID
+        let name: String
+        let baseURL: String
+        let apiKeys: [String]
+        let apiFormat: String
+        let models: [Model]
+        let headerOverrides: [String: String]
+    }
     
     // Clean up provider files
     private func cleanup(providers: [Provider]) {
@@ -2933,18 +2942,30 @@ fileprivate struct ConfigLoaderTests {
             .appendingPathComponent("Providers")
     }
 
-    private func writeRawProviderFile(_ provider: Provider, fileName: String) throws {
+    private func providerFileURL(for providerID: UUID) -> URL {
+        providersDirectory.appendingPathComponent("\(providerID.uuidString).json")
+    }
+
+    private func writeLegacyProviderFile(_ provider: Provider, fileName: String) throws {
         ConfigLoader.setupInitialProviderConfigs()
         let fileURL = providersDirectory.appendingPathComponent(fileName)
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        let data = try encoder.encode(provider)
+        let snapshot = LegacyProviderSnapshot(
+            id: provider.id,
+            name: provider.name,
+            baseURL: provider.baseURL,
+            apiKeys: provider.apiKeys,
+            apiFormat: provider.apiFormat,
+            models: provider.models,
+            headerOverrides: provider.headerOverrides
+        )
+        let data = try encoder.encode(snapshot)
         try data.write(to: fileURL, options: .atomic)
     }
 
-    @Test("Save and Load Provider")
-    func testSaveAndLoadProvider() {
-        // 1. Arrange
+    @Test("保存并加载提供商时将 API Key 写入共享 Keychain")
+    func testSaveAndLoadProvider() throws {
         let provider = Provider(
             id: UUID(),
             name: "Test Provider",
@@ -2953,23 +2974,51 @@ fileprivate struct ConfigLoaderTests {
             apiFormat: "openai-compatible",
             models: [Model(modelName: "test-model")]
         )
-        
-        // 2. Act
+
         ConfigLoader.saveProvider(provider)
+        defer { cleanup(providers: [provider]) }
+
         let loadedProviders = ConfigLoader.loadProviders()
-        
-        // 3. Assert
         let foundProvider = loadedProviders.first(where: { $0.id == provider.id })
+
         #expect(foundProvider != nil)
         #expect(foundProvider?.name == "Test Provider")
-        #expect(foundProvider?.apiKeys.count == 2)
+        #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
-        
-        // Teardown
-        cleanup(providers: [provider])
+
+        let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
+        #expect(!fileContents.contains("\"apiKeys\""))
     }
 
-    @Test("Load Providers Should Repair Duplicate IDs And Normalize Files")
+    @Test("加载旧版 Provider 文件时会迁移 API Key 并清理明文字段")
+    func testLoadProvidersMigratesLegacyAPIKeysToKeychain() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "legacy-\(UUID().uuidString)",
+            baseURL: "https://legacy.example.com",
+            apiKeys: ["legacy-key-1", "legacy-key-2"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "legacy-model", isActivated: true)]
+        )
+        let fileName = "\(provider.id.uuidString).json"
+
+        try writeLegacyProviderFile(provider, fileName: fileName)
+        defer {
+            cleanup(providers: [provider])
+            try? FileManager.default.removeItem(at: providerFileURL(for: provider.id))
+        }
+
+        let firstLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
+        #expect(firstLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
+
+        let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
+        #expect(!fileContents.contains("\"apiKeys\""))
+
+        let secondLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
+        #expect(secondLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
+    }
+
+    @Test("加载提供商时会修复重复 ID 并规范化文件")
     func testLoadProvidersRepairDuplicateIDsAndNormalizeFiles() throws {
         let token = "repair-\(UUID().uuidString)"
         let duplicateProviderID = UUID()
@@ -2998,16 +3047,22 @@ fileprivate struct ConfigLoaderTests {
         let rawFileA = "\(token)-manual-a.json"
         let rawFileB = "\(token)-manual-b.json"
 
-        try writeRawProviderFile(providerA, fileName: rawFileA)
-        try writeRawProviderFile(providerB, fileName: rawFileB)
+        try writeLegacyProviderFile(providerA, fileName: rawFileA)
+        try writeLegacyProviderFile(providerB, fileName: rawFileB)
 
         let firstLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
         #expect(firstLoad.count == 2)
         #expect(Set(firstLoad.map(\.id)).count == 2)
         if let repairedA = firstLoad.first(where: { $0.name == "\(token)-A" }) {
             #expect(Set(repairedA.models.map(\.id)).count == repairedA.models.count)
+            #expect(repairedA.apiKeys == ["key-a"])
         } else {
             Issue.record("未找到 \(token)-A")
+        }
+        if let repairedB = firstLoad.first(where: { $0.name == "\(token)-B" }) {
+            #expect(repairedB.apiKeys == ["key-b"])
+        } else {
+            Issue.record("未找到 \(token)-B")
         }
 
         let secondLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }

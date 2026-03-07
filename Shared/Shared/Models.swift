@@ -96,6 +96,7 @@ public struct Provider: Codable, Identifiable, Hashable {
     public var id: UUID
     public var name: String
     public var baseURL: String
+    /// 运行时凭据，持久化时改由共享 Keychain 保存。
     public var apiKeys: [String]
     public var apiFormat: String // 例如: "openai-compatible"
     public var models: [Model]
@@ -139,7 +140,6 @@ public struct Provider: Codable, Identifiable, Hashable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(baseURL, forKey: .baseURL)
-        try container.encode(apiKeys, forKey: .apiKeys)
         try container.encode(apiFormat, forKey: .apiFormat)
         try container.encode(models, forKey: .models)
         if !headerOverrides.isEmpty {

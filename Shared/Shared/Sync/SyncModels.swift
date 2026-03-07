@@ -254,12 +254,11 @@ private func removeSyncSuffixes(from name: String) -> String {
 }
 
 extension Provider {
-    /// 判断两个提供商是否逻辑等价（忽略 ID）
+    /// 判断两个提供商是否逻辑等价（忽略 ID 与 API Key）
     func isEquivalent(to other: Provider) -> Bool {
         name == other.name &&
         baseURL == other.baseURL &&
         apiFormat == other.apiFormat &&
-        apiKeys == other.apiKeys &&
         headerOverrides == other.headerOverrides &&
         models.count == other.models.count &&
         zip(models, other.models).allSatisfy { $0.isEquivalent(to: $1) }
