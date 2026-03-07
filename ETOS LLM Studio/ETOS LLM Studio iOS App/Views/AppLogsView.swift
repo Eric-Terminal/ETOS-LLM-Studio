@@ -130,6 +130,8 @@ private struct AppLogRow: View {
             return .orange
         case .error:
             return .red
+        @unknown default:
+            return .gray
         }
     }
 

@@ -43,7 +43,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("软件设置（AppStorage）", isOn: $syncAppStorage)
             }
 
-            Section("Apple Watch 同步") {
+            Section {
                 Toggle("启动时自动同步", isOn: $autoSyncEnabled)
 
                 Button {
@@ -61,6 +61,8 @@ struct DeviceSyncSettingsView: View {
                     }
                 }
                 .disabled(selectedSyncOptions.isEmpty || isSyncing)
+            } header: {
+                Text("Apple Watch 同步")
             } footer: {
                 Text("点击后将与 Apple Watch 双向同步数据：比较双方差异后，把对方有而本地没有的数据传过来。")
             }
@@ -69,7 +71,7 @@ struct DeviceSyncSettingsView: View {
                 syncStatusView
             }
 
-            Section("iCloud 同步") {
+            Section {
                 Toggle("启用 iCloud 同步", isOn: $cloudSyncEnabled)
 
                 Toggle("启动时自动同步", isOn: $cloudAutoSyncEnabled)
@@ -92,6 +94,8 @@ struct DeviceSyncSettingsView: View {
                     }
                 }
                 .disabled(!cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
+            } header: {
+                Text("iCloud 同步")
             } footer: {
                 Text("默认关闭。开启后，iCloud 同步会先上传当前设备快照，再拉取其他设备快照并合并。API Key 通过 iCloud 钥匙串同步，不会写入普通同步包。")
             }
@@ -177,42 +181,41 @@ struct DeviceSyncSettingsView: View {
             Text("iCloud 同步已关闭")
                 .font(.footnote)
                 .foregroundColor(.secondary)
-            return
-        }
-
-        switch cloudSyncManager.state {
-        case .idle:
-            Text("未进行同步").font(.footnote).foregroundColor(.secondary)
-        case .syncing(let message):
-            HStack {
-                ProgressView()
-                Text(message).font(.footnote)
-            }
-        case .success(let summary):
-            VStack(alignment: .leading, spacing: 2) {
-                Label("同步成功", systemImage: "checkmark.circle")
-                    .foregroundStyle(.green)
-                Text(summaryDescription(summary))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                if let lastUpdated = cloudSyncManager.lastUpdatedAt {
-                    Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        } else {
+            switch cloudSyncManager.state {
+            case .idle:
+                Text("未进行同步").font(.footnote).foregroundColor(.secondary)
+            case .syncing(let message):
+                HStack {
+                    ProgressView()
+                    Text(message).font(.footnote)
                 }
-            }
-        case .failed(let reason):
-            VStack(alignment: .leading, spacing: 2) {
-                Label("同步失败", systemImage: "xmark.circle")
-                    .foregroundStyle(.red)
-                Text(reason)
-                    .font(.caption2)
+            case .success(let summary):
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("同步成功", systemImage: "checkmark.circle")
+                        .foregroundStyle(.green)
+                    Text(summaryDescription(summary))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if let lastUpdated = cloudSyncManager.lastUpdatedAt {
+                        Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            case .failed(let reason):
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("同步失败", systemImage: "xmark.circle")
+                        .foregroundStyle(.red)
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            @unknown default:
+                Text("未知状态")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        @unknown default:
-            Text("未知状态")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
     
