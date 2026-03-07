@@ -10,7 +10,7 @@ import Foundation
 import Combine
 
 public enum SyncEngine {
-    private static let globalSystemPromptKey = "systemPrompt"
+    private static let legacyGlobalSystemPromptKey = "systemPrompt"
     
     // MARK: - 打包导出
     
@@ -30,7 +30,8 @@ public enum SyncEngine {
         var shortcutTools: [ShortcutToolDefinition] = []
         var worldbooks: [Worldbook] = []
         var feedbackTickets: [FeedbackTicket] = []
-        var globalSystemPrompt: String?
+        var appStorageSnapshot: Data?
+        var legacyGlobalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
         
@@ -87,9 +88,11 @@ public enum SyncEngine {
             feedbackTickets = FeedbackStore.loadTickets()
         }
 
-        if options.contains(.globalSystemPrompt) {
-            // 使用空字符串表示“显式清空”全局系统提示词。
-            globalSystemPrompt = userDefaults.string(forKey: globalSystemPromptKey) ?? ""
+        if options.contains(.appStorage) {
+            let snapshot = collectAppStorageSnapshot(userDefaults: userDefaults)
+            appStorageSnapshot = encodeAppStorageSnapshot(snapshot)
+            // 兼容旧版本：仍然回填全局提示词字段，旧端至少可同步该项。
+            legacyGlobalSystemPrompt = snapshot[legacyGlobalSystemPromptKey] as? String ?? ""
         }
         
         // 音频文件同步：会话引用的音频 + 可选全量音频文件
@@ -140,7 +143,8 @@ public enum SyncEngine {
             shortcutTools: shortcutTools,
             worldbooks: worldbooks,
             feedbackTickets: feedbackTickets,
-            globalSystemPrompt: globalSystemPrompt
+            appStorageSnapshot: appStorageSnapshot,
+            globalSystemPrompt: legacyGlobalSystemPrompt
         )
     }
     
@@ -224,10 +228,14 @@ public enum SyncEngine {
             summary.skippedImageFiles = result.skipped
         }
 
-        if package.options.contains(.globalSystemPrompt) {
-            let result = mergeGlobalSystemPrompt(package.globalSystemPrompt, userDefaults: userDefaults)
-            summary.importedGlobalSystemPrompt = result.imported
-            summary.skippedGlobalSystemPrompt = result.skipped
+        if package.options.contains(.appStorage) {
+            let result = mergeAppStorage(
+                package.appStorageSnapshot,
+                legacyGlobalSystemPrompt: package.globalSystemPrompt,
+                userDefaults: userDefaults
+            )
+            summary.importedAppStorageValues = result.imported
+            summary.skippedAppStorageValues = result.skipped
         }
         
         return summary
@@ -394,20 +402,104 @@ public enum SyncEngine {
         FeedbackStore.mergeTickets(incoming)
     }
 
-    // MARK: - Global System Prompt
+    // MARK: - AppStorage
 
-    private static func mergeGlobalSystemPrompt(
-        _ incoming: String?,
+    private static func mergeAppStorage(
+        _ snapshotData: Data?,
+        legacyGlobalSystemPrompt: String?,
         userDefaults: UserDefaults
     ) -> (imported: Int, skipped: Int) {
-        guard let incoming else { return (0, 1) }
-        let local = userDefaults.string(forKey: globalSystemPromptKey) ?? ""
-        if local == incoming {
+        var incomingSnapshot: [String: Any] = [:]
+
+        if let snapshotData, let decoded = decodeAppStorageSnapshot(snapshotData) {
+            incomingSnapshot = decoded
+        } else if let legacyGlobalSystemPrompt {
+            // 兼容旧版本同步包：仅包含全局提示词。
+            incomingSnapshot[legacyGlobalSystemPromptKey] = legacyGlobalSystemPrompt
+        } else {
             return (0, 1)
         }
 
-        userDefaults.set(incoming, forKey: globalSystemPromptKey)
-        return (1, 0)
+        guard !incomingSnapshot.isEmpty else {
+            return (0, 0)
+        }
+
+        var imported = 0
+        var skipped = 0
+        for (key, incomingValue) in incomingSnapshot {
+            guard isCandidateAppStorageKey(key) else {
+                skipped += 1
+                continue
+            }
+            let localValue = userDefaults.object(forKey: key)
+            if appStorageValuesEqual(localValue, incomingValue) {
+                skipped += 1
+                continue
+            }
+
+            userDefaults.set(incomingValue, forKey: key)
+            imported += 1
+        }
+
+        return (imported, skipped)
+    }
+
+    private static func encodeAppStorageSnapshot(_ snapshot: [String: Any]) -> Data? {
+        guard PropertyListSerialization.propertyList(snapshot, isValidFor: .binary) else {
+            return nil
+        }
+        return try? PropertyListSerialization.data(fromPropertyList: snapshot, format: .binary, options: 0)
+    }
+
+    private static func decodeAppStorageSnapshot(_ data: Data) -> [String: Any]? {
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+              let dictionary = plist as? [String: Any] else {
+            return nil
+        }
+        return dictionary
+    }
+
+    private static func collectAppStorageSnapshot(userDefaults: UserDefaults) -> [String: Any] {
+        // 优先读取当前 App 的持久域，避免把系统域键值（如 AppleLanguages）同步出去。
+        if userDefaults === UserDefaults.standard,
+           let bundleIdentifier = Bundle.main.bundleIdentifier,
+           let domain = userDefaults.persistentDomain(forName: bundleIdentifier),
+           !domain.isEmpty {
+            return domain.filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
+        }
+
+        // 测试与极端环境兜底：仅保留可序列化且非系统前缀键。
+        return userDefaults.dictionaryRepresentation()
+            .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
+    }
+
+    private static func isPropertyListEncodableValue(_ value: Any) -> Bool {
+        PropertyListSerialization.propertyList(["value": value], isValidFor: .binary)
+    }
+
+    private static func isCandidateAppStorageKey(_ key: String) -> Bool {
+        // 排除系统与框架注入键，避免污染对端环境。
+        if key.hasPrefix("Apple") || key.hasPrefix("NS") || key.hasPrefix("com.apple.") {
+            return false
+        }
+        return true
+    }
+
+    private static func appStorageValuesEqual(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case (nil, _), (_, nil):
+            return false
+        default:
+            break
+        }
+
+        if let lhsObject = lhs as? NSObject, let rhsObject = rhs as? NSObject {
+            return lhsObject.isEqual(rhsObject)
+        }
+
+        return String(describing: lhs) == String(describing: rhs)
     }
     
     // MARK: - Memories
