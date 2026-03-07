@@ -140,4 +140,4 @@ ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（34 个 Swift 源
 
 ---
 
-本次 README 修订于 2026 年 3 月 7 日（基于当前 dev 分支状态），软件更新可能很勤快，README 可能更新不及时
+本次 README 修订于 2026 年 3 月 7 日（7907e83 之后），软件更新可能很勤快，README 可能更新不及时
