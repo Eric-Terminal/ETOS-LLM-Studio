@@ -1354,6 +1354,40 @@ struct ToolResultsDisclosureView: View, Equatable {
         }
         return toolName
     }
+
+    private var headerForegroundColor: Color {
+        isOutgoing ? Color.white.opacity(0.9) : Color.secondary
+    }
+
+    private var summaryForegroundColor: Color {
+        isOutgoing ? Color.white.opacity(0.72) : Color.secondary.opacity(0.9)
+    }
+
+    private var sectionForegroundColor: Color {
+        isOutgoing ? Color.white.opacity(0.78) : Color.secondary
+    }
+
+    private var sectionBackgroundColor: Color {
+        isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1)
+    }
+
+    private func resolvedResult(for call: InternalToolCall) -> String {
+        (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func displayModel(for call: InternalToolCall) -> MCPToolResultDisplayModel {
+        MCPToolResultFormatter.displayModel(from: resolvedResult(for: call))
+    }
+
+    private var disclosureSummaryText: String? {
+        let summaries = toolCalls
+            .map { displayModel(for: $0) }
+            .map(\.summaryText)
+            .filter { !$0.isEmpty }
+
+        guard !summaries.isEmpty else { return nil }
+        return summaries.joined(separator: " · ")
+    }
     
     var body: some View {
         let toolNames = toolCalls.map { displayName(for: $0.toolName) }
@@ -1365,7 +1399,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                     ShimmeringText(
                         text: "结果：\(toolNames.joined(separator: ", "))",
                         font: .subheadline.weight(.medium),
-                        baseColor: isOutgoing ? Color.white.opacity(0.9) : Color.secondary,
+                        baseColor: headerForegroundColor,
                         highlightColor: isOutgoing ? Color.white : Color.primary.opacity(0.85)
                     )
                     .lineLimit(1)
@@ -1374,24 +1408,33 @@ struct ToolResultsDisclosureView: View, Equatable {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(isOutgoing ? Color.white.opacity(0.4) : Color.secondary.opacity(0.6))
                 }
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                .foregroundStyle(headerForegroundColor)
                 .contentShape(Rectangle())
             } else {
                 Button {
                     isExpanded.toggle()
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "wrench.and.screwdriver")
-                            .font(.system(size: 12))
-                        Text("结果：\(toolNames.joined(separator: ", "))")
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "wrench.and.screwdriver")
+                                .font(.system(size: 12))
+                            Text("结果：\(toolNames.joined(separator: ", "))")
+                                .font(.subheadline.weight(.medium))
+                                .lineLimit(1)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        }
+                        if let disclosureSummaryText {
+                            Text(disclosureSummaryText)
+                                .font(.caption)
+                                .foregroundStyle(summaryForegroundColor)
+                                .lineLimit(1)
+                                .multilineTextAlignment(.leading)
+                        }
                     }
-                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+                    .foregroundStyle(headerForegroundColor)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1400,26 +1443,38 @@ struct ToolResultsDisclosureView: View, Equatable {
             if isExpanded && !isPending {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(toolCalls, id: \.id) { call in
-                        let result = (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let display = displayModel(for: call)
                         let label = displayName(for: call.toolName)
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text(label)
                                 .font(.caption.weight(.semibold))
-                            if !result.isEmpty {
-                                CappedScrollableText(
-                                    text: result,
-                                    maxHeight: 200,
+                            if let primaryContentText = display.primaryContentText,
+                               !primaryContentText.isEmpty {
+                                toolResultSection(
+                                    title: display.shouldShowRawSection ? "主要内容" : "结果内容",
+                                    text: primaryContentText,
                                     font: .caption,
-                                    foreground: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                                    enableSelection: true
+                                )
+                            }
+                            if display.shouldShowRawSection {
+                                if display.primaryContentText != nil {
+                                    Divider()
+                                        .background(sectionBackgroundColor.opacity(0.7))
+                                }
+                                toolResultSection(
+                                    title: "原始返回",
+                                    text: display.rawDisplayText,
+                                    font: .system(.caption, design: .monospaced),
                                     enableSelection: true
                                 )
                             }
                         }
-                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+                        .foregroundStyle(sectionForegroundColor)
                         .padding(6)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                                .fill(sectionBackgroundColor)
                         )
                     }
                 }
@@ -1428,6 +1483,26 @@ struct ToolResultsDisclosureView: View, Equatable {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+
+    private func toolResultSection(
+        title: String,
+        text: String,
+        font: Font,
+        enableSelection: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(sectionForegroundColor.opacity(0.85))
+            CappedScrollableText(
+                text: text,
+                maxHeight: 200,
+                font: font,
+                foreground: sectionForegroundColor,
+                enableSelection: enableSelection
+            )
+        }
     }
 }
 

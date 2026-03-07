@@ -816,6 +816,10 @@ struct ChatBubble: View {
     ) -> some View {
         let toolNames = toolCalls.map { toolDisplayLabel(for: $0.toolName) }
         let expansion = expanded ?? $isToolCallsExpanded
+        let summaries = toolCalls
+            .map { toolResultDisplayModel(for: ($0.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)) }
+            .map(\.summaryText)
+            .filter { !$0.isEmpty }
         VStack(alignment: .leading, spacing: 5) {
             if isPending {
                 HStack {
@@ -838,14 +842,23 @@ struct ChatBubble: View {
                         expansion.wrappedValue.toggle()
                     }
                 }) {
-                    HStack {
-                        Text("结果：\(toolNames.joined(separator: ", "))")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                        Spacer()
-                        Image(systemName: expansion.wrappedValue ? "chevron.down" : "chevron.right")
-                            .font(.caption)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("结果：\(toolNames.joined(separator: ", "))")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            Spacer()
+                            Image(systemName: expansion.wrappedValue ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                        }
+                        if !summaries.isEmpty {
+                            Text(summaries.joined(separator: " · "))
+                                .font(.caption2)
+                                .foregroundColor(.secondary.opacity(0.9))
+                                .lineLimit(1)
+                                .multilineTextAlignment(.leading)
+                        }
                     }
                     .foregroundColor(.secondary)
                 }
@@ -854,18 +867,31 @@ struct ChatBubble: View {
 
             if expansion.wrappedValue && !isPending {
                 ForEach(toolCalls, id: \.id) { toolCall in
-                    let result = (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let display = toolResultDisplayModel(for: (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines))
                     let label = toolDisplayLabel(for: toolCall.toolName)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(label)
                             .font(.caption2.weight(.semibold))
                             .foregroundColor(.secondary)
-                        if !result.isEmpty {
-                            CappedScrollableText(
-                                text: result,
-                                maxHeight: 120,
+                        if let primaryContentText = display.primaryContentText,
+                           !primaryContentText.isEmpty {
+                            toolResultSection(
+                                title: display.shouldShowRawSection ? "主要内容" : "结果内容",
+                                text: primaryContentText,
                                 font: .caption2,
-                                foreground: .secondary
+                                maxHeight: 110
+                            )
+                        }
+                        if display.shouldShowRawSection {
+                            if display.primaryContentText != nil {
+                                Divider()
+                                    .background(Color.secondary.opacity(0.2))
+                            }
+                            toolResultSection(
+                                title: "原始返回",
+                                text: display.rawDisplayText,
+                                font: .system(.caption2, design: .monospaced),
+                                maxHeight: 90
                             )
                         }
                     }
@@ -874,6 +900,29 @@ struct ChatBubble: View {
             }
         }
         .padding(.bottom, 5)
+    }
+
+    private func toolResultDisplayModel(for rawResult: String) -> MCPToolResultDisplayModel {
+        MCPToolResultFormatter.displayModel(from: rawResult)
+    }
+
+    private func toolResultSection(
+        title: String,
+        text: String,
+        font: Font,
+        maxHeight: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(.secondary.opacity(0.9))
+            CappedScrollableText(
+                text: text,
+                maxHeight: maxHeight,
+                font: font,
+                foreground: .secondary
+            )
+        }
     }
 
     private struct ShimmeringText: View {
