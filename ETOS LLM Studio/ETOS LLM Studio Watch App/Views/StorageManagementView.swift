@@ -312,10 +312,12 @@ public struct WatchFileListView: View {
                 infoRow(title: "总大小", value: StorageUtility.formatSize(totalFileSize))
             }
 
-            Section("内容") {
+            Section {
                 ForEach(files) { file in
                     row(for: file)
                 }
+            } header: {
+                Text("内容")
             } footer: {
                 Text("点击文件夹继续浏览，点击 JSON 文件打开分页阅读。")
                     .font(.caption2)
