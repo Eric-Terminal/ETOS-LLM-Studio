@@ -404,6 +404,8 @@ struct ToolCenterView: View {
             return NSLocalizedString("长期记忆写入", comment: "Memory write tool title")
         case .memorySearch:
             return NSLocalizedString("长期记忆主动检索", comment: "Memory search tool title")
+        @unknown default:
+            return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
         }
     }
 
@@ -413,6 +415,8 @@ struct ToolCenterView: View {
             return NSLocalizedString("允许模型调用 save_memory，将有长期价值的信息写入记忆。", comment: "Memory write tool subtitle")
         case .memorySearch:
             return NSLocalizedString("允许模型调用 search_memory，在回答前主动检索记忆。", comment: "Memory search tool subtitle")
+        @unknown default:
+            return NSLocalizedString("该内置工具当前可按配置参与聊天。", comment: "Built-in tool fallback subtitle")
         }
     }
 
@@ -430,6 +434,8 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
             case .activeRetrievalDisabled, .zeroTopK:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled fallback")
+            @unknown default:
+                return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
             }
         case .memorySearch:
             switch state.statusReason {
@@ -448,7 +454,11 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
             case .memoryWriteDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search disabled fallback")
+            @unknown default:
+                return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
             }
+        @unknown default:
+            return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")
         }
     }
 
@@ -673,6 +683,11 @@ private struct BuiltInToolDetailView: View {
                     }
                     .disabled(!enableMemory)
                 }
+            @unknown default:
+                Section(NSLocalizedString("当前状态", comment: "Current status section")) {
+                    Text(NSLocalizedString("该工具类型暂未提供可编辑设置。", comment: "Unknown built-in tool settings fallback"))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
@@ -684,6 +699,8 @@ private struct BuiltInToolDetailView: View {
             return NSLocalizedString("长期记忆写入", comment: "Memory write tool title")
         case .memorySearch:
             return NSLocalizedString("长期记忆主动检索", comment: "Memory search tool title")
+        @unknown default:
+            return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
         }
     }
 
@@ -693,6 +710,8 @@ private struct BuiltInToolDetailView: View {
             return NSLocalizedString("允许模型调用 save_memory，将有长期价值的信息写入记忆。", comment: "Memory write tool subtitle")
         case .memorySearch:
             return NSLocalizedString("允许模型调用 search_memory，在回答前主动检索记忆。", comment: "Memory search tool subtitle")
+        @unknown default:
+            return NSLocalizedString("该内置工具当前可按配置参与聊天。", comment: "Built-in tool fallback subtitle")
         }
     }
 
@@ -710,6 +729,8 @@ private struct BuiltInToolDetailView: View {
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
             case .activeRetrievalDisabled, .zeroTopK:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
+            @unknown default:
+                return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
             }
         case .memorySearch:
             switch state.statusReason {
@@ -728,7 +749,11 @@ private struct BuiltInToolDetailView: View {
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
             case .memoryWriteDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
+            @unknown default:
+                return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
             }
+        @unknown default:
+            return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")
         }
     }
 }

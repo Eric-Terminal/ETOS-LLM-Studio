@@ -266,6 +266,8 @@ struct ShortcutIntegrationView: View {
             return "直连优先"
         case .bridge:
             return "桥接优先"
+        @unknown default:
+            return "直连优先"
         }
     }
 }
