@@ -28,9 +28,8 @@ struct SyncConflictStrategyTests {
 
         let session = ChatSession(id: UUID(), name: "同步会话", isTemporary: false)
         let userMessage = ChatMessage(id: UUID(), role: .user, content: "你好")
-        let assistantMessageID = UUID()
-        let partialAssistant = ChatMessage(id: assistantMessageID, role: .assistant, content: "正在生成")
-        let completedAssistant = ChatMessage(id: assistantMessageID, role: .assistant, content: "正在生成完整回复")
+        let partialAssistant = ChatMessage(id: UUID(), role: .assistant, content: "正在生成")
+        let completedAssistant = ChatMessage(id: UUID(), role: .assistant, content: "正在生成完整回复")
         let followupMessage = ChatMessage(id: UUID(), role: .user, content: "继续")
 
         Persistence.saveChatSessions([session])

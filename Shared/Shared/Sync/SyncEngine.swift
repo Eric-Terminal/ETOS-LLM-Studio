@@ -985,7 +985,7 @@ public enum SyncEngine {
         }
 
         let canTreatAsSameMessage = local.id == incoming.id
-            || (local.role == incoming.role && local.content == incoming.content)
+            || messagesShareMergeIdentity(local, incoming)
         guard canTreatAsSameMessage else {
             return nil
         }
@@ -1048,6 +1048,25 @@ public enum SyncEngine {
             merged.id = local.id
         }
         return merged
+    }
+
+    private static func messagesShareMergeIdentity(_ local: ChatMessage, _ incoming: ChatMessage) -> Bool {
+        guard local.role == incoming.role else {
+            return false
+        }
+
+        if stringsAreCompatible(local.content, incoming.content) {
+            return true
+        }
+
+        let localVersions = local.getAllVersions()
+        let incomingVersions = incoming.getAllVersions()
+        for localVersion in localVersions {
+            if incomingVersions.contains(where: { stringsAreCompatible(localVersion, $0) }) {
+                return true
+            }
+        }
+        return false
     }
 
     private static func buildMessage(
