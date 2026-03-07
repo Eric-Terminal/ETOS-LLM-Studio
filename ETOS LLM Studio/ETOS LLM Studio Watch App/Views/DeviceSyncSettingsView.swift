@@ -163,38 +163,42 @@ struct DeviceSyncSettingsView: View {
     @ViewBuilder
     private var cloudSyncStatusView: some View {
         if !cloudSyncEnabled {
-            Text("iCloud 同步已关闭").font(.caption).foregroundStyle(.secondary)
-            return
-        }
-
-        switch cloudSyncManager.state {
-        case .idle:
-            Text("未同步").font(.caption).foregroundStyle(.secondary)
-        case .syncing(let message):
-            HStack {
-                ProgressView()
-                Text(message).font(.caption)
-            }
-        case .success(let summary):
-            VStack(alignment: .leading, spacing: 2) {
-                Label("成功", systemImage: "checkmark.circle")
-                    .foregroundStyle(.green)
-                Text(summaryDescription(summary))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        case .failed(let reason):
-            VStack(alignment: .leading, spacing: 2) {
-                Label("失败", systemImage: "xmark.circle")
-                    .foregroundStyle(.red)
-                Text(reason)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        @unknown default:
-            Text("未知状态")
+            Text("iCloud 同步已关闭")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        } else {
+            switch cloudSyncManager.state {
+            case .idle:
+                Text("未同步")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .syncing(let message):
+                HStack {
+                    ProgressView()
+                    Text(message)
+                        .font(.caption)
+                }
+            case .success(let summary):
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("成功", systemImage: "checkmark.circle")
+                        .foregroundStyle(.green)
+                    Text(summaryDescription(summary))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            case .failed(let reason):
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("失败", systemImage: "xmark.circle")
+                        .foregroundStyle(.red)
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            @unknown default:
+                Text("未知状态")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
     

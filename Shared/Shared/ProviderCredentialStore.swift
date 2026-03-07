@@ -158,16 +158,18 @@ private struct KeychainProviderCredentialBackingStore: ProviderCredentialBacking
     }
 
     private static func resolveAccessGroup() -> String? {
-        if let configuredGroup = Bundle.main.object(forInfoDictionaryKey: accessGroupInfoKey) as? String {
-            let trimmed = configuredGroup.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty, !trimmed.contains("$(") {
-                return trimmed
+        let configuredGroupValue = Bundle.main.object(forInfoDictionaryKey: accessGroupInfoKey)
+        if let configuredGroup = configuredGroupValue as? String {
+            let trimmedGroup = configuredGroup.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedGroup.isEmpty && !trimmedGroup.contains("$(") {
+                return trimmedGroup
             }
         }
 
-        if let rawPrefix = Bundle.main.object(forInfoDictionaryKey: appIdentifierPrefixInfoKey) as? String {
+        let appIdentifierPrefixValue = Bundle.main.object(forInfoDictionaryKey: appIdentifierPrefixInfoKey)
+        if let rawPrefix = appIdentifierPrefixValue as? String {
             let trimmedPrefix = rawPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedPrefix.isEmpty, !trimmedPrefix.contains("$(") {
+            if !trimmedPrefix.isEmpty && !trimmedPrefix.contains("$(") {
                 return trimmedPrefix + sharedGroupSuffix
             }
         }

@@ -81,6 +81,8 @@ struct WatchAppLogsView: View {
             return .orange
         case .error:
             return .red
+        @unknown default:
+            return .gray
         }
     }
 
