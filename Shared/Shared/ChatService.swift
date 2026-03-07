@@ -472,17 +472,37 @@ public class ChatService {
     }
 
     public func assignWorldbooks(to sessionID: UUID, worldbookIDs: [UUID]) {
-        var sessions = chatSessionsSubject.value
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        let uniqueIDs = deduplicatedWorldbookIDs(worldbookIDs)
-        sessions[index].lorebookIDs = uniqueIDs
+        let currentIsolationEnabled = chatSessionsSubject.value.first(where: { $0.id == sessionID })?.worldbookContextIsolationEnabled
+            ?? currentSessionSubject.value?.worldbookContextIsolationEnabled
+            ?? false
+        updateWorldbookSessionSettings(
+            sessionID: sessionID,
+            worldbookIDs: worldbookIDs,
+            worldbookContextIsolationEnabled: currentIsolationEnabled
+        )
+    }
 
-        chatSessionsSubject.send(sessions)
+    public func updateWorldbookSessionSettings(
+        sessionID: UUID,
+        worldbookIDs: [UUID],
+        worldbookContextIsolationEnabled: Bool
+    ) {
+        var sessions = chatSessionsSubject.value
+        let uniqueIDs = deduplicatedWorldbookIDs(worldbookIDs)
+
+        if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
+            sessions[index].lorebookIDs = uniqueIDs
+            sessions[index].worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
+            chatSessionsSubject.send(sessions)
+        }
+
         if let current = currentSessionSubject.value, current.id == sessionID {
             var updated = current
             updated.lorebookIDs = uniqueIDs
+            updated.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
             currentSessionSubject.send(updated)
         }
+
         Persistence.saveChatSessions(sessions)
     }
 
@@ -734,6 +754,7 @@ public class ChatService {
             topicPrompt: sourceSession.topicPrompt,
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
+            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
             isTemporary: false
         )
         logger.info("创建了分支会话: \(newSession.name)")
@@ -795,6 +816,7 @@ public class ChatService {
             topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             lorebookIDs: sourceSession.lorebookIDs,
+            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
             isTemporary: false
         )
         logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
@@ -1157,6 +1179,96 @@ public class ChatService {
         
         return (displayMessage, fullContent)
     }
+
+    private struct AuxiliaryContextPolicy {
+        let enableMemory: Bool
+        let enableMemoryWrite: Bool
+        let enableMemoryActiveRetrieval: Bool
+        let includeMCPTools: Bool
+        let includeShortcutTools: Bool
+    }
+
+    private func auxiliaryContextPolicy(
+        for session: ChatSession?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool
+    ) -> AuxiliaryContextPolicy {
+        let isolationActive = session?.isWorldbookContextIsolationActive ?? false
+        guard isolationActive else {
+            return AuxiliaryContextPolicy(
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                includeMCPTools: true,
+                includeShortcutTools: true
+            )
+        }
+
+        logger.info("当前会话已启用世界书隔离发送，将屏蔽长期记忆与工具上下文。")
+        return AuxiliaryContextPolicy(
+            enableMemory: false,
+            enableMemoryWrite: false,
+            enableMemoryActiveRetrieval: false,
+            includeMCPTools: false,
+            includeShortcutTools: false
+        )
+    }
+
+    private func resolveRequestTooling(
+        for session: ChatSession?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool
+    ) async -> (tools: [InternalToolDefinition]?, policy: AuxiliaryContextPolicy) {
+        let policy = auxiliaryContextPolicy(
+            for: session,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+        )
+
+        var resolvedTools: [InternalToolDefinition] = []
+        if policy.enableMemory && policy.enableMemoryWrite {
+            resolvedTools.append(saveMemoryTool)
+        }
+        if policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
+            resolvedTools.append(searchMemoryTool)
+        }
+        if policy.includeMCPTools {
+            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: mcpTools)
+        }
+        if policy.includeShortcutTools {
+            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: shortcutTools)
+        }
+        return (resolvedTools.isEmpty ? nil : resolvedTools, policy)
+    }
+
+    private func preparedMessagesForRequest(
+        from messages: [ChatMessage],
+        loadingMessageID: UUID,
+        session: ChatSession?
+    ) -> [ChatMessage] {
+        let baseMessages = messages.filter { $0.role != .error && $0.id != loadingMessageID }
+        guard session?.isWorldbookContextIsolationActive == true else {
+            return baseMessages
+        }
+
+        return baseMessages.compactMap { message in
+            guard message.role != .tool else { return nil }
+            var sanitized = message
+            sanitized.toolCalls = nil
+            sanitized.toolCallsPlacement = nil
+
+            if sanitized.role == .assistant,
+               sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return nil
+            }
+            return sanitized
+        }
+    }
         
     public func sendAndProcessMessage(
         content: String,
@@ -1330,18 +1442,12 @@ public class ChatService {
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
-            var resolvedTools: [InternalToolDefinition] = []
-            if enableMemory && enableMemoryWrite {
-                resolvedTools.append(self.saveMemoryTool)
-            }
-            if enableMemory && enableMemoryActiveRetrieval && self.resolvedMemoryTopK() > 0 {
-                resolvedTools.append(self.searchMemoryTool)
-            }
-            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: mcpTools)
-            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: shortcutTools)
-            let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            let requestTooling = await self.resolveRequestTooling(
+                for: currentSession,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+            )
             await self.executeMessageRequest(
                 messages: messages,
                 loadingMessageID: loadingMessage.id,
@@ -1354,10 +1460,10 @@ public class ChatService {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: enhancedPrompt,
-                tools: tools,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                tools: requestTooling.tools,
+                enableMemory: requestTooling.policy.enableMemory,
+                enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
+                enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: audioAttachment,
@@ -1979,6 +2085,13 @@ public class ChatService {
         currentAudioAttachment: AudioAttachment?, // 当前消息的音频附件（用于首次发送，尚未保存到文件）
         currentFileAttachments: [FileAttachment] // 当前消息的文件附件（用于首次发送，尚未保存到文件）
     ) async {
+        let sessionForRequest = chatSessionsSubject.value.first(where: { $0.id == currentSessionID }) ?? currentSessionSubject.value
+        let requestMessages = preparedMessagesForRequest(
+            from: messages,
+            loadingMessageID: loadingMessageID,
+            session: sessionForRequest
+        )
+
         // 自动查：执行记忆搜索
         var memories: [MemoryItem] = []
         if enableMemory {
@@ -1987,7 +2100,7 @@ public class ChatService {
                 // topK == 0 表示不进行向量检索，直接获取所有激活的记忆
                 memories = await self.memoryManager.getActiveMemories()
             } else {
-                let queryText = buildMemoryQueryContext(from: messages, fallbackUserMessage: userMessage)
+                let queryText = buildMemoryQueryContext(from: requestMessages, fallbackUserMessage: userMessage)
                 if let queryText {
                     memories = await self.memoryManager.searchMemories(query: queryText, topK: topK)
                 }
@@ -2012,13 +2125,12 @@ public class ChatService {
             return
         }
 
-        let sessionForRequest = chatSessionsSubject.value.first(where: { $0.id == currentSessionID }) ?? currentSessionSubject.value
         let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.lorebookIDs ?? [])
         let worldbookResult = worldbookEngine.evaluate(
             .init(
                 sessionID: currentSessionID,
                 worldbooks: boundWorldbooks,
-                messages: messages.filter { $0.role != .error && $0.id != loadingMessageID },
+                messages: requestMessages,
                 topicPrompt: sessionForRequest?.topicPrompt,
                 enhancedPrompt: enhancedPrompt
             )
@@ -2041,7 +2153,7 @@ public class ChatService {
             messagesToSend.append(ChatMessage(role: .system, content: finalSystemPrompt))
         }
 
-        var chatHistory = messages.filter { $0.role != .error && $0.id != loadingMessageID }
+        var chatHistory = requestMessages
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
             chatHistory = Array(chatHistory.suffix(maxChatHistory))
         }
@@ -2409,18 +2521,12 @@ public class ChatService {
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
-            var resolvedTools: [InternalToolDefinition] = []
-            if enableMemory && enableMemoryWrite {
-                resolvedTools.append(self.saveMemoryTool)
-            }
-            if enableMemory && enableMemoryActiveRetrieval && self.resolvedMemoryTopK() > 0 {
-                resolvedTools.append(self.searchMemoryTool)
-            }
-            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: mcpTools)
-            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: shortcutTools)
-            let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            let requestTooling = await self.resolveRequestTooling(
+                for: currentSession,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+            )
             
             await self.executeMessageRequest(
                 messages: messages,
@@ -2434,10 +2540,10 @@ public class ChatService {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: enhancedPrompt,
-                tools: tools,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                tools: requestTooling.tools,
+                enableMemory: requestTooling.policy.enableMemory,
+                enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
+                enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,

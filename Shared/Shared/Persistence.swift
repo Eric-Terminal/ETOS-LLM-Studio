@@ -53,6 +53,7 @@ public enum Persistence {
         let id: UUID
         let name: String
         let lorebookIDs: [UUID]
+        let worldbookContextIsolationEnabled: Bool?
     }
 
     private struct SessionRecordFileV3: Codable {
@@ -255,6 +256,7 @@ public enum Persistence {
                         topicPrompt: nil,
                         enhancedPrompt: nil,
                         lorebookIDs: [],
+                        worldbookContextIsolationEnabled: false,
                         isTemporary: false
                     )
                     loadedSessions.append(session)
@@ -422,7 +424,8 @@ public enum Persistence {
             session: SessionMetaV3(
                 id: session.id,
                 name: session.name,
-                lorebookIDs: session.lorebookIDs
+                lorebookIDs: session.lorebookIDs,
+                worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil
             ),
             prompts: SessionPromptsV3(
                 topicPrompt: session.topicPrompt,
@@ -439,6 +442,7 @@ public enum Persistence {
             topicPrompt: summary.prompts.topicPrompt,
             enhancedPrompt: summary.prompts.enhancedPrompt,
             lorebookIDs: summary.session.lorebookIDs,
+            worldbookContextIsolationEnabled: summary.session.worldbookContextIsolationEnabled ?? false,
             isTemporary: false
         )
     }
@@ -465,6 +469,7 @@ public enum Persistence {
         summary.session.id == session.id &&
         summary.session.name == session.name &&
         summary.session.lorebookIDs == session.lorebookIDs &&
+        (summary.session.worldbookContextIsolationEnabled ?? false) == session.worldbookContextIsolationEnabled &&
         summary.prompts.topicPrompt == session.topicPrompt &&
         summary.prompts.enhancedPrompt == session.enhancedPrompt
     }

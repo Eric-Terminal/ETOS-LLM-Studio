@@ -867,6 +867,9 @@
 "世界书列表" = "Worldbook list";
 "暂无世界书，请在 iPhone 端导入后同步。" = "No worldbooks yet. Import on iPhone, then sync.";
 "已绑定当前会话" = "Bound to current session";
+"绑定世界书时屏蔽记忆与工具" = "Hide memory and tools when worldbooks are bound";
+"开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送长期记忆、MCP 与快捷指令工具调用。" = "When enabled and the current session has bound worldbooks, only the global prompt, topic prompt, enhanced prompt, and worldbooks are sent. Long-term memory, MCP, and Shortcuts tool calls are not sent.";
+"已启用隔离发送" = "Isolation enabled";
 "暂无可绑定世界书" = "No worldbooks available to bind";
 "会话绑定" = "Session binding";
 "已启用" = "Enabled";

@@ -719,6 +719,7 @@ public enum SyncEngine {
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,
+            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
             isTemporary: false
         )
     }
@@ -731,6 +732,7 @@ public enum SyncEngine {
         hasher.combine(session.baseNameWithoutSyncSuffix)
         hasher.combine(session.topicPrompt ?? "")
         hasher.combine(session.enhancedPrompt ?? "")
+        hasher.combine(session.worldbookContextIsolationEnabled)
         for worldbookID in session.lorebookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
             hasher.combine(worldbookID.uuidString)
         }

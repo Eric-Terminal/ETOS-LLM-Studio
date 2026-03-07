@@ -268,6 +268,7 @@ extension ChatSession {
         name == other.name &&
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
+        worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
         Set(lorebookIDs) == Set(other.lorebookIDs)
     }
     
@@ -282,6 +283,7 @@ extension ChatSession {
         baseNameWithoutSyncSuffix == other.baseNameWithoutSyncSuffix &&
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
+        worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
         Set(lorebookIDs) == Set(other.lorebookIDs)
     }
 }

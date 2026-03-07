@@ -2024,6 +2024,88 @@ fileprivate struct ChatServiceTests {
 
         await cleanup()
     }
+
+    @Test("Worldbook isolation suppresses memory and tool context")
+    func testWorldbookIsolationSuppressesMemoryAndToolContext() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        let originalShortcutTools = ShortcutToolStore.loadTools()
+        let originalShortcutToolsEnabled = await MainActor.run { ShortcutToolManager.shared.chatToolsEnabled }
+
+        await memoryManager.addMemory(content: "memory-should-hide")
+
+        let shortcutTool = ShortcutToolDefinition(
+            name: "RP 测试快捷指令",
+            metadata: ["displayName": .string("RP 测试快捷指令")],
+            isEnabled: true,
+            userDescription: "用于测试世界书隔离发送。"
+        )
+        ShortcutToolStore.saveTools([shortcutTool])
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(true)
+        }
+
+        let book = Worldbook(
+            name: "隔离书",
+            entries: [WorldbookEntry(content: "wb-isolated", keys: ["hero"], position: .after)]
+        )
+        store.saveWorldbooks([book])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "隔离会话")
+        session.lorebookIDs = [book.id]
+        session.worldbookContextIsolationEnabled = true
+        chatService.setCurrentSession(session)
+
+        let historicalAssistantToolCall = InternalToolCall(
+            id: "historical-tool-call",
+            toolName: ShortcutToolNaming.alias(for: shortcutTool),
+            arguments: "{}"
+        )
+        let historicalMessages = [
+            ChatMessage(role: .user, content: "前情 hero"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [historicalAssistantToolCall]),
+            ChatMessage(role: .tool, content: "tool-result", toolCalls: [historicalAssistantToolCall])
+        ]
+        chatService.messagesForSessionSubject.send(historicalMessages)
+        Persistence.saveMessages(historicalMessages, for: session.id)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true,
+            includeSystemTime: false
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let systemPrompt = sentMessages.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("<worldbook_after>"))
+        #expect(systemPrompt.contains("wb-isolated"))
+        #expect(!systemPrompt.contains("<memory>"))
+        #expect(!systemPrompt.contains("memory-should-hide"))
+        #expect(mockAdapter.receivedTools == nil)
+        #expect(!sentMessages.contains(where: { $0.role == .tool }))
+        #expect(!sentMessages.contains(where: { !($0.toolCalls?.isEmpty ?? true) }))
+
+        ShortcutToolStore.saveTools(originalShortcutTools)
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(originalShortcutToolsEnabled)
+        }
+        store.saveWorldbooks(originalBooks)
+
+        await cleanup()
+    }
     
     @Test("Update Message Content")
     func testUpdateMessageContent() {

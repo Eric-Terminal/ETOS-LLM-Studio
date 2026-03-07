@@ -47,4 +47,23 @@ struct WorldbookModelCompatibilityTests {
         #expect(lorebookIDs == [lorebookID.uuidString])
         #expect(worldbookIDs == [lorebookID.uuidString])
     }
+
+    @Test("ChatSession decodes worldbook context isolation switch")
+    func testChatSessionDecodesWorldbookContextIsolationSwitch() throws {
+        let id = UUID()
+        let json = """
+        {
+          "id": "\(id.uuidString)",
+          "name": "RP 会话",
+          "worldbookContextIsolationEnabled": true
+        }
+        """
+
+        let data = try #require(json.data(using: .utf8))
+        let session = try JSONDecoder().decode(ChatSession.self, from: data)
+
+        #expect(session.id == id)
+        #expect(session.worldbookContextIsolationEnabled == true)
+        #expect(session.isWorldbookContextIsolationActive == false)
+    }
 }

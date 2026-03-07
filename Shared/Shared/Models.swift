@@ -706,12 +706,19 @@ public struct ChatSession: Identifiable, Codable, Hashable {
     public var topicPrompt: String?
     public var enhancedPrompt: String?
     public var lorebookIDs: [UUID]
+    /// 开启后，仅在当前会话已绑定世界书时生效，发送时会屏蔽记忆与工具上下文。
+    public var worldbookContextIsolationEnabled: Bool
     @available(*, deprecated, message: "请改用 lorebookIDs；worldbookIDs 为兼容旧代码保留。")
     public var worldbookIDs: [UUID] {
         get { lorebookIDs }
         set { lorebookIDs = newValue }
     }
     public var isTemporary: Bool = false
+
+    /// 仅当会话已绑定世界书且用户开启隔离时，才真正启用 RP 隔离发送。
+    public var isWorldbookContextIsolationActive: Bool {
+        worldbookContextIsolationEnabled && !lorebookIDs.isEmpty
+    }
 
     public init(
         id: UUID,
@@ -720,6 +727,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         enhancedPrompt: String? = nil,
         worldbookIDs: [UUID] = [],
         lorebookIDs: [UUID]? = nil,
+        worldbookContextIsolationEnabled: Bool = false,
         isTemporary: Bool = false
     ) {
         self.id = id
@@ -727,6 +735,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         self.topicPrompt = topicPrompt
         self.enhancedPrompt = enhancedPrompt
         self.lorebookIDs = lorebookIDs ?? worldbookIDs
+        self.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
         self.isTemporary = isTemporary
     }
     
@@ -738,6 +747,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         case worldbookIDs
         case lorebookIDs
         case lorebookIds
+        case worldbookContextIsolationEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -755,6 +765,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         } else {
             self.lorebookIDs = []
         }
+        self.worldbookContextIsolationEnabled = try container.decodeIfPresent(Bool.self, forKey: .worldbookContextIsolationEnabled) ?? false
         self.isTemporary = false
     }
 
@@ -768,6 +779,9 @@ public struct ChatSession: Identifiable, Codable, Hashable {
             try container.encode(lorebookIDs, forKey: .lorebookIDs)
             // 兼容旧版本持久化字段，避免多端混用时丢失绑定。
             try container.encode(lorebookIDs, forKey: .worldbookIDs)
+        }
+        if worldbookContextIsolationEnabled {
+            try container.encode(worldbookContextIsolationEnabled, forKey: .worldbookContextIsolationEnabled)
         }
     }
 }
