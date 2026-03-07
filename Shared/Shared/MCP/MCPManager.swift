@@ -1119,7 +1119,7 @@ public final class MCPManager: ObservableObject {
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
         guard chatToolsEnabled else { return [] }
-        tools.compactMap { available in
+        let chatTools: [InternalToolDefinition] = tools.compactMap { available -> InternalToolDefinition? in
             if available.server.approvalPolicy(for: available.tool.toolId) == .alwaysDeny {
                 return nil
             }
@@ -1135,6 +1135,7 @@ public final class MCPManager: ObservableObject {
             ])
             return InternalToolDefinition(name: available.internalName, description: description, parameters: parameters, isBlocking: true)
         }
+        return chatTools
     }
 
     public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
