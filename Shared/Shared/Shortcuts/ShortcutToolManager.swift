@@ -351,7 +351,7 @@ public final class ShortcutToolManager: ObservableObject {
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
         guard chatToolsEnabled else { return [] }
-        tools
+        let chatTools: [InternalToolDefinition] = tools
             .filter { $0.isEnabled }
             .map { tool in
                 let alias = ShortcutToolNaming.alias(for: tool)
@@ -367,6 +367,7 @@ public final class ShortcutToolManager: ObservableObject {
                 }
                 return InternalToolDefinition(name: alias, description: description, parameters: parameters, isBlocking: true)
             }
+        return chatTools
     }
 
     public func displayLabel(for toolName: String) -> String? {
