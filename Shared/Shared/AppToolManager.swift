@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import os.log
 
 public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable {
