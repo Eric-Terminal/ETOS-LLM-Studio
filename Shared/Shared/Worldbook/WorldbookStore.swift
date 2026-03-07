@@ -541,10 +541,10 @@ public final class WorldbookStore {
             }
         }
 
-        if removeLegacyAggregate, fm.fileExists(atPath: storageFileURL.path) {
+        if removeLegacyAggregate, fm.fileExists(atPath: self.storageFileURL.path) {
             do {
-                try fm.removeItem(at: storageFileURL)
-                logger.info("已删除旧版世界书聚合文件: \(storageFileURL.lastPathComponent, privacy: .public)")
+                try fm.removeItem(at: self.storageFileURL)
+                logger.info("已删除旧版世界书聚合文件: \(self.storageFileURL.lastPathComponent, privacy: .public)")
             } catch {
                 logger.error("删除旧版世界书聚合文件失败: \(error.localizedDescription, privacy: .public)")
             }
