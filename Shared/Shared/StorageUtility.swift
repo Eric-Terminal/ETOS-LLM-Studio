@@ -306,6 +306,11 @@ public enum StorageUtility {
         
         logger.info("Category cleared: \(category.rawValue)")
     }
+
+    /// 通知共享层某个沙盒文件路径发生了变更，用于刷新相关缓存。
+    public static func notifyFilesystemMutation(at url: URL) {
+        invalidateRelatedCaches(for: url)
+    }
     
     // MARK: - 缓存清理
     

@@ -32,6 +32,17 @@ struct AppToolManagerTests {
     }
 
     @MainActor
+    @Test("拓展工具目录包含记忆编辑与沙盒文件工具")
+    func testToolCatalogContainsRequestedTools() {
+        let kinds = Set(AppToolKind.allCases)
+
+        #expect(kinds.contains(.editMemory))
+        #expect(kinds.contains(.listSandboxDirectory))
+        #expect(kinds.contains(.readSandboxFile))
+        #expect(kinds.contains(.writeSandboxFile))
+    }
+
+    @MainActor
     @Test("启用示例工具后会向模型暴露工具定义")
     func testChatToolsForLLMReturnsEnabledAppTools() {
         let manager = AppToolManager.shared
