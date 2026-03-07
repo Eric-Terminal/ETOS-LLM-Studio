@@ -72,6 +72,55 @@ struct CloudSyncManagerTests {
     }
 
     @MainActor
+    @Test("云同步关闭时不会执行上传或导入")
+    func testPerformSyncDoesNothingWhenDisabled() async {
+        let suiteName = "com.ETOS.tests.cloudSync.disabled.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("无法创建测试专用 UserDefaults")
+            return
+        }
+
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let localPackage = SyncPackage(options: [.providers])
+        let remotePackage = SyncPackage(options: [.sessions])
+        let remoteSnapshot = makeRemoteSnapshot(
+            recordName: "snapshot.remote-device",
+            deviceID: "remote-device",
+            updatedAt: Date(timeIntervalSince1970: 1_730_050_000),
+            package: remotePackage
+        )
+        let transport = MockCloudSyncTransport(remoteSnapshots: [remoteSnapshot])
+        let appliedRecorder = AppliedPackageRecorder(summary: .summary(importedSessions: 1))
+        let manager = CloudSyncManager(
+            transport: transport,
+            userDefaults: defaults,
+            packageBuilder: { _ in localPackage },
+            packageApplier: { package in
+                await appliedRecorder.record(package)
+                return await appliedRecorder.summary
+            }
+        )
+
+        await manager.performSync(options: [.providers])
+
+        let uploadedSnapshots = await transport.uploadedSnapshots
+        let appliedPackages = await appliedRecorder.packages
+
+        #expect(uploadedSnapshots.isEmpty)
+        #expect(appliedPackages.isEmpty)
+
+        if case .failed(let message) = manager.state {
+            #expect(message == "iCloud 同步已关闭。")
+        } else {
+            Issue.record("关闭状态下手动同步没有返回关闭提示")
+        }
+    }
+
+    @MainActor
     @Test("云同步会跳过相同校验值的远端快照")
     func testPerformSyncSkipsAlreadyAppliedSnapshot() async {
         let suiteName = "com.ETOS.tests.cloudSync.dedupe.\(UUID().uuidString)"

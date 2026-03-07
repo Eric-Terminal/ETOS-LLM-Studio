@@ -71,6 +71,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public static let shared = CloudSyncManager()
+    public static let enabledKey = "cloudSync.enabled"
     public static let autoSyncEnabledKey = "cloudSync.autoSyncEnabled"
 
     private static let deviceIdentifierKey = "cloudSync.deviceIdentifier"
@@ -105,6 +106,13 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func performSync(options: SyncOptions, silent: Bool = false) async {
+        guard isEnabled else {
+            if !silent {
+                state = .failed("iCloud 同步已关闭。")
+            }
+            return
+        }
+
         guard !options.isEmpty else {
             if !silent {
                 state = .failed("请至少勾选一项同步内容。")
@@ -152,6 +160,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func performAutoSyncIfEnabled() {
+        guard isEnabled else { return }
         guard userDefaults.bool(forKey: Self.autoSyncEnabledKey) else { return }
 
         let options = buildSyncOptionsFromSettings()
@@ -172,6 +181,10 @@ public final class CloudSyncManager: ObservableObject {
         let value = UUID().uuidString
         userDefaults.set(value, forKey: Self.deviceIdentifierKey)
         return value
+    }
+
+    public var isEnabled: Bool {
+        userDefaults.bool(forKey: Self.enabledKey)
     }
 
     private func buildLocalSnapshot(options: SyncOptions) -> CloudSyncRemoteSnapshot {

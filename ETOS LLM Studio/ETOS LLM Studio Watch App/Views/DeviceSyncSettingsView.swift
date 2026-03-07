@@ -25,6 +25,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
+    @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
     @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
     
     var body: some View {
@@ -66,7 +67,10 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section("iCloud 同步") {
+                Toggle("启用 iCloud 同步", isOn: $cloudSyncEnabled)
+
                 Toggle("启动时自动同步", isOn: $cloudAutoSyncEnabled)
+                    .disabled(!cloudSyncEnabled)
 
                 Button {
                     Task {
@@ -83,7 +87,7 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(selectedSyncOptions.isEmpty || isCloudSyncing)
+                .disabled(!cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
             }
 
             Section("iCloud 状态") {
@@ -158,6 +162,11 @@ struct DeviceSyncSettingsView: View {
 
     @ViewBuilder
     private var cloudSyncStatusView: some View {
+        if !cloudSyncEnabled {
+            Text("iCloud 同步已关闭").font(.caption).foregroundStyle(.secondary)
+            return
+        }
+
         switch cloudSyncManager.state {
         case .idle:
             Text("未同步").font(.caption).foregroundStyle(.secondary)
