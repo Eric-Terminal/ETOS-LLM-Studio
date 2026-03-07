@@ -15,6 +15,9 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
     case listSandboxDirectory = "list_sandbox_directory"
     case readSandboxFile = "read_sandbox_file"
     case writeSandboxFile = "write_sandbox_file"
+    case searchSandboxFiles = "search_sandbox_files"
+    case readSandboxFileChunk = "read_sandbox_file_chunk"
+    case moveSandboxItem = "move_sandbox_item"
     case diffSandboxFile = "diff_sandbox_file"
     case editSandboxFile = "edit_sandbox_file"
     case deleteSandboxItem = "delete_sandbox_item"
@@ -33,6 +36,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "app_read_sandbox_file"
         case .writeSandboxFile:
             return "app_write_sandbox_file"
+        case .searchSandboxFiles:
+            return "app_search_sandbox_files"
+        case .readSandboxFileChunk:
+            return "app_read_sandbox_file_chunk"
+        case .moveSandboxItem:
+            return "app_move_sandbox_item"
         case .diffSandboxFile:
             return "app_diff_sandbox_file"
         case .editSandboxFile:
@@ -54,6 +63,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("读取沙盒文件", comment: "Read sandbox file tool name")
         case .writeSandboxFile:
             return NSLocalizedString("写入沙盒文件", comment: "Write sandbox file tool name")
+        case .searchSandboxFiles:
+            return NSLocalizedString("搜索沙盒文件", comment: "Search sandbox files tool name")
+        case .readSandboxFileChunk:
+            return NSLocalizedString("分块读取沙盒文件", comment: "Read sandbox file chunk tool name")
+        case .moveSandboxItem:
+            return NSLocalizedString("移动沙盒路径", comment: "Move sandbox item tool name")
         case .diffSandboxFile:
             return NSLocalizedString("比较沙盒文件差异", comment: "Diff sandbox file tool name")
         case .editSandboxFile:
@@ -75,6 +90,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("读取沙盒内 UTF-8 文本文件内容。", comment: "Read sandbox file tool summary")
         case .writeSandboxFile:
             return NSLocalizedString("写入或覆盖沙盒内 UTF-8 文本文件内容。", comment: "Write sandbox file tool summary")
+        case .searchSandboxFiles:
+            return NSLocalizedString("按路径名或文本内容搜索沙盒内文件。", comment: "Search sandbox files tool summary")
+        case .readSandboxFileChunk:
+            return NSLocalizedString("按行号分块读取沙盒文本文件。", comment: "Read sandbox file chunk tool summary")
+        case .moveSandboxItem:
+            return NSLocalizedString("在沙盒内移动或重命名文件与目录。", comment: "Move sandbox item tool summary")
         case .diffSandboxFile:
             return NSLocalizedString("比较当前文件内容和拟修改内容之间的差异。", comment: "Diff sandbox file tool summary")
         case .editSandboxFile:
@@ -96,6 +117,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("工具详情：读取沙盒文件", comment: "Read sandbox file tool detail description")
         case .writeSandboxFile:
             return NSLocalizedString("工具详情：写入沙盒文件", comment: "Write sandbox file tool detail description")
+        case .searchSandboxFiles:
+            return NSLocalizedString("工具详情：搜索沙盒文件", comment: "Search sandbox files tool detail description")
+        case .readSandboxFileChunk:
+            return NSLocalizedString("工具详情：分块读取沙盒文件", comment: "Read sandbox file chunk tool detail description")
+        case .moveSandboxItem:
+            return NSLocalizedString("工具详情：移动沙盒路径", comment: "Move sandbox item tool detail description")
         case .diffSandboxFile:
             return NSLocalizedString("工具详情：比较沙盒文件差异", comment: "Diff sandbox file tool detail description")
         case .editSandboxFile:
@@ -177,6 +204,78 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                 ]),
                 "required": .array([.string("path"), .string("content")])
             ])
+        case .searchSandboxFiles:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("搜索起点的相对路径，基于 Documents 根目录；留空表示根目录。", comment: "Search sandbox files path parameter description"))
+                    ]),
+                    "name_query": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("按路径名或文件名匹配的关键词。", comment: "Search sandbox files name query parameter description"))
+                    ]),
+                    "content_query": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("按 UTF-8 文本内容匹配的关键词。", comment: "Search sandbox files content query parameter description"))
+                    ]),
+                    "max_results": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("返回结果上限，默认 20，最大 200。", comment: "Search sandbox files max results parameter description"))
+                    ]),
+                    "include_directories": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("是否在结果中包含目录，默认 false。", comment: "Search sandbox files include directories parameter description"))
+                    ]),
+                    "case_sensitive": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("是否区分大小写，默认 false。", comment: "Search sandbox files case sensitive parameter description"))
+                    ])
+                ])
+            ])
+        case .readSandboxFileChunk:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要分块读取的相对文件路径，基于 Documents 根目录。", comment: "Read sandbox file chunk path parameter description"))
+                    ]),
+                    "start_line": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("起始行号（从 1 开始），默认 1。", comment: "Read sandbox file chunk start line parameter description"))
+                    ]),
+                    "max_lines": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("最多读取行数，默认 200，最大 1000。", comment: "Read sandbox file chunk max lines parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("path")])
+            ])
+        case .moveSandboxItem:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "source_path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要移动的源相对路径，基于 Documents 根目录。", comment: "Move sandbox item source path parameter description"))
+                    ]),
+                    "destination_path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("目标相对路径，基于 Documents 根目录。", comment: "Move sandbox item destination path parameter description"))
+                    ]),
+                    "overwrite": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("目标已存在时是否覆盖，默认 false。", comment: "Move sandbox item overwrite parameter description"))
+                    ]),
+                    "create_parent_directories": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("目标父目录不存在时是否自动创建，默认 true。", comment: "Move sandbox item create directories parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("source_path"), .string("destination_path")])
+            ])
         case .diffSandboxFile:
             return JSONValue.dictionary([
                 "type": .string("object"),
@@ -255,6 +354,21 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString(
                 "写入或覆盖应用沙盒 Documents 目录中的 UTF-8 文本文件。只能访问沙盒内部路径。",
                 comment: "Write sandbox file description sent to model"
+            )
+        case .searchSandboxFiles:
+            return NSLocalizedString(
+                "按路径名或 UTF-8 文本内容搜索应用沙盒 Documents 目录下的文件。只能访问沙盒内部路径。",
+                comment: "Search sandbox files description sent to model"
+            )
+        case .readSandboxFileChunk:
+            return NSLocalizedString(
+                "按行号分块读取应用沙盒 Documents 目录中的 UTF-8 文本文件，适合大文件场景。只能访问沙盒内部路径。",
+                comment: "Read sandbox file chunk description sent to model"
+            )
+        case .moveSandboxItem:
+            return NSLocalizedString(
+                "在应用沙盒 Documents 目录内移动或重命名文件、子目录。只能访问沙盒内部路径。",
+                comment: "Move sandbox item description sent to model"
             )
         case .diffSandboxFile:
             return NSLocalizedString(
@@ -565,6 +679,100 @@ public final class AppToolManager: ObservableObject {
                 "path": result.path,
                 "size": result.size,
                 "createdParentDirectories": result.createdParentDirectories
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .searchSandboxFiles:
+            struct SearchFilesArgs: Decodable {
+                let path: String?
+                let name_query: String?
+                let content_query: String?
+                let max_results: Int?
+                let include_directories: Bool?
+                let case_sensitive: Bool?
+            }
+
+            let argsData = argumentsJSON.data(using: .utf8)
+            let args = argsData.flatMap { try? JSONDecoder().decode(SearchFilesArgs.self, from: $0) }
+            let relativePath = args?.path ?? ""
+            let results = try SandboxFileToolSupport.searchItems(
+                relativePath: relativePath,
+                nameQuery: args?.name_query,
+                contentQuery: args?.content_query,
+                maxResults: args?.max_results ?? 20,
+                includeDirectories: args?.include_directories ?? false,
+                caseSensitive: args?.case_sensitive ?? false
+            )
+            let payload: [String: Any] = [
+                "path": relativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Documents" : relativePath,
+                "count": results.count,
+                "items": results.map { result in
+                    [
+                        "path": result.path,
+                        "name": result.name,
+                        "isDirectory": result.isDirectory,
+                        "size": result.size,
+                        "modifiedAt": result.modifiedAt as Any,
+                        "matchedByName": result.matchedByName,
+                        "matchedByContent": result.matchedByContent
+                    ]
+                }
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .readSandboxFileChunk:
+            struct ReadFileChunkArgs: Decodable {
+                let path: String
+                let start_line: Int?
+                let max_lines: Int?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(ReadFileChunkArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 read_sandbox_file_chunk 的参数，请提供 path。", comment: "Read sandbox file chunk invalid arguments")
+                )
+            }
+
+            let result = try SandboxFileToolSupport.readTextFileChunk(
+                relativePath: args.path,
+                startLine: args.start_line ?? 1,
+                maxLines: args.max_lines ?? 200
+            )
+            let payload: [String: Any] = [
+                "path": result.path,
+                "startLine": result.startLine,
+                "endLine": result.endLine,
+                "totalLines": result.totalLines,
+                "hasMore": result.hasMore,
+                "content": result.content
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .moveSandboxItem:
+            struct MoveItemArgs: Decodable {
+                let source_path: String
+                let destination_path: String
+                let overwrite: Bool?
+                let create_parent_directories: Bool?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(MoveItemArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 move_sandbox_item 的参数，请提供 source_path 和 destination_path。", comment: "Move sandbox item invalid arguments")
+                )
+            }
+
+            let result = try SandboxFileToolSupport.moveItem(
+                from: args.source_path,
+                to: args.destination_path,
+                overwrite: args.overwrite ?? false,
+                createIntermediateDirectories: args.create_parent_directories ?? true
+            )
+            let payload: [String: Any] = [
+                "sourcePath": result.sourcePath,
+                "destinationPath": result.destinationPath,
+                "wasDirectory": result.wasDirectory,
+                "createdParentDirectories": result.createdParentDirectories,
+                "overwroteDestination": result.overwroteDestination
             ]
             return prettyPrintedJSONString(from: payload)
         case .diffSandboxFile:

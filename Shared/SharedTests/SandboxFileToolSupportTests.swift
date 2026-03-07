@@ -75,6 +75,101 @@ struct SandboxFileToolSupportTests {
         #expect(entries[0].path == "Documents/drafts/chapter1.txt")
     }
 
+    @Test("搜索工具支持按文件名与内容检索")
+    func testSearchItemsFindsByNameAndContent() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "docs/plan.txt",
+            content: "alpha beta",
+            rootDirectory: root
+        )
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "logs/app.log",
+            content: "beta gamma",
+            rootDirectory: root
+        )
+
+        let byName = try SandboxFileToolSupport.searchItems(
+            relativePath: "",
+            nameQuery: "plan",
+            contentQuery: nil,
+            rootDirectory: root
+        )
+        let byContent = try SandboxFileToolSupport.searchItems(
+            relativePath: "",
+            nameQuery: nil,
+            contentQuery: "gamma",
+            rootDirectory: root
+        )
+
+        #expect(byName.count == 1)
+        #expect(byName[0].path == "Documents/docs/plan.txt")
+        #expect(byContent.count == 1)
+        #expect(byContent[0].path == "Documents/logs/app.log")
+    }
+
+    @Test("分块读取会返回指定行范围与是否还有剩余内容")
+    func testReadTextFileChunkReturnsExpectedWindow() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "notes/chunk.txt",
+            content: "line1\nline2\nline3\nline4\nline5",
+            rootDirectory: root
+        )
+
+        let chunk = try SandboxFileToolSupport.readTextFileChunk(
+            relativePath: "notes/chunk.txt",
+            startLine: 2,
+            maxLines: 2,
+            rootDirectory: root
+        )
+
+        #expect(chunk.startLine == 2)
+        #expect(chunk.endLine == 3)
+        #expect(chunk.totalLines == 5)
+        #expect(chunk.hasMore == true)
+        #expect(chunk.content == "line2\nline3")
+    }
+
+    @Test("移动工具可重命名并自动创建目标父目录")
+    func testMoveItemRenamesFileAndCreatesParents() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "drafts/todo.txt",
+            content: "todo",
+            rootDirectory: root
+        )
+
+        let result = try SandboxFileToolSupport.moveItem(
+            from: "drafts/todo.txt",
+            to: "archive/2026/todo-final.txt",
+            overwrite: false,
+            createIntermediateDirectories: true,
+            rootDirectory: root
+        )
+
+        let sourceURL = root.appendingPathComponent("drafts/todo.txt")
+        let destinationURL = root.appendingPathComponent("archive/2026/todo-final.txt")
+
+        #expect(FileManager.default.fileExists(atPath: sourceURL.path) == false)
+        #expect(FileManager.default.fileExists(atPath: destinationURL.path) == true)
+        #expect(result.createdParentDirectories == true)
+        #expect(result.sourcePath == "Documents/drafts/todo.txt")
+        #expect(result.destinationPath == "Documents/archive/2026/todo-final.txt")
+    }
+
     @Test("diff 会输出新增与删除行")
     func testDiffTextFileReturnsUnifiedLikeOutput() throws {
         let root = FileManager.default.temporaryDirectory
