@@ -15,6 +15,9 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
     case listSandboxDirectory = "list_sandbox_directory"
     case readSandboxFile = "read_sandbox_file"
     case writeSandboxFile = "write_sandbox_file"
+    case diffSandboxFile = "diff_sandbox_file"
+    case editSandboxFile = "edit_sandbox_file"
+    case deleteSandboxItem = "delete_sandbox_item"
 
     public var id: String { rawValue }
 
@@ -30,6 +33,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "app_read_sandbox_file"
         case .writeSandboxFile:
             return "app_write_sandbox_file"
+        case .diffSandboxFile:
+            return "app_diff_sandbox_file"
+        case .editSandboxFile:
+            return "app_edit_sandbox_file"
+        case .deleteSandboxItem:
+            return "app_delete_sandbox_item"
         }
     }
 
@@ -45,6 +54,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("读取沙盒文件", comment: "Read sandbox file tool name")
         case .writeSandboxFile:
             return NSLocalizedString("写入沙盒文件", comment: "Write sandbox file tool name")
+        case .diffSandboxFile:
+            return NSLocalizedString("比较沙盒文件差异", comment: "Diff sandbox file tool name")
+        case .editSandboxFile:
+            return NSLocalizedString("局部编辑沙盒文件", comment: "Edit sandbox file tool name")
+        case .deleteSandboxItem:
+            return NSLocalizedString("删除沙盒路径", comment: "Delete sandbox item tool name")
         }
     }
 
@@ -60,6 +75,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("读取沙盒内 UTF-8 文本文件内容。", comment: "Read sandbox file tool summary")
         case .writeSandboxFile:
             return NSLocalizedString("写入或覆盖沙盒内 UTF-8 文本文件内容。", comment: "Write sandbox file tool summary")
+        case .diffSandboxFile:
+            return NSLocalizedString("比较当前文件内容和拟修改内容之间的差异。", comment: "Diff sandbox file tool summary")
+        case .editSandboxFile:
+            return NSLocalizedString("按旧文本和新文本对文件做局部替换。", comment: "Edit sandbox file tool summary")
+        case .deleteSandboxItem:
+            return NSLocalizedString("删除沙盒内的文件或子目录。", comment: "Delete sandbox item tool summary")
         }
     }
 
@@ -75,6 +96,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("工具详情：读取沙盒文件", comment: "Read sandbox file tool detail description")
         case .writeSandboxFile:
             return NSLocalizedString("工具详情：写入沙盒文件", comment: "Write sandbox file tool detail description")
+        case .diffSandboxFile:
+            return NSLocalizedString("工具详情：比较沙盒文件差异", comment: "Diff sandbox file tool detail description")
+        case .editSandboxFile:
+            return NSLocalizedString("工具详情：局部编辑沙盒文件", comment: "Edit sandbox file tool detail description")
+        case .deleteSandboxItem:
+            return NSLocalizedString("工具详情：删除沙盒路径", comment: "Delete sandbox item tool detail description")
         }
     }
 
@@ -150,6 +177,55 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                 ]),
                 "required": .array([.string("path"), .string("content")])
             ])
+        case .diffSandboxFile:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要比较的相对文件路径，基于 Documents 根目录。", comment: "Diff sandbox file tool path parameter description"))
+                    ]),
+                    "updated_content": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("准备写入的新文本内容，用于和当前文件内容比较差异。", comment: "Diff sandbox file tool updated content parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("path"), .string("updated_content")])
+            ])
+        case .editSandboxFile:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要编辑的相对文件路径，基于 Documents 根目录。", comment: "Edit sandbox file tool path parameter description"))
+                    ]),
+                    "old_text": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("需要在文件中查找并替换的旧文本片段。", comment: "Edit sandbox file tool old text parameter description"))
+                    ]),
+                    "new_text": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("替换后的新文本片段。", comment: "Edit sandbox file tool new text parameter description"))
+                    ]),
+                    "replace_all": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("是否替换全部匹配项，默认 false。", comment: "Edit sandbox file tool replace all parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("path"), .string("old_text"), .string("new_text")])
+            ])
+        case .deleteSandboxItem:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要删除的相对路径，基于 Documents 根目录。", comment: "Delete sandbox item tool path parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("path")])
+            ])
         }
     }
 
@@ -179,6 +255,21 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString(
                 "写入或覆盖应用沙盒 Documents 目录中的 UTF-8 文本文件。只能访问沙盒内部路径。",
                 comment: "Write sandbox file description sent to model"
+            )
+        case .diffSandboxFile:
+            return NSLocalizedString(
+                "比较应用沙盒 Documents 目录中文本文件的当前内容与拟修改内容之间的差异，只能访问沙盒内部路径。",
+                comment: "Diff sandbox file description sent to model"
+            )
+        case .editSandboxFile:
+            return NSLocalizedString(
+                "按旧文本和新文本对应用沙盒 Documents 目录中的 UTF-8 文本文件做局部替换。只能访问沙盒内部路径。",
+                comment: "Edit sandbox file description sent to model"
+            )
+        case .deleteSandboxItem:
+            return NSLocalizedString(
+                "删除应用沙盒 Documents 目录中的文件或子目录。只能访问沙盒内部路径，不能删除 Documents 根目录。",
+                comment: "Delete sandbox item description sent to model"
             )
         }
     }
@@ -474,6 +565,68 @@ public final class AppToolManager: ObservableObject {
                 "path": result.path,
                 "size": result.size,
                 "createdParentDirectories": result.createdParentDirectories
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .diffSandboxFile:
+            struct DiffFileArgs: Decodable {
+                let path: String
+                let updated_content: String
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(DiffFileArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 diff_sandbox_file 的参数，请提供 path 和 updated_content。", comment: "Diff sandbox file invalid arguments")
+                )
+            }
+
+            return try SandboxFileToolSupport.diffTextFile(
+                relativePath: args.path,
+                updatedContent: args.updated_content
+            )
+        case .editSandboxFile:
+            struct EditFileArgs: Decodable {
+                let path: String
+                let old_text: String
+                let new_text: String
+                let replace_all: Bool?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(EditFileArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 edit_sandbox_file 的参数，请提供 path、old_text 和 new_text。", comment: "Edit sandbox file invalid arguments")
+                )
+            }
+
+            let result = try SandboxFileToolSupport.replaceText(
+                relativePath: args.path,
+                oldText: args.old_text,
+                newText: args.new_text,
+                replaceAll: args.replace_all ?? false
+            )
+            let payload: [String: Any] = [
+                "path": result.path,
+                "replacements": result.replacements,
+                "size": result.size
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .deleteSandboxItem:
+            struct DeleteFileArgs: Decodable {
+                let path: String
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(DeleteFileArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 delete_sandbox_item 的参数，请提供 path。", comment: "Delete sandbox item invalid arguments")
+                )
+            }
+
+            let result = try SandboxFileToolSupport.deleteItem(relativePath: args.path)
+            let payload: [String: Any] = [
+                "path": result.path,
+                "wasDirectory": result.wasDirectory
             ]
             return prettyPrintedJSONString(from: payload)
         }

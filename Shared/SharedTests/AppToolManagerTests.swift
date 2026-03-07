@@ -40,6 +40,9 @@ struct AppToolManagerTests {
         #expect(kinds.contains(.listSandboxDirectory))
         #expect(kinds.contains(.readSandboxFile))
         #expect(kinds.contains(.writeSandboxFile))
+        #expect(kinds.contains(.diffSandboxFile))
+        #expect(kinds.contains(.editSandboxFile))
+        #expect(kinds.contains(.deleteSandboxItem))
     }
 
     @MainActor
