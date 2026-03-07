@@ -22,7 +22,7 @@ private let cloudSyncLogger = Logger(
     category: "CloudSync"
 )
 
-public struct CloudSyncSnapshot: Codable, Equatable {
+public struct CloudSyncSnapshot: Codable {
     public let schemaVersion: Int
     public let deviceID: String
     public let updatedAt: Date
@@ -48,7 +48,7 @@ public struct CloudSyncSnapshot: Codable, Equatable {
     }
 }
 
-struct CloudSyncRemoteSnapshot: Equatable {
+struct CloudSyncRemoteSnapshot {
     let recordName: String
     let deviceID: String
     let updatedAt: Date
