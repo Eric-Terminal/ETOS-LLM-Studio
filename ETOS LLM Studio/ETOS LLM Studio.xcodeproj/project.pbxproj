@@ -613,7 +613,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
@@ -660,7 +660,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "ETOS LLM Studio";
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
