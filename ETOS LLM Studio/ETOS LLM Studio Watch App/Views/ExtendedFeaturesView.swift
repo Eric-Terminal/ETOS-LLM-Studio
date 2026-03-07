@@ -19,6 +19,21 @@ public struct ExtendedFeaturesView: View {
         List {
             Section {
                 NavigationLink {
+                    ToolCenterView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label(NSLocalizedString("工具中心", comment: "Tool center title"), systemImage: "slider.horizontal.3")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("统一预览和调整聊天工具启用状态。", comment: "Tool center entry footer"))
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     FeedbackCenterView()
                 } label: {
                     Label(NSLocalizedString("反馈助手", comment: "反馈入口"), systemImage: "text.bubble")

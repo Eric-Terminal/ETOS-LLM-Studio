@@ -97,6 +97,13 @@ struct SettingsView: View {
 
             Section("拓展能力") {
                 NavigationLink {
+                    ToolCenterView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label(NSLocalizedString("工具中心", comment: "Tool center title"), systemImage: "slider.horizontal.3")
+                }
+
+                NavigationLink {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
