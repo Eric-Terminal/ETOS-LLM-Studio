@@ -252,32 +252,42 @@ public enum SyncEngine {
         var local = ConfigLoader.loadProviders()
         var imported = 0
         var skipped = 0
-        
-        // 预先计算本地 Provider 的内容哈希
-        var localContentHashes = Set(local.map { computeProviderContentHash($0) })
-        
-        for var provider in incoming {
-            // 优先比对内容哈希，完全相同则跳过
+
+        for provider in incoming {
             let incomingHash = computeProviderContentHash(provider)
-            if localContentHashes.contains(incomingHash) {
-                skipped += 1
+
+            if let exactIndex = local.firstIndex(where: { computeProviderContentHash($0) == incomingHash }) {
+                let mergedAPIKeys = mergeProviderAPIKeys(local[exactIndex].apiKeys, provider.apiKeys)
+                if mergedAPIKeys == local[exactIndex].apiKeys {
+                    skipped += 1
+                } else {
+                    local[exactIndex].apiKeys = mergedAPIKeys
+                    ConfigLoader.saveProvider(local[exactIndex])
+                    imported += 1
+                }
                 continue
             }
-            
-            // 检查 UUID 是否冲突
-            if local.firstIndex(where: { $0.id == provider.id }) != nil {
-                // ID 冲突但内容不同，生成新 UUID（不添加后缀）
-                provider.id = UUID()
-                provider.models = provider.models.map {
-                    var clone = $0
-                    clone.id = UUID()
-                    return clone
+
+            if let candidateIndex = providerMergeCandidateIndex(for: provider, localProviders: local) {
+                switch mergeProviderDeep(local[candidateIndex], with: provider) {
+                case .unchanged(let mergedProvider):
+                    local[candidateIndex] = mergedProvider
+                    skipped += 1
+                    continue
+                case .merged(let mergedProvider):
+                    local[candidateIndex] = mergedProvider
+                    ConfigLoader.saveProvider(mergedProvider)
+                    imported += 1
+                    continue
+                case .conflict:
+                    break
                 }
             }
-            
-            ConfigLoader.saveProvider(provider)
-            local.append(provider)
-            localContentHashes.insert(incomingHash)
+
+            var copied = provider
+            copied = reassignProviderIdentifiersIfNeeded(copied, existingProviders: local)
+            ConfigLoader.saveProvider(copied)
+            local.append(copied)
             imported += 1
         }
         
@@ -297,48 +307,71 @@ public enum SyncEngine {
         guard !incoming.isEmpty else { return (0, 0) }
         
         var sessions = chatService.chatSessionsSubject.value
+        var messagesBySessionID: [UUID: [ChatMessage]] = [:]
         var imported = 0
         var skipped = 0
-        
-        // 预先计算所有本地会话的内容哈希，用于快速去重
-        var localContentHashes: [String: UUID] = [:]
-        for localSession in sessions {
-            let localMessages = Persistence.loadMessages(for: localSession.id)
-            let hash = computeSessionContentHash(session: localSession, messages: localMessages)
-            localContentHashes[hash] = localSession.id
-        }
         
         for payload in incoming {
             var session = payload.session
             session.isTemporary = false
-            
-            // 优先使用内容哈希比较：如果内容完全相同，直接跳过
+
             let incomingHash = computeSessionContentHash(session: session, messages: payload.messages)
-            if localContentHashes[incomingHash] != nil {
+            if containsSessionHash(
+                incomingHash,
+                sessions: sessions,
+                messagesBySessionID: &messagesBySessionID
+            ) {
                 skipped += 1
                 continue
             }
-            
-            // 检查 UUID 是否冲突
-            if sessions.firstIndex(where: { $0.id == session.id }) != nil {
-                // UUID 冲突但内容不同（已经通过哈希检查），生成新 UUID
-                session = makeNewSession(from: session)
-            } else if sessions.first(where: { $0.isEquivalentIgnoringSyncSuffix(to: session) }) != nil {
-                // 名称等价但内容不同，也生成新 UUID（不再叠加后缀）
+
+            if let candidateIndex = sessionMergeCandidateIndex(for: session, localSessions: sessions) {
+                let localSession = sessions[candidateIndex]
+                let localMessages = messagesForSession(
+                    localSession.id,
+                    cache: &messagesBySessionID
+                )
+
+                switch mergeSessionDeep(
+                    localSession: localSession,
+                    localMessages: localMessages,
+                    incomingSession: session,
+                    incomingMessages: payload.messages
+                ) {
+                case .unchanged((let mergedSession, let mergedMessages)):
+                    sessions[candidateIndex] = mergedSession
+                    messagesBySessionID[mergedSession.id] = mergedMessages
+                    skipped += 1
+                    continue
+                case .merged((let mergedSession, let mergedMessages)):
+                    sessions[candidateIndex] = mergedSession
+                    messagesBySessionID[mergedSession.id] = mergedMessages
+                    Persistence.saveMessages(mergedMessages, for: mergedSession.id)
+                    imported += 1
+                    continue
+                case .conflict:
+                    break
+                }
+            }
+
+            if sessions.firstIndex(where: { $0.id == session.id }) != nil
+                || sessions.first(where: { $0.isEquivalentIgnoringSyncSuffix(to: session) }) != nil {
                 session = makeNewSession(from: session)
             }
-            
-            // 写入消息文件
+
             Persistence.saveMessages(payload.messages, for: session.id)
             sessions.insert(session, at: 0)
-            localContentHashes[incomingHash] = session.id
+            messagesBySessionID[session.id] = payload.messages
             imported += 1
         }
         
         if imported > 0 {
             Persistence.saveChatSessions(sessions)
             chatService.chatSessionsSubject.send(sessions)
-            if chatService.currentSessionSubject.value == nil {
+            if let current = chatService.currentSessionSubject.value,
+               let updatedCurrent = sessions.first(where: { $0.id == current.id }) {
+                chatService.currentSessionSubject.send(updatedCurrent)
+            } else if chatService.currentSessionSubject.value == nil {
                 chatService.currentSessionSubject.send(sessions.first)
             }
         }
@@ -801,6 +834,774 @@ public enum SyncEngine {
         return (imported, skipped, idMapping)
     }
 
+    private enum DeepMergeResult<Value> {
+        case unchanged(Value)
+        case merged(Value)
+        case conflict
+    }
+
+    private static func containsSessionHash(
+        _ hash: String,
+        sessions: [ChatSession],
+        messagesBySessionID: inout [UUID: [ChatMessage]]
+    ) -> Bool {
+        for session in sessions {
+            let messages = messagesForSession(session.id, cache: &messagesBySessionID)
+            if computeSessionContentHash(session: session, messages: messages) == hash {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func messagesForSession(
+        _ sessionID: UUID,
+        cache: inout [UUID: [ChatMessage]]
+    ) -> [ChatMessage] {
+        if let cached = cache[sessionID] {
+            return cached
+        }
+        let loaded = Persistence.loadMessages(for: sessionID)
+        cache[sessionID] = loaded
+        return loaded
+    }
+
+    private static func sessionMergeCandidateIndex(
+        for incomingSession: ChatSession,
+        localSessions: [ChatSession]
+    ) -> Int? {
+        if let exactIDMatch = localSessions.firstIndex(where: { $0.id == incomingSession.id }) {
+            return exactIDMatch
+        }
+        return localSessions.firstIndex(where: { $0.isEquivalentIgnoringSyncSuffix(to: incomingSession) })
+    }
+
+    private static func mergeSessionDeep(
+        localSession: ChatSession,
+        localMessages: [ChatMessage],
+        incomingSession: ChatSession,
+        incomingMessages: [ChatMessage]
+    ) -> DeepMergeResult<(ChatSession, [ChatMessage])> {
+        guard let mergedSession = mergeChatSessionMetadata(local: localSession, incoming: incomingSession) else {
+            return .conflict
+        }
+        guard let mergedMessagesResult = mergeLinearMessages(local: localMessages, incoming: incomingMessages) else {
+            return .conflict
+        }
+
+        let payload = (mergedSession, mergedMessagesResult.messages)
+        if mergedSession == localSession && !mergedMessagesResult.changed {
+            return .unchanged(payload)
+        }
+        return .merged(payload)
+    }
+
+    private static func mergeChatSessionMetadata(
+        local: ChatSession,
+        incoming: ChatSession
+    ) -> ChatSession? {
+        guard local.baseNameWithoutSyncSuffix == incoming.baseNameWithoutSyncSuffix else {
+            return nil
+        }
+
+        var merged = local
+        guard let topicMerge = mergeOptionalStringField(
+            local.topicPrompt,
+            incoming.topicPrompt,
+            allowPrefixExtension: false
+        ) else {
+            return nil
+        }
+        merged.topicPrompt = topicMerge.value
+
+        guard let enhancedMerge = mergeOptionalStringField(
+            local.enhancedPrompt,
+            incoming.enhancedPrompt,
+            allowPrefixExtension: false
+        ) else {
+            return nil
+        }
+        merged.enhancedPrompt = enhancedMerge.value
+
+        merged.lorebookIDs = mergeOrderedUUIDs(local.lorebookIDs, incoming.lorebookIDs)
+
+        if local.worldbookContextIsolationEnabled != incoming.worldbookContextIsolationEnabled {
+            let localHasBindings = !local.lorebookIDs.isEmpty
+            let incomingHasBindings = !incoming.lorebookIDs.isEmpty
+            if local.worldbookContextIsolationEnabled && !localHasBindings {
+                merged.worldbookContextIsolationEnabled = incoming.worldbookContextIsolationEnabled
+            } else if incoming.worldbookContextIsolationEnabled && !incomingHasBindings {
+                merged.worldbookContextIsolationEnabled = local.worldbookContextIsolationEnabled
+            } else if local.worldbookContextIsolationEnabled || incoming.worldbookContextIsolationEnabled {
+                merged.worldbookContextIsolationEnabled = true
+            }
+        }
+
+        if local.name != incoming.name {
+            if local.baseNameWithoutSyncSuffix == incoming.baseNameWithoutSyncSuffix {
+                merged.name = local.name
+            } else {
+                return nil
+            }
+        }
+
+        merged.isTemporary = false
+        return merged
+    }
+
+    private static func mergeLinearMessages(
+        local: [ChatMessage],
+        incoming: [ChatMessage]
+    ) -> (messages: [ChatMessage], changed: Bool)? {
+        if local == incoming {
+            return (local, false)
+        }
+
+        var merged = local
+        var changed = false
+        let overlapCount = min(local.count, incoming.count)
+
+        for index in 0..<overlapCount {
+            guard let mergedMessage = mergeChatMessage(local[index], incoming[index]) else {
+                return nil
+            }
+            if mergedMessage != merged[index] {
+                merged[index] = mergedMessage
+                changed = true
+            }
+        }
+
+        if incoming.count > local.count {
+            merged.append(contentsOf: incoming.dropFirst(overlapCount))
+            changed = true
+        }
+
+        return (merged, changed)
+    }
+
+    private static func mergeChatMessage(_ local: ChatMessage, _ incoming: ChatMessage) -> ChatMessage? {
+        if local == incoming {
+            return local
+        }
+
+        let canTreatAsSameMessage = local.id == incoming.id
+            || (local.role == incoming.role && local.content == incoming.content)
+        guard canTreatAsSameMessage else {
+            return nil
+        }
+
+        guard let contentMerge = mergeMessageVersions(local: local, incoming: incoming) else {
+            return nil
+        }
+        guard let reasoningMerge = mergeOptionalStringField(
+            local.reasoningContent,
+            incoming.reasoningContent,
+            allowPrefixExtension: true
+        ) else {
+            return nil
+        }
+        guard let toolCallsMerge = mergeOptionalArrayField(local.toolCalls, incoming.toolCalls) else {
+            return nil
+        }
+        guard let toolCallsPlacement = mergeOptionalScalarField(
+            local.toolCallsPlacement,
+            incoming.toolCallsPlacement
+        ) else {
+            return nil
+        }
+        guard let audioFileName = mergeOptionalStringField(
+            local.audioFileName,
+            incoming.audioFileName,
+            allowPrefixExtension: false
+        ) else {
+            return nil
+        }
+        guard let fullErrorContent = mergeOptionalStringField(
+            local.fullErrorContent,
+            incoming.fullErrorContent,
+            allowPrefixExtension: true
+        ) else {
+            return nil
+        }
+
+        let mergedImageFiles = mergeOrderedStrings(local.imageFileNames, incoming.imageFileNames)
+        let mergedFileFiles = mergeOrderedStrings(local.fileFileNames, incoming.fileFileNames)
+        let mergedTokenUsage = mergeTokenUsage(local.tokenUsage, incoming.tokenUsage)
+        let mergedResponseMetrics = mergeResponseMetrics(local.responseMetrics, incoming.responseMetrics)
+
+        var merged = buildMessage(
+            from: local,
+            versions: contentMerge.versions,
+            currentVersionIndex: contentMerge.currentVersionIndex,
+            reasoningContent: reasoningMerge.value,
+            toolCalls: toolCallsMerge.value,
+            toolCallsPlacement: toolCallsPlacement.value,
+            tokenUsage: mergedTokenUsage,
+            audioFileName: audioFileName.value,
+            imageFileNames: mergedImageFiles,
+            fileFileNames: mergedFileFiles,
+            fullErrorContent: fullErrorContent.value,
+            responseMetrics: mergedResponseMetrics
+        )
+
+        if local.id != incoming.id, local.content == incoming.content {
+            merged.id = local.id
+        }
+        return merged
+    }
+
+    private static func buildMessage(
+        from template: ChatMessage,
+        versions: [String],
+        currentVersionIndex: Int,
+        reasoningContent: String?,
+        toolCalls: [InternalToolCall]?,
+        toolCallsPlacement: ToolCallsPlacement?,
+        tokenUsage: MessageTokenUsage?,
+        audioFileName: String?,
+        imageFileNames: [String]?,
+        fileFileNames: [String]?,
+        fullErrorContent: String?,
+        responseMetrics: MessageResponseMetrics?
+    ) -> ChatMessage {
+        let safeVersions = versions.isEmpty ? [""] : versions
+        var message = ChatMessage(
+            id: template.id,
+            role: template.role,
+            content: safeVersions[0],
+            reasoningContent: reasoningContent,
+            toolCalls: toolCalls,
+            toolCallsPlacement: toolCallsPlacement,
+            tokenUsage: tokenUsage,
+            audioFileName: audioFileName,
+            imageFileNames: imageFileNames,
+            fileFileNames: fileFileNames,
+            fullErrorContent: fullErrorContent,
+            responseMetrics: responseMetrics
+        )
+        if safeVersions.count > 1 {
+            for version in safeVersions.dropFirst() {
+                message.addVersion(version)
+            }
+            let safeCurrentIndex = min(max(0, currentVersionIndex), safeVersions.count - 1)
+            message.switchToVersion(safeCurrentIndex)
+        }
+        return message
+    }
+
+    private static func mergeMessageVersions(
+        local: ChatMessage,
+        incoming: ChatMessage
+    ) -> (versions: [String], currentVersionIndex: Int)? {
+        let localCurrent = local.content
+        let incomingCurrent = incoming.content
+        guard stringsAreCompatible(localCurrent, incomingCurrent) else {
+            return nil
+        }
+
+        var versions = local.getAllVersions()
+        for version in incoming.getAllVersions() where !versions.contains(version) {
+            versions.append(version)
+        }
+
+        let preferredCurrent = preferLongerString(localCurrent, incomingCurrent)
+        if !versions.contains(preferredCurrent) {
+            versions.append(preferredCurrent)
+        }
+        let currentIndex = versions.firstIndex(of: preferredCurrent) ?? max(0, versions.count - 1)
+        return (versions, currentIndex)
+    }
+
+    private static func providerMergeCandidateIndex(
+        for incomingProvider: Provider,
+        localProviders: [Provider]
+    ) -> Int? {
+        if let exactIDMatch = localProviders.firstIndex(where: { $0.id == incomingProvider.id }) {
+            return exactIDMatch
+        }
+        let identity = providerMergeIdentity(incomingProvider)
+        return localProviders.firstIndex(where: { providerMergeIdentity($0) == identity })
+    }
+
+    private static func mergeProviderDeep(
+        _ local: Provider,
+        with incoming: Provider
+    ) -> DeepMergeResult<Provider> {
+        guard providerMergeIdentity(local) == providerMergeIdentity(incoming) else {
+            return .conflict
+        }
+
+        var merged = local
+        var changed = false
+
+        let mergedAPIKeys = mergeProviderAPIKeys(local.apiKeys, incoming.apiKeys)
+        if mergedAPIKeys != local.apiKeys {
+            merged.apiKeys = mergedAPIKeys
+            changed = true
+        }
+
+        guard let mergedHeaders = mergeStringDictionary(local.headerOverrides, incoming.headerOverrides) else {
+            return .conflict
+        }
+        if mergedHeaders != local.headerOverrides {
+            merged.headerOverrides = mergedHeaders
+            changed = true
+        }
+
+        guard let mergedModelsResult = mergeProviderModels(local.models, incoming.models) else {
+            return .conflict
+        }
+        if mergedModelsResult.changed {
+            merged.models = mergedModelsResult.models
+            changed = true
+        }
+
+        if changed {
+            return .merged(merged)
+        }
+        return .unchanged(merged)
+    }
+
+    private static func mergeProviderModels(
+        _ localModels: [Model],
+        _ incomingModels: [Model]
+    ) -> (models: [Model], changed: Bool)? {
+        var merged = localModels
+        var changed = false
+        var modelIDs = Set(merged.map(\.id))
+
+        for incomingModel in incomingModels {
+            if let existingIndex = merged.firstIndex(where: {
+                normalizedModelIdentity($0) == normalizedModelIdentity(incomingModel)
+            }) {
+                switch mergeModelDeep(merged[existingIndex], with: incomingModel) {
+                case .unchanged(let model):
+                    merged[existingIndex] = model
+                case .merged(let model):
+                    merged[existingIndex] = model
+                    changed = true
+                case .conflict:
+                    return nil
+                }
+                continue
+            }
+
+            var appended = incomingModel
+            if modelIDs.contains(appended.id) {
+                appended.id = UUID()
+            }
+            merged.append(appended)
+            modelIDs.insert(appended.id)
+            changed = true
+        }
+
+        return (merged, changed)
+    }
+
+    private static func mergeModelDeep(
+        _ local: Model,
+        with incoming: Model
+    ) -> DeepMergeResult<Model> {
+        guard normalizedModelIdentity(local) == normalizedModelIdentity(incoming) else {
+            return .conflict
+        }
+
+        var merged = local
+        var changed = false
+
+        guard let displayName = mergeDisplayName(local: local.displayName, incoming: incoming.displayName, fallback: local.modelName) else {
+            return .conflict
+        }
+        if displayName != local.displayName {
+            merged.displayName = displayName
+            changed = true
+        }
+
+        let mergedIsActivated = local.isActivated || incoming.isActivated
+        if mergedIsActivated != local.isActivated {
+            merged.isActivated = mergedIsActivated
+            changed = true
+        }
+
+        let mergedCapabilities = mergeCapabilities(local.capabilities, incoming.capabilities)
+        if mergedCapabilities != local.capabilities {
+            merged.capabilities = mergedCapabilities
+            changed = true
+        }
+
+        guard let mergedOverrideParameters = mergeJSONDictionary(local.overrideParameters, incoming.overrideParameters) else {
+            return .conflict
+        }
+        if mergedOverrideParameters != local.overrideParameters {
+            merged.overrideParameters = mergedOverrideParameters
+            changed = true
+        }
+
+        guard let requestBodyMode = mergeRequestBodyOverrideMode(local: local, incoming: incoming) else {
+            return .conflict
+        }
+        if requestBodyMode != local.requestBodyOverrideMode {
+            merged.requestBodyOverrideMode = requestBodyMode
+            changed = true
+        }
+
+        guard let rawRequestBody = mergeOptionalStringField(
+            normalizeOptionalJSONString(local.rawRequestBodyJSON),
+            normalizeOptionalJSONString(incoming.rawRequestBodyJSON),
+            allowPrefixExtension: false
+        ) else {
+            return .conflict
+        }
+        if rawRequestBody.value != normalizeOptionalJSONString(local.rawRequestBodyJSON) {
+            merged.rawRequestBodyJSON = rawRequestBody.value
+            changed = true
+        }
+
+        if changed {
+            return .merged(merged)
+        }
+        return .unchanged(merged)
+    }
+
+    private static func mergeStringDictionary(
+        _ local: [String: String],
+        _ incoming: [String: String]
+    ) -> [String: String]? {
+        var merged = local
+        for (key, incomingValue) in incoming {
+            if let localValue = merged[key] {
+                guard localValue == incomingValue else {
+                    return nil
+                }
+            } else {
+                merged[key] = incomingValue
+            }
+        }
+        return merged
+    }
+
+    private static func mergeJSONDictionary(
+        _ local: [String: JSONValue],
+        _ incoming: [String: JSONValue]
+    ) -> [String: JSONValue]? {
+        var merged = local
+        for (key, incomingValue) in incoming {
+            if let localValue = merged[key] {
+                guard let mergedValue = mergeJSONValue(localValue, incomingValue) else {
+                    return nil
+                }
+                merged[key] = mergedValue
+            } else {
+                merged[key] = incomingValue
+            }
+        }
+        return merged
+    }
+
+    private static func mergeJSONValue(_ local: JSONValue, _ incoming: JSONValue) -> JSONValue? {
+        if local == incoming {
+            return local
+        }
+
+        switch (local, incoming) {
+        case (.dictionary(let localDictionary), .dictionary(let incomingDictionary)):
+            guard let merged = mergeJSONDictionary(localDictionary, incomingDictionary) else {
+                return nil
+            }
+            return .dictionary(merged)
+        case (.array(let localArray), .array(let incomingArray)):
+            return .array(mergeJSONArray(localArray, incomingArray))
+        case (.null, _):
+            return incoming
+        case (_, .null):
+            return local
+        default:
+            return nil
+        }
+    }
+
+    private static func mergeJSONArray(_ local: [JSONValue], _ incoming: [JSONValue]) -> [JSONValue] {
+        if local == incoming {
+            return local
+        }
+        var merged = local
+        for value in incoming where !merged.contains(value) {
+            merged.append(value)
+        }
+        return merged
+    }
+
+    private static func mergeCapabilities(
+        _ local: [Model.Capability],
+        _ incoming: [Model.Capability]
+    ) -> [Model.Capability] {
+        var merged = local
+        for capability in incoming where !merged.contains(capability) {
+            merged.append(capability)
+        }
+        return merged.isEmpty ? [.chat] : merged
+    }
+
+    private static func mergeRequestBodyOverrideMode(
+        local: Model,
+        incoming: Model
+    ) -> Model.RequestBodyOverrideMode? {
+        if local.requestBodyOverrideMode == incoming.requestBodyOverrideMode {
+            return local.requestBodyOverrideMode
+        }
+
+        let localHasRawJSON = normalizeOptionalJSONString(local.rawRequestBodyJSON) != nil
+        let incomingHasRawJSON = normalizeOptionalJSONString(incoming.rawRequestBodyJSON) != nil
+
+        if local.requestBodyOverrideMode == .expression && !localHasRawJSON {
+            return incoming.requestBodyOverrideMode
+        }
+        if incoming.requestBodyOverrideMode == .expression && !incomingHasRawJSON {
+            return local.requestBodyOverrideMode
+        }
+        return nil
+    }
+
+    private static func mergeDisplayName(
+        local: String,
+        incoming: String,
+        fallback: String
+    ) -> String? {
+        if local == incoming {
+            return local
+        }
+        if local == fallback {
+            return incoming
+        }
+        if incoming == fallback {
+            return local
+        }
+        return nil
+    }
+
+    private static func mergeProviderAPIKeys(_ local: [String], _ incoming: [String]) -> [String] {
+        ProviderCredentialStore.normalizeAPIKeys(local + incoming)
+    }
+
+    private static func reassignProviderIdentifiersIfNeeded(
+        _ provider: Provider,
+        existingProviders: [Provider]
+    ) -> Provider {
+        var copied = provider
+        if existingProviders.contains(where: { $0.id == copied.id }) {
+            copied.id = UUID()
+            copied.models = copied.models.map { model in
+                var clone = model
+                clone.id = UUID()
+                return clone
+            }
+            return copied
+        }
+
+        var seenModelIDs = Set(existingProviders.flatMap { $0.models.map(\.id) })
+        copied.models = copied.models.map { model in
+            var clone = model
+            if seenModelIDs.contains(clone.id) {
+                clone.id = UUID()
+            }
+            seenModelIDs.insert(clone.id)
+            return clone
+        }
+        return copied
+    }
+
+    private static func providerMergeIdentity(_ provider: Provider) -> String {
+        [
+            provider.baseNameWithoutSyncSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            provider.apiFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        ].joined(separator: "\u{1F}")
+    }
+
+    private static func normalizedModelIdentity(_ model: Model) -> String {
+        model.modelName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func normalizeOptionalJSONString(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func mergeOrderedUUIDs(_ local: [UUID], _ incoming: [UUID]) -> [UUID] {
+        var merged = local
+        for value in incoming where !merged.contains(value) {
+            merged.append(value)
+        }
+        return merged
+    }
+
+    private static func mergeOrderedStrings(_ local: [String]?, _ incoming: [String]?) -> [String]? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return nil
+        case let (lhs?, nil):
+            return lhs
+        case let (nil, rhs?):
+            return rhs
+        case let (lhs?, rhs?):
+            var merged = lhs
+            for value in rhs where !merged.contains(value) {
+                merged.append(value)
+            }
+            return merged
+        }
+    }
+
+    private static func mergeOptionalArrayField<Element: Equatable>(
+        _ local: [Element]?,
+        _ incoming: [Element]?
+    ) -> (value: [Element]?, changed: Bool)? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return (nil, false)
+        case let (lhs?, nil):
+            return (lhs, false)
+        case let (nil, rhs?):
+            return (rhs, true)
+        case let (lhs?, rhs?):
+            return lhs == rhs ? (lhs, false) : nil
+        }
+    }
+
+    private static func mergeOptionalScalarField<Value: Equatable>(
+        _ local: Value?,
+        _ incoming: Value?
+    ) -> (value: Value?, changed: Bool)? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return (nil, false)
+        case let (lhs?, nil):
+            return (lhs, false)
+        case let (nil, rhs?):
+            return (rhs, true)
+        case let (lhs?, rhs?):
+            return lhs == rhs ? (lhs, false) : nil
+        }
+    }
+
+    private static func mergeOptionalStringField(
+        _ local: String?,
+        _ incoming: String?,
+        allowPrefixExtension: Bool
+    ) -> (value: String?, changed: Bool)? {
+        let normalizedLocal = normalizeOptionalString(local)
+        let normalizedIncoming = normalizeOptionalString(incoming)
+
+        switch (normalizedLocal, normalizedIncoming) {
+        case (nil, nil):
+            return (nil, false)
+        case let (lhs?, nil):
+            return (lhs, false)
+        case let (nil, rhs?):
+            return (rhs, true)
+        case let (lhs?, rhs?):
+            if lhs == rhs {
+                return (lhs, false)
+            }
+            if allowPrefixExtension, stringsAreCompatible(lhs, rhs) {
+                let preferred = preferLongerString(lhs, rhs)
+                return (preferred, preferred != lhs)
+            }
+            return nil
+        }
+    }
+
+    private static func normalizeOptionalString(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func stringsAreCompatible(_ lhs: String, _ rhs: String) -> Bool {
+        lhs == rhs || lhs.hasPrefix(rhs) || rhs.hasPrefix(lhs)
+    }
+
+    private static func preferLongerString(_ lhs: String, _ rhs: String) -> String {
+        rhs.count > lhs.count ? rhs : lhs
+    }
+
+    private static func mergeTokenUsage(
+        _ local: MessageTokenUsage?,
+        _ incoming: MessageTokenUsage?
+    ) -> MessageTokenUsage? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return nil
+        case let (lhs?, nil):
+            return lhs
+        case let (nil, rhs?):
+            return rhs
+        case let (lhs?, rhs?):
+            return MessageTokenUsage(
+                promptTokens: maxOptional(lhs.promptTokens, rhs.promptTokens),
+                completionTokens: maxOptional(lhs.completionTokens, rhs.completionTokens),
+                totalTokens: maxOptional(lhs.totalTokens, rhs.totalTokens),
+                thinkingTokens: maxOptional(lhs.thinkingTokens, rhs.thinkingTokens),
+                cacheWriteTokens: maxOptional(lhs.cacheWriteTokens, rhs.cacheWriteTokens),
+                cacheReadTokens: maxOptional(lhs.cacheReadTokens, rhs.cacheReadTokens)
+            )
+        }
+    }
+
+    private static func mergeResponseMetrics(
+        _ local: MessageResponseMetrics?,
+        _ incoming: MessageResponseMetrics?
+    ) -> MessageResponseMetrics? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return nil
+        case let (lhs?, nil):
+            return lhs
+        case let (nil, rhs?):
+            return rhs
+        case let (lhs?, rhs?):
+            let speedSamples = lhs.speedSamples ?? rhs.speedSamples
+            return MessageResponseMetrics(
+                schemaVersion: max(lhs.schemaVersion, rhs.schemaVersion),
+                requestStartedAt: minOptional(lhs.requestStartedAt, rhs.requestStartedAt),
+                responseCompletedAt: maxOptional(lhs.responseCompletedAt, rhs.responseCompletedAt),
+                totalResponseDuration: maxOptional(lhs.totalResponseDuration, rhs.totalResponseDuration),
+                timeToFirstToken: minOptional(lhs.timeToFirstToken, rhs.timeToFirstToken),
+                completionTokensForSpeed: maxOptional(lhs.completionTokensForSpeed, rhs.completionTokensForSpeed),
+                tokenPerSecond: maxOptional(lhs.tokenPerSecond, rhs.tokenPerSecond),
+                isTokenPerSecondEstimated: lhs.isTokenPerSecondEstimated && rhs.isTokenPerSecondEstimated,
+                speedSamples: speedSamples
+            )
+        }
+    }
+
+    private static func maxOptional<Value: Comparable>(_ lhs: Value?, _ rhs: Value?) -> Value? {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return nil
+        case let (value?, nil), let (nil, value?):
+            return value
+        case let (lhs?, rhs?):
+            return max(lhs, rhs)
+        }
+    }
+
+    private static func minOptional<Value: Comparable>(_ lhs: Value?, _ rhs: Value?) -> Value? {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return nil
+        case let (value?, nil), let (nil, value?):
+            return value
+        case let (lhs?, rhs?):
+            return min(lhs, rhs)
+        }
+    }
+
     // MARK: - Helpers
 
     /// 创建带有新 UUID 的会话副本（保留原名称，不添加后缀）
@@ -820,7 +1621,6 @@ public enum SyncEngine {
     /// 包含：会话基础名称（去除同步后缀）、系统提示、消息内容
     private static func computeSessionContentHash(session: ChatSession, messages: [ChatMessage]) -> String {
         var hasher = Hasher()
-        // 使用去除同步后缀的基础名称
         hasher.combine(session.baseNameWithoutSyncSuffix)
         hasher.combine(session.topicPrompt ?? "")
         hasher.combine(session.enhancedPrompt ?? "")
@@ -828,13 +1628,8 @@ public enum SyncEngine {
         for worldbookID in session.lorebookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
             hasher.combine(worldbookID.uuidString)
         }
-        // 对消息进行哈希
         for message in messages {
-            hasher.combine(message.role.rawValue)
-            hasher.combine(message.content)
-            // 附件数量和类型也参与比较
-            hasher.combine(message.imageFileNames?.count ?? 0)
-            hasher.combine(message.audioFileName ?? "")
+            hasher.combine(messageSyncSignature(message))
         }
         return String(hasher.finalize())
     }
@@ -846,7 +1641,6 @@ public enum SyncEngine {
         hasher.combine(provider.baseNameWithoutSyncSuffix)
         hasher.combine(provider.baseURL)
         hasher.combine(provider.apiFormat)
-        // API Keys 不参与哈希（可能是敏感信息且易变）
         for (key, value) in provider.headerOverrides.sorted(by: { $0.key < $1.key }) {
             hasher.combine(key)
             hasher.combine(value)
@@ -855,7 +1649,60 @@ public enum SyncEngine {
             hasher.combine(model.modelName)
             hasher.combine(model.displayName)
             hasher.combine(model.isActivated)
+            hasher.combine(model.requestBodyOverrideMode.rawValue)
+            hasher.combine(model.rawRequestBodyJSON ?? "")
+            for capability in model.capabilities {
+                hasher.combine(capability.rawValue)
+            }
+            for (key, value) in model.overrideParameters.sorted(by: { $0.key < $1.key }) {
+                hasher.combine(key)
+                hasher.combine(value.prettyPrintedCompact())
+            }
         }
+        return String(hasher.finalize())
+    }
+
+    private static func messageSyncSignature(_ message: ChatMessage) -> String {
+        var hasher = Hasher()
+        hasher.combine(message.role.rawValue)
+        for version in message.getAllVersions() {
+            hasher.combine(version)
+        }
+        hasher.combine(message.getCurrentVersionIndex())
+        hasher.combine(message.reasoningContent ?? "")
+        for toolCall in message.toolCalls ?? [] {
+            hasher.combine(toolCall.id)
+            hasher.combine(toolCall.toolName)
+            hasher.combine(toolCall.arguments)
+            hasher.combine(toolCall.result ?? "")
+            for (key, value) in (toolCall.providerSpecificFields ?? [:]).sorted(by: { $0.key < $1.key }) {
+                hasher.combine(key)
+                hasher.combine(value.prettyPrintedCompact())
+            }
+        }
+        hasher.combine(message.toolCallsPlacement?.rawValue ?? "")
+        hasher.combine(message.audioFileName ?? "")
+        for imageFileName in message.imageFileNames ?? [] {
+            hasher.combine(imageFileName)
+        }
+        for fileName in message.fileFileNames ?? [] {
+            hasher.combine(fileName)
+        }
+        hasher.combine(message.fullErrorContent ?? "")
+        hasher.combine(message.tokenUsage?.promptTokens ?? -1)
+        hasher.combine(message.tokenUsage?.completionTokens ?? -1)
+        hasher.combine(message.tokenUsage?.totalTokens ?? -1)
+        hasher.combine(message.tokenUsage?.thinkingTokens ?? -1)
+        hasher.combine(message.tokenUsage?.cacheWriteTokens ?? -1)
+        hasher.combine(message.tokenUsage?.cacheReadTokens ?? -1)
+        hasher.combine(message.responseMetrics?.schemaVersion ?? 0)
+        hasher.combine(message.responseMetrics?.requestStartedAt?.timeIntervalSince1970 ?? -1)
+        hasher.combine(message.responseMetrics?.responseCompletedAt?.timeIntervalSince1970 ?? -1)
+        hasher.combine(message.responseMetrics?.totalResponseDuration ?? -1)
+        hasher.combine(message.responseMetrics?.timeToFirstToken ?? -1)
+        hasher.combine(message.responseMetrics?.completionTokensForSpeed ?? -1)
+        hasher.combine(message.responseMetrics?.tokenPerSecond ?? -1)
+        hasher.combine(message.responseMetrics?.isTokenPerSecondEstimated ?? false)
         return String(hasher.finalize())
     }
     

@@ -277,7 +277,9 @@ extension Model {
         displayName == other.displayName &&
         isActivated == other.isActivated &&
         overrideParameters == other.overrideParameters &&
-        capabilities == other.capabilities
+        capabilities == other.capabilities &&
+        requestBodyOverrideMode == other.requestBodyOverrideMode &&
+        rawRequestBodyJSON == other.rawRequestBodyJSON
     }
 }
 
