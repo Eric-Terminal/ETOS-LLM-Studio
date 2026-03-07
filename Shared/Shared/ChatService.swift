@@ -708,7 +708,7 @@ public class ChatService {
             // 始终切换到复用的临时会话，并刷新其消息列表（通常为空）。
             if let target = updatedSessions.first(where: { $0.id == reusableTemporary.id }) {
                 if currentSessionSubject.value?.id == target.id {
-                    messagesForSessionSubject.send(Persistence.loadMessages(for: target.id))
+                    publishMessages(Persistence.loadMessages(for: target.id))
                 } else {
                     setCurrentSession(target)
                 }
@@ -721,7 +721,7 @@ public class ChatService {
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
         currentSessionSubject.send(newSession)
-        messagesForSessionSubject.send([])
+        publishMessages([])
         logger.info("创建了新的临时会话。")
     }
     
@@ -799,7 +799,7 @@ public class ChatService {
                         }
                     }
                 }
-                Persistence.saveMessages(sourceMessages, for: newSession.id)
+                persistMessages(sourceMessages, for: newSession.id)
                 logger.info("  - 复制了 \(sourceMessages.count) 条消息到新会话。")
             }
         }
@@ -886,7 +886,7 @@ public class ChatService {
                 }
             }
             
-            Persistence.saveMessages(messagesToCopy, for: newSession.id)
+            persistMessages(messagesToCopy, for: newSession.id)
             logger.info("  - 复制了 \(messagesToCopy.count) 条消息到新会话（截止到指定消息）。")
         } else {
             logger.warning("  - 未找到指定的消息，创建空分支会话。")
@@ -922,10 +922,10 @@ public class ChatService {
                     Persistence.deleteFile(fileName: fileName)
                 }
             }
-            Persistence.saveMessages(messages, for: session.id)
+            persistMessages(messages, for: session.id)
             logger.info("删除了会话的最后一条消息: \(session.name)")
             if session.id == currentSessionSubject.value?.id {
-                messagesForSessionSubject.send(messages)
+                publishMessages(messages)
             }
         }
     }
@@ -988,8 +988,8 @@ public class ChatService {
         
         messages.removeAll { $0.id == message.id || relatedToolMessageIDs.contains($0.id) }
         
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
         logger.info("已删除消息: \(message.id.uuidString)")
     }
     
@@ -998,8 +998,8 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         guard let index = messages.firstIndex(where: { $0.id == message.id }) else { return }
         messages[index].content = newContent
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
         logger.info("已更新消息内容: \(message.id.uuidString)")
     }
 
@@ -1009,15 +1009,15 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         guard let index = messages.firstIndex(where: { $0.id == updatedMessage.id }) else { return }
         messages[index] = updatedMessage
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
         logger.info("已更新消息: \(updatedMessage.id.uuidString)")
     }
     
     /// 更新整个消息列表（用于版本管理等批量操作）
     public func updateMessages(_ messages: [ChatMessage], for sessionID: UUID) {
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: sessionID)
+        publishMessages(messages)
+        persistMessages(messages, for: sessionID)
         logger.info("已更新会话消息列表: \(sessionID.uuidString)")
     }
     
@@ -1049,7 +1049,7 @@ public class ChatService {
         if session?.id == currentSessionSubject.value?.id { return }
         currentSessionSubject.send(session)
         let messages = session != nil ? Persistence.loadMessages(for: session!.id) : []
-        messagesForSessionSubject.send(messages)
+        publishMessages(messages)
         logger.info("已切换到会话: \(session?.name ?? "无")")
     }
 
@@ -1111,8 +1111,8 @@ public class ChatService {
             logger.error("错误消息已添加: \(content)")
         }
         
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
     }
     
     /// 获取 HTTP 状态码的描述信息
@@ -1413,7 +1413,7 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         messages.append(contentsOf: userMessages)
         messages.append(loadingMessage)
-        messagesForSessionSubject.send(messages)
+        publishMessages(messages)
         
         // 注意：当音频作为附件直接发送给模型时，不再需要后台转文字
         // 因为每次发送消息都会重新加载音频文件并以 base64 发送
@@ -1448,7 +1448,7 @@ public class ChatService {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         }
         
-        Persistence.saveMessages(messages, for: currentSession.id)
+        persistMessages(messages, for: currentSession.id)
         requestStatusSubject.send(.started)
         
         // 记录当前请求的上下文，便于取消和状态恢复
@@ -1636,7 +1636,7 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         messages.append(userMessage)
         messages.append(loadingMessage)
-        messagesForSessionSubject.send(messages)
+        publishMessages(messages)
         logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
 
         if currentSession.isTemporary {
@@ -1654,7 +1654,7 @@ public class ChatService {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         }
 
-        Persistence.saveMessages(messages, for: currentSession.id)
+        persistMessages(messages, for: currentSession.id)
         requestStatusSubject.send(.started)
         imageGenerationStatusSubject.send(
             .started(
@@ -2081,8 +2081,8 @@ public class ChatService {
         toolCalls[resolvedIndex].result = result
         message.toolCalls = toolCalls
         messages[messageIndex] = message
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: sessionID)
+        publishMessages(messages)
+        persistMessages(messages, for: sessionID)
     }
 
     private func ensureToolCallsVisible(_ toolCalls: [InternalToolCall], in loadingMessageID: UUID, sessionID: UUID) {
@@ -2117,8 +2117,8 @@ public class ChatService {
         guard didChange else { return }
         message.toolCalls = existingCalls
         messages[messageIndex] = message
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: sessionID)
+        publishMessages(messages)
+        persistMessages(messages, for: sessionID)
     }
 
     // MARK: - 核心请求执行逻辑 (已重构)
@@ -2512,8 +2512,8 @@ public class ChatService {
         persistedMessages.append(contentsOf: trailingMessages)
         
         // 更新 UI 显示新的 loading message
-        messagesForSessionSubject.send(persistedMessages)
-        Persistence.saveMessages(persistedMessages, for: currentSession.id)
+        publishMessages(persistedMessages)
+        persistMessages(persistedMessages, for: currentSession.id)
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -2676,8 +2676,8 @@ public class ChatService {
         let historyBeforeRetry = Array(messages.prefix(upTo: lastUserMessageIndex))
         
         // 3. 更新实时消息列表
-        messagesForSessionSubject.send(historyBeforeRetry)
-        Persistence.saveMessages(historyBeforeRetry, for: currentSession.id)
+        publishMessages(historyBeforeRetry)
+        persistMessages(historyBeforeRetry, for: currentSession.id)
         
         // 4. 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -2833,8 +2833,8 @@ public class ChatService {
                     content: content,
                     imageFileNames: generatedImageFileNames
                 )
-                messagesForSessionSubject.send(messages)
-                Persistence.saveMessages(messages, for: currentSessionID)
+                publishMessages(messages)
+                persistMessages(messages, for: currentSessionID)
                 logger.info(
                     "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
                 )
@@ -3098,6 +3098,54 @@ public class ChatService {
         )
     }
 
+    /// 仅在内存中保留“最近一条助手消息”的流式速度采样，避免历史样本长期占用内存。
+    private func normalizedMessagesForRuntime(
+        _ messages: [ChatMessage],
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) -> [ChatMessage] {
+        guard !messages.isEmpty else { return messages }
+        let keepMessageID = preferredMessageID ?? messages.last(where: { $0.role == .assistant })?.id
+
+        return messages.map { message in
+            guard var metrics = message.responseMetrics, metrics.speedSamples != nil else {
+                return message
+            }
+            if let keepMessageID, message.id == keepMessageID {
+                return message
+            }
+            var trimmedMessage = message
+            metrics.speedSamples = nil
+            trimmedMessage.responseMetrics = metrics
+            return trimmedMessage
+        }
+    }
+
+    /// 将流式采样作为临时 UI 数据，不写入磁盘，避免会话文件膨胀。
+    private func normalizedMessagesForPersistence(_ messages: [ChatMessage]) -> [ChatMessage] {
+        messages.map { message in
+            guard var metrics = message.responseMetrics, metrics.speedSamples != nil else {
+                return message
+            }
+            var trimmedMessage = message
+            metrics.speedSamples = nil
+            trimmedMessage.responseMetrics = metrics
+            return trimmedMessage
+        }
+    }
+
+    private func publishMessages(
+        _ messages: [ChatMessage],
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) {
+        let normalized = normalizedMessagesForRuntime(messages, keepingSpeedSamplesFor: preferredMessageID)
+        messagesForSessionSubject.send(normalized)
+    }
+
+    private func persistMessages(_ messages: [ChatMessage], for sessionID: UUID) {
+        let persisted = normalizedMessagesForPersistence(messages)
+        Persistence.saveMessages(persisted, for: sessionID)
+    }
+
     private func persistRequestLog(
         context: RequestLogContext,
         status: RequestLogStatus,
@@ -3226,9 +3274,9 @@ public class ChatService {
         messages[index].content = transcript
         
         if isCurrentSession {
-            messagesForSessionSubject.send(messages)
+            publishMessages(messages)
         }
-        Persistence.saveMessages(messages, for: sessionID)
+        persistMessages(messages, for: sessionID)
         
         // 如果是新建的会话且名称仍为占位符，则同步更新会话名称
         if isCurrentSession, var currentSession = currentSessionSubject.value, currentSession.name == placeholder {
@@ -3487,8 +3535,8 @@ public class ChatService {
         if shouldAwaitUserSupplement {
             var updatedMessages = self.messagesForSessionSubject.value
             updatedMessages.append(contentsOf: blockingResultMessages)
-            self.messagesForSessionSubject.send(updatedMessages)
-            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            self.publishMessages(updatedMessages)
+            persistMessages(updatedMessages, for: currentSessionID)
             requestStatusSubject.send(.finished)
             return
         }
@@ -3507,8 +3555,8 @@ public class ChatService {
                         // 非阻塞工具也写入消息列表，便于 UI 直接展示结果
                         var messages = self.messagesForSessionSubject.value
                         messages.append(outcome.message)
-                        self.messagesForSessionSubject.send(messages)
-                        Persistence.saveMessages(messages, for: currentSessionID)
+                        self.publishMessages(messages)
+                        persistMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
                 }
@@ -3532,8 +3580,8 @@ public class ChatService {
         if shouldAwaitUserSupplement {
             var updatedMessages = self.messagesForSessionSubject.value
             updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
-            self.messagesForSessionSubject.send(updatedMessages)
-            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            self.publishMessages(updatedMessages)
+            persistMessages(updatedMessages, for: currentSessionID)
             requestStatusSubject.send(.finished)
             return
         }
@@ -3547,8 +3595,8 @@ public class ChatService {
             // 新增一个独立的 loading assistant 气泡，用于最终回复
             let followUpLoadingMessage = ChatMessage(role: .assistant, content: "")
             updatedMessages.append(followUpLoadingMessage)
-            self.messagesForSessionSubject.send(updatedMessages)
-            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            self.publishMessages(updatedMessages)
+            persistMessages(updatedMessages, for: currentSessionID)
             currentLoadingMessageID = followUpLoadingMessage.id
 
             logger.info("正在将工具结果发回 AI 以生成最终回复...")
@@ -3721,7 +3769,7 @@ public class ChatService {
                             speedSamples: speedSamples.isEmpty ? nil : speedSamples
                         )
                     }
-                    messagesForSessionSubject.send(messages)
+                    publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
                 }
             }
             
@@ -3790,8 +3838,8 @@ public class ChatService {
                     )
                 }
                 finalAssistantMessage = messages[index]
-                messagesForSessionSubject.send(messages)
-                Persistence.saveMessages(messages, for: currentSessionID)
+                publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
+                persistMessages(messages, for: currentSessionID)
             }
             
             if let finalAssistantMessage = finalAssistantMessage {
@@ -3886,8 +3934,8 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         if let index = messages.firstIndex(where: { $0.id == messageID }) {
             messages.remove(at: index)
-            messagesForSessionSubject.send(messages)
-            Persistence.saveMessages(messages, for: sessionID)
+            publishMessages(messages)
+            persistMessages(messages, for: sessionID)
             logger.info("已移除占位消息 \(messageID.uuidString)。")
         }
     }
@@ -3951,8 +3999,8 @@ public class ChatService {
             // 清除重试标记
             retryTargetMessageID = nil
             
-            messagesForSessionSubject.send(messages)
-            Persistence.saveMessages(messages, for: sessionID)
+            publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
+            persistMessages(messages, for: sessionID)
             
             logger.info("已将新内容追加到消息历史: \(targetID)")
         } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
@@ -3979,8 +4027,8 @@ public class ChatService {
                 fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
                 responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
             )
-            messagesForSessionSubject.send(messages)
-            Persistence.saveMessages(messages, for: sessionID)
+            publishMessages(messages)
+            persistMessages(messages, for: sessionID)
         }
     }
 

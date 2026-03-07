@@ -514,6 +514,45 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         self.isTokenPerSecondEstimated = isTokenPerSecondEstimated
         self.speedSamples = speedSamples
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case requestStartedAt
+        case responseCompletedAt
+        case totalResponseDuration
+        case timeToFirstToken
+        case completionTokensForSpeed
+        case tokenPerSecond
+        case isTokenPerSecondEstimated
+        case speedSamples
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? MessageResponseMetrics.currentSchemaVersion
+        self.requestStartedAt = try container.decodeIfPresent(Date.self, forKey: .requestStartedAt)
+        self.responseCompletedAt = try container.decodeIfPresent(Date.self, forKey: .responseCompletedAt)
+        self.totalResponseDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .totalResponseDuration)
+        self.timeToFirstToken = try container.decodeIfPresent(TimeInterval.self, forKey: .timeToFirstToken)
+        self.completionTokensForSpeed = try container.decodeIfPresent(Int.self, forKey: .completionTokensForSpeed)
+        self.tokenPerSecond = try container.decodeIfPresent(Double.self, forKey: .tokenPerSecond)
+        self.isTokenPerSecondEstimated = try container.decodeIfPresent(Bool.self, forKey: .isTokenPerSecondEstimated) ?? false
+        // 流式曲线采样属于临时内存数据，解码时主动丢弃，避免历史会话回放占用内存。
+        self.speedSamples = nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encodeIfPresent(requestStartedAt, forKey: .requestStartedAt)
+        try container.encodeIfPresent(responseCompletedAt, forKey: .responseCompletedAt)
+        try container.encodeIfPresent(totalResponseDuration, forKey: .totalResponseDuration)
+        try container.encodeIfPresent(timeToFirstToken, forKey: .timeToFirstToken)
+        try container.encodeIfPresent(completionTokensForSpeed, forKey: .completionTokensForSpeed)
+        try container.encodeIfPresent(tokenPerSecond, forKey: .tokenPerSecond)
+        try container.encode(isTokenPerSecondEstimated, forKey: .isTokenPerSecondEstimated)
+        // 不编码 speedSamples，保证该数据只驻留内存。
+    }
 }
 
 /// 聊天消息数据结构 (App的"官方语言")
