@@ -162,9 +162,13 @@ struct ModelAdvancedSettingsView: View {
                         } label: {
                             HStack {
                                 Text("语音识别模型")
-                                Spacer()
-                                Text(selectedSpeechModelLabel)
+                                MarqueeText(
+                                    content: selectedSpeechModelLabel,
+                                    uiFont: .preferredFont(forTextStyle: .body)
+                                )
                                     .foregroundStyle(.secondary)
+                                    .allowsHitTesting(false)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                         }
                     
@@ -210,7 +214,8 @@ private struct SpeechModelSelectionView: View {
                 } label: {
                     let isSelected = selectedSpeechModel?.id == runnable.id
                     selectionRow(
-                        title: "\(runnable.model.displayName) | \(runnable.provider.name)",
+                        title: runnable.model.displayName,
+                        subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
                         isSelected: isSelected
                     )
                 }
@@ -225,14 +230,15 @@ private struct SpeechModelSelectionView: View {
     }
     
     @ViewBuilder
-    private func selectionRow(title: String, isSelected: Bool) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.tint)
-            }
-        }
+    private func selectionRow(title: String, subtitle: String? = nil, isSelected: Bool) -> some View {
+        MarqueeTitleSubtitleSelectionRow(
+            title: title,
+            subtitle: subtitle,
+            isSelected: isSelected,
+            subtitleUIFont: .monospacedSystemFont(
+                ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                weight: .regular
+            )
+        )
     }
 }

@@ -17,15 +17,20 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persist
 public enum Persistence {
     private static let sessionStoreSchemaVersion = 3
     private static let messagesFileSchemaVersion = 2
+    private static let requestLogSchemaVersion = 1
+    private static let requestLogRetentionLimit = 10_000
     private static let migrationLogPrefix = "[(迁移)]"
     private static let compatibilityReminderPrefix = "[(迁移)][兼容提醒]"
     private static let compatibilityReminderLock = NSLock()
+    private static let requestLogLock = NSLock()
     private static var hasLoggedCompatibilityReminder = false
 
-    private static let sessionIndexFileNameV3 = "index.json"
-    private static let sessionStoreDirectoryNameV3 = "v3"
-    private static let sessionRecordsDirectoryNameV3 = "sessions"
-    private static let legacyDirectoryName = "legacy"
+    private static let sessionIndexFileName = "index.json"
+    private static let sessionRecordsDirectoryName = "sessions"
+    private static let requestLogsDirectoryName = "RequestLogs"
+    private static let requestLogsFileName = "index.json"
+    private static let legacyV3DirectoryName = "v3"
+    private static let legacyArchiveDirectoryName = "legacy"
 
     private struct ChatMessagesFileEnvelope: Codable {
         let schemaVersion: Int
@@ -53,6 +58,7 @@ public enum Persistence {
         let id: UUID
         let name: String
         let lorebookIDs: [UUID]
+        let worldbookContextIsolationEnabled: Bool?
     }
 
     private struct SessionRecordFileV3: Codable {
@@ -66,6 +72,12 @@ public enum Persistence {
         let schemaVersion: Int
         let session: SessionMetaV3
         let prompts: SessionPromptsV3
+    }
+
+    private struct RequestLogFileEnvelope: Codable {
+        let schemaVersion: Int
+        let updatedAt: String
+        let logs: [RequestLogEntry]
     }
 
     private struct LegacyMessagesReadResult {
@@ -92,6 +104,8 @@ public enum Persistence {
 
     /// 保存所有聊天会话的列表
     public static func saveChatSessions(_ sessions: [ChatSession]) {
+        migrateLegacyV3StoreToCurrentLayoutIfNeeded()
+
         let sessionsToSave = sessions.filter { !$0.isTemporary }
         logger.info("准备保存 \(sessionsToSave.count) 个会话到会话索引。")
 
@@ -121,10 +135,12 @@ public enum Persistence {
 
     /// 加载所有聊天会话的列表
     public static func loadChatSessions() -> [ChatSession] {
+        migrateLegacyV3StoreToCurrentLayoutIfNeeded()
         logCompatibilityReminderIfNeeded(trigger: "loadChatSessions")
 
         if let sessions = loadChatSessionsFromV3() {
             logger.info("已从会话索引加载 \(sessions.count) 个会话。")
+            cleanupLegacyArtifactsIfPossible()
             return sessions
         }
 
@@ -139,6 +155,7 @@ public enum Persistence {
             try migrateLegacyStoreToV3(legacySessions: legacySessions)
             if let migratedSessions = loadChatSessionsFromV3() {
                 logger.info("\(migrationLogPrefix) 已完成迁移，加载到 \(migratedSessions.count) 个会话。")
+                cleanupLegacyArtifactsIfPossible()
                 return migratedSessions
             }
             logger.warning("\(migrationLogPrefix) 迁移后未读取到会话索引，回退返回旧会话列表。")
@@ -153,6 +170,8 @@ public enum Persistence {
 
     /// 保存指定会话的聊天消息
     public static func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
+        migrateLegacyV3StoreToCurrentLayoutIfNeeded()
+
         do {
             let normalized = normalizeToolCallsPlacement(in: messages, sessionID: sessionID)
             let sessionSnapshot = resolveSessionSnapshot(for: sessionID)
@@ -166,10 +185,12 @@ public enum Persistence {
 
     /// 加载指定会话的聊天消息
     public static func loadMessages(for sessionID: UUID) -> [ChatMessage] {
+        migrateLegacyV3StoreToCurrentLayoutIfNeeded()
         logCompatibilityReminderIfNeeded(trigger: "loadMessages")
 
         if let loadedMessages = loadMessagesFromV3(for: sessionID) {
             logger.info("会话 \(sessionID.uuidString) 已从会话存储加载 \(loadedMessages.count) 条消息。")
+            cleanupLegacyArtifactsIfPossible()
             return loadedMessages
         }
 
@@ -185,6 +206,8 @@ public enum Persistence {
             let sessionSnapshot = resolveSessionSnapshot(for: sessionID)
             let record = makeSessionRecordV3(session: sessionSnapshot, messages: legacy.messages)
             try writeSessionRecordV3(record, for: sessionID)
+            try removeItemIfExists(at: legacyURL)
+            cleanupLegacyArtifactsIfPossible()
             logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 消息迁移完成，共 \(legacy.messages.count) 条。")
             return legacy.messages
         } catch {
@@ -193,17 +216,157 @@ public enum Persistence {
         }
     }
 
+    // MARK: - 请求日志持久化
+
+    /// 追加一条请求日志，内部会执行滚动裁剪。
+    public static func appendRequestLog(_ entry: RequestLogEntry) {
+        requestLogLock.lock()
+        defer { requestLogLock.unlock() }
+
+        do {
+            var logs = (try loadRequestLogEnvelope()?.logs) ?? []
+            logs.append(entry)
+            if logs.count > requestLogRetentionLimit {
+                logs.removeFirst(logs.count - requestLogRetentionLimit)
+            }
+            try writeRequestLogEnvelope(
+                .init(
+                    schemaVersion: requestLogSchemaVersion,
+                    updatedAt: iso8601Timestamp(),
+                    logs: logs
+                )
+            )
+        } catch {
+            logger.error("写入请求日志失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 清空请求日志文件。
+    public static func clearRequestLogs() {
+        requestLogLock.lock()
+        defer { requestLogLock.unlock() }
+
+        let fileURL = requestLogsFileURL()
+        do {
+            try removeItemIfExists(at: fileURL)
+        } catch {
+            logger.error("清空请求日志失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 按条件读取请求日志（默认按请求开始时间倒序）。
+    public static func loadRequestLogs(query: RequestLogQuery = .init()) -> [RequestLogEntry] {
+        requestLogLock.lock()
+        defer { requestLogLock.unlock() }
+
+        let allLogs: [RequestLogEntry]
+        do {
+            allLogs = try loadRequestLogEnvelope()?.logs ?? []
+        } catch {
+            logger.error("读取请求日志失败: \(error.localizedDescription)")
+            return []
+        }
+
+        var filtered = allLogs.filter { entry in
+            if let from = query.from, entry.requestedAt < from {
+                return false
+            }
+            if let to = query.to, entry.requestedAt > to {
+                return false
+            }
+            if let providerID = query.providerID, entry.providerID != providerID {
+                return false
+            }
+            if let modelID = query.modelID, entry.modelID != modelID {
+                return false
+            }
+            if let statuses = query.statuses, !statuses.contains(entry.status) {
+                return false
+            }
+            return true
+        }
+        filtered.sort { $0.requestedAt > $1.requestedAt }
+        if let limit = query.limit, limit > 0, filtered.count > limit {
+            return Array(filtered.prefix(limit))
+        }
+        return filtered
+    }
+
+    /// 汇总请求日志，用于后续统计展示与导出。
+    public static func summarizeRequestLogs(query: RequestLogQuery = .init()) -> RequestLogSummary {
+        let logs = loadRequestLogs(query: query)
+        var summary = RequestLogSummary()
+
+        var providerBuckets: [String: RequestLogSummaryBucket] = [:]
+        var modelBuckets: [String: RequestLogSummaryBucket] = [:]
+
+        for entry in logs {
+            summary.totalRequests += 1
+            switch entry.status {
+            case .success:
+                summary.successCount += 1
+            case .failed:
+                summary.failedCount += 1
+            case .cancelled:
+                summary.cancelledCount += 1
+            }
+            accumulateRequestTokens(entry.tokenUsage, to: &summary.tokenTotals)
+
+            var providerBucket = providerBuckets[entry.providerName] ?? RequestLogSummaryBucket(key: entry.providerName)
+            providerBucket.requestCount += 1
+            switch entry.status {
+            case .success:
+                providerBucket.successCount += 1
+            case .failed:
+                providerBucket.failedCount += 1
+            case .cancelled:
+                providerBucket.cancelledCount += 1
+            }
+            accumulateRequestTokens(entry.tokenUsage, to: &providerBucket.tokenTotals)
+            providerBuckets[entry.providerName] = providerBucket
+
+            var modelBucket = modelBuckets[entry.modelID] ?? RequestLogSummaryBucket(key: entry.modelID)
+            modelBucket.requestCount += 1
+            switch entry.status {
+            case .success:
+                modelBucket.successCount += 1
+            case .failed:
+                modelBucket.failedCount += 1
+            case .cancelled:
+                modelBucket.cancelledCount += 1
+            }
+            accumulateRequestTokens(entry.tokenUsage, to: &modelBucket.tokenTotals)
+            modelBuckets[entry.modelID] = modelBucket
+        }
+
+        summary.byProvider = providerBuckets.values.sorted { lhs, rhs in
+            if lhs.requestCount == rhs.requestCount {
+                return lhs.key < rhs.key
+            }
+            return lhs.requestCount > rhs.requestCount
+        }
+        summary.byModel = modelBuckets.values.sorted { lhs, rhs in
+            if lhs.requestCount == rhs.requestCount {
+                return lhs.key < rhs.key
+            }
+            return lhs.requestCount > rhs.requestCount
+        }
+        return summary
+    }
+
     /// 判断会话是否存在可读取的数据文件（V3 或 legacy）。
     public static func sessionDataExists(sessionID: UUID) -> Bool {
         let v3FileExists = FileManager.default.fileExists(atPath: sessionRecordFileURL(for: sessionID).path)
+        let legacyV3FileExists = FileManager.default.fileExists(atPath: legacyV3SessionRecordFileURL(for: sessionID).path)
         let legacyFileExists = FileManager.default.fileExists(atPath: legacyMessagesFileURL(for: sessionID).path)
-        return v3FileExists || legacyFileExists
+        return v3FileExists || legacyV3FileExists || legacyFileExists
     }
 
     /// 删除会话相关的消息持久化文件（V3 + legacy）。
     public static func deleteSessionArtifacts(sessionID: UUID) {
         let targets = [
             sessionRecordFileURL(for: sessionID),
+            legacyV3SessionRecordFileURL(for: sessionID),
             legacyMessagesFileURL(for: sessionID)
         ]
 
@@ -242,6 +405,7 @@ public enum Persistence {
                         topicPrompt: nil,
                         enhancedPrompt: nil,
                         lorebookIDs: [],
+                        worldbookContextIsolationEnabled: false,
                         isTemporary: false
                     )
                     loadedSessions.append(session)
@@ -304,7 +468,7 @@ public enum Persistence {
             }
         )
         try writeSessionIndexV3(index)
-        try archiveLegacyFiles(sessions: sessionsToSave)
+        try removeLegacySourceFiles(sessions: sessionsToSave)
     }
 
     private static func ensureSessionRecordMetadataUpToDate(for session: ChatSession) throws {
@@ -409,7 +573,8 @@ public enum Persistence {
             session: SessionMetaV3(
                 id: session.id,
                 name: session.name,
-                lorebookIDs: session.lorebookIDs
+                lorebookIDs: session.lorebookIDs,
+                worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil
             ),
             prompts: SessionPromptsV3(
                 topicPrompt: session.topicPrompt,
@@ -426,6 +591,7 @@ public enum Persistence {
             topicPrompt: summary.prompts.topicPrompt,
             enhancedPrompt: summary.prompts.enhancedPrompt,
             lorebookIDs: summary.session.lorebookIDs,
+            worldbookContextIsolationEnabled: summary.session.worldbookContextIsolationEnabled ?? false,
             isTemporary: false
         )
     }
@@ -452,8 +618,39 @@ public enum Persistence {
         summary.session.id == session.id &&
         summary.session.name == session.name &&
         summary.session.lorebookIDs == session.lorebookIDs &&
+        (summary.session.worldbookContextIsolationEnabled ?? false) == session.worldbookContextIsolationEnabled &&
         summary.prompts.topicPrompt == session.topicPrompt &&
         summary.prompts.enhancedPrompt == session.enhancedPrompt
+    }
+
+    private static func accumulateRequestTokens(_ usage: MessageTokenUsage?, to totals: inout RequestLogTokenTotals) {
+        guard let usage else { return }
+        totals.sentTokens += usage.promptTokens ?? 0
+        totals.receivedTokens += usage.completionTokens ?? 0
+        totals.thinkingTokens += usage.thinkingTokens ?? 0
+        totals.cacheWriteTokens += usage.cacheWriteTokens ?? 0
+        totals.cacheReadTokens += usage.cacheReadTokens ?? 0
+        totals.totalTokens += usage.totalTokens ?? 0
+    }
+
+    private static func loadRequestLogEnvelope() throws -> RequestLogFileEnvelope? {
+        let fileURL = requestLogsFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+
+        let data = try Data(contentsOf: fileURL)
+        return try JSONDecoder().decode(RequestLogFileEnvelope.self, from: data)
+    }
+
+    private static func writeRequestLogEnvelope(_ envelope: RequestLogFileEnvelope) throws {
+        let fileURL = requestLogsFileURL()
+        try ensureDirectoryExists(fileURL.deletingLastPathComponent())
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(envelope)
+        try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
     }
 
     private static func loadSessionIndexV3() -> SessionIndexFileV3? {
@@ -508,36 +705,66 @@ public enum Persistence {
         try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
     }
 
-    private static func archiveLegacyFiles(sessions: [ChatSession]) throws {
+    private static func removeLegacySourceFiles(sessions: [ChatSession]) throws {
         let legacyIndexURL = legacySessionIndexFileURL()
         let legacyMessageURLs = sessions.map { legacyMessagesFileURL(for: $0.id) }
-        let hasLegacyIndex = FileManager.default.fileExists(atPath: legacyIndexURL.path)
-        let hasLegacyMessages = legacyMessageURLs.contains(where: { FileManager.default.fileExists(atPath: $0.path) })
-        guard hasLegacyIndex || hasLegacyMessages else {
+
+        try removeItemIfExists(at: legacyIndexURL)
+        for sourceURL in legacyMessageURLs {
+            try removeItemIfExists(at: sourceURL)
+        }
+
+        logger.info("\(migrationLogPrefix) 旧版会话索引与消息文件已清理。")
+    }
+
+    private static func migrateLegacyV3StoreToCurrentLayoutIfNeeded() {
+        let legacyV3Directory = legacyV3DirectoryURL()
+        guard FileManager.default.fileExists(atPath: legacyV3Directory.path) else {
             return
         }
 
-        let archiveRoot = getChatsDirectory()
-            .appendingPathComponent(legacyDirectoryName)
-            .appendingPathComponent("v2_\(compactTimestamp())")
-        let archiveMessagesDirectory = archiveRoot.appendingPathComponent("messages")
+        let legacyV3IndexURL = legacyV3SessionIndexFileURL()
+        let legacyV3SessionsDirectory = legacyV3SessionsDirectoryURL()
+        let currentIndexURL = sessionIndexFileURLV3()
+        let currentSessionsDirectory = currentSessionRecordsDirectory()
 
-        try ensureDirectoryExists(archiveRoot)
-        try ensureDirectoryExists(archiveMessagesDirectory)
+        do {
+            try ensureDirectoryExists(currentSessionsDirectory)
 
-        if hasLegacyIndex {
-            let archivedIndexURL = archiveRoot.appendingPathComponent("sessions.json")
-            try moveItemIfExists(from: legacyIndexURL, to: archivedIndexURL)
+            if FileManager.default.fileExists(atPath: legacyV3IndexURL.path) {
+                if FileManager.default.fileExists(atPath: currentIndexURL.path) {
+                    try mergeLegacyV3IndexIntoCurrentIfNeeded(
+                        currentIndexURL: currentIndexURL,
+                        legacyV3IndexURL: legacyV3IndexURL
+                    )
+                    try removeItemIfExists(at: legacyV3IndexURL)
+                } else {
+                    try moveItemIfExists(from: legacyV3IndexURL, to: currentIndexURL)
+                }
+            }
+
+            if FileManager.default.fileExists(atPath: legacyV3SessionsDirectory.path) {
+                let sessionFiles = try FileManager.default.contentsOfDirectory(
+                    at: legacyV3SessionsDirectory,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                )
+
+                for sourceURL in sessionFiles where sourceURL.pathExtension.lowercased() == "json" {
+                    let targetURL = currentSessionsDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+                    if FileManager.default.fileExists(atPath: targetURL.path) {
+                        try removeItemIfExists(at: sourceURL)
+                    } else {
+                        try moveItemIfExists(from: sourceURL, to: targetURL)
+                    }
+                }
+            }
+
+            try removeItemIfExists(at: legacyV3Directory)
+            logger.info("\(migrationLogPrefix) v3 目录数据已迁移到 ChatSessions 根目录并清理旧目录。")
+        } catch {
+            logger.warning("\(migrationLogPrefix) v3 目录迁移失败: \(error.localizedDescription)")
         }
-
-        for sourceURL in legacyMessageURLs {
-            guard FileManager.default.fileExists(atPath: sourceURL.path) else { continue }
-            let targetURL = archiveMessagesDirectory.appendingPathComponent(sourceURL.lastPathComponent)
-            try moveItemIfExists(from: sourceURL, to: targetURL)
-        }
-
-        logger.info("\(migrationLogPrefix) 旧版文件已归档到 \(archiveRoot.path)")
-        logger.info("\(compatibilityReminderPrefix) 旧版文件已归档，legacy 兼容读取仍保留。")
     }
 
     private static func moveItemIfExists(from source: URL, to destination: URL) throws {
@@ -549,6 +776,61 @@ public enum Persistence {
         try FileManager.default.moveItem(at: source, to: destination)
     }
 
+    private static func removeItemIfExists(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    private static func cleanupLegacyArtifactsIfPossible() {
+        let hasLegacyIndex = FileManager.default.fileExists(atPath: legacySessionIndexFileURL().path)
+        let hasLegacyMessages = hasLegacyMessageFiles()
+        guard !hasLegacyIndex && !hasLegacyMessages else {
+            return
+        }
+
+        let legacyArchiveURL = legacyArchiveDirectoryURL()
+        guard FileManager.default.fileExists(atPath: legacyArchiveURL.path) else {
+            return
+        }
+
+        do {
+            try removeItemIfExists(at: legacyArchiveURL)
+            logger.info("\(migrationLogPrefix) legacy 目录已自动清理。")
+        } catch {
+            logger.warning("\(migrationLogPrefix) 清理 legacy 目录失败: \(error.localizedDescription)")
+        }
+    }
+
+    private static func mergeLegacyV3IndexIntoCurrentIfNeeded(
+        currentIndexURL: URL,
+        legacyV3IndexURL: URL
+    ) throws {
+        let decoder = JSONDecoder()
+        let currentData = try Data(contentsOf: currentIndexURL)
+        let legacyData = try Data(contentsOf: legacyV3IndexURL)
+        let currentIndex = try decoder.decode(SessionIndexFileV3.self, from: currentData)
+        let legacyIndex = try decoder.decode(SessionIndexFileV3.self, from: legacyData)
+
+        var existingIDs = Set(currentIndex.sessions.map(\.id))
+        var mergedSessions = currentIndex.sessions
+        for item in legacyIndex.sessions where !existingIDs.contains(item.id) {
+            mergedSessions.append(item)
+            existingIDs.insert(item.id)
+        }
+
+        guard mergedSessions.count != currentIndex.sessions.count else {
+            return
+        }
+
+        let mergedIndex = SessionIndexFileV3(
+            schemaVersion: sessionStoreSchemaVersion,
+            updatedAt: iso8601Timestamp(),
+            sessions: mergedSessions
+        )
+        try writeSessionIndexV3(mergedIndex)
+        logger.info("\(migrationLogPrefix) 已合并 v3 与当前会话索引，新增 \(mergedSessions.count - currentIndex.sessions.count) 个会话条目。")
+    }
+
     private static func logCompatibilityReminderIfNeeded(trigger: String) {
         compatibilityReminderLock.lock()
         defer { compatibilityReminderLock.unlock() }
@@ -556,18 +838,26 @@ public enum Persistence {
         guard !hasLoggedCompatibilityReminder else { return }
 
         let hasCurrentIndex = FileManager.default.fileExists(atPath: sessionIndexFileURLV3().path)
+        let hasLegacyV3 = hasLegacyV3Artifacts()
         let hasLegacyIndex = FileManager.default.fileExists(atPath: legacySessionIndexFileURL().path)
         let hasLegacyMessages = hasLegacyMessageFiles()
 
         let legacyStatus: String
-        if hasLegacyIndex || hasLegacyMessages {
+        if hasLegacyV3 {
+            legacyStatus = "检测到 v3 目录历史文件，将自动迁移到 ChatSessions 根目录。"
+        } else if hasLegacyIndex || hasLegacyMessages {
             legacyStatus = "检测到 legacy 文件，已启用前向兼容读取。"
         } else {
-            legacyStatus = "当前未检测到 legacy 文件，但前向兼容读取逻辑仍保留。"
+            legacyStatus = "当前未检测到 legacy/v3 历史文件。"
         }
 
-        logger.info("\(compatibilityReminderPrefix) 触发点=\(trigger)，存储状态: currentIndex=\(hasCurrentIndex), legacyIndex=\(hasLegacyIndex), legacyMessages=\(hasLegacyMessages)。\(legacyStatus)")
+        logger.info("\(compatibilityReminderPrefix) 触发点=\(trigger)，存储状态: currentIndex=\(hasCurrentIndex), legacyV3=\(hasLegacyV3), legacyIndex=\(hasLegacyIndex), legacyMessages=\(hasLegacyMessages)。\(legacyStatus)")
         hasLoggedCompatibilityReminder = true
+    }
+
+    private static func hasLegacyV3Artifacts() -> Bool {
+        let legacyV3Directory = legacyV3DirectoryURL()
+        return FileManager.default.fileExists(atPath: legacyV3Directory.path)
     }
 
     private static func hasLegacyMessageFiles() -> Bool {
@@ -592,16 +882,16 @@ public enum Persistence {
         }
     }
 
-    private static func getChatV3Directory() -> URL {
-        let directory = getChatsDirectory().appendingPathComponent(sessionStoreDirectoryNameV3)
+    private static func currentSessionRecordsDirectory() -> URL {
+        let directory = getChatsDirectory().appendingPathComponent(sessionRecordsDirectoryName)
         if !FileManager.default.fileExists(atPath: directory.path) {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
         return directory
     }
 
-    private static func getChatV3SessionsDirectory() -> URL {
-        let directory = getChatV3Directory().appendingPathComponent(sessionRecordsDirectoryNameV3)
+    private static func requestLogsDirectoryURL() -> URL {
+        let directory = getChatsDirectory().appendingPathComponent(requestLogsDirectoryName)
         if !FileManager.default.fileExists(atPath: directory.path) {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -609,11 +899,31 @@ public enum Persistence {
     }
 
     private static func sessionIndexFileURLV3() -> URL {
-        getChatV3Directory().appendingPathComponent(sessionIndexFileNameV3)
+        getChatsDirectory().appendingPathComponent(sessionIndexFileName)
+    }
+
+    private static func requestLogsFileURL() -> URL {
+        requestLogsDirectoryURL().appendingPathComponent(requestLogsFileName)
     }
 
     private static func sessionRecordFileURL(for sessionID: UUID) -> URL {
-        getChatV3SessionsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
+        currentSessionRecordsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
+    private static func legacyV3DirectoryURL() -> URL {
+        getChatsDirectory().appendingPathComponent(legacyV3DirectoryName)
+    }
+
+    private static func legacyV3SessionIndexFileURL() -> URL {
+        legacyV3DirectoryURL().appendingPathComponent(sessionIndexFileName)
+    }
+
+    private static func legacyV3SessionsDirectoryURL() -> URL {
+        legacyV3DirectoryURL().appendingPathComponent(sessionRecordsDirectoryName)
+    }
+
+    private static func legacyV3SessionRecordFileURL(for sessionID: UUID) -> URL {
+        legacyV3SessionsDirectoryURL().appendingPathComponent("\(sessionID.uuidString).json")
     }
 
     private static func legacySessionIndexFileURL() -> URL {
@@ -624,16 +934,13 @@ public enum Persistence {
         getChatsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
     }
 
+    private static func legacyArchiveDirectoryURL() -> URL {
+        getChatsDirectory().appendingPathComponent(legacyArchiveDirectoryName)
+    }
+
     private static func iso8601Timestamp() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: Date())
-    }
-
-    private static func compactTimestamp() -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
         return formatter.string(from: Date())
     }
 

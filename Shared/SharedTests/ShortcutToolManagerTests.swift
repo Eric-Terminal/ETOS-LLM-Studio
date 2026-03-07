@@ -10,15 +10,17 @@ import Testing
 import Foundation
 @testable import Shared
 
-@Suite("ShortcutToolManager Tests")
+@Suite("快捷指令工具管理器测试")
 struct ShortcutToolManagerTests {
 
     @MainActor
-    @Test("chatToolsForLLM only returns enabled shortcuts")
+    @Test("chatToolsForLLM 仅返回已启用的快捷指令")
     func testChatToolsForLLMReturnsEnabledOnly() {
         let original = ShortcutToolStore.loadTools()
+        let originalGlobalSwitch = ShortcutToolManager.shared.chatToolsEnabled
         defer {
             ShortcutToolStore.saveTools(original)
+            ShortcutToolManager.shared.setChatToolsEnabled(originalGlobalSwitch)
             ShortcutToolManager.shared.reloadFromDisk()
         }
 
@@ -35,6 +37,7 @@ struct ShortcutToolManagerTests {
 
         ShortcutToolStore.saveTools([enabled, disabled])
         ShortcutToolManager.shared.reloadFromDisk()
+        ShortcutToolManager.shared.setChatToolsEnabled(true)
 
         let tools = ShortcutToolManager.shared.chatToolsForLLM()
         #expect(tools.count == 1)
@@ -42,7 +45,31 @@ struct ShortcutToolManagerTests {
         #expect(tools.first?.description.contains("快捷指令") == true)
     }
 
-    @Test("tool alias is stable and prefixed")
+    @MainActor
+    @Test("聊天总开关关闭时 chatToolsForLLM 返回空数组")
+    func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() {
+        let original = ShortcutToolStore.loadTools()
+        let originalGlobalSwitch = ShortcutToolManager.shared.chatToolsEnabled
+        defer {
+            ShortcutToolStore.saveTools(original)
+            ShortcutToolManager.shared.setChatToolsEnabled(originalGlobalSwitch)
+            ShortcutToolManager.shared.reloadFromDisk()
+        }
+
+        let enabled = ShortcutToolDefinition(
+            name: "Enabled Shortcut",
+            isEnabled: true,
+            generatedDescription: "enabled"
+        )
+
+        ShortcutToolStore.saveTools([enabled])
+        ShortcutToolManager.shared.reloadFromDisk()
+        ShortcutToolManager.shared.setChatToolsEnabled(false)
+
+        #expect(ShortcutToolManager.shared.chatToolsForLLM().isEmpty)
+    }
+
+    @Test("工具别名保持稳定且带有预期前缀")
     func testAliasFormat() {
         let tool = ShortcutToolDefinition(id: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!, name: "My Tool")
         let alias = ShortcutToolNaming.alias(for: tool)
@@ -51,7 +78,7 @@ struct ShortcutToolManagerTests {
     }
 
     @MainActor
-    @Test("official import shortcut has default name and share URL")
+    @Test("官方导入快捷指令具有默认名称与分享链接")
     func testOfficialImportDefaults() {
         let manager = ShortcutToolManager.shared
         let originalName = manager.officialImportShortcutName

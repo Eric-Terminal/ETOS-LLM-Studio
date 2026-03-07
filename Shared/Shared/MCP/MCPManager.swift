@@ -239,6 +239,7 @@ public final class MCPManager: ObservableObject {
     public nonisolated static var toolNamePrefix: String { "mcp://" }
     public nonisolated static var toolAliasPrefix: String { "mcp_" }
     private nonisolated static var resourceNamePrefix: String { "mcpres://" }
+    private nonisolated static let chatToolsEnabledUserDefaultsKey = "mcp.chatToolsEnabled"
     public nonisolated static func isMCPToolName(_ name: String) -> Bool {
         name.hasPrefix(toolNamePrefix) || name.hasPrefix(toolAliasPrefix)
     }
@@ -264,6 +265,7 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var lastOperationOutput: String?
     @Published public private(set) var lastOperationError: String?
     @Published public private(set) var isBusy: Bool = false
+    @Published public private(set) var chatToolsEnabled: Bool
 
     public weak var samplingHandler: MCPSamplingHandler? {
         didSet {
@@ -309,6 +311,7 @@ public final class MCPManager: ObservableObject {
     private let governanceLogLimit = 1200
 
     private init() {
+        chatToolsEnabled = UserDefaults.standard.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
         reloadServers()
         startConfigWatcherIfNeeded()
         connectSelectedServersIfNeeded()
@@ -1107,8 +1110,16 @@ public final class MCPManager: ObservableObject {
 
     // MARK: - Chat Integration
 
+    public func setChatToolsEnabled(_ isEnabled: Bool) {
+        guard chatToolsEnabled != isEnabled else { return }
+        chatToolsEnabled = isEnabled
+        UserDefaults.standard.set(isEnabled, forKey: Self.chatToolsEnabledUserDefaultsKey)
+        appendGovernanceLog(level: .info, category: .routing, message: "MCP 聊天工具总开关已\(isEnabled ? "开启" : "关闭")。")
+    }
+
     public func chatToolsForLLM() -> [InternalToolDefinition] {
-        tools.compactMap { available in
+        guard chatToolsEnabled else { return [] }
+        let chatTools: [InternalToolDefinition] = tools.compactMap { available -> InternalToolDefinition? in
             if available.server.approvalPolicy(for: available.tool.toolId) == .alwaysDeny {
                 return nil
             }
@@ -1124,9 +1135,13 @@ public final class MCPManager: ObservableObject {
             ])
             return InternalToolDefinition(name: available.internalName, description: description, parameters: parameters, isBlocking: true)
         }
+        return chatTools
     }
 
     public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
+        guard chatToolsEnabled else {
+            throw MCPChatBridgeError.toolGroupDisabled("MCP 工具")
+        }
         guard let routed = routedTools[toolName] else {
             throw MCPChatBridgeError.unknownTool
         }
@@ -1191,6 +1206,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func approvalPolicy(for toolName: String) -> MCPToolApprovalPolicy? {
+        guard chatToolsEnabled else { return .alwaysDeny }
         guard let routed = routedTools[toolName] else { return nil }
         return routed.server.approvalPolicy(for: routed.tool.toolId)
     }
@@ -1865,6 +1881,7 @@ private struct RoutedPrompt {
 public enum MCPChatBridgeError: LocalizedError {
     case unknownTool
     case unknownPrompt
+    case toolGroupDisabled(String)
     case toolDeniedByPolicy(String)
     case toolCancelled(String)
 
@@ -1874,6 +1891,8 @@ public enum MCPChatBridgeError: LocalizedError {
             return "未找到匹配的 MCP 工具。"
         case .unknownPrompt:
             return "未找到匹配的 MCP 提示词模板。"
+        case .toolGroupDisabled(let displayName):
+            return "\(displayName)总开关已关闭。"
         case .toolDeniedByPolicy(let displayName):
             return "\(displayName) 已被策略禁止调用。"
         case .toolCancelled(let displayName):

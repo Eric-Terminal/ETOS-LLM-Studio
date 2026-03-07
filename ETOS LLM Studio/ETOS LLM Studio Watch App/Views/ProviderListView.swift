@@ -49,7 +49,13 @@ private struct WatchProviderManagementContentView: View {
         List {
             ForEach(viewModel.providers) { provider in
                 NavigationLink(destination: ProviderDetailView(provider: provider)) {
-                    Text(provider.name)
+                    MarqueeTitleSubtitleLabel(
+                        title: provider.name,
+                        subtitle: provider.baseURL,
+                        titleUIFont: .preferredFont(forTextStyle: .body),
+                        subtitleUIFont: .preferredFont(forTextStyle: .caption2),
+                        spacing: 2
+                    )
                 }
                 .swipeActions(edge: .leading) {
                     NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
@@ -131,20 +137,25 @@ private struct WatchProviderModelOrderContentView: View {
     @ViewBuilder
     private func modelOrderRow(runnable: RunnableModel, position: Int, total: Int) -> some View {
         HStack(spacing: 6) {
+            MarqueeTitleSubtitleLabel(
+                title: runnable.model.displayName,
+                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                titleUIFont: .preferredFont(forTextStyle: .body),
+                subtitleUIFont: .monospacedSystemFont(
+                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                    weight: .regular
+                ),
+                spacing: 2
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(runnable.model.displayName)
-                    .lineLimit(1)
-                Text(runnable.provider.name)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
                 if !runnable.model.isActivated {
                     Text("未启用")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
-            Spacer()
             VStack(spacing: 4) {
                 Button {
                     moveModelUp(at: position)

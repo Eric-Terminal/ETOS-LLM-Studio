@@ -37,6 +37,19 @@ struct MCPIntegrationView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section("聊天工具总开关") {
+                Toggle(
+                    "向模型暴露 MCP 工具",
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+                Text("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             
             Section("已配置服务器") {
                 if manager.servers.isEmpty {
@@ -139,6 +152,11 @@ struct MCPIntegrationView: View {
                 Section(
                     String(format: NSLocalizedString("已公布工具 (%d)", comment: ""), manager.tools.count)
                 ) {
+                    if !manager.chatToolsEnabled {
+                        Text("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(manager.tools) { available in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(available.tool.toolId)
@@ -725,30 +743,37 @@ private struct MCPServerDetailView: View {
                     String(format: NSLocalizedString("工具 (%d)", comment: ""), status.tools.count)
                 ) {
                     ForEach(status.tools) { tool in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Toggle(isOn: toolBinding(for: tool.toolId)) {
-                                VStack(alignment: .leading, spacing: 2) {
+                        NavigationLink {
+                            MCPToolSettingsDetailView(serverID: server.id, tool: tool)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline) {
                                     Text(tool.toolId)
-                                    if let desc = tool.description {
-                                        Text(desc)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    if let schemaSummary = schemaSummary(for: tool.inputSchema) {
-                                        Text("输入 Schema：\(schemaSummary)")
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                            .lineLimit(3)
-                                    }
+                                    Spacer()
+                                    Text(
+                                        manager.isToolEnabled(serverID: server.id, toolId: tool.toolId)
+                                        ? NSLocalizedString("已启用", comment: "MCP tool enabled status")
+                                        : NSLocalizedString("已停用", comment: "MCP tool disabled status")
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(
+                                        manager.isToolEnabled(serverID: server.id, toolId: tool.toolId)
+                                        ? .green
+                                        : .secondary
+                                    )
+                                }
+                                if let desc = tool.description {
+                                    Text(desc)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let schemaSummary = schemaSummary(for: tool.inputSchema) {
+                                    Text("输入 Schema：\(schemaSummary)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(3)
                                 }
                             }
-                            Picker("审批策略", selection: toolApprovalPolicyBinding(for: tool.toolId)) {
-                                ForEach(MCPToolApprovalPolicy.allCases, id: \.self) { policy in
-                                    Text(policy.displayName).tag(policy)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .font(.caption)
                         }
                     }
                 }
@@ -811,22 +836,6 @@ private struct MCPServerDetailView: View {
         }
     }
 
-    private func toolBinding(for toolId: String) -> Binding<Bool> {
-        Binding {
-            manager.isToolEnabled(serverID: server.id, toolId: toolId)
-        } set: { newValue in
-            manager.setToolEnabled(serverID: server.id, toolId: toolId, isEnabled: newValue)
-        }
-    }
-
-    private func toolApprovalPolicyBinding(for toolId: String) -> Binding<MCPToolApprovalPolicy> {
-        Binding {
-            manager.approvalPolicy(serverID: server.id, toolId: toolId)
-        } set: { newValue in
-            manager.setToolApprovalPolicy(serverID: server.id, toolId: toolId, policy: newValue)
-        }
-    }
-
     private func schemaSummary(for schema: JSONValue?) -> String? {
         guard let schema else { return nil }
         guard case .dictionary(let schemaDict) = schema else {
@@ -862,6 +871,97 @@ private struct MCPServerDetailView: View {
             return true
         }
         return false
+    }
+}
+
+private struct MCPToolSettingsDetailView: View {
+    let serverID: UUID
+    let tool: MCPToolDescription
+    @ObservedObject private var manager = MCPManager.shared
+
+    var body: some View {
+        List {
+            Section("工具信息") {
+                Text(tool.toolId)
+                    .font(.headline)
+                if let desc = tool.description, !desc.isEmpty {
+                    Text(desc)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                if let schemaSummary = schemaSummary(for: tool.inputSchema) {
+                    Text("Schema: \(schemaSummary)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(3)
+                }
+            }
+
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: toolBinding)
+            }
+
+            Section(
+                header: Text("审批策略"),
+                footer: Text("默认“每次询问”，可按工具单独设置。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Picker("审批策略", selection: toolApprovalPolicyBinding) {
+                    ForEach(MCPToolApprovalPolicy.allCases, id: \.self) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        }
+        .navigationTitle("工具设置")
+    }
+
+    private var toolBinding: Binding<Bool> {
+        Binding {
+            manager.isToolEnabled(serverID: serverID, toolId: tool.toolId)
+        } set: { newValue in
+            manager.setToolEnabled(serverID: serverID, toolId: tool.toolId, isEnabled: newValue)
+        }
+    }
+
+    private var toolApprovalPolicyBinding: Binding<MCPToolApprovalPolicy> {
+        Binding {
+            manager.approvalPolicy(serverID: serverID, toolId: tool.toolId)
+        } set: { newValue in
+            manager.setToolApprovalPolicy(serverID: serverID, toolId: tool.toolId, policy: newValue)
+        }
+    }
+
+    private func schemaSummary(for schema: JSONValue?) -> String? {
+        guard let schema else { return nil }
+        guard case .dictionary(let schemaDict) = schema else {
+            return schema.prettyPrintedCompact()
+        }
+        let typeLabel: String
+        if let typeValue = schemaDict["type"], case .string(let typeString) = typeValue {
+            typeLabel = typeString
+        } else {
+            typeLabel = "unknown"
+        }
+        var segments: [String] = ["type=\(typeLabel)"]
+        if let propertiesValue = schemaDict["properties"],
+           case .dictionary(let properties) = propertiesValue,
+           !properties.isEmpty {
+            segments.append("fields=\(properties.keys.sorted().prefix(6).joined(separator: ", "))")
+        }
+        if let requiredValue = schemaDict["required"],
+           case .array(let requiredItems) = requiredValue {
+            let requiredKeys = requiredItems.compactMap { item -> String? in
+                if case .string(let key) = item { return key }
+                return nil
+            }
+            if !requiredKeys.isEmpty {
+                segments.append("required=\(requiredKeys.joined(separator: ", "))")
+            }
+        }
+        return segments.joined(separator: " · ")
     }
 }
 

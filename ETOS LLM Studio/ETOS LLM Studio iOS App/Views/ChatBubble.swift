@@ -95,15 +95,17 @@ struct ChatBubble: View {
     let enableLiquidGlass: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
+    let onSwitchToPreviousVersion: () -> Void
+    let onSwitchToNextVersion: () -> Void
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
     @State private var availableWidth: CGFloat = 0
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
-    @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
 
     init(
@@ -115,8 +117,11 @@ struct ChatBubble: View {
         enableLiquidGlass: Bool,
         enableAdvancedRenderer: Bool = false,
         enableMathRendering: Bool = false,
+        showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
-        mergeWithNext: Bool
+        mergeWithNext: Bool,
+        onSwitchToPreviousVersion: @escaping () -> Void,
+        onSwitchToNextVersion: @escaping () -> Void
     ) {
         self.messageState = messageState
         self._isReasoningExpanded = isReasoningExpanded
@@ -126,8 +131,11 @@ struct ChatBubble: View {
         self.enableLiquidGlass = enableLiquidGlass
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
+        self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
+        self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
+        self.onSwitchToNextVersion = onSwitchToNextVersion
     }
     
     private var message: ChatMessage {
@@ -226,8 +234,8 @@ struct ChatBubble: View {
     }
 
     private var shouldShimmerReasoningHeader: Bool {
-        guard viewModel.isSendingMessage, message.role == .assistant else { return false }
-        return viewModel.latestAssistantMessageID == message.id
+        guard showsStreamingIndicators, message.role == .assistant else { return false }
+        return true
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
@@ -290,7 +298,7 @@ struct ChatBubble: View {
     private var shouldPlaceImagesAfterText: Bool {
         !isOutgoing && shouldShowTextBubble
     }
-    
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             // 用户消息靠右：左边放 Spacer
@@ -381,7 +389,7 @@ struct ChatBubble: View {
     private var compactVersionIndicator: some View {
         HStack(spacing: 4) {
             Button {
-                viewModel.switchToPreviousVersion(of: message)
+                onSwitchToPreviousVersion()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .bold))
@@ -395,7 +403,7 @@ struct ChatBubble: View {
                 .monospacedDigit()
             
             Button {
-                viewModel.switchToNextVersion(of: message)
+                onSwitchToNextVersion()
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .bold))
@@ -639,7 +647,7 @@ struct ChatBubble: View {
                   (message.reasoningContent ?? "").isEmpty,
                   (message.toolCalls ?? []).isEmpty {
             // 加载指示器
-            if viewModel.isSendingMessage {
+            if showsStreamingIndicators {
                 ShimmeringText(
                     text: "正在思考...",
                     font: .subheadline,
@@ -735,41 +743,14 @@ struct ChatBubble: View {
             
             LazyVGrid(columns: columns, alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
                 ForEach(fileNames, id: \.self) { fileName in
-                    if let image = loadImage(fileName: fileName) {
-                        Button {
-                            imagePreview = ImagePreviewPayload(image: image)
-                        } label: {
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(
-                                    minWidth: minWidth,
-                                    maxWidth: maxWidth
-                                )
-                                .frame(height: itemHeight)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                .shadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.secondary.opacity(0.15))
-                            .frame(
-                                minWidth: minWidth,
-                                maxWidth: maxWidth
-                            )
-                            .frame(height: itemHeight)
-                            .overlay(
-                                VStack(spacing: 4) {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 20))
-                                        .foregroundStyle(.secondary)
-                                    Text("图片丢失")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            )
-                            .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+                    AttachmentImageView(
+                        fileName: fileName,
+                        minWidth: minWidth,
+                        maxWidth: maxWidth,
+                        height: itemHeight,
+                        cornerRadius: 16
+                    ) { image in
+                        imagePreview = ImagePreviewPayload(image: image)
                     }
                 }
             }
@@ -804,15 +785,6 @@ struct ChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
-    }
-    
-    private func loadImage(fileName: String) -> UIImage? {
-        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
-        if let image = UIImage(contentsOfFile: fileURL.path) {
-            return image
-        }
-        guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
-        return UIImage(data: data)
     }
     
     @ViewBuilder
@@ -938,6 +910,100 @@ struct ImagePreviewWrapper: Identifiable {
 private struct ImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+private enum ChatAttachmentImageCache {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 160
+        return cache
+    }()
+
+    static func image(for fileName: String) -> UIImage? {
+        cache.object(forKey: fileName as NSString)
+    }
+
+    static func store(_ image: UIImage, for fileName: String) {
+        let pixelCost = Int(image.size.width * image.size.height * image.scale * image.scale)
+        cache.setObject(image, forKey: fileName as NSString, cost: max(1, pixelCost))
+    }
+}
+
+private struct AttachmentImageView: View {
+    let fileName: String
+    let minWidth: CGFloat
+    let maxWidth: CGFloat
+    let height: CGFloat
+    let cornerRadius: CGFloat
+    let onPreview: (UIImage) -> Void
+
+    @State private var image: UIImage?
+    @State private var didAttemptLoad = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Button {
+                    onPreview(image)
+                } label: {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(minWidth: minWidth, maxWidth: maxWidth)
+                        .frame(height: height)
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.12), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.secondary.opacity(0.15))
+                    .frame(minWidth: minWidth, maxWidth: maxWidth)
+                    .frame(height: height)
+                    .overlay(
+                        VStack(spacing: 4) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 20))
+                                .foregroundStyle(.secondary)
+                            Text("图片丢失")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    )
+                    .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
+            }
+        }
+        .task(id: fileName) {
+            guard !didAttemptLoad else { return }
+            didAttemptLoad = true
+            await loadImage()
+        }
+    }
+
+    private func loadImage() async {
+        if let cached = ChatAttachmentImageCache.image(for: fileName) {
+            await MainActor.run {
+                image = cached
+            }
+            return
+        }
+
+        let loadTask = Task.detached(priority: .userInitiated) { () -> UIImage? in
+            let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+            if let image = UIImage(contentsOfFile: fileURL.path) {
+                return image
+            }
+            guard let data = Persistence.loadImage(fileName: fileName) else { return nil }
+            return UIImage(data: data)
+        }
+        let loadedImage = await loadTask.value
+
+        guard let loadedImage else { return }
+        ChatAttachmentImageCache.store(loadedImage, for: fileName)
+        await MainActor.run {
+            image = loadedImage
+        }
+    }
 }
 
 // MARK: - Audio Player Manager

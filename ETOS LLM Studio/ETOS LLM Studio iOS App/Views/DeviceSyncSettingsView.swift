@@ -12,6 +12,7 @@ import Shared
 
 struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
+    @EnvironmentObject private var cloudSyncManager: CloudSyncManager
     @AppStorage("sync.options.providers") private var syncProviders = true
     @AppStorage("sync.options.sessions") private var syncSessions = true
     @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
@@ -21,17 +22,14 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.shortcutTools") private var syncShortcutTools = true
     @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
     @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
-    @AppStorage("sync.options.globalPrompt") private var syncGlobalPrompt = true
+    @AppStorage("sync.options.appStorage") private var syncAppStorage = true
+    @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
+    @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
+    @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
     
     var body: some View {
         List {
-            Section {
-                Toggle("启动时自动同步", isOn: $autoSyncEnabled)
-            } footer: {
-                Text("启用后，App 启动时会自动与 Apple Watch 同步数据。同步在后台静默进行，成功后会发送通知。")
-            }
-            
             Section("同步内容") {
                 Toggle("提供商配置", isOn: $syncProviders)
                 Toggle("会话记录", isOn: $syncSessions)
@@ -42,10 +40,12 @@ struct DeviceSyncSettingsView: View {
                 Toggle("快捷指令工具", isOn: $syncShortcutTools)
                 Toggle("世界书", isOn: $syncWorldbooks)
                 Toggle("反馈工单", isOn: $syncFeedbackTickets)
-                Toggle("全局系统提示词", isOn: $syncGlobalPrompt)
+                Toggle("软件设置（AppStorage）", isOn: $syncAppStorage)
             }
-            
+
             Section {
+                Toggle("启动时自动同步", isOn: $autoSyncEnabled)
+
                 Button {
                     syncManager.performSync(options: selectedSyncOptions)
                 } label: {
@@ -61,15 +61,51 @@ struct DeviceSyncSettingsView: View {
                     }
                 }
                 .disabled(selectedSyncOptions.isEmpty || isSyncing)
+            } header: {
+                Text("Apple Watch 同步")
             } footer: {
                 Text("点击后将与 Apple Watch 双向同步数据：比较双方差异后，把对方有而本地没有的数据传过来。")
             }
             
-            Section("同步状态") {
+            Section("Apple Watch 状态") {
                 syncStatusView
+            }
+
+            Section {
+                Toggle("启用 iCloud 同步", isOn: $cloudSyncEnabled)
+
+                Toggle("启动时自动同步", isOn: $cloudAutoSyncEnabled)
+                    .disabled(!cloudSyncEnabled)
+
+                Button {
+                    Task {
+                        await cloudSyncManager.performSync(options: selectedSyncOptions)
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isCloudSyncing {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        Label("同步到 iCloud", systemImage: "icloud")
+                            .font(.headline)
+                        Spacer()
+                    }
+                }
+                .disabled(!cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
+            } header: {
+                Text("iCloud 同步")
+            } footer: {
+                Text("默认关闭。开启后，iCloud 同步会先上传当前设备快照，再拉取其他设备快照并合并。API Key 通过 iCloud 钥匙串同步，不会写入普通同步包。")
+            }
+
+            Section("iCloud 状态") {
+                cloudSyncStatusView
             }
         }
         .navigationTitle("设备同步")
+        .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
     }
     
     private var selectedSyncOptions: SyncOptions {
@@ -83,12 +119,19 @@ struct DeviceSyncSettingsView: View {
         if syncShortcutTools { option.insert(.shortcutTools) }
         if syncWorldbooks { option.insert(.worldbooks) }
         if syncFeedbackTickets { option.insert(.feedbackTickets) }
-        if syncGlobalPrompt { option.insert(.globalSystemPrompt) }
+        if syncAppStorage { option.insert(.appStorage) }
         return option
     }
     
     private var isSyncing: Bool {
         if case .syncing = syncManager.state {
+            return true
+        }
+        return false
+    }
+
+    private var isCloudSyncing: Bool {
+        if case .syncing = cloudSyncManager.state {
             return true
         }
         return false
@@ -131,6 +174,50 @@ struct DeviceSyncSettingsView: View {
                 .foregroundStyle(.secondary)
         }
     }
+
+    @ViewBuilder
+    private var cloudSyncStatusView: some View {
+        if !cloudSyncEnabled {
+            Text("iCloud 同步已关闭")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+        } else {
+            switch cloudSyncManager.state {
+            case .idle:
+                Text("未进行同步").font(.footnote).foregroundColor(.secondary)
+            case .syncing(let message):
+                HStack {
+                    ProgressView()
+                    Text(message).font(.footnote)
+                }
+            case .success(let summary):
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("同步成功", systemImage: "checkmark.circle")
+                        .foregroundStyle(.green)
+                    Text(summaryDescription(summary))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if let lastUpdated = cloudSyncManager.lastUpdatedAt {
+                        Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            case .failed(let reason):
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("同步失败", systemImage: "xmark.circle")
+                        .foregroundStyle(.red)
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            @unknown default:
+                Text("未知状态")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
     
     private func summaryDescription(_ summary: SyncMergeSummary) -> String {
         var parts: [String] = []
@@ -161,10 +248,19 @@ struct DeviceSyncSettingsView: View {
         if summary.importedFeedbackTickets > 0 {
             parts.append(String(format: NSLocalizedString("工单 +%d", comment: ""), summary.importedFeedbackTickets))
         }
-        if summary.importedGlobalSystemPrompt > 0 {
-            parts.append(String(format: NSLocalizedString("全局提示词 +%d", comment: ""), summary.importedGlobalSystemPrompt))
+        if summary.importedAppStorageValues > 0 {
+            parts.append(String(format: NSLocalizedString("软件设置 +%d", comment: ""), summary.importedAppStorageValues))
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
+    }
+
+    private func migrateLegacyAppStorageOptionIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "sync.options.appStorage") == nil,
+              defaults.object(forKey: "sync.options.globalPrompt") != nil else {
+            return
+        }
+        syncAppStorage = legacySyncGlobalPrompt
     }
 }

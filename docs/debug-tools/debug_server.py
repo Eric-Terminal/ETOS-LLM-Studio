@@ -401,24 +401,41 @@ class DebugServer:
             
             success_count = 0
             fail_count = 0
+            MAX_RETRIES = 3  # 最大重试次数
             
             # 步骤2：逐个下载每个文件
             for i, file_path in enumerate(file_list):
-                # 重置事件用于等待下一个响应
-                self.compatible_download_event.clear()
-                
                 # 清理路径（处理设备返回的绝对路径问题）
                 clean_path = self.clean_device_path(file_path)
                 
-                # 发送下载命令
-                await self.send_command({"command": "download", "path": clean_path})
+                file_success = False
+                for attempt in range(MAX_RETRIES + 1):
+                    # 重置事件用于等待下一个响应
+                    self.compatible_download_event.clear()
+                    
+                    # 指数退避：首次不等待，重试时等待 1s / 2s / 4s
+                    if attempt > 0:
+                        delay = 2 ** (attempt - 1)
+                        print(f"  🔄 [{i+1}/{total}] 第{attempt}次重试（等待 {delay}s）: {file_path}")
+                        await asyncio.sleep(delay)
+                    
+                    # 发送下载命令
+                    await self.send_command({"command": "download", "path": clean_path})
+                    
+                    # 等待文件响应（最多60秒每个文件）
+                    try:
+                        await asyncio.wait_for(self.compatible_download_event.wait(), timeout=60.0)
+                        file_success = True
+                        break  # 下载成功，退出重试循环
+                    except asyncio.TimeoutError:
+                        if attempt < MAX_RETRIES:
+                            print(f"  ⚠️  [{i+1}/{total}] 第{attempt + 1}次尝试超时: {file_path}")
+                        else:
+                            print(f"  ❌ [{i+1}/{total}] 已重试 {MAX_RETRIES} 次，最终失败: {file_path}")
                 
-                # 等待文件响应（最多60秒每个文件）
-                try:
-                    await asyncio.wait_for(self.compatible_download_event.wait(), timeout=60.0)
+                if file_success:
                     success_count += 1
-                except asyncio.TimeoutError:
-                    print(f"  ❌ [{i+1}/{total}] 下载超时: {file_path}")
+                else:
                     fail_count += 1
                 
                 # 小延迟避免过快请求

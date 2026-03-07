@@ -114,13 +114,27 @@ struct SpecializedModelSelectorView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                Picker(title, selection: selectionID) {
-                    if allowEmptySelection {
-                        Text("未选择").tag("")
-                    }
-                    ForEach(options) { runnable in
-                        Text("\(runnable.model.displayName) | \(runnable.provider.name)")
-                            .tag(runnable.id)
+                NavigationLink {
+                    RunnableModelIdentifierSelectionView(
+                        title: title,
+                        options: options,
+                        selectionID: selectionID,
+                        allowEmptySelection: allowEmptySelection
+                    )
+                } label: {
+                    HStack {
+                        Text(title)
+                        MarqueeText(
+                            content: selectedModelLabel(
+                                for: selectionID.wrappedValue,
+                                in: options,
+                                allowEmptySelection: allowEmptySelection
+                            ),
+                            uiFont: .preferredFont(forTextStyle: .body)
+                        )
+                        .foregroundStyle(.secondary)
+                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
             }
@@ -142,5 +156,64 @@ struct SpecializedModelSelectorView: View {
         }
 
         imageGenerationModelIdentifier = options[0].id
+    }
+
+    private func selectedModelLabel(
+        for selectionID: String,
+        in options: [RunnableModel],
+        allowEmptySelection: Bool
+    ) -> String {
+        if let matched = options.first(where: { $0.id == selectionID }) {
+            return "\(matched.model.displayName) | \(matched.provider.name)"
+        }
+
+        if allowEmptySelection {
+            return "未选择"
+        }
+
+        return options.first.map { "\($0.model.displayName) | \($0.provider.name)" } ?? ""
+    }
+}
+
+private struct RunnableModelIdentifierSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    let options: [RunnableModel]
+    let selectionID: Binding<String>
+    let allowEmptySelection: Bool
+
+    var body: some View {
+        List {
+            if allowEmptySelection {
+                Button {
+                    select(nil)
+                } label: {
+                    MarqueeSelectionRow(title: "未选择", isSelected: selectionID.wrappedValue.isEmpty)
+                }
+            }
+
+            ForEach(options) { runnable in
+                Button {
+                    select(runnable.id)
+                } label: {
+                    MarqueeTitleSubtitleSelectionRow(
+                        title: runnable.model.displayName,
+                        subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                        isSelected: selectionID.wrappedValue == runnable.id,
+                        subtitleUIFont: .monospacedSystemFont(
+                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                            weight: .regular
+                        )
+                    )
+                }
+            }
+        }
+        .navigationTitle(title)
+    }
+
+    private func select(_ identifier: String?) {
+        selectionID.wrappedValue = identifier ?? ""
+        dismiss()
     }
 }

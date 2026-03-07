@@ -122,11 +122,116 @@ public class ChatService {
     private let worldbookExportService: WorldbookExportService
     private let worldbookEngine: WorldbookEngine
     private let urlSession: URLSession
+    private let audioAttachmentDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 24
+        cache.totalCostLimit = 32 * 1024 * 1024
+        return cache
+    }()
+    private let imageAttachmentDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 96
+        cache.totalCostLimit = 64 * 1024 * 1024
+        return cache
+    }()
+    private let fileAttachmentDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 32
+        cache.totalCostLimit = 64 * 1024 * 1024
+        return cache
+    }()
 
     private struct ImageGenerationContext {
         let sessionID: UUID
         let loadingMessageID: UUID
         let prompt: String
+    }
+
+    private struct RequestLogContext {
+        let requestID: UUID
+        let sessionID: UUID?
+        let providerID: UUID?
+        let providerName: String
+        let modelID: String
+        let isStreaming: Bool
+        let requestedAt: Date
+    }
+
+    private func cachedAttachmentData(
+        for fileName: String,
+        cache: NSCache<NSString, NSData>,
+        loader: (String) -> Data?
+    ) -> Data? {
+        let key = fileName as NSString
+        if let cached = cache.object(forKey: key) {
+            return Data(referencing: cached)
+        }
+
+        guard let data = loader(fileName) else { return nil }
+        cache.setObject(data as NSData, forKey: key, cost: data.count)
+        return data
+    }
+
+    private func loadAudioAttachmentFromStorage(fileName: String) -> AudioAttachment? {
+        guard let audioData = cachedAttachmentData(
+            for: fileName,
+            cache: audioAttachmentDataCache,
+            loader: { Persistence.loadAudio(fileName: $0) }
+        ) else {
+            return nil
+        }
+
+        let fileExtension = (fileName as NSString).pathExtension.lowercased()
+        let mimeType = "audio/\(fileExtension)"
+        return AudioAttachment(
+            data: audioData,
+            mimeType: mimeType,
+            format: fileExtension,
+            fileName: fileName
+        )
+    }
+
+    private func loadImageAttachmentFromStorage(fileName: String) -> ImageAttachment? {
+        guard let imageData = cachedAttachmentData(
+            for: fileName,
+            cache: imageAttachmentDataCache,
+            loader: { Persistence.loadImage(fileName: $0) }
+        ) else {
+            return nil
+        }
+
+        let fileExtension = (fileName as NSString).pathExtension.lowercased()
+        let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+        return ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+    }
+
+    private func loadFileAttachmentFromStorage(fileName: String) -> FileAttachment? {
+        guard let fileData = cachedAttachmentData(
+            for: fileName,
+            cache: fileAttachmentDataCache,
+            loader: { Persistence.loadFile(fileName: $0) }
+        ) else {
+            return nil
+        }
+
+        let mimeType = resolvedMimeType(for: fileName)
+        return FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+    }
+
+    private func invalidateAttachmentCache(for message: ChatMessage) {
+        if let audioFileName = message.audioFileName {
+            audioAttachmentDataCache.removeObject(forKey: audioFileName as NSString)
+        }
+        if let imageFileNames = message.imageFileNames {
+            for fileName in imageFileNames {
+                imageAttachmentDataCache.removeObject(forKey: fileName as NSString)
+            }
+        }
+        if let fileFileNames = message.fileFileNames {
+            for fileName in fileFileNames {
+                fileAttachmentDataCache.removeObject(forKey: fileName as NSString)
+            }
+        }
     }
 
     private func sanitizedToolName(_ name: String) -> String {
@@ -295,6 +400,20 @@ public class ChatService {
         
         logger.info("  - 初始选中模型为: \(initialModel?.model.displayName ?? "无")")
         logger.info("  - 初始化完成。")
+        AppLog.developer(
+            category: "chat_service",
+            action: "initialize",
+            message: "ChatService 初始化完成",
+            payload: [
+                "providerCount": "\(self.providers.count)",
+                "selectedModel": initialModel?.model.displayName ?? "无"
+            ]
+        )
+        AppLog.userOperation(
+            category: "应用",
+            action: "初始化聊天服务",
+            payload: ["providerCount": "\(self.providers.count)"]
+        )
     }
     
     // MARK: - 公开方法 (配置管理)
@@ -332,6 +451,14 @@ public class ChatService {
         selectedModelSubject.send(model)
         UserDefaults.standard.set(model?.id, forKey: "selectedRunnableModelID")
         logger.info("已将模型切换为: \(model?.model.displayName ?? "无")")
+        AppLog.userOperation(
+            category: "模型",
+            action: "切换模型",
+            payload: [
+                "provider": model?.provider.name ?? "无",
+                "model": model?.model.displayName ?? "无"
+            ]
+        )
     }
 
     // MARK: - 世界书管理
@@ -377,17 +504,37 @@ public class ChatService {
     }
 
     public func assignWorldbooks(to sessionID: UUID, worldbookIDs: [UUID]) {
-        var sessions = chatSessionsSubject.value
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        let uniqueIDs = deduplicatedWorldbookIDs(worldbookIDs)
-        sessions[index].lorebookIDs = uniqueIDs
+        let currentIsolationEnabled = chatSessionsSubject.value.first(where: { $0.id == sessionID })?.worldbookContextIsolationEnabled
+            ?? currentSessionSubject.value?.worldbookContextIsolationEnabled
+            ?? false
+        updateWorldbookSessionSettings(
+            sessionID: sessionID,
+            worldbookIDs: worldbookIDs,
+            worldbookContextIsolationEnabled: currentIsolationEnabled
+        )
+    }
 
-        chatSessionsSubject.send(sessions)
+    public func updateWorldbookSessionSettings(
+        sessionID: UUID,
+        worldbookIDs: [UUID],
+        worldbookContextIsolationEnabled: Bool
+    ) {
+        var sessions = chatSessionsSubject.value
+        let uniqueIDs = deduplicatedWorldbookIDs(worldbookIDs)
+
+        if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
+            sessions[index].lorebookIDs = uniqueIDs
+            sessions[index].worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
+            chatSessionsSubject.send(sessions)
+        }
+
         if let current = currentSessionSubject.value, current.id == sessionID {
             var updated = current
             updated.lorebookIDs = uniqueIDs
+            updated.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
             currentSessionSubject.send(updated)
         }
+
         Persistence.saveChatSessions(sessions)
     }
 
@@ -583,11 +730,16 @@ public class ChatService {
             // 始终切换到复用的临时会话，并刷新其消息列表（通常为空）。
             if let target = updatedSessions.first(where: { $0.id == reusableTemporary.id }) {
                 if currentSessionSubject.value?.id == target.id {
-                    messagesForSessionSubject.send(Persistence.loadMessages(for: target.id))
+                    publishMessages(Persistence.loadMessages(for: target.id))
                 } else {
                     setCurrentSession(target)
                 }
                 logger.info("复用了已有临时会话。")
+                AppLog.userOperation(
+                    category: "会话",
+                    action: "复用临时会话",
+                    payload: ["sessionID": target.id.uuidString]
+                )
             }
             return
         }
@@ -596,8 +748,13 @@ public class ChatService {
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
         currentSessionSubject.send(newSession)
-        messagesForSessionSubject.send([])
+        publishMessages([])
         logger.info("创建了新的临时会话。")
+        AppLog.userOperation(
+            category: "会话",
+            action: "创建新会话",
+            payload: ["sessionID": newSession.id.uuidString]
+        )
     }
     
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
@@ -629,6 +786,11 @@ public class ChatService {
         }
         Persistence.saveChatSessions(currentSessions)
         logger.info("删除后已保存会话列表。")
+        AppLog.userOperation(
+            category: "会话",
+            action: "删除会话",
+            payload: ["count": "\(sessionsToDelete.count)"]
+        )
     }
     
     @discardableResult
@@ -639,6 +801,7 @@ public class ChatService {
             topicPrompt: sourceSession.topicPrompt,
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
+            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
             isTemporary: false
         )
         logger.info("创建了分支会话: \(newSession.name)")
@@ -673,7 +836,7 @@ public class ChatService {
                         }
                     }
                 }
-                Persistence.saveMessages(sourceMessages, for: newSession.id)
+                persistMessages(sourceMessages, for: newSession.id)
                 logger.info("  - 复制了 \(sourceMessages.count) 条消息到新会话。")
             }
         }
@@ -700,6 +863,7 @@ public class ChatService {
             topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             lorebookIDs: sourceSession.lorebookIDs,
+            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
             isTemporary: false
         )
         logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
@@ -759,7 +923,7 @@ public class ChatService {
                 }
             }
             
-            Persistence.saveMessages(messagesToCopy, for: newSession.id)
+            persistMessages(messagesToCopy, for: newSession.id)
             logger.info("  - 复制了 \(messagesToCopy.count) 条消息到新会话（截止到指定消息）。")
         } else {
             logger.warning("  - 未找到指定的消息，创建空分支会话。")
@@ -778,6 +942,7 @@ public class ChatService {
         var messages = Persistence.loadMessages(for: session.id)
         if !messages.isEmpty {
             let lastMessage = messages.removeLast()
+            invalidateAttachmentCache(for: lastMessage)
             // 清理被删除消息关联的音频文件
             if let audioFileName = lastMessage.audioFileName {
                 Persistence.deleteAudio(fileName: audioFileName)
@@ -794,10 +959,10 @@ public class ChatService {
                     Persistence.deleteFile(fileName: fileName)
                 }
             }
-            Persistence.saveMessages(messages, for: session.id)
+            persistMessages(messages, for: session.id)
             logger.info("删除了会话的最后一条消息: \(session.name)")
             if session.id == currentSessionSubject.value?.id {
-                messagesForSessionSubject.send(messages)
+                publishMessages(messages)
             }
         }
     }
@@ -821,6 +986,7 @@ public class ChatService {
         }
         if !relatedToolMessageIDs.isEmpty {
             for candidate in messages where relatedToolMessageIDs.contains(candidate.id) {
+                invalidateAttachmentCache(for: candidate)
                 if let audioFileName = candidate.audioFileName {
                     Persistence.deleteAudio(fileName: audioFileName)
                 }
@@ -838,6 +1004,7 @@ public class ChatService {
         }
         
         // 清理被删除消息关联的音频文件
+        invalidateAttachmentCache(for: message)
         if let audioFileName = message.audioFileName {
             Persistence.deleteAudio(fileName: audioFileName)
         }
@@ -858,8 +1025,8 @@ public class ChatService {
         
         messages.removeAll { $0.id == message.id || relatedToolMessageIDs.contains($0.id) }
         
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
         logger.info("已删除消息: \(message.id.uuidString)")
     }
     
@@ -868,8 +1035,8 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         guard let index = messages.firstIndex(where: { $0.id == message.id }) else { return }
         messages[index].content = newContent
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
         logger.info("已更新消息内容: \(message.id.uuidString)")
     }
 
@@ -879,15 +1046,15 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         guard let index = messages.firstIndex(where: { $0.id == updatedMessage.id }) else { return }
         messages[index] = updatedMessage
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
         logger.info("已更新消息: \(updatedMessage.id.uuidString)")
     }
     
     /// 更新整个消息列表（用于版本管理等批量操作）
     public func updateMessages(_ messages: [ChatMessage], for sessionID: UUID) {
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: sessionID)
+        publishMessages(messages)
+        persistMessages(messages, for: sessionID)
         logger.info("已更新会话消息列表: \(sessionID.uuidString)")
     }
     
@@ -919,8 +1086,13 @@ public class ChatService {
         if session?.id == currentSessionSubject.value?.id { return }
         currentSessionSubject.send(session)
         let messages = session != nil ? Persistence.loadMessages(for: session!.id) : []
-        messagesForSessionSubject.send(messages)
+        publishMessages(messages)
         logger.info("已切换到会话: \(session?.name ?? "无")")
+        AppLog.userOperation(
+            category: "会话",
+            action: "切换会话",
+            payload: ["sessionID": session?.id.uuidString ?? "无"]
+        )
     }
 
     /// 当老会话重新变为活跃状态时，将其移动到列表顶部以保持最近使用的排序
@@ -981,8 +1153,8 @@ public class ChatService {
             logger.error("错误消息已添加: \(content)")
         }
         
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: currentSession.id)
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
     }
     
     /// 获取 HTTP 状态码的描述信息
@@ -1058,6 +1230,103 @@ public class ChatService {
         }
         
         return (displayMessage, fullContent)
+    }
+
+    private struct AuxiliaryContextPolicy {
+        let enableMemory: Bool
+        let enableMemoryWrite: Bool
+        let enableMemoryActiveRetrieval: Bool
+        let includeAppTools: Bool
+        let includeMCPTools: Bool
+        let includeShortcutTools: Bool
+    }
+
+    private func auxiliaryContextPolicy(
+        for session: ChatSession?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool
+    ) -> AuxiliaryContextPolicy {
+        let isolationActive = session?.isWorldbookContextIsolationActive ?? false
+        guard isolationActive else {
+            return AuxiliaryContextPolicy(
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                includeAppTools: true,
+                includeMCPTools: true,
+                includeShortcutTools: true
+            )
+        }
+
+        logger.info("当前会话已启用世界书隔离发送，将屏蔽长期记忆与工具上下文。")
+        return AuxiliaryContextPolicy(
+            enableMemory: false,
+            enableMemoryWrite: false,
+            enableMemoryActiveRetrieval: false,
+            includeAppTools: false,
+            includeMCPTools: false,
+            includeShortcutTools: false
+        )
+    }
+
+    private func resolveRequestTooling(
+        for session: ChatSession?,
+        enableMemory: Bool,
+        enableMemoryWrite: Bool,
+        enableMemoryActiveRetrieval: Bool
+    ) async -> (tools: [InternalToolDefinition]?, policy: AuxiliaryContextPolicy) {
+        let policy = auxiliaryContextPolicy(
+            for: session,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+        )
+
+        var resolvedTools: [InternalToolDefinition] = []
+        if policy.enableMemory && policy.enableMemoryWrite {
+            resolvedTools.append(saveMemoryTool)
+        }
+        if policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
+            resolvedTools.append(searchMemoryTool)
+        }
+        if policy.includeAppTools {
+            let appTools = await MainActor.run { AppToolManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: appTools)
+        }
+        if policy.includeMCPTools {
+            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: mcpTools)
+        }
+        if policy.includeShortcutTools {
+            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: shortcutTools)
+        }
+        return (resolvedTools.isEmpty ? nil : resolvedTools, policy)
+    }
+
+    private func preparedMessagesForRequest(
+        from messages: [ChatMessage],
+        loadingMessageID: UUID,
+        session: ChatSession?
+    ) -> [ChatMessage] {
+        let baseMessages = messages.filter { $0.role != .error && $0.id != loadingMessageID }
+        guard session?.isWorldbookContextIsolationActive == true else {
+            return baseMessages
+        }
+
+        return baseMessages.compactMap { message in
+            guard message.role != .tool else { return nil }
+            var sanitized = message
+            sanitized.toolCalls = nil
+            sanitized.toolCallsPlacement = nil
+
+            if sanitized.role == .assistant,
+               sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return nil
+            }
+            return sanitized
+        }
     }
         
     public func sendAndProcessMessage(
@@ -1186,7 +1455,7 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         messages.append(contentsOf: userMessages)
         messages.append(loadingMessage)
-        messagesForSessionSubject.send(messages)
+        publishMessages(messages)
         
         // 注意：当音频作为附件直接发送给模型时，不再需要后台转文字
         // 因为每次发送消息都会重新加载音频文件并以 base64 发送
@@ -1221,7 +1490,7 @@ public class ChatService {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         }
         
-        Persistence.saveMessages(messages, for: currentSession.id)
+        persistMessages(messages, for: currentSession.id)
         requestStatusSubject.send(.started)
         
         // 记录当前请求的上下文，便于取消和状态恢复
@@ -1232,18 +1501,12 @@ public class ChatService {
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
-            var resolvedTools: [InternalToolDefinition] = []
-            if enableMemory && enableMemoryWrite {
-                resolvedTools.append(self.saveMemoryTool)
-            }
-            if enableMemory && enableMemoryActiveRetrieval && self.resolvedMemoryTopK() > 0 {
-                resolvedTools.append(self.searchMemoryTool)
-            }
-            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: mcpTools)
-            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: shortcutTools)
-            let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            let requestTooling = await self.resolveRequestTooling(
+                for: currentSession,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+            )
             await self.executeMessageRequest(
                 messages: messages,
                 loadingMessageID: loadingMessage.id,
@@ -1256,10 +1519,10 @@ public class ChatService {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: enhancedPrompt,
-                tools: tools,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                tools: requestTooling.tools,
+                enableMemory: requestTooling.policy.enableMemory,
+                enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
+                enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: audioAttachment,
@@ -1415,7 +1678,7 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         messages.append(userMessage)
         messages.append(loadingMessage)
-        messagesForSessionSubject.send(messages)
+        publishMessages(messages)
         logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
 
         if currentSession.isTemporary {
@@ -1433,7 +1696,7 @@ public class ChatService {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         }
 
-        Persistence.saveMessages(messages, for: currentSession.id)
+        persistMessages(messages, for: currentSession.id)
         requestStatusSubject.send(.started)
         imageGenerationStatusSubject.send(
             .started(
@@ -1708,6 +1971,13 @@ public class ChatService {
 
         case _ where ShortcutToolManager.isShortcutToolName(toolCall.toolName):
             let toolLabel = await ShortcutToolManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
+            let shortcutToolsEnabled = await MainActor.run { ShortcutToolManager.shared.chatToolsEnabled }
+            guard shortcutToolsEnabled else {
+                content = "快捷指令工具总开关已关闭。"
+                displayResult = content
+                logger.info("  - 快捷指令工具调用被总开关拒绝: \(toolCall.toolName)")
+                break
+            }
             let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                 toolName: toolCall.toolName,
                 displayName: toolLabel,
@@ -1736,6 +2006,48 @@ public class ChatService {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
                     displayResult = content
                     logger.error("  - 快捷指令工具调用失败: \(error.localizedDescription)")
+                }
+            }
+
+        case _ where AppToolManager.isAppToolName(toolCall.toolName):
+            let toolLabel = await MainActor.run {
+                AppToolManager.shared.displayLabel(for: toolCall.toolName)
+            } ?? toolCall.toolName
+            let appToolsEnabled = await MainActor.run { AppToolManager.shared.chatToolsEnabled }
+            guard appToolsEnabled else {
+                content = "拓展工具总开关已关闭。"
+                displayResult = content
+                logger.info("  - 拓展工具调用被总开关拒绝: \(toolCall.toolName)")
+                break
+            }
+            let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
+                toolName: toolCall.toolName,
+                displayName: toolLabel,
+                arguments: toolCall.arguments
+            )
+            switch permissionDecision {
+            case .deny:
+                content = "\(toolLabel) 调用已被用户拒绝。"
+                displayResult = content
+                logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
+            case .supplement:
+                content = "\(toolLabel) 调用已被用户拒绝。"
+                displayResult = content
+                shouldAwaitUserSupplement = true
+                logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
+            case .allowOnce, .allowForTool, .allowAll:
+                do {
+                    let result = try await AppToolManager.shared.executeToolFromChat(
+                        toolName: toolCall.toolName,
+                        argumentsJSON: toolCall.arguments
+                    )
+                    content = result
+                    displayResult = result
+                    logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
+                } catch {
+                    content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                    displayResult = content
+                    logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
                 }
             }
             
@@ -1811,8 +2123,8 @@ public class ChatService {
         toolCalls[resolvedIndex].result = result
         message.toolCalls = toolCalls
         messages[messageIndex] = message
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: sessionID)
+        publishMessages(messages)
+        persistMessages(messages, for: sessionID)
     }
 
     private func ensureToolCallsVisible(_ toolCalls: [InternalToolCall], in loadingMessageID: UUID, sessionID: UUID) {
@@ -1847,8 +2159,8 @@ public class ChatService {
         guard didChange else { return }
         message.toolCalls = existingCalls
         messages[messageIndex] = message
-        messagesForSessionSubject.send(messages)
-        Persistence.saveMessages(messages, for: sessionID)
+        publishMessages(messages)
+        persistMessages(messages, for: sessionID)
     }
 
     // MARK: - 核心请求执行逻辑 (已重构)
@@ -1874,6 +2186,13 @@ public class ChatService {
         currentAudioAttachment: AudioAttachment?, // 当前消息的音频附件（用于首次发送，尚未保存到文件）
         currentFileAttachments: [FileAttachment] // 当前消息的文件附件（用于首次发送，尚未保存到文件）
     ) async {
+        let sessionForRequest = chatSessionsSubject.value.first(where: { $0.id == currentSessionID }) ?? currentSessionSubject.value
+        let requestMessages = preparedMessagesForRequest(
+            from: messages,
+            loadingMessageID: loadingMessageID,
+            session: sessionForRequest
+        )
+
         // 自动查：执行记忆搜索
         var memories: [MemoryItem] = []
         if enableMemory {
@@ -1882,7 +2201,7 @@ public class ChatService {
                 // topK == 0 表示不进行向量检索，直接获取所有激活的记忆
                 memories = await self.memoryManager.getActiveMemories()
             } else {
-                let queryText = buildMemoryQueryContext(from: messages, fallbackUserMessage: userMessage)
+                let queryText = buildMemoryQueryContext(from: requestMessages, fallbackUserMessage: userMessage)
                 if let queryText {
                     memories = await self.memoryManager.searchMemories(query: queryText, topK: topK)
                 }
@@ -1907,13 +2226,12 @@ public class ChatService {
             return
         }
 
-        let sessionForRequest = chatSessionsSubject.value.first(where: { $0.id == currentSessionID }) ?? currentSessionSubject.value
         let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.lorebookIDs ?? [])
         let worldbookResult = worldbookEngine.evaluate(
             .init(
                 sessionID: currentSessionID,
                 worldbooks: boundWorldbooks,
-                messages: messages.filter { $0.role != .error && $0.id != loadingMessageID },
+                messages: requestMessages,
                 topicPrompt: sessionForRequest?.topicPrompt,
                 enhancedPrompt: enhancedPrompt
             )
@@ -1936,7 +2254,7 @@ public class ChatService {
             messagesToSend.append(ChatMessage(role: .system, content: finalSystemPrompt))
         }
 
-        var chatHistory = messages.filter { $0.role != .error && $0.id != loadingMessageID }
+        var chatHistory = requestMessages
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
             chatHistory = Array(chatHistory.suffix(maxChatHistory))
         }
@@ -1963,11 +2281,7 @@ public class ChatService {
             if let currentAudio = currentAudioAttachment, msg.id == userMessage?.id {
                 audioAttachments[msg.id] = currentAudio
             } else if let audioFileName = msg.audioFileName,
-                      let audioData = Persistence.loadAudio(fileName: audioFileName) {
-                // 从文件名推断格式
-                let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
-                let mimeType = "audio/\(fileExtension)"
-                let attachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+                      let attachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
                 audioAttachments[msg.id] = attachment
                 logger.info("已加载历史音频: \(audioFileName) 用于消息 \(msg.id)")
             }
@@ -1979,11 +2293,7 @@ public class ChatService {
             guard let imageFileNames = msg.imageFileNames, !imageFileNames.isEmpty else { continue }
             var attachments: [ImageAttachment] = []
             for fileName in imageFileNames {
-                if let imageData = Persistence.loadImage(fileName: fileName) {
-                    // 从文件名推断 MIME 类型
-                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
-                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
-                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
                     attachments.append(attachment)
                     logger.info("已加载历史图片: \(fileName) 用于消息 \(msg.id)")
                 }
@@ -2003,9 +2313,7 @@ public class ChatService {
             guard let fileFileNames = msg.fileFileNames, !fileFileNames.isEmpty else { continue }
             var attachments: [FileAttachment] = []
             for fileName in fileFileNames {
-                if let fileData = Persistence.loadFile(fileName: fileName) {
-                    let mimeType = resolvedMimeType(for: fileName)
-                    let attachment = FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
                     attachments.append(attachment)
                     logger.info("已加载历史文件附件: \(fileName) 用于消息 \(msg.id)")
                 }
@@ -2016,14 +2324,28 @@ public class ChatService {
         }
         
         let commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
+        let requestStartedAt = Date()
+        let requestLogContext = RequestLogContext(
+            requestID: UUID(),
+            sessionID: currentSessionID,
+            providerID: runnableModel.provider.id,
+            providerName: runnableModel.provider.name,
+            modelID: runnableModel.model.modelName,
+            isStreaming: enableStreaming,
+            requestedAt: requestStartedAt
+        )
         
         guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
             addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
             requestStatusSubject.send(.error)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
             return
         }
-        
-        let requestStartedAt = Date()
 
         if enableStreaming {
             await handleStreamedResponse(
@@ -2043,7 +2365,8 @@ public class ChatService {
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                requestStartedAt: requestStartedAt
+                requestStartedAt: requestStartedAt,
+                requestLogContext: requestLogContext
             )
         } else {
             await handleStandardResponse(
@@ -2063,7 +2386,8 @@ public class ChatService {
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                requestStartedAt: requestStartedAt
+                requestStartedAt: requestStartedAt,
+                requestLogContext: requestLogContext
             )
         }
     }
@@ -2230,16 +2554,14 @@ public class ChatService {
         persistedMessages.append(contentsOf: trailingMessages)
         
         // 更新 UI 显示新的 loading message
-        messagesForSessionSubject.send(persistedMessages)
-        Persistence.saveMessages(persistedMessages, for: currentSession.id)
+        publishMessages(persistedMessages)
+        persistMessages(persistedMessages, for: currentSession.id)
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
         if let audioFileName = messageToSend.audioFileName,
-           let audioData = Persistence.loadAudio(fileName: audioFileName) {
-            let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
-            let mimeType = "audio/\(fileExtension)"
-            audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+           let restoredAudioAttachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
+            audioAttachment = restoredAudioAttachment
             logger.info("重试时恢复音频附件: \(audioFileName)")
         }
         
@@ -2247,10 +2569,7 @@ public class ChatService {
         var imageAttachments: [ImageAttachment] = []
         if let imageFileNames = messageToSend.imageFileNames {
             for fileName in imageFileNames {
-                if let imageData = Persistence.loadImage(fileName: fileName) {
-                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
-                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
-                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
                     imageAttachments.append(attachment)
                     logger.info("重试时恢复图片附件: \(fileName)")
                 }
@@ -2261,9 +2580,7 @@ public class ChatService {
         var fileAttachments: [FileAttachment] = []
         if let fileFileNames = messageToSend.fileFileNames {
             for fileName in fileFileNames {
-                if let fileData = Persistence.loadFile(fileName: fileName) {
-                    let mimeType = resolvedMimeType(for: fileName)
-                    let attachment = FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
                     fileAttachments.append(attachment)
                     logger.info("重试时恢复文件附件: \(fileName)")
                 }
@@ -2321,18 +2638,12 @@ public class ChatService {
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
-            var resolvedTools: [InternalToolDefinition] = []
-            if enableMemory && enableMemoryWrite {
-                resolvedTools.append(self.saveMemoryTool)
-            }
-            if enableMemory && enableMemoryActiveRetrieval && self.resolvedMemoryTopK() > 0 {
-                resolvedTools.append(self.searchMemoryTool)
-            }
-            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: mcpTools)
-            let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: shortcutTools)
-            let tools = resolvedTools.isEmpty ? nil : resolvedTools
+            let requestTooling = await self.resolveRequestTooling(
+                for: currentSession,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+            )
             
             await self.executeMessageRequest(
                 messages: messages,
@@ -2346,10 +2657,10 @@ public class ChatService {
                 maxChatHistory: maxChatHistory,
                 enableStreaming: enableStreaming,
                 enhancedPrompt: enhancedPrompt,
-                tools: tools,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                tools: requestTooling.tools,
+                enableMemory: requestTooling.policy.enableMemory,
+                enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
+                enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
@@ -2407,16 +2718,14 @@ public class ChatService {
         let historyBeforeRetry = Array(messages.prefix(upTo: lastUserMessageIndex))
         
         // 3. 更新实时消息列表
-        messagesForSessionSubject.send(historyBeforeRetry)
-        Persistence.saveMessages(historyBeforeRetry, for: currentSession.id)
+        publishMessages(historyBeforeRetry)
+        persistMessages(historyBeforeRetry, for: currentSession.id)
         
         // 4. 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
         if let audioFileName = lastUserMessage.audioFileName,
-           let audioData = Persistence.loadAudio(fileName: audioFileName) {
-            let fileExtension = (audioFileName as NSString).pathExtension.lowercased()
-            let mimeType = "audio/\(fileExtension)"
-            audioAttachment = AudioAttachment(data: audioData, mimeType: mimeType, format: fileExtension, fileName: audioFileName)
+           let restoredAudioAttachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
+            audioAttachment = restoredAudioAttachment
             logger.info("重试时恢复音频附件: \(audioFileName)")
         }
         
@@ -2424,10 +2733,7 @@ public class ChatService {
         var imageAttachments: [ImageAttachment] = []
         if let imageFileNames = lastUserMessage.imageFileNames {
             for fileName in imageFileNames {
-                if let imageData = Persistence.loadImage(fileName: fileName) {
-                    let fileExtension = (fileName as NSString).pathExtension.lowercased()
-                    let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
-                    let attachment = ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
                     imageAttachments.append(attachment)
                     logger.info("重试时恢复图片附件: \(fileName)")
                 }
@@ -2438,9 +2744,7 @@ public class ChatService {
         var fileAttachments: [FileAttachment] = []
         if let fileFileNames = lastUserMessage.fileFileNames {
             for fileName in fileFileNames {
-                if let fileData = Persistence.loadFile(fileName: fileName) {
-                    let mimeType = resolvedMimeType(for: fileName)
-                    let attachment = FileAttachment(data: fileData, mimeType: mimeType, fileName: fileName)
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
                     fileAttachments.append(attachment)
                     logger.info("重试时恢复文件附件: \(fileName)")
                 }
@@ -2571,8 +2875,8 @@ public class ChatService {
                     content: content,
                     imageFileNames: generatedImageFileNames
                 )
-                messagesForSessionSubject.send(messages)
-                Persistence.saveMessages(messages, for: currentSessionID)
+                publishMessages(messages)
+                persistMessages(messages, for: currentSessionID)
                 logger.info(
                     "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
                 )
@@ -2765,6 +3069,55 @@ public class ChatService {
         return Double(tokens) / elapsed
     }
 
+    /// 合并流式返回的 token 使用量分片，避免后续分片覆盖掉前面字段（例如先返回 prompt，后返回 completion）。
+    private func mergeTokenUsage(existing: MessageTokenUsage?, incoming: MessageTokenUsage) -> MessageTokenUsage {
+        MessageTokenUsage(
+            promptTokens: incoming.promptTokens ?? existing?.promptTokens,
+            completionTokens: incoming.completionTokens ?? existing?.completionTokens,
+            totalTokens: incoming.totalTokens ?? existing?.totalTokens,
+            thinkingTokens: incoming.thinkingTokens ?? existing?.thinkingTokens,
+            cacheWriteTokens: incoming.cacheWriteTokens ?? existing?.cacheWriteTokens,
+            cacheReadTokens: incoming.cacheReadTokens ?? existing?.cacheReadTokens
+        )
+    }
+
+    /// 流式速度计算：按照“总时长 - 首字时间”得到生成阶段时长，再计算 token/s。
+    func streamingTokenPerSecond(
+        tokens: Int?,
+        requestStartedAt: Date,
+        firstTokenAt: Date?,
+        snapshotAt: Date
+    ) -> Double? {
+        guard let firstTokenAt else { return nil }
+        let totalDuration = max(0, snapshotAt.timeIntervalSince(requestStartedAt))
+        let timeToFirstToken = max(0, firstTokenAt.timeIntervalSince(requestStartedAt))
+        let generationDuration = totalDuration - timeToFirstToken
+        return tokenPerSecond(tokens: tokens, elapsed: generationDuration)
+    }
+
+    /// 将流式速度按“整秒”采样并追加到序列中，用于实时曲线展示。
+    private func appendSpeedSample(
+        to samples: inout [MessageResponseMetrics.SpeedSample],
+        elapsed: TimeInterval,
+        speed: Double?
+    ) {
+        guard let speed, speed.isFinite, speed > 0 else { return }
+        let second = max(0, Int(elapsed.rounded(.down)))
+        let sample = MessageResponseMetrics.SpeedSample(elapsedSecond: second, tokenPerSecond: speed)
+
+        if let lastIndex = samples.indices.last {
+            let last = samples[lastIndex]
+            if sample.elapsedSecond == last.elapsedSecond {
+                samples[lastIndex] = sample
+                return
+            }
+            if sample.elapsedSecond < last.elapsedSecond {
+                return
+            }
+        }
+        samples.append(sample)
+    }
+
     private func makeResponseMetrics(
         requestStartedAt: Date,
         responseCompletedAt: Date?,
@@ -2772,7 +3125,8 @@ public class ChatService {
         timeToFirstToken: TimeInterval?,
         completionTokensForSpeed: Int?,
         tokenPerSecond: Double?,
-        isEstimated: Bool
+        isEstimated: Bool,
+        speedSamples: [MessageResponseMetrics.SpeedSample]? = nil
     ) -> MessageResponseMetrics {
         MessageResponseMetrics(
             requestStartedAt: requestStartedAt,
@@ -2781,8 +3135,79 @@ public class ChatService {
             timeToFirstToken: timeToFirstToken,
             completionTokensForSpeed: completionTokensForSpeed,
             tokenPerSecond: tokenPerSecond,
-            isTokenPerSecondEstimated: isEstimated
+            isTokenPerSecondEstimated: isEstimated,
+            speedSamples: speedSamples
         )
+    }
+
+    /// 仅在内存中保留“最近一条助手消息”的流式速度采样，避免历史样本长期占用内存。
+    private func normalizedMessagesForRuntime(
+        _ messages: [ChatMessage],
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) -> [ChatMessage] {
+        guard !messages.isEmpty else { return messages }
+        let keepMessageID = preferredMessageID ?? messages.last(where: { $0.role == .assistant })?.id
+
+        return messages.map { message in
+            guard var metrics = message.responseMetrics, metrics.speedSamples != nil else {
+                return message
+            }
+            if let keepMessageID, message.id == keepMessageID {
+                return message
+            }
+            var trimmedMessage = message
+            metrics.speedSamples = nil
+            trimmedMessage.responseMetrics = metrics
+            return trimmedMessage
+        }
+    }
+
+    /// 将流式采样作为临时 UI 数据，不写入磁盘，避免会话文件膨胀。
+    private func normalizedMessagesForPersistence(_ messages: [ChatMessage]) -> [ChatMessage] {
+        messages.map { message in
+            guard var metrics = message.responseMetrics, metrics.speedSamples != nil else {
+                return message
+            }
+            var trimmedMessage = message
+            metrics.speedSamples = nil
+            trimmedMessage.responseMetrics = metrics
+            return trimmedMessage
+        }
+    }
+
+    private func publishMessages(
+        _ messages: [ChatMessage],
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) {
+        let normalized = normalizedMessagesForRuntime(messages, keepingSpeedSamplesFor: preferredMessageID)
+        messagesForSessionSubject.send(normalized)
+    }
+
+    private func persistMessages(_ messages: [ChatMessage], for sessionID: UUID) {
+        let persisted = normalizedMessagesForPersistence(messages)
+        Persistence.saveMessages(persisted, for: sessionID)
+    }
+
+    private func persistRequestLog(
+        context: RequestLogContext,
+        status: RequestLogStatus,
+        tokenUsage: MessageTokenUsage?,
+        finishedAt: Date
+    ) {
+        let normalizedUsage = tokenUsage?.hasAnyData == true ? tokenUsage : nil
+        let logEntry = RequestLogEntry(
+            requestID: context.requestID,
+            sessionID: context.sessionID,
+            providerID: context.providerID,
+            providerName: context.providerName,
+            modelID: context.modelID,
+            requestedAt: context.requestedAt,
+            finishedAt: finishedAt,
+            isStreaming: context.isStreaming,
+            status: status,
+            tokenUsage: normalizedUsage
+        )
+        Persistence.appendRequestLog(logEntry)
     }
 
     private func fetchData(for request: URLRequest) async throws -> Data {
@@ -2891,9 +3316,9 @@ public class ChatService {
         messages[index].content = transcript
         
         if isCurrentSession {
-            messagesForSessionSubject.send(messages)
+            publishMessages(messages)
         }
-        Persistence.saveMessages(messages, for: sessionID)
+        persistMessages(messages, for: sessionID)
         
         // 如果是新建的会话且名称仍为占位符，则同步更新会话名称
         if isCurrentSession, var currentSession = currentSessionSubject.value, currentSession.name == placeholder {
@@ -2934,7 +3359,8 @@ public class ChatService {
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
-        requestStartedAt: Date
+        requestStartedAt: Date,
+        requestLogContext: RequestLogContext
     ) async {
         do {
             let data = try await fetchData(for: request)
@@ -2957,6 +3383,12 @@ public class ChatService {
                         isEstimated: false
                     )
                 }
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .success,
+                    tokenUsage: parsedMessage.tokenUsage,
+                    finishedAt: Date()
+                )
                 await processResponseMessage(
                     responseMessage: parsedMessage,
                     loadingMessageID: loadingMessageID,
@@ -2975,6 +3407,12 @@ public class ChatService {
                 )
             } catch is CancellationError {
                 logger.info("请求在解析阶段被取消，已忽略后续处理。")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             } catch {
                 logger.error("解析响应失败: \(error.localizedDescription)")
                 addErrorMessage(String(
@@ -2982,9 +3420,21 @@ public class ChatService {
                     rawResponse
                 ))
                 requestStatusSubject.send(.error)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             }
         } catch is CancellationError {
             logger.info("请求在拉取数据时被取消。")
+            persistRequestLog(
+                context: requestLogContext,
+                status: .cancelled,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodyString: String
             if let bodyData, let utf8Text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !utf8Text.isEmpty {
@@ -2999,16 +3449,34 @@ public class ChatService {
             }
             addErrorMessage(bodyString, httpStatusCode: code)
             requestStatusSubject.send(.error)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
             if isCancellationError(error) {
                 logger.info("请求在拉取数据时被取消 (URLError)。")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             } else {
                 addErrorMessage(String(
                     format: NSLocalizedString("网络错误: %@", comment: "Network error with description"),
                     error.localizedDescription
                 ))
                 requestStatusSubject.send(.error)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             }
         }
     }
@@ -3109,8 +3577,8 @@ public class ChatService {
         if shouldAwaitUserSupplement {
             var updatedMessages = self.messagesForSessionSubject.value
             updatedMessages.append(contentsOf: blockingResultMessages)
-            self.messagesForSessionSubject.send(updatedMessages)
-            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            self.publishMessages(updatedMessages)
+            persistMessages(updatedMessages, for: currentSessionID)
             requestStatusSubject.send(.finished)
             return
         }
@@ -3129,8 +3597,8 @@ public class ChatService {
                         // 非阻塞工具也写入消息列表，便于 UI 直接展示结果
                         var messages = self.messagesForSessionSubject.value
                         messages.append(outcome.message)
-                        self.messagesForSessionSubject.send(messages)
-                        Persistence.saveMessages(messages, for: currentSessionID)
+                        self.publishMessages(messages)
+                        persistMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
                 }
@@ -3154,8 +3622,8 @@ public class ChatService {
         if shouldAwaitUserSupplement {
             var updatedMessages = self.messagesForSessionSubject.value
             updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
-            self.messagesForSessionSubject.send(updatedMessages)
-            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            self.publishMessages(updatedMessages)
+            persistMessages(updatedMessages, for: currentSessionID)
             requestStatusSubject.send(.finished)
             return
         }
@@ -3169,8 +3637,8 @@ public class ChatService {
             // 新增一个独立的 loading assistant 气泡，用于最终回复
             let followUpLoadingMessage = ChatMessage(role: .assistant, content: "")
             updatedMessages.append(followUpLoadingMessage)
-            self.messagesForSessionSubject.send(updatedMessages)
-            Persistence.saveMessages(updatedMessages, for: currentSessionID)
+            self.publishMessages(updatedMessages)
+            persistMessages(updatedMessages, for: currentSessionID)
             currentLoadingMessageID = followUpLoadingMessage.id
 
             logger.info("正在将工具结果发回 AI 以生成最终回复...")
@@ -3209,8 +3677,10 @@ public class ChatService {
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
-        requestStartedAt: Date
+        requestStartedAt: Date,
+        requestLogContext: RequestLogContext
     ) async {
+        var latestTokenUsage: MessageTokenUsage?
         do {
             let bytes = try await streamData(for: request)
 
@@ -3218,10 +3688,10 @@ public class ChatService {
             var toolCallBuilders: [Int: (id: String?, name: String?, arguments: String, providerSpecificFields: [String: JSONValue]?)] = [:]
             var toolCallOrder: [Int] = []
             var toolCallIndexByID: [String: Int] = [:]
-            var latestTokenUsage: MessageTokenUsage?
             var latestOfficialCompletionTokens: Int?
             var accumulatedOutputText = ""
             var firstTokenAt: Date?
+            var speedSamples: [MessageResponseMetrics.SpeedSample] = []
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
@@ -3229,9 +3699,10 @@ public class ChatService {
                 var messages = messagesForSessionSubject.value
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                     if let usage = part.tokenUsage {
-                        latestTokenUsage = usage
-                        messages[index].tokenUsage = usage
-                        if let completionTokens = usage.completionTokens, completionTokens > 0 {
+                        let mergedUsage = mergeTokenUsage(existing: latestTokenUsage, incoming: usage)
+                        latestTokenUsage = mergedUsage
+                        messages[index].tokenUsage = mergedUsage
+                        if let completionTokens = mergedUsage.completionTokens, completionTokens > 0 {
                             latestOfficialCompletionTokens = completionTokens
                         }
                     }
@@ -3316,20 +3787,31 @@ public class ChatService {
                         if didReceiveTextDelta, firstTokenAt == nil {
                             firstTokenAt = now
                         }
-                        let elapsed = max(0, now.timeIntervalSince(requestStartedAt))
                         let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                         let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                        let speed = streamingTokenPerSecond(
+                            tokens: completionTokensForSpeed,
+                            requestStartedAt: requestStartedAt,
+                            firstTokenAt: firstTokenAt,
+                            snapshotAt: now
+                        )
+                        appendSpeedSample(
+                            to: &speedSamples,
+                            elapsed: max(0, now.timeIntervalSince(requestStartedAt)),
+                            speed: speed
+                        )
                         messages[index].responseMetrics = makeResponseMetrics(
                             requestStartedAt: requestStartedAt,
                             responseCompletedAt: nil,
                             totalResponseDuration: nil,
                             timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
                             completionTokensForSpeed: completionTokensForSpeed,
-                            tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: elapsed),
-                            isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                            tokenPerSecond: speed,
+                            isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
+                            speedSamples: speedSamples.isEmpty ? nil : speedSamples
                         )
                     }
-                    messagesForSessionSubject.send(messages)
+                    publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
                 }
             }
             
@@ -3375,22 +3857,40 @@ public class ChatService {
                     let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                     let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                     let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
+                    let finalSpeed = streamingTokenPerSecond(
+                        tokens: completionTokensForSpeed,
+                        requestStartedAt: requestStartedAt,
+                        firstTokenAt: firstTokenAt,
+                        snapshotAt: responseCompletedAt
+                    )
+                    appendSpeedSample(
+                        to: &speedSamples,
+                        elapsed: totalDuration,
+                        speed: finalSpeed
+                    )
                     messages[index].responseMetrics = makeResponseMetrics(
                         requestStartedAt: requestStartedAt,
                         responseCompletedAt: responseCompletedAt,
                         totalResponseDuration: totalDuration,
                         timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
                         completionTokensForSpeed: completionTokensForSpeed,
-                        tokenPerSecond: tokenPerSecond(tokens: completionTokensForSpeed, elapsed: totalDuration),
-                        isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil
+                        tokenPerSecond: finalSpeed,
+                        isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
+                        speedSamples: speedSamples.isEmpty ? nil : speedSamples
                     )
                 }
                 finalAssistantMessage = messages[index]
-                messagesForSessionSubject.send(messages)
-                Persistence.saveMessages(messages, for: currentSessionID)
+                publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
+                persistMessages(messages, for: currentSessionID)
             }
             
             if let finalAssistantMessage = finalAssistantMessage {
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .success,
+                    tokenUsage: finalAssistantMessage.tokenUsage,
+                    finishedAt: Date()
+                )
                 await processResponseMessage(
                     responseMessage: finalAssistantMessage,
                     loadingMessageID: loadingMessageID,
@@ -3408,11 +3908,23 @@ public class ChatService {
                     includeSystemTime: includeSystemTime
                 )
             } else {
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .success,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
                 requestStatusSubject.send(.finished)
             }
 
         } catch is CancellationError {
             logger.info("流式请求在处理中被取消。")
+            persistRequestLog(
+                context: requestLogContext,
+                status: .cancelled,
+                tokenUsage: latestTokenUsage,
+                finishedAt: Date()
+            )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodySnippet: String
             if let bodyData, let text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
@@ -3427,16 +3939,34 @@ public class ChatService {
             }
             addErrorMessage(bodySnippet, httpStatusCode: code)
             requestStatusSubject.send(.error)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: latestTokenUsage,
+                finishedAt: Date()
+            )
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
             if isCancellationError(error) {
                 logger.info("流式请求在处理中被取消 (URLError)。")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: latestTokenUsage,
+                    finishedAt: Date()
+                )
             } else {
                 addErrorMessage(String(
                     format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
                     error.localizedDescription
                 ))
                 requestStatusSubject.send(.error)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: latestTokenUsage,
+                    finishedAt: Date()
+                )
             }
         }
     }
@@ -3446,8 +3976,8 @@ public class ChatService {
         var messages = messagesForSessionSubject.value
         if let index = messages.firstIndex(where: { $0.id == messageID }) {
             messages.remove(at: index)
-            messagesForSessionSubject.send(messages)
-            Persistence.saveMessages(messages, for: sessionID)
+            publishMessages(messages)
+            persistMessages(messages, for: sessionID)
             logger.info("已移除占位消息 \(messageID.uuidString)。")
         }
     }
@@ -3511,8 +4041,8 @@ public class ChatService {
             // 清除重试标记
             retryTargetMessageID = nil
             
-            messagesForSessionSubject.send(messages)
-            Persistence.saveMessages(messages, for: sessionID)
+            publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
+            persistMessages(messages, for: sessionID)
             
             logger.info("已将新内容追加到消息历史: \(targetID)")
         } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
@@ -3539,8 +4069,8 @@ public class ChatService {
                 fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
                 responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
             )
-            messagesForSessionSubject.send(messages)
-            Persistence.saveMessages(messages, for: sessionID)
+            publishMessages(messages)
+            persistMessages(messages, for: sessionID)
         }
     }
 

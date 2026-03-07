@@ -735,6 +735,11 @@ public class MemoryManager {
     private func preferredEmbeddingModelIdentifier() -> String? {
         UserDefaults.standard.string(forKey: preferredEmbeddingModelKey)
     }
+
+    /// 当前是否已配置可用于记忆嵌入的模型。
+    public func isEmbeddingModelConfigured() -> Bool {
+        hasConfiguredEmbeddingModel()
+    }
     
     /// 检查是否配置了可用的嵌入模型（云端嵌入必须先选择模型）
     private func hasConfiguredEmbeddingModel() -> Bool {

@@ -31,7 +31,9 @@ public struct SyncOptions: OptionSet, Codable {
     public static let shortcutTools = SyncOptions(rawValue: 1 << 7) // 快捷指令工具同步选项
     public static let worldbooks = SyncOptions(rawValue: 1 << 8) // 世界书同步选项
     public static let feedbackTickets = SyncOptions(rawValue: 1 << 9) // 反馈工单同步选项
-    public static let globalSystemPrompt = SyncOptions(rawValue: 1 << 10) // 全局系统提示词同步选项
+    public static let appStorage = SyncOptions(rawValue: 1 << 10) // AppStorage（软件设置）同步选项
+    @available(*, deprecated, message: "请改用 appStorage 选项。")
+    public static let globalSystemPrompt = appStorage
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -109,10 +111,13 @@ public struct SyncPackage: Codable {
     public var shortcutTools: [ShortcutToolDefinition]
     public var worldbooks: [Worldbook]
     public var feedbackTickets: [FeedbackTicket]
+    /// 完整 AppStorage 快照（二进制 Plist），用于同步软件设置
+    public var appStorageSnapshot: Data?
+    /// 兼容旧版本：仅携带 systemPrompt 时回退使用
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
@@ -127,6 +132,7 @@ public struct SyncPackage: Codable {
         shortcutTools: [ShortcutToolDefinition] = [],
         worldbooks: [Worldbook] = [],
         feedbackTickets: [FeedbackTicket] = [],
+        appStorageSnapshot: Data? = nil,
         globalSystemPrompt: String? = nil
     ) {
         self.options = options
@@ -140,6 +146,7 @@ public struct SyncPackage: Codable {
         self.shortcutTools = shortcutTools
         self.worldbooks = worldbooks
         self.feedbackTickets = feedbackTickets
+        self.appStorageSnapshot = appStorageSnapshot
         self.globalSystemPrompt = globalSystemPrompt
     }
     
@@ -156,6 +163,7 @@ public struct SyncPackage: Codable {
         shortcutTools = try container.decodeIfPresent([ShortcutToolDefinition].self, forKey: .shortcutTools) ?? []
         worldbooks = try container.decodeIfPresent([Worldbook].self, forKey: .worldbooks) ?? []
         feedbackTickets = try container.decodeIfPresent([FeedbackTicket].self, forKey: .feedbackTickets) ?? []
+        appStorageSnapshot = try container.decodeIfPresent(Data.self, forKey: .appStorageSnapshot)
         globalSystemPrompt = try container.decodeIfPresent(String.self, forKey: .globalSystemPrompt)
     }
 }
@@ -182,8 +190,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedWorldbooks: Int
     public var importedFeedbackTickets: Int
     public var skippedFeedbackTickets: Int
-    public var importedGlobalSystemPrompt: Int
-    public var skippedGlobalSystemPrompt: Int
+    public var importedAppStorageValues: Int
+    public var skippedAppStorageValues: Int
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -206,9 +214,21 @@ public struct SyncMergeSummary: Equatable {
         skippedWorldbooks: 0,
         importedFeedbackTickets: 0,
         skippedFeedbackTickets: 0,
-        importedGlobalSystemPrompt: 0,
-        skippedGlobalSystemPrompt: 0
+        importedAppStorageValues: 0,
+        skippedAppStorageValues: 0
     )
+
+    @available(*, deprecated, message: "请改用 importedAppStorageValues。")
+    public var importedGlobalSystemPrompt: Int {
+        get { importedAppStorageValues }
+        set { importedAppStorageValues = newValue }
+    }
+
+    @available(*, deprecated, message: "请改用 skippedAppStorageValues。")
+    public var skippedGlobalSystemPrompt: Int {
+        get { skippedAppStorageValues }
+        set { skippedAppStorageValues = newValue }
+    }
 }
 
 // MARK: - 通知定义
@@ -234,12 +254,11 @@ private func removeSyncSuffixes(from name: String) -> String {
 }
 
 extension Provider {
-    /// 判断两个提供商是否逻辑等价（忽略 ID）
+    /// 判断两个提供商是否逻辑等价（忽略 ID 与 API Key）
     func isEquivalent(to other: Provider) -> Bool {
         name == other.name &&
         baseURL == other.baseURL &&
         apiFormat == other.apiFormat &&
-        apiKeys == other.apiKeys &&
         headerOverrides == other.headerOverrides &&
         models.count == other.models.count &&
         zip(models, other.models).allSatisfy { $0.isEquivalent(to: $1) }
@@ -258,7 +277,9 @@ extension Model {
         displayName == other.displayName &&
         isActivated == other.isActivated &&
         overrideParameters == other.overrideParameters &&
-        capabilities == other.capabilities
+        capabilities == other.capabilities &&
+        requestBodyOverrideMode == other.requestBodyOverrideMode &&
+        rawRequestBodyJSON == other.rawRequestBodyJSON
     }
 }
 
@@ -268,6 +289,7 @@ extension ChatSession {
         name == other.name &&
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
+        worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
         Set(lorebookIDs) == Set(other.lorebookIDs)
     }
     
@@ -282,6 +304,7 @@ extension ChatSession {
         baseNameWithoutSyncSuffix == other.baseNameWithoutSyncSuffix &&
         topicPrompt == other.topicPrompt &&
         enhancedPrompt == other.enhancedPrompt &&
+        worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
         Set(lorebookIDs) == Set(other.lorebookIDs)
     }
 }

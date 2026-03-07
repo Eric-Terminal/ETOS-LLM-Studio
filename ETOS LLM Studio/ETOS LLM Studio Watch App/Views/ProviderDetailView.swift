@@ -28,6 +28,16 @@ struct ProviderDetailView: View {
     var body: some View {
         ZStack {
             List {
+                Section("提供商信息") {
+                    MarqueeTitleSubtitleLabel(
+                        title: provider.name,
+                        subtitle: provider.baseURL,
+                        titleUIFont: .preferredFont(forTextStyle: .body),
+                        subtitleUIFont: .preferredFont(forTextStyle: .caption2),
+                        spacing: 2
+                    )
+                }
+
                 if isSearchPresented {
                     Section {
                         HStack(spacing: 6) {
@@ -311,14 +321,16 @@ struct ProviderDetailView: View {
     }
 
     private func modelLabel(for model: Model) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(model.displayName)
-                .lineLimit(1)
-            Text(model.modelName)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-        }
+        MarqueeTitleSubtitleLabel(
+            title: model.displayName,
+            subtitle: model.modelName,
+            titleUIFont: .preferredFont(forTextStyle: .body),
+            subtitleUIFont: .monospacedSystemFont(
+                ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                weight: .regular
+            ),
+            spacing: 2
+        )
     }
 }
 

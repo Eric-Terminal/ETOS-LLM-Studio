@@ -615,6 +615,15 @@ private struct WatchWorldbookEntryEditView: View {
         )
     }
 
+    private var depthBinding: Binding<Int> {
+        Binding(
+            get: { draft.depth },
+            set: { newValue in
+                draft.depth = max(0, newValue)
+            }
+        )
+    }
+
     var body: some View {
         Form {
             Section(NSLocalizedString("基础", comment: "Entry base section")) {
@@ -664,11 +673,13 @@ private struct WatchWorldbookEntryEditView: View {
                         .frame(width: 60)
                 }
                 if draft.position == .atDepth {
-                    Stepper(
-                        String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth),
-                        value: $draft.depth,
-                        in: 0...64
-                    )
+                    HStack {
+                        Text(String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth))
+                        Spacer()
+                        TextField("数量", value: depthBinding, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
                 }
             }
 
@@ -833,6 +844,20 @@ private struct WatchWorldbookSessionBindingView: View {
             }
 
             Section {
+                Toggle(
+                    NSLocalizedString("绑定世界书时屏蔽记忆与工具", comment: "Worldbook isolation toggle"),
+                    isOn: Binding(
+                        get: { session?.worldbookContextIsolationEnabled ?? false },
+                        set: { updateIsolationMode($0) }
+                    )
+                )
+
+                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送长期记忆、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -887,8 +912,22 @@ private struct WatchWorldbookSessionBindingView: View {
             selected.insert(id)
         }
         current.lorebookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
+        persistSessionSettings(current)
+    }
+
+    private func updateIsolationMode(_ isEnabled: Bool) {
+        guard var current = session else { return }
+        current.worldbookContextIsolationEnabled = isEnabled
+        persistSessionSettings(current)
+    }
+
+    private func persistSessionSettings(_ current: ChatSession) {
         session = current
-        ChatService.shared.assignWorldbooks(to: current.id, worldbookIDs: current.lorebookIDs)
+        ChatService.shared.updateWorldbookSessionSettings(
+            sessionID: current.id,
+            worldbookIDs: current.lorebookIDs,
+            worldbookContextIsolationEnabled: current.worldbookContextIsolationEnabled
+        )
     }
 }
 

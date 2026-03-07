@@ -22,6 +22,16 @@ struct ProviderActionsView: View {
 
     var body: some View {
         Form {
+            Section("当前提供商") {
+                MarqueeTitleSubtitleLabel(
+                    title: provider.name,
+                    subtitle: provider.baseURL,
+                    titleUIFont: .preferredFont(forTextStyle: .body),
+                    subtitleUIFont: .preferredFont(forTextStyle: .caption2),
+                    spacing: 2
+                )
+            }
+
             Section {
                 // 编辑按钮
                 NavigationLink(destination: ProviderEditView(provider: provider, isNew: false).environmentObject(viewModel)) {

@@ -96,6 +96,7 @@ public struct Provider: Codable, Identifiable, Hashable {
     public var id: UUID
     public var name: String
     public var baseURL: String
+    /// 运行时凭据，持久化时改由共享 Keychain 保存。
     public var apiKeys: [String]
     public var apiFormat: String // 例如: "openai-compatible"
     public var models: [Model]
@@ -139,7 +140,6 @@ public struct Provider: Codable, Identifiable, Hashable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(baseURL, forKey: .baseURL)
-        try container.encode(apiKeys, forKey: .apiKeys)
         try container.encode(apiFormat, forKey: .apiFormat)
         try container.encode(models, forKey: .models)
         if !headerOverrides.isEmpty {
@@ -470,6 +470,17 @@ public enum ToolCallsPlacement: String, Codable, Sendable {
 
 /// 单次 API 请求的响应测速信息
 public struct MessageResponseMetrics: Codable, Hashable, Sendable {
+    /// 流式速度采样点（按秒记录 token/s）。
+    public struct SpeedSample: Codable, Hashable, Sendable {
+        public var elapsedSecond: Int
+        public var tokenPerSecond: Double
+
+        public init(elapsedSecond: Int, tokenPerSecond: Double) {
+            self.elapsedSecond = max(0, elapsedSecond)
+            self.tokenPerSecond = max(0, tokenPerSecond)
+        }
+    }
+
     public static let currentSchemaVersion = 1
 
     public var schemaVersion: Int
@@ -480,6 +491,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
     public var completionTokensForSpeed: Int?
     public var tokenPerSecond: Double?
     public var isTokenPerSecondEstimated: Bool
+    public var speedSamples: [SpeedSample]?
 
     public init(
         schemaVersion: Int = MessageResponseMetrics.currentSchemaVersion,
@@ -489,7 +501,8 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         timeToFirstToken: TimeInterval? = nil,
         completionTokensForSpeed: Int? = nil,
         tokenPerSecond: Double? = nil,
-        isTokenPerSecondEstimated: Bool = false
+        isTokenPerSecondEstimated: Bool = false,
+        speedSamples: [SpeedSample]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.requestStartedAt = requestStartedAt
@@ -499,6 +512,46 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         self.completionTokensForSpeed = completionTokensForSpeed
         self.tokenPerSecond = tokenPerSecond
         self.isTokenPerSecondEstimated = isTokenPerSecondEstimated
+        self.speedSamples = speedSamples
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case requestStartedAt
+        case responseCompletedAt
+        case totalResponseDuration
+        case timeToFirstToken
+        case completionTokensForSpeed
+        case tokenPerSecond
+        case isTokenPerSecondEstimated
+        case speedSamples
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? MessageResponseMetrics.currentSchemaVersion
+        self.requestStartedAt = try container.decodeIfPresent(Date.self, forKey: .requestStartedAt)
+        self.responseCompletedAt = try container.decodeIfPresent(Date.self, forKey: .responseCompletedAt)
+        self.totalResponseDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .totalResponseDuration)
+        self.timeToFirstToken = try container.decodeIfPresent(TimeInterval.self, forKey: .timeToFirstToken)
+        self.completionTokensForSpeed = try container.decodeIfPresent(Int.self, forKey: .completionTokensForSpeed)
+        self.tokenPerSecond = try container.decodeIfPresent(Double.self, forKey: .tokenPerSecond)
+        self.isTokenPerSecondEstimated = try container.decodeIfPresent(Bool.self, forKey: .isTokenPerSecondEstimated) ?? false
+        // 流式曲线采样属于临时内存数据，解码时主动丢弃，避免历史会话回放占用内存。
+        self.speedSamples = nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encodeIfPresent(requestStartedAt, forKey: .requestStartedAt)
+        try container.encodeIfPresent(responseCompletedAt, forKey: .responseCompletedAt)
+        try container.encodeIfPresent(totalResponseDuration, forKey: .totalResponseDuration)
+        try container.encodeIfPresent(timeToFirstToken, forKey: .timeToFirstToken)
+        try container.encodeIfPresent(completionTokensForSpeed, forKey: .completionTokensForSpeed)
+        try container.encodeIfPresent(tokenPerSecond, forKey: .tokenPerSecond)
+        try container.encode(isTokenPerSecondEstimated, forKey: .isTokenPerSecondEstimated)
+        // 不编码 speedSamples，保证该数据只驻留内存。
     }
 }
 
@@ -686,16 +739,193 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
 public struct MessageTokenUsage: Codable, Hashable, Sendable {
     public var promptTokens: Int?
     public var completionTokens: Int?
+    public var thinkingTokens: Int?
+    public var cacheWriteTokens: Int?
+    public var cacheReadTokens: Int?
     public var totalTokens: Int?
     
-    public init(promptTokens: Int?, completionTokens: Int?, totalTokens: Int?) {
+    public init(
+        promptTokens: Int?,
+        completionTokens: Int?,
+        totalTokens: Int?,
+        thinkingTokens: Int? = nil,
+        cacheWriteTokens: Int? = nil,
+        cacheReadTokens: Int? = nil
+    ) {
         self.promptTokens = promptTokens
         self.completionTokens = completionTokens
+        self.thinkingTokens = thinkingTokens
+        self.cacheWriteTokens = cacheWriteTokens
+        self.cacheReadTokens = cacheReadTokens
         self.totalTokens = totalTokens
     }
     
     public var hasData: Bool {
         promptTokens != nil || completionTokens != nil || totalTokens != nil
+    }
+
+    public var hasAnyData: Bool {
+        promptTokens != nil
+            || completionTokens != nil
+            || thinkingTokens != nil
+            || cacheWriteTokens != nil
+            || cacheReadTokens != nil
+            || totalTokens != nil
+    }
+}
+
+/// 请求日志状态
+public enum RequestLogStatus: String, Codable, Hashable, Sendable {
+    case success
+    case failed
+    case cancelled
+}
+
+/// 单次模型请求日志
+public struct RequestLogEntry: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var requestID: UUID
+    public var sessionID: UUID?
+    public var providerID: UUID?
+    public var providerName: String
+    public var modelID: String
+    public var requestedAt: Date
+    public var finishedAt: Date
+    public var isStreaming: Bool
+    public var status: RequestLogStatus
+    public var tokenUsage: MessageTokenUsage?
+
+    public init(
+        id: UUID = UUID(),
+        requestID: UUID,
+        sessionID: UUID?,
+        providerID: UUID?,
+        providerName: String,
+        modelID: String,
+        requestedAt: Date,
+        finishedAt: Date,
+        isStreaming: Bool,
+        status: RequestLogStatus,
+        tokenUsage: MessageTokenUsage? = nil
+    ) {
+        self.id = id
+        self.requestID = requestID
+        self.sessionID = sessionID
+        self.providerID = providerID
+        self.providerName = providerName
+        self.modelID = modelID
+        self.requestedAt = requestedAt
+        self.finishedAt = finishedAt
+        self.isStreaming = isStreaming
+        self.status = status
+        self.tokenUsage = tokenUsage
+    }
+}
+
+/// 请求日志查询条件
+public struct RequestLogQuery: Hashable, Sendable {
+    public var from: Date?
+    public var to: Date?
+    public var providerID: UUID?
+    public var modelID: String?
+    public var statuses: Set<RequestLogStatus>?
+    public var limit: Int?
+
+    public init(
+        from: Date? = nil,
+        to: Date? = nil,
+        providerID: UUID? = nil,
+        modelID: String? = nil,
+        statuses: Set<RequestLogStatus>? = nil,
+        limit: Int? = nil
+    ) {
+        self.from = from
+        self.to = to
+        self.providerID = providerID
+        self.modelID = modelID
+        self.statuses = statuses
+        self.limit = limit
+    }
+}
+
+/// 请求日志 Token 汇总值
+public struct RequestLogTokenTotals: Codable, Hashable, Sendable {
+    public var sentTokens: Int
+    public var receivedTokens: Int
+    public var thinkingTokens: Int
+    public var cacheWriteTokens: Int
+    public var cacheReadTokens: Int
+    public var totalTokens: Int
+
+    public init(
+        sentTokens: Int = 0,
+        receivedTokens: Int = 0,
+        thinkingTokens: Int = 0,
+        cacheWriteTokens: Int = 0,
+        cacheReadTokens: Int = 0,
+        totalTokens: Int = 0
+    ) {
+        self.sentTokens = sentTokens
+        self.receivedTokens = receivedTokens
+        self.thinkingTokens = thinkingTokens
+        self.cacheWriteTokens = cacheWriteTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.totalTokens = totalTokens
+    }
+}
+
+/// 请求日志分组统计
+public struct RequestLogSummaryBucket: Codable, Hashable, Sendable {
+    public var key: String
+    public var requestCount: Int
+    public var successCount: Int
+    public var failedCount: Int
+    public var cancelledCount: Int
+    public var tokenTotals: RequestLogTokenTotals
+
+    public init(
+        key: String,
+        requestCount: Int = 0,
+        successCount: Int = 0,
+        failedCount: Int = 0,
+        cancelledCount: Int = 0,
+        tokenTotals: RequestLogTokenTotals = .init()
+    ) {
+        self.key = key
+        self.requestCount = requestCount
+        self.successCount = successCount
+        self.failedCount = failedCount
+        self.cancelledCount = cancelledCount
+        self.tokenTotals = tokenTotals
+    }
+}
+
+/// 请求日志汇总
+public struct RequestLogSummary: Codable, Hashable, Sendable {
+    public var totalRequests: Int
+    public var successCount: Int
+    public var failedCount: Int
+    public var cancelledCount: Int
+    public var tokenTotals: RequestLogTokenTotals
+    public var byProvider: [RequestLogSummaryBucket]
+    public var byModel: [RequestLogSummaryBucket]
+
+    public init(
+        totalRequests: Int = 0,
+        successCount: Int = 0,
+        failedCount: Int = 0,
+        cancelledCount: Int = 0,
+        tokenTotals: RequestLogTokenTotals = .init(),
+        byProvider: [RequestLogSummaryBucket] = [],
+        byModel: [RequestLogSummaryBucket] = []
+    ) {
+        self.totalRequests = totalRequests
+        self.successCount = successCount
+        self.failedCount = failedCount
+        self.cancelledCount = cancelledCount
+        self.tokenTotals = tokenTotals
+        self.byProvider = byProvider
+        self.byModel = byModel
     }
 }
 
@@ -706,12 +936,19 @@ public struct ChatSession: Identifiable, Codable, Hashable {
     public var topicPrompt: String?
     public var enhancedPrompt: String?
     public var lorebookIDs: [UUID]
+    /// 开启后，仅在当前会话已绑定世界书时生效，发送时会屏蔽记忆与工具上下文。
+    public var worldbookContextIsolationEnabled: Bool
     @available(*, deprecated, message: "请改用 lorebookIDs；worldbookIDs 为兼容旧代码保留。")
     public var worldbookIDs: [UUID] {
         get { lorebookIDs }
         set { lorebookIDs = newValue }
     }
     public var isTemporary: Bool = false
+
+    /// 仅当会话已绑定世界书且用户开启隔离时，才真正启用 RP 隔离发送。
+    public var isWorldbookContextIsolationActive: Bool {
+        worldbookContextIsolationEnabled && !lorebookIDs.isEmpty
+    }
 
     public init(
         id: UUID,
@@ -720,6 +957,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         enhancedPrompt: String? = nil,
         worldbookIDs: [UUID] = [],
         lorebookIDs: [UUID]? = nil,
+        worldbookContextIsolationEnabled: Bool = false,
         isTemporary: Bool = false
     ) {
         self.id = id
@@ -727,6 +965,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         self.topicPrompt = topicPrompt
         self.enhancedPrompt = enhancedPrompt
         self.lorebookIDs = lorebookIDs ?? worldbookIDs
+        self.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
         self.isTemporary = isTemporary
     }
     
@@ -738,6 +977,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         case worldbookIDs
         case lorebookIDs
         case lorebookIds
+        case worldbookContextIsolationEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -755,6 +995,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         } else {
             self.lorebookIDs = []
         }
+        self.worldbookContextIsolationEnabled = try container.decodeIfPresent(Bool.self, forKey: .worldbookContextIsolationEnabled) ?? false
         self.isTemporary = false
     }
 
@@ -768,6 +1009,9 @@ public struct ChatSession: Identifiable, Codable, Hashable {
             try container.encode(lorebookIDs, forKey: .lorebookIDs)
             // 兼容旧版本持久化字段，避免多端混用时丢失绑定。
             try container.encode(lorebookIDs, forKey: .worldbookIDs)
+        }
+        if worldbookContextIsolationEnabled {
+            try container.encode(worldbookContextIsolationEnabled, forKey: .worldbookContextIsolationEnabled)
         }
     }
 }

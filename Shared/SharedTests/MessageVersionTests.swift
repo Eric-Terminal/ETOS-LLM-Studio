@@ -221,6 +221,35 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decoded.tokenUsage?.totalTokens, 30)
     }
 
+    /// 测试扩展 Token 字段的序列化与反序列化兼容
+    func testExtendedTokenUsageRoundTrip() throws {
+        let originalUsage = MessageTokenUsage(
+            promptTokens: 11,
+            completionTokens: 22,
+            totalTokens: nil,
+            thinkingTokens: 7,
+            cacheWriteTokens: 3,
+            cacheReadTokens: 5
+        )
+        let original = ChatMessage(
+            role: .assistant,
+            content: "Token 扩展字段",
+            tokenUsage: originalUsage
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ChatMessage.self, from: data)
+        let decodedUsage = try XCTUnwrap(decoded.tokenUsage)
+
+        XCTAssertEqual(decodedUsage.promptTokens, 11)
+        XCTAssertEqual(decodedUsage.completionTokens, 22)
+        XCTAssertEqual(decodedUsage.thinkingTokens, 7)
+        XCTAssertEqual(decodedUsage.cacheWriteTokens, 3)
+        XCTAssertEqual(decodedUsage.cacheReadTokens, 5)
+        XCTAssertNil(decodedUsage.totalTokens)
+        XCTAssertTrue(decodedUsage.hasAnyData)
+    }
+
     /// 测试工具调用的服务商专有字段在序列化往返中不丢失
     func testToolCallProviderSpecificFieldsRoundTrip() throws {
         let toolCall = InternalToolCall(
@@ -260,7 +289,12 @@ final class MessageVersionTests: XCTestCase {
             timeToFirstToken: 0.45,
             completionTokensForSpeed: 120,
             tokenPerSecond: 60.0,
-            isTokenPerSecondEstimated: false
+            isTokenPerSecondEstimated: false,
+            speedSamples: [
+                .init(elapsedSecond: 0, tokenPerSecond: 35.0),
+                .init(elapsedSecond: 1, tokenPerSecond: 52.0),
+                .init(elapsedSecond: 2, tokenPerSecond: 60.0)
+            ]
         )
         let original = ChatMessage(
             role: .assistant,
@@ -281,6 +315,12 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decodedMetrics.completionTokensForSpeed, 120)
         XCTAssertEqual(try XCTUnwrap(decodedMetrics.tokenPerSecond), 60.0, accuracy: 0.0001)
         XCTAssertEqual(decodedMetrics.isTokenPerSecondEstimated, false)
+        let samples = try XCTUnwrap(decodedMetrics.speedSamples)
+        XCTAssertEqual(samples.count, 3)
+        XCTAssertEqual(samples[0].elapsedSecond, 0)
+        XCTAssertEqual(samples[0].tokenPerSecond, 35.0, accuracy: 0.0001)
+        XCTAssertEqual(samples[2].elapsedSecond, 2)
+        XCTAssertEqual(samples[2].tokenPerSecond, 60.0, accuracy: 0.0001)
     }
     
     /// 测试旧数据升级后的序列化

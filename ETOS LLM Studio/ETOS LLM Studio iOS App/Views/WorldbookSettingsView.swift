@@ -306,11 +306,13 @@ struct WorldbookSettingsView: View {
         let boundSet = Set(session.lorebookIDs)
         let boundBookCount = worldbooks.filter { boundSet.contains($0.id) }.count
         let totalBookCount = worldbooks.count
-        return String(
+        let base = String(
             format: NSLocalizedString("%d/%d 本", comment: "Bound worldbook count summary"),
             boundBookCount,
             totalBookCount
         )
+        guard session.worldbookContextIsolationEnabled else { return base }
+        return "\(base) · \(NSLocalizedString("已启用隔离发送", comment: "Isolation enabled summary"))"
     }
 
     private func enabledEntrySummary(for book: Worldbook) -> String {
@@ -964,11 +966,13 @@ private struct WorldbookEntryEditView: View {
                 }
 
                 if draft.position == .atDepth {
-                    Stepper(
-                        String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth),
-                        value: $draft.depth,
-                        in: 0...64
-                    )
+                    Stepper {
+                        Text(String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth))
+                    } onIncrement: {
+                        draft.depth += 1
+                    } onDecrement: {
+                        draft.depth = max(0, draft.depth - 1)
+                    }
                 }
 
                 if draft.position == .outlet {
@@ -1352,6 +1356,20 @@ private struct WorldbookSessionBindingView: View {
             }
 
             Section {
+                Toggle(
+                    NSLocalizedString("绑定世界书时屏蔽记忆与工具", comment: "Worldbook isolation toggle"),
+                    isOn: Binding(
+                        get: { currentSession?.worldbookContextIsolationEnabled ?? false },
+                        set: { updateIsolationMode($0) }
+                    )
+                )
+
+                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送长期记忆、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -1407,8 +1425,22 @@ private struct WorldbookSessionBindingView: View {
             selected.insert(id)
         }
         session.lorebookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
+        persistSessionSettings(session)
+    }
+
+    private func updateIsolationMode(_ isEnabled: Bool) {
+        guard var session = currentSession else { return }
+        session.worldbookContextIsolationEnabled = isEnabled
+        persistSessionSettings(session)
+    }
+
+    private func persistSessionSettings(_ session: ChatSession) {
         currentSession = session
-        ChatService.shared.assignWorldbooks(to: session.id, worldbookIDs: session.lorebookIDs)
+        ChatService.shared.updateWorldbookSessionSettings(
+            sessionID: session.id,
+            worldbookIDs: session.lorebookIDs,
+            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled
+        )
     }
 }
 

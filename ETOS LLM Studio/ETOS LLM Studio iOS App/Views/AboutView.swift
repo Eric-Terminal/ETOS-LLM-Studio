@@ -8,9 +8,16 @@
 
 import SwiftUI
 import Foundation
+import Shared
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct AboutView: View {
     @Environment(\.openURL) private var openURL
+    @State private var versionTapCount = 0
+    @State private var lastVersionTapAt: Date = .distantPast
+    @State private var showAppLogs = false
     
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "N/A"
@@ -48,7 +55,16 @@ struct AboutView: View {
             
             // MARK: - App Info
             Section(header: Text("应用信息")) {
-                LabeledContent("版本", value: appVersion)
+                HStack {
+                    Text("版本")
+                    Spacer()
+                    Text(appVersion)
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handleVersionTap()
+                }
                 LabeledContent("开发者", value: "Eric-Terminal")
                 LabeledContent("平台支持", value: "iOS / watchOS")
             }
@@ -120,6 +136,29 @@ struct AboutView: View {
             }
         }
         .navigationTitle("关于")
+        .sheet(isPresented: $showAppLogs) {
+            NavigationStack {
+                AppLogsView()
+            }
+        }
+    }
+
+    private func handleVersionTap() {
+        let now = Date()
+        if now.timeIntervalSince(lastVersionTapAt) > 1.5 {
+            versionTapCount = 0
+        }
+        lastVersionTapAt = now
+        versionTapCount += 1
+
+        guard versionTapCount >= 7 else { return }
+        versionTapCount = 0
+        showAppLogs = true
+        AppLog.userOperation(category: "调试入口", action: "打开应用日志页")
+
+        #if canImport(UIKit)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        #endif
     }
 }
 

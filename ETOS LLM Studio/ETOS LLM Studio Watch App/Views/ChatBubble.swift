@@ -83,6 +83,7 @@ struct ChatBubble: View {
     let enableLiquidGlass: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
     
@@ -91,7 +92,6 @@ struct ChatBubble: View {
     @State private var availableWidth: CGFloat = 0
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
-    @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
 
@@ -104,6 +104,7 @@ struct ChatBubble: View {
         enableLiquidGlass: Bool,
         enableAdvancedRenderer: Bool = false,
         enableMathRendering: Bool = false,
+        showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
         mergeWithNext: Bool
     ) {
@@ -115,6 +116,7 @@ struct ChatBubble: View {
         self.enableLiquidGlass = enableLiquidGlass
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
+        self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
     }
@@ -155,8 +157,8 @@ struct ChatBubble: View {
     }
 
     private var shouldShimmerReasoningHeader: Bool {
-        guard viewModel.isSendingMessage, message.role == .assistant else { return false }
-        return viewModel.latestAssistantMessageID == message.id
+        guard showsStreamingIndicators, message.role == .assistant else { return false }
+        return true
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
@@ -505,7 +507,7 @@ struct ChatBubble: View {
                 }
 
                 if shouldShowThinkingIndicator {
-                    if viewModel.isSendingMessage {
+                    if showsStreamingIndicators {
                         ShimmeringText(
                             text: currentThinkingText,
                             font: .caption,
@@ -592,7 +594,7 @@ struct ChatBubble: View {
     private var shouldPlaceAssistantImagesAfterText: Bool {
         message.role != .user && message.role != .error && shouldShowAssistantBubble
     }
-    
+
     // MARK: - 辅助视图
     
     @ViewBuilder
@@ -745,7 +747,8 @@ struct ChatBubble: View {
         @State private var isExpanded = true
 
         private var trimmedArguments: String {
-            arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+            WatchToolArgumentFormatter.normalized(arguments)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         var body: some View {
@@ -795,7 +798,12 @@ struct ChatBubble: View {
         request: ToolPermissionRequest,
         onDecision: @escaping (ToolPermissionDecision) -> Void
     ) -> some View {
-        ToolPermissionInlineView(request: request, onDecision: onDecision)
+        ToolPermissionBubble(
+            request: request,
+            enableBackground: enableBackground,
+            enableLiquidGlass: enableLiquidGlass,
+            onDecision: onDecision
+        )
             .padding(.bottom, 5)
     }
 
@@ -922,85 +930,6 @@ struct ChatBubble: View {
                         isAnimating = true
                     }
                 }
-        }
-    }
-
-    private struct ToolPermissionInlineView: View {
-        let request: ToolPermissionRequest
-        let onDecision: (ToolPermissionDecision) -> Void
-        @State private var isShowingMoreOptions = false
-        @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
-
-        private var countdownText: String? {
-            guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
-                return nil
-            }
-            return "将在 \(remaining)s 后自动允许"
-        }
-
-        private var autoApproveToggleLabel: String {
-            permissionCenter.isAutoApproveDisabled(for: request.toolName)
-                ? "恢复该工具自动批准"
-                : "关闭该工具自动批准"
-        }
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Button("允许") {
-                        onDecision(.allowOnce)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isShowingMoreOptions.toggle()
-                        }
-                    } label: {
-                        Label("更多", systemImage: "ellipsis")
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                if isShowingMoreOptions {
-                    HStack(spacing: 6) {
-                        Button("拒绝", role: .destructive) {
-                            onDecision(.deny)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button("补充提示") {
-                            onDecision(.supplement)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    HStack(spacing: 6) {
-                        Button("保持允许") {
-                            onDecision(.allowForTool)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button("完全权限") {
-                            onDecision(.allowAll)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    Button(autoApproveToggleLabel) {
-                        let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
-                        permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                if let countdownText {
-                    Text(countdownText)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .controlSize(.mini)
         }
     }
 
@@ -1150,6 +1079,7 @@ private struct AttachmentImageView: View {
     let onPreview: (UIImage) -> Void
 
     @State private var image: UIImage?
+    @State private var didAttemptLoad = false
 
     var body: some View {
         Group {
@@ -1180,18 +1110,28 @@ private struct AttachmentImageView: View {
                     )
             }
         }
-        .task {
-            if image == nil {
-                await loadImage()
-            }
+        .task(id: fileName) {
+            guard !didAttemptLoad else { return }
+            didAttemptLoad = true
+            await loadImage()
         }
     }
 
     private func loadImage() async {
-        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
-        let uiImage = UIImage(contentsOfFile: fileURL.path)
-            ?? Persistence.loadImage(fileName: fileName).flatMap { UIImage(data: $0) }
+        if let cached = ChatAttachmentImageCache.image(for: fileName) {
+            await MainActor.run {
+                image = cached
+            }
+            return
+        }
+
+        let uiImage = await Task.detached(priority: .userInitiated) {
+            let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+            return UIImage(contentsOfFile: fileURL.path)
+                ?? Persistence.loadImage(fileName: fileName).flatMap { UIImage(data: $0) }
+        }.value
         guard let uiImage else { return }
+        ChatAttachmentImageCache.store(uiImage, for: fileName)
         await MainActor.run {
             image = uiImage
         }
@@ -1201,6 +1141,23 @@ private struct AttachmentImageView: View {
 private struct ImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+private enum ChatAttachmentImageCache {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 96
+        return cache
+    }()
+
+    static func image(for fileName: String) -> UIImage? {
+        cache.object(forKey: fileName as NSString)
+    }
+
+    static func store(_ image: UIImage, for fileName: String) {
+        let pixelCost = Int(image.size.width * image.size.height * image.scale * image.scale)
+        cache.setObject(image, forKey: fileName as NSString, cost: max(1, pixelCost))
+    }
 }
 
 // MARK: - Watch Audio Player Manager

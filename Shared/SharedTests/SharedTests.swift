@@ -1028,6 +1028,20 @@ struct OpenAIAdapterTests {
         let firstDelta = try #require(part?.toolCallDeltas?.first)
         #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
     }
+
+    @Test("OpenAI 流式 usage-only 片段可解析 token 用量")
+    func testStreamingUsageOnlyChunkParsesTokenUsage() throws {
+        let line = """
+        data: {"id":"chatcmpl-usage","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":11,"completion_tokens":29,"total_tokens":40}}
+        """
+        let part = try #require(adapter.parseStreamingResponse(line: line))
+        let usage = try #require(part.tokenUsage)
+        #expect(usage.promptTokens == 11)
+        #expect(usage.completionTokens == 29)
+        #expect(usage.totalTokens == 40)
+        #expect(part.content == nil)
+        #expect(part.reasoningContent == nil)
+    }
 }
 
 @Suite("GeminiAdapter Tests")
@@ -1276,6 +1290,68 @@ struct GeminiAdapterTests {
         #expect(typeSchema["type"] as? String == "string")
         #expect(!(properties["type"] is String))
     }
+
+    @Test("Gemini 响应可解析思考 Token 字段")
+    func testGeminiResponseParsesThinkingTokens() throws {
+        let payload = """
+        {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  { "text": "你好" }
+                ]
+              }
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 12,
+            "candidatesTokenCount": 34,
+            "totalTokenCount": 46,
+            "thoughtsTokenCount": 7
+          }
+        }
+        """
+
+        let data = Data(payload.utf8)
+        let message = try adapter.parseResponse(data: data)
+        let usage = try #require(message.tokenUsage)
+        #expect(usage.promptTokens == 12)
+        #expect(usage.completionTokens == 34)
+        #expect(usage.totalTokens == 46)
+        #expect(usage.thinkingTokens == 7)
+    }
+}
+
+@Suite("AnthropicAdapter Tests")
+struct AnthropicAdapterTests {
+    private let adapter = AnthropicAdapter()
+
+    @Test("Anthropic 响应可解析缓存 Token 字段")
+    func testAnthropicResponseParsesCacheTokens() throws {
+        let payload = """
+        {
+          "content": [
+            { "type": "text", "text": "done" }
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 8,
+            "cache_creation_input_tokens": 3,
+            "cache_read_input_tokens": 5
+          }
+        }
+        """
+
+        let data = Data(payload.utf8)
+        let message = try adapter.parseResponse(data: data)
+        let usage = try #require(message.tokenUsage)
+        #expect(usage.promptTokens == 20)
+        #expect(usage.completionTokens == 8)
+        #expect(usage.cacheWriteTokens == 3)
+        #expect(usage.cacheReadTokens == 5)
+        #expect(usage.totalTokens == nil)
+    }
 }
 
 // MARK: - ChatService Integration Tests
@@ -1366,6 +1442,7 @@ fileprivate struct ChatServiceTests {
         if !allMems.isEmpty {
             await memoryManager.deleteMemories(allMems)
         }
+        Persistence.clearRequestLogs()
         UserDefaults.standard.removeObject(forKey: "titleGenerationModelIdentifier")
         // 清理模拟响应，避免测试间互相影响
         MockURLProtocol.mockResponses = [:]
@@ -1391,6 +1468,47 @@ fileprivate struct ChatServiceTests {
 
     private func activatedChatModels() -> [RunnableModel] {
         chatService.activatedRunnableModels.filter { $0.model.capabilities.contains(.chat) }
+    }
+
+    @Test("Chat request writes independent request log")
+    func testChatRequestWritesIndependentRequestLog() async {
+        await cleanup()
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(
+            role: .assistant,
+            content: "日志测试回复",
+            tokenUsage: MessageTokenUsage(
+                promptTokens: 13,
+                completionTokens: 21,
+                totalTokens: 34,
+                thinkingTokens: 5,
+                cacheWriteTokens: nil,
+                cacheReadTokens: nil
+            )
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请记录这次请求",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let logs = Persistence.loadRequestLogs(query: .init(limit: 1))
+        #expect(logs.count == 1)
+        #expect(logs[0].providerName == "Test")
+        #expect(logs[0].modelID == "test-model")
+        #expect(logs[0].status == .success)
+        #expect(logs[0].tokenUsage?.promptTokens == 13)
+        #expect(logs[0].tokenUsage?.completionTokens == 21)
+        #expect(logs[0].tokenUsage?.thinkingTokens == 5)
     }
 
     @Test("Auto-naming handles network error during title generation")
@@ -2010,6 +2128,98 @@ fileprivate struct ChatServiceTests {
 
         await cleanup()
     }
+
+    @Test("Worldbook isolation suppresses memory and tool context")
+    func testWorldbookIsolationSuppressesMemoryAndToolContext() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        let originalShortcutTools = ShortcutToolStore.loadTools()
+        let originalShortcutToolsEnabled = await MainActor.run { ShortcutToolManager.shared.chatToolsEnabled }
+        let originalAppToolsEnabled = await MainActor.run { AppToolManager.shared.chatToolsEnabled }
+        let originalAppToolKinds = await MainActor.run { AppToolManager.shared.enabledToolKinds }
+
+        await memoryManager.addMemory(content: "memory-should-hide")
+
+        let shortcutTool = ShortcutToolDefinition(
+            name: "RP 测试快捷指令",
+            metadata: ["displayName": .string("RP 测试快捷指令")],
+            isEnabled: true,
+            userDescription: "用于测试世界书隔离发送。"
+        )
+        ShortcutToolStore.saveTools([shortcutTool])
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(true)
+            AppToolManager.shared.restoreStateForTests(
+                chatToolsEnabled: true,
+                enabledKinds: [.echoText]
+            )
+        }
+
+        let book = Worldbook(
+            name: "隔离书",
+            entries: [WorldbookEntry(content: "wb-isolated", keys: ["hero"], position: .after)]
+        )
+        store.saveWorldbooks([book])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "隔离会话")
+        session.lorebookIDs = [book.id]
+        session.worldbookContextIsolationEnabled = true
+        chatService.setCurrentSession(session)
+
+        let historicalAssistantToolCall = InternalToolCall(
+            id: "historical-tool-call",
+            toolName: ShortcutToolNaming.alias(for: shortcutTool),
+            arguments: "{}"
+        )
+        let historicalMessages = [
+            ChatMessage(role: .user, content: "前情 hero"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [historicalAssistantToolCall]),
+            ChatMessage(role: .tool, content: "tool-result", toolCalls: [historicalAssistantToolCall])
+        ]
+        chatService.messagesForSessionSubject.send(historicalMessages)
+        Persistence.saveMessages(historicalMessages, for: session.id)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true,
+            includeSystemTime: false
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let systemPrompt = sentMessages.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("<worldbook_after>"))
+        #expect(systemPrompt.contains("wb-isolated"))
+        #expect(!systemPrompt.contains("<memory>"))
+        #expect(!systemPrompt.contains("memory-should-hide"))
+        #expect(mockAdapter.receivedTools == nil)
+        #expect(!sentMessages.contains(where: { $0.role == .tool }))
+        #expect(!sentMessages.contains(where: { !($0.toolCalls?.isEmpty ?? true) }))
+
+        ShortcutToolStore.saveTools(originalShortcutTools)
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(originalShortcutToolsEnabled)
+            AppToolManager.shared.restoreStateForTests(
+                chatToolsEnabled: originalAppToolsEnabled,
+                enabledKinds: originalAppToolKinds
+            )
+        }
+        store.saveWorldbooks(originalBooks)
+
+        await cleanup()
+    }
     
     @Test("Update Message Content")
     func testUpdateMessageContent() {
@@ -2044,6 +2254,43 @@ fileprivate struct ChatServiceTests {
         // Assert
         #expect(secondRequestMessages?.last?.content == firstUserMessage)
         #expect(secondRequestMessages?.count == firstRequestMessages?.count)
+    }
+}
+
+@Suite("ChatService 响应测速计算 Tests")
+fileprivate struct ChatServiceResponseMetricsTests {
+    @Test("流式 token/s 使用总时长减首字时间")
+    func testStreamingTokenPerSecondUsesPostFirstTokenDuration() {
+        let service = ChatService()
+        let requestStartedAt = Date(timeIntervalSince1970: 1_000)
+        let firstTokenAt = Date(timeIntervalSince1970: 1_002)
+        let completedAt = Date(timeIntervalSince1970: 1_010)
+
+        let speed = service.streamingTokenPerSecond(
+            tokens: 80,
+            requestStartedAt: requestStartedAt,
+            firstTokenAt: firstTokenAt,
+            snapshotAt: completedAt
+        )
+
+        #expect(speed != nil)
+        #expect(abs((speed ?? 0) - 10.0) < 0.0001)
+    }
+
+    @Test("流式 token/s 在无首字时间时返回空")
+    func testStreamingTokenPerSecondReturnsNilWithoutFirstToken() {
+        let service = ChatService()
+        let requestStartedAt = Date(timeIntervalSince1970: 1_000)
+        let snapshotAt = Date(timeIntervalSince1970: 1_010)
+
+        let speed = service.streamingTokenPerSecond(
+            tokens: 80,
+            requestStartedAt: requestStartedAt,
+            firstTokenAt: nil,
+            snapshotAt: snapshotAt
+        )
+
+        #expect(speed == nil)
     }
 }
 
@@ -2246,24 +2493,41 @@ fileprivate struct PersistenceTests {
         Persistence.getChatsDirectory()
     }
 
-    private var v3Directory: URL {
+    private var currentSessionsDirectory: URL {
+        chatsDirectory.appendingPathComponent("sessions")
+    }
+
+    private var currentIndexFileURL: URL {
+        chatsDirectory.appendingPathComponent("index.json")
+    }
+
+    private var legacyV3Directory: URL {
         chatsDirectory.appendingPathComponent("v3")
     }
 
-    private var v3IndexFileURL: URL {
-        v3Directory.appendingPathComponent("index.json")
+    private var legacyV3IndexFileURL: URL {
+        legacyV3Directory.appendingPathComponent("index.json")
     }
 
     private var legacyRootDirectory: URL {
         chatsDirectory.appendingPathComponent("legacy")
     }
 
+    private var requestLogsDirectory: URL {
+        chatsDirectory.appendingPathComponent("RequestLogs")
+    }
+
     private var legacySessionsIndexURL: URL {
         chatsDirectory.appendingPathComponent("sessions.json")
     }
 
-    private func v3SessionFileURL(_ sessionID: UUID) -> URL {
-        v3Directory
+    private func currentSessionFileURL(_ sessionID: UUID) -> URL {
+        currentSessionsDirectory
+            .appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
+    private func legacyV3SessionFileURL(_ sessionID: UUID) -> URL {
+        legacyV3Directory
             .appendingPathComponent("sessions")
             .appendingPathComponent("\(sessionID.uuidString).json")
     }
@@ -2280,9 +2544,14 @@ fileprivate struct PersistenceTests {
     // Clean up files created during tests
     private func cleanup(sessions: [ChatSession]) {
         Persistence.saveChatSessions([])
+        Persistence.clearRequestLogs()
         for session in sessions {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
+        removeIfExists(currentIndexFileURL)
+        removeIfExists(currentSessionsDirectory)
+        removeIfExists(requestLogsDirectory)
+        removeIfExists(legacyV3Directory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyRootDirectory)
     }
@@ -2303,9 +2572,9 @@ fileprivate struct PersistenceTests {
         #expect(loadedSessions.first?.id == session1.id)
         #expect(loadedSessions.last?.name == session2.name)
         #expect(loadedSessions.last?.topicPrompt == "Test Topic")
-        #expect(FileManager.default.fileExists(atPath: v3IndexFileURL.path))
-        #expect(FileManager.default.fileExists(atPath: v3SessionFileURL(session1.id).path))
-        #expect(FileManager.default.fileExists(atPath: v3SessionFileURL(session2.id).path))
+        #expect(FileManager.default.fileExists(atPath: currentIndexFileURL.path))
+        #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session1.id).path))
+        #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session2.id).path))
         
         // Teardown
         cleanup(sessions: sessionsToSave)
@@ -2329,23 +2598,23 @@ fileprivate struct PersistenceTests {
         #expect(loadedMessages.first?.content == "Hello")
         #expect(loadedMessages.last?.role == .assistant)
 
-        let v3FileURL = v3SessionFileURL(sessionId)
-        #expect(FileManager.default.fileExists(atPath: v3FileURL.path))
-        if let migratedData = try? Data(contentsOf: v3FileURL),
+        let sessionFileURL = currentSessionFileURL(sessionId)
+        #expect(FileManager.default.fileExists(atPath: sessionFileURL.path))
+        if let migratedData = try? Data(contentsOf: sessionFileURL),
            let record = try? JSONDecoder().decode(SessionRecordV3.self, from: migratedData) {
             #expect(record.schemaVersion == 3)
             #expect(record.messages.count == 2)
             #expect(record.messages.first?.content == "Hello")
         } else {
-            Issue.record("V3 会话文件不存在或格式不正确。")
+            Issue.record("会话文件不存在或格式不正确。")
         }
 
         // Teardown
         cleanup(sessions: [ChatSession(id: sessionId, name: "cleanup", isTemporary: false)])
     }
 
-    @Test("Migrate Legacy Session Store To V3 And Archive Legacy Files")
-    func testMigrateLegacySessionStoreToV3AndArchiveLegacyFiles() throws {
+    @Test("Migrate Legacy Session Store To Current Layout And Cleanup Legacy Files")
+    func testMigrateLegacySessionStoreToCurrentLayoutAndCleanupLegacyFiles() throws {
         let sessionId = UUID()
         let legacySession = ChatSession(
             id: sessionId,
@@ -2359,7 +2628,9 @@ fileprivate struct PersistenceTests {
             ChatMessage(role: .assistant, content: "legacy-assistant")
         ]
 
-        removeIfExists(v3Directory)
+        removeIfExists(currentIndexFileURL)
+        removeIfExists(currentSessionsDirectory)
+        removeIfExists(legacyV3Directory)
         removeIfExists(legacyRootDirectory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyMessageFileURL(sessionId))
@@ -2378,7 +2649,7 @@ fileprivate struct PersistenceTests {
         let loadedMessages = Persistence.loadMessages(for: sessionId)
         #expect(loadedMessages.map(\.content) == ["legacy-user", "legacy-assistant"])
 
-        let migratedFileURL = v3SessionFileURL(sessionId)
+        let migratedFileURL = currentSessionFileURL(sessionId)
         #expect(FileManager.default.fileExists(atPath: migratedFileURL.path))
         let migratedData = try Data(contentsOf: migratedFileURL)
         let record = try JSONDecoder().decode(SessionRecordV3.self, from: migratedData)
@@ -2391,28 +2662,273 @@ fileprivate struct PersistenceTests {
 
         #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
         #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionId).path))
-
-        let archivedDirectories = (try? FileManager.default.contentsOfDirectory(
-            at: legacyRootDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )) ?? []
-        let archiveContainsLegacyPayload = archivedDirectories.contains { directory in
-            let archivedIndex = directory.appendingPathComponent("sessions.json")
-            let archivedMessage = directory
-                .appendingPathComponent("messages")
-                .appendingPathComponent("\(sessionId.uuidString).json")
-            return FileManager.default.fileExists(atPath: archivedIndex.path)
-                && FileManager.default.fileExists(atPath: archivedMessage.path)
-        }
-        #expect(archiveContainsLegacyPayload)
+        #expect(!FileManager.default.fileExists(atPath: legacyRootDirectory.path))
 
         cleanup(sessions: [legacySession])
+    }
+
+    @Test("Migrate Legacy v3 Directory To Root Layout And Delete v3 Folder")
+    func testMigrateLegacyV3DirectoryToRootLayoutAndDeleteV3Folder() throws {
+        struct LegacyV3IndexFile: Encodable {
+            struct Item: Encodable {
+                let id: UUID
+                let name: String
+                let updatedAt: String
+            }
+
+            let schemaVersion: Int
+            let updatedAt: String
+            let sessions: [Item]
+        }
+
+        struct LegacyV3SessionRecord: Encodable {
+            struct SessionMeta: Encodable {
+                let id: UUID
+                let name: String
+                let lorebookIDs: [UUID]
+            }
+
+            struct Prompts: Encodable {
+                let topicPrompt: String?
+                let enhancedPrompt: String?
+            }
+
+            let schemaVersion: Int
+            let session: SessionMeta
+            let prompts: Prompts
+            let messages: [ChatMessage]
+        }
+
+        let sessionId = UUID()
+        let sessionName = "V3 Session"
+        let now = ISO8601DateFormatter().string(from: Date())
+        let messages = [
+            ChatMessage(role: .user, content: "from-v3-user"),
+            ChatMessage(role: .assistant, content: "from-v3-assistant")
+        ]
+
+        removeIfExists(currentIndexFileURL)
+        removeIfExists(currentSessionsDirectory)
+        removeIfExists(legacyV3Directory)
+        removeIfExists(legacySessionsIndexURL)
+        removeIfExists(legacyRootDirectory)
+        removeIfExists(legacyMessageFileURL(sessionId))
+
+        try FileManager.default.createDirectory(
+            at: legacyV3SessionFileURL(sessionId).deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        let index = LegacyV3IndexFile(
+            schemaVersion: 3,
+            updatedAt: now,
+            sessions: [.init(id: sessionId, name: sessionName, updatedAt: now)]
+        )
+        let indexData = try JSONEncoder().encode(index)
+        try indexData.write(to: legacyV3IndexFileURL, options: .atomic)
+
+        let recordData = try JSONEncoder().encode(
+            LegacyV3SessionRecord(
+                schemaVersion: 3,
+                session: .init(id: sessionId, name: sessionName, lorebookIDs: []),
+                prompts: .init(topicPrompt: nil, enhancedPrompt: nil),
+                messages: messages
+            )
+        )
+        try recordData.write(to: legacyV3SessionFileURL(sessionId), options: .atomic)
+
+        let loadedSessions = Persistence.loadChatSessions()
+        #expect(loadedSessions.count == 1)
+        #expect(loadedSessions.first?.id == sessionId)
+        #expect(loadedSessions.first?.name == sessionName)
+
+        let loadedMessages = Persistence.loadMessages(for: sessionId)
+        #expect(loadedMessages.map(\.content) == ["from-v3-user", "from-v3-assistant"])
+
+        #expect(FileManager.default.fileExists(atPath: currentIndexFileURL.path))
+        #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(sessionId).path))
+        #expect(!FileManager.default.fileExists(atPath: legacyV3Directory.path))
+
+        cleanup(sessions: [ChatSession(id: sessionId, name: sessionName, isTemporary: false)])
+    }
+
+    @Test("Append and Load Request Logs")
+    func testAppendAndLoadRequestLogs() {
+        cleanup(sessions: [])
+
+        let requestA = RequestLogEntry(
+            requestID: UUID(),
+            sessionID: UUID(),
+            providerID: UUID(),
+            providerName: "OpenAI",
+            modelID: "gpt-5",
+            requestedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            finishedAt: Date(timeIntervalSince1970: 1_700_000_002),
+            isStreaming: true,
+            status: .success,
+            tokenUsage: MessageTokenUsage(
+                promptTokens: 100,
+                completionTokens: 50,
+                totalTokens: 150,
+                thinkingTokens: 10,
+                cacheWriteTokens: 0,
+                cacheReadTokens: 0
+            )
+        )
+        let requestB = RequestLogEntry(
+            requestID: UUID(),
+            sessionID: UUID(),
+            providerID: UUID(),
+            providerName: "Anthropic",
+            modelID: "claude-sonnet-4",
+            requestedAt: Date(timeIntervalSince1970: 1_700_000_010),
+            finishedAt: Date(timeIntervalSince1970: 1_700_000_012),
+            isStreaming: false,
+            status: .failed,
+            tokenUsage: nil
+        )
+
+        Persistence.appendRequestLog(requestA)
+        Persistence.appendRequestLog(requestB)
+
+        let loaded = Persistence.loadRequestLogs()
+        #expect(loaded.count == 2)
+        #expect(loaded.first?.providerName == "Anthropic")
+        #expect(loaded.last?.providerName == "OpenAI")
+        #expect(loaded.last?.tokenUsage?.thinkingTokens == 10)
+
+        let successOnly = Persistence.loadRequestLogs(query: .init(statuses: Set([.success])))
+        #expect(successOnly.count == 1)
+        #expect(successOnly.first?.modelID == "gpt-5")
+
+        cleanup(sessions: [])
+    }
+
+    @Test("Summarize Request Logs")
+    func testSummarizeRequestLogs() {
+        cleanup(sessions: [])
+
+        let now = Date(timeIntervalSince1970: 1_700_100_000)
+        let entries: [RequestLogEntry] = [
+            .init(
+                requestID: UUID(),
+                sessionID: UUID(),
+                providerID: UUID(),
+                providerName: "OpenAI",
+                modelID: "gpt-5",
+                requestedAt: now,
+                finishedAt: now.addingTimeInterval(1),
+                isStreaming: true,
+                status: .success,
+                tokenUsage: .init(
+                    promptTokens: 10,
+                    completionTokens: 20,
+                    totalTokens: 30,
+                    thinkingTokens: 2,
+                    cacheWriteTokens: nil,
+                    cacheReadTokens: nil
+                )
+            ),
+            .init(
+                requestID: UUID(),
+                sessionID: UUID(),
+                providerID: UUID(),
+                providerName: "OpenAI",
+                modelID: "gpt-5",
+                requestedAt: now.addingTimeInterval(2),
+                finishedAt: now.addingTimeInterval(3),
+                isStreaming: true,
+                status: .failed,
+                tokenUsage: nil
+            ),
+            .init(
+                requestID: UUID(),
+                sessionID: UUID(),
+                providerID: UUID(),
+                providerName: "Anthropic",
+                modelID: "claude-sonnet-4",
+                requestedAt: now.addingTimeInterval(4),
+                finishedAt: now.addingTimeInterval(5),
+                isStreaming: false,
+                status: .cancelled,
+                tokenUsage: .init(
+                    promptTokens: 5,
+                    completionTokens: 7,
+                    totalTokens: nil,
+                    thinkingTokens: nil,
+                    cacheWriteTokens: 3,
+                    cacheReadTokens: 4
+                )
+            )
+        ]
+
+        for entry in entries {
+            Persistence.appendRequestLog(entry)
+        }
+
+        let summary = Persistence.summarizeRequestLogs()
+        #expect(summary.totalRequests == 3)
+        #expect(summary.successCount == 1)
+        #expect(summary.failedCount == 1)
+        #expect(summary.cancelledCount == 1)
+        #expect(summary.tokenTotals.sentTokens == 15)
+        #expect(summary.tokenTotals.receivedTokens == 27)
+        #expect(summary.tokenTotals.thinkingTokens == 2)
+        #expect(summary.tokenTotals.cacheWriteTokens == 3)
+        #expect(summary.tokenTotals.cacheReadTokens == 4)
+        #expect(summary.tokenTotals.totalTokens == 30)
+        #expect(summary.byProvider.count == 2)
+        #expect(summary.byModel.count == 2)
+
+        cleanup(sessions: [])
+    }
+
+    @Test("Request Logs Retention Limit")
+    func testRequestLogsRetentionLimit() {
+        cleanup(sessions: [])
+
+        let total = 10_020
+        let dropped = total - 10_000
+        let baseDate = Date(timeIntervalSince1970: 1_700_200_000)
+        for index in 0..<total {
+            let time = baseDate.addingTimeInterval(TimeInterval(index))
+            Persistence.appendRequestLog(
+                .init(
+                    requestID: UUID(),
+                    sessionID: UUID(),
+                    providerID: UUID(),
+                    providerName: "Retention",
+                    modelID: "model-\(index)",
+                    requestedAt: time,
+                    finishedAt: time.addingTimeInterval(0.1),
+                    isStreaming: false,
+                    status: .success,
+                    tokenUsage: nil
+                )
+            )
+        }
+
+        let loaded = Persistence.loadRequestLogs()
+        #expect(loaded.count == 10_000)
+        #expect(loaded.first?.modelID == "model-\(total - 1)")
+        #expect(loaded.last?.modelID == "model-\(dropped)")
+
+        cleanup(sessions: [])
     }
 }
 
 @Suite("ConfigLoader Tests")
 fileprivate struct ConfigLoaderTests {
+    private struct LegacyProviderSnapshot: Encodable {
+        let id: UUID
+        let name: String
+        let baseURL: String
+        let apiKeys: [String]
+        let apiFormat: String
+        let models: [Model]
+        let headerOverrides: [String: String]
+    }
     
     // Clean up provider files
     private func cleanup(providers: [Provider]) {
@@ -2426,18 +2942,30 @@ fileprivate struct ConfigLoaderTests {
             .appendingPathComponent("Providers")
     }
 
-    private func writeRawProviderFile(_ provider: Provider, fileName: String) throws {
+    private func providerFileURL(for providerID: UUID) -> URL {
+        providersDirectory.appendingPathComponent("\(providerID.uuidString).json")
+    }
+
+    private func writeLegacyProviderFile(_ provider: Provider, fileName: String) throws {
         ConfigLoader.setupInitialProviderConfigs()
         let fileURL = providersDirectory.appendingPathComponent(fileName)
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        let data = try encoder.encode(provider)
+        let snapshot = LegacyProviderSnapshot(
+            id: provider.id,
+            name: provider.name,
+            baseURL: provider.baseURL,
+            apiKeys: provider.apiKeys,
+            apiFormat: provider.apiFormat,
+            models: provider.models,
+            headerOverrides: provider.headerOverrides
+        )
+        let data = try encoder.encode(snapshot)
         try data.write(to: fileURL, options: .atomic)
     }
 
-    @Test("Save and Load Provider")
-    func testSaveAndLoadProvider() {
-        // 1. Arrange
+    @Test("保存并加载提供商时将 API Key 写入共享 Keychain")
+    func testSaveAndLoadProvider() throws {
         let provider = Provider(
             id: UUID(),
             name: "Test Provider",
@@ -2446,23 +2974,51 @@ fileprivate struct ConfigLoaderTests {
             apiFormat: "openai-compatible",
             models: [Model(modelName: "test-model")]
         )
-        
-        // 2. Act
+
         ConfigLoader.saveProvider(provider)
+        defer { cleanup(providers: [provider]) }
+
         let loadedProviders = ConfigLoader.loadProviders()
-        
-        // 3. Assert
         let foundProvider = loadedProviders.first(where: { $0.id == provider.id })
+
         #expect(foundProvider != nil)
         #expect(foundProvider?.name == "Test Provider")
-        #expect(foundProvider?.apiKeys.count == 2)
+        #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
-        
-        // Teardown
-        cleanup(providers: [provider])
+
+        let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
+        #expect(!fileContents.contains("\"apiKeys\""))
     }
 
-    @Test("Load Providers Should Repair Duplicate IDs And Normalize Files")
+    @Test("加载旧版 Provider 文件时会迁移 API Key 并清理明文字段")
+    func testLoadProvidersMigratesLegacyAPIKeysToKeychain() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "legacy-\(UUID().uuidString)",
+            baseURL: "https://legacy.example.com",
+            apiKeys: ["legacy-key-1", "legacy-key-2"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "legacy-model", isActivated: true)]
+        )
+        let fileName = "\(provider.id.uuidString).json"
+
+        try writeLegacyProviderFile(provider, fileName: fileName)
+        defer {
+            cleanup(providers: [provider])
+            try? FileManager.default.removeItem(at: providerFileURL(for: provider.id))
+        }
+
+        let firstLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
+        #expect(firstLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
+
+        let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
+        #expect(!fileContents.contains("\"apiKeys\""))
+
+        let secondLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
+        #expect(secondLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
+    }
+
+    @Test("加载提供商时会修复重复 ID 并规范化文件")
     func testLoadProvidersRepairDuplicateIDsAndNormalizeFiles() throws {
         let token = "repair-\(UUID().uuidString)"
         let duplicateProviderID = UUID()
@@ -2491,16 +3047,22 @@ fileprivate struct ConfigLoaderTests {
         let rawFileA = "\(token)-manual-a.json"
         let rawFileB = "\(token)-manual-b.json"
 
-        try writeRawProviderFile(providerA, fileName: rawFileA)
-        try writeRawProviderFile(providerB, fileName: rawFileB)
+        try writeLegacyProviderFile(providerA, fileName: rawFileA)
+        try writeLegacyProviderFile(providerB, fileName: rawFileB)
 
         let firstLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
         #expect(firstLoad.count == 2)
         #expect(Set(firstLoad.map(\.id)).count == 2)
         if let repairedA = firstLoad.first(where: { $0.name == "\(token)-A" }) {
             #expect(Set(repairedA.models.map(\.id)).count == repairedA.models.count)
+            #expect(repairedA.apiKeys == ["key-a"])
         } else {
             Issue.record("未找到 \(token)-A")
+        }
+        if let repairedB = firstLoad.first(where: { $0.name == "\(token)-B" }) {
+            #expect(repairedB.apiKeys == ["key-b"])
+        } else {
+            Issue.record("未找到 \(token)-B")
         }
 
         let secondLoad = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }

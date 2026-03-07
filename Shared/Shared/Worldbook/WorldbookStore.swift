@@ -3,7 +3,7 @@
 // ============================================================================
 // 世界书持久化存储
 //
-// 负责 worldbooks.json 的读写、去重导入与基础 CRUD。
+// 负责目录级世界书文件的读写、旧版聚合文件迁移、去重导入与基础 CRUD。
 // ============================================================================
 
 import Foundation
@@ -47,18 +47,37 @@ public struct WorldbookImportDiagnostics: Hashable, Sendable {
 public final class WorldbookStore {
     public static let shared = WorldbookStore()
 
+    private struct StandaloneLoadResult {
+        var worldbooks: [Worldbook]
+        var requiresRewrite: Bool
+    }
+
+    private struct LoadedStandaloneBook {
+        var worldbook: Worldbook
+        var requiresRewrite: Bool
+    }
+
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "WorldbookStore")
     private let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.worldbook.store")
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private let importService: WorldbookImportService
+    private let storageDirectoryOverride: URL?
     private var cachedWorldbooks: [Worldbook]?
     private var cacheByID: [UUID: Worldbook] = [:]
     private var cacheNormalizedContents: Set<String> = []
 
     public static let directoryName = "Worldbooks"
     public static let fileName = "worldbooks.json"
+    private static let standaloneFileExtension = "json"
+    private static let importedFileExtensions: Set<String> = ["json", "png"]
 
-    private init() {
+    init(
+        storageDirectoryURL: URL? = nil,
+        importService: WorldbookImportService = WorldbookImportService()
+    ) {
+        self.storageDirectoryOverride = storageDirectoryURL
+        self.importService = importService
         encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -68,6 +87,9 @@ public final class WorldbookStore {
     }
 
     public var storageDirectory: URL {
+        if let storageDirectoryOverride {
+            return storageDirectoryOverride
+        }
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0].appendingPathComponent(Self.directoryName, isDirectory: true)
     }
@@ -100,6 +122,14 @@ public final class WorldbookStore {
     public func saveWorldbooks(_ worldbooks: [Worldbook]) {
         queue.sync {
             saveWorldbooksUnlocked(worldbooks)
+        }
+    }
+
+    public func invalidateCache() {
+        queue.sync {
+            cachedWorldbooks = nil
+            cacheByID = [:]
+            cacheNormalizedContents = []
         }
     }
 
@@ -234,35 +264,290 @@ public final class WorldbookStore {
             return cachedWorldbooks
         }
         _ = ensureDirectoryIfNeeded()
-        let fileURL = storageFileURL
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            updateCaches(with: [])
-            return []
+        let standaloneResult = loadStandaloneWorldbooksUnlocked()
+        let legacyResult = loadLegacyWorldbooksUnlocked()
+
+        var merged: [Worldbook] = []
+        var knownIDs = Set<UUID>()
+
+        for worldbook in standaloneResult.worldbooks {
+            if knownIDs.insert(worldbook.id).inserted {
+                merged.append(worldbook)
+            }
         }
 
-        do {
-            let data = try Data(contentsOf: fileURL)
-            let books = try decoder.decode([Worldbook].self, from: data)
-            let sorted = books.sorted { $0.updatedAt > $1.updatedAt }
-            updateCaches(with: sorted)
-            return sorted
-        } catch {
-            logger.error("读取世界书失败: \(error.localizedDescription, privacy: .public)")
-            updateCaches(with: [])
-            return []
+        for worldbook in legacyResult.worldbooks {
+            if knownIDs.insert(worldbook.id).inserted {
+                merged.append(worldbook)
+            }
         }
+
+        let sorted = merged.sorted { lhs, rhs in
+            if lhs.updatedAt == rhs.updatedAt {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+
+        if standaloneResult.requiresRewrite || legacyResult.requiresRewrite {
+            saveWorldbooksUnlocked(sorted, removeLegacyAggregate: legacyResult.requiresRewrite)
+            return cachedWorldbooks ?? sorted
+        }
+
+        updateCaches(with: sorted)
+        return sorted
     }
 
-    private func saveWorldbooksUnlocked(_ worldbooks: [Worldbook]) {
+    private func saveWorldbooksUnlocked(
+        _ worldbooks: [Worldbook],
+        removeLegacyAggregate: Bool = true
+    ) {
         _ = ensureDirectoryIfNeeded()
         do {
-            let data = try encoder.encode(worldbooks)
-            try data.write(to: storageFileURL, options: [.atomicWrite, .completeFileProtection])
-            logger.info("已保存世界书: \(worldbooks.count)")
             let sorted = worldbooks.sorted { $0.updatedAt > $1.updatedAt }
+            let destinationMap = standaloneFileURLs(for: sorted)
+
+            for worldbook in sorted {
+                guard let destinationURL = destinationMap[worldbook.id] else { continue }
+                let data = try encoder.encode(worldbook)
+                try data.write(to: destinationURL, options: [.atomicWrite, .completeFileProtection])
+            }
+
+            cleanupStaleStandaloneFiles(
+                keeping: Set(destinationMap.values.map { $0.lastPathComponent.lowercased() }),
+                removeLegacyAggregate: removeLegacyAggregate
+            )
+
+            logger.info("已保存世界书文件: \(worldbooks.count)")
             updateCaches(with: sorted)
         } catch {
             logger.error("保存世界书失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func loadStandaloneWorldbooksUnlocked() -> StandaloneLoadResult {
+        let urls = standaloneCandidateFileURLs()
+        guard !urls.isEmpty else {
+            return StandaloneLoadResult(worldbooks: [], requiresRewrite: false)
+        }
+
+        var loadedWorldbooks: [Worldbook] = []
+        var seenIDs = Set<UUID>()
+        var requiresRewrite = false
+
+        for fileURL in urls {
+            guard let loaded = loadStandaloneWorldbook(at: fileURL) else { continue }
+            var worldbook = loaded.worldbook
+            requiresRewrite = requiresRewrite || loaded.requiresRewrite
+
+            if seenIDs.contains(worldbook.id) {
+                worldbook.id = UUID()
+                requiresRewrite = true
+            }
+
+            seenIDs.insert(worldbook.id)
+            loadedWorldbooks.append(worldbook)
+        }
+
+        return StandaloneLoadResult(
+            worldbooks: loadedWorldbooks.sorted { $0.updatedAt > $1.updatedAt },
+            requiresRewrite: requiresRewrite
+        )
+    }
+
+    private func loadLegacyWorldbooksUnlocked() -> StandaloneLoadResult {
+        let legacyURL = storageFileURL
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else {
+            return StandaloneLoadResult(worldbooks: [], requiresRewrite: false)
+        }
+
+        do {
+            let data = try Data(contentsOf: legacyURL)
+            let worldbooks = try decoder.decode([Worldbook].self, from: data)
+            logger.info("检测到旧版世界书聚合文件，准备迁移: \(legacyURL.lastPathComponent, privacy: .public)")
+            return StandaloneLoadResult(worldbooks: worldbooks, requiresRewrite: true)
+        } catch {
+            if let loaded = loadStandaloneWorldbook(at: legacyURL) {
+                logger.info("检测到旧版路径上的单本世界书文件，准备迁移: \(legacyURL.lastPathComponent, privacy: .public)")
+                return StandaloneLoadResult(worldbooks: [loaded.worldbook], requiresRewrite: true)
+            }
+
+            logger.error("读取旧版世界书聚合文件失败: \(error.localizedDescription, privacy: .public)")
+            return StandaloneLoadResult(worldbooks: [], requiresRewrite: false)
+        }
+    }
+
+    private func loadStandaloneWorldbook(at fileURL: URL) -> LoadedStandaloneBook? {
+        do {
+            let data = try Data(contentsOf: fileURL)
+
+            if fileURL.pathExtension.lowercased() == Self.standaloneFileExtension,
+               let decoded = try? decoder.decode(Worldbook.self, from: data) {
+                return LoadedStandaloneBook(worldbook: decoded, requiresRewrite: false)
+            }
+
+            let imported = try importService.importWorldbookWithReport(
+                from: data,
+                fileName: fileURL.lastPathComponent
+            )
+            return LoadedStandaloneBook(worldbook: imported.worldbook, requiresRewrite: true)
+        } catch {
+            logger.error("读取世界书文件失败: \(fileURL.lastPathComponent, privacy: .public) - \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    private func standaloneCandidateFileURLs() -> [URL] {
+        let directory = storageDirectory
+        let fm = FileManager.default
+
+        guard let urls = try? fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return urls
+            .filter { url in
+                guard url.lastPathComponent.lowercased() != Self.fileName.lowercased() else {
+                    return false
+                }
+                return Self.importedFileExtensions.contains(url.pathExtension.lowercased())
+            }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    }
+
+    private func standaloneFileURLs(for worldbooks: [Worldbook]) -> [UUID: URL] {
+        var usedNames = Set<String>()
+        var result: [UUID: URL] = [:]
+
+        for worldbook in worldbooks.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            let fileName = nextAvailableStandaloneFileName(for: worldbook, usedNames: &usedNames)
+            result[worldbook.id] = storageDirectory.appendingPathComponent(fileName, isDirectory: false)
+        }
+
+        return result
+    }
+
+    private func nextAvailableStandaloneFileName(
+        for worldbook: Worldbook,
+        usedNames: inout Set<String>
+    ) -> String {
+        let preferred = preferredStandaloneFileName(for: worldbook)
+        let preferredKey = preferred.lowercased()
+        if !usedNames.contains(preferredKey) {
+            usedNames.insert(preferredKey)
+            return preferred
+        }
+
+        let fallback = nameBasedStandaloneFileName(for: worldbook)
+        let fallbackKey = fallback.lowercased()
+        if !usedNames.contains(fallbackKey) {
+            usedNames.insert(fallbackKey)
+            return fallback
+        }
+
+        var index = 2
+        while true {
+            let candidate = indexedStandaloneFileName(for: worldbook, index: index)
+            let key = candidate.lowercased()
+            if !usedNames.contains(key) {
+                usedNames.insert(key)
+                return candidate
+            }
+            index += 1
+        }
+    }
+
+    private func preferredStandaloneFileName(for worldbook: Worldbook) -> String {
+        if let sourceFileName = worldbook.sourceFileName,
+           !sourceFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let sanitizedSource = sanitizedSourceFileName(sourceFileName) {
+            return sanitizedSource
+        }
+
+        return nameBasedStandaloneFileName(for: worldbook)
+    }
+
+    private func nameBasedStandaloneFileName(for worldbook: Worldbook) -> String {
+        let baseName = sanitizedFileComponent(worldbook.name)
+        let safeBaseName = baseName.isEmpty ? "worldbook" : baseName
+        return "\(safeBaseName)--\(worldbook.id.uuidString.lowercased()).\(Self.standaloneFileExtension)"
+    }
+
+    private func indexedStandaloneFileName(for worldbook: Worldbook, index: Int) -> String {
+        let baseName = sanitizedFileComponent(worldbook.name)
+        let safeBaseName = baseName.isEmpty ? "worldbook" : baseName
+        return "\(safeBaseName)--\(worldbook.id.uuidString.lowercased())-\(index).\(Self.standaloneFileExtension)"
+    }
+
+    private func sanitizedSourceFileName(_ rawValue: String) -> String? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let lastPathComponent = URL(fileURLWithPath: trimmed).lastPathComponent
+        let baseName = URL(fileURLWithPath: lastPathComponent).deletingPathExtension().lastPathComponent
+        let sanitizedBaseName = sanitizedFileComponent(baseName)
+        guard !sanitizedBaseName.isEmpty else { return nil }
+
+        let candidate = "\(sanitizedBaseName).\(Self.standaloneFileExtension)"
+        guard candidate.lowercased() != Self.fileName.lowercased() else {
+            return nil
+        }
+
+        return candidate
+    }
+
+    private func sanitizedFileComponent(_ rawValue: String) -> String {
+        let invalidScalars = CharacterSet(charactersIn: "/:\\?%*|\"<>\n\r\t")
+            .union(.controlCharacters)
+        let cleanedScalars = rawValue.unicodeScalars.map { scalar -> Character in
+            if invalidScalars.contains(scalar) {
+                return "_"
+            }
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                return "_"
+            }
+            return Character(scalar)
+        }
+
+        let cleaned = String(cleanedScalars)
+            .replacingOccurrences(of: "_{2,}", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "._ "))
+
+        if cleaned.isEmpty || cleaned == "." || cleaned == ".." {
+            return ""
+        }
+
+        return String(cleaned.prefix(80))
+    }
+
+    private func cleanupStaleStandaloneFiles(
+        keeping desiredFileNames: Set<String>,
+        removeLegacyAggregate: Bool
+    ) {
+        let fm = FileManager.default
+
+        for url in standaloneCandidateFileURLs() {
+            if desiredFileNames.contains(url.lastPathComponent.lowercased()) {
+                continue
+            }
+            do {
+                try fm.removeItem(at: url)
+            } catch {
+                logger.error("删除旧世界书文件失败: \(url.lastPathComponent, privacy: .public) - \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        if removeLegacyAggregate, fm.fileExists(atPath: self.storageFileURL.path) {
+            do {
+                try fm.removeItem(at: self.storageFileURL)
+                logger.info("已删除旧版世界书聚合文件: \(self.storageFileURL.lastPathComponent, privacy: .public)")
+            } catch {
+                logger.error("删除旧版世界书聚合文件失败: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 

@@ -242,7 +242,8 @@ private struct SpeechModelSelectionView: View {
                 } label: {
                     let isSelected = selectedSpeechModel?.id == runnable.id
                     selectionRow(
-                        title: "\(runnable.model.displayName) | \(runnable.provider.name)",
+                        title: runnable.model.displayName,
+                        subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
                         isSelected: isSelected
                     )
                 }
@@ -257,16 +258,15 @@ private struct SpeechModelSelectionView: View {
     }
     
     @ViewBuilder
-    private func selectionRow(title: String, isSelected: Bool) -> some View {
-        HStack {
-            MarqueeText(content: title, uiFont: .preferredFont(forTextStyle: .body))
-                .allowsHitTesting(false)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.footnote)
-                    .foregroundColor(.accentColor)
-            }
-        }
+    private func selectionRow(title: String, subtitle: String? = nil, isSelected: Bool) -> some View {
+        MarqueeTitleSubtitleSelectionRow(
+            title: title,
+            subtitle: subtitle,
+            isSelected: isSelected,
+            subtitleUIFont: .monospacedSystemFont(
+                ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                weight: .regular
+            )
+        )
     }
 }

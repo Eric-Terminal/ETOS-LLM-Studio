@@ -10,14 +10,15 @@ import Testing
 import Foundation
 @testable import Shared
 
-@Suite("ChatService Shortcut Tool Tests")
+@Suite("聊天服务快捷指令工具测试")
 struct ChatServiceShortcutToolTests {
 
     @MainActor
-    @Test("sendAndProcessMessage injects enabled shortcut tools")
+    @Test("sendAndProcessMessage 会注入已启用的快捷指令工具")
     func testShortcutToolsInjected() async {
         let originalProviders = ConfigLoader.loadProviders()
         let originalShortcutTools = ShortcutToolStore.loadTools()
+        let originalGlobalSwitch = ShortcutToolManager.shared.chatToolsEnabled
 
         defer {
             for provider in ConfigLoader.loadProviders() {
@@ -27,6 +28,7 @@ struct ChatServiceShortcutToolTests {
                 ConfigLoader.saveProvider(provider)
             }
             ShortcutToolStore.saveTools(originalShortcutTools)
+            ShortcutToolManager.shared.setChatToolsEnabled(originalGlobalSwitch)
             ShortcutToolManager.shared.reloadFromDisk()
         }
 
@@ -51,6 +53,7 @@ struct ChatServiceShortcutToolTests {
             generatedDescription: "for unit test"
         )
         ShortcutToolStore.saveTools([shortcutTool])
+        ShortcutToolManager.shared.setChatToolsEnabled(true)
         ShortcutToolManager.shared.reloadFromDisk()
 
         let adapter = ShortcutInjectionMockAdapter()
@@ -79,6 +82,77 @@ struct ChatServiceShortcutToolTests {
 
         let toolNames = adapter.receivedTools?.map(\.name) ?? []
         #expect(toolNames.contains(where: { $0.hasPrefix(ShortcutToolNaming.toolAliasPrefix) }))
+    }
+
+    @MainActor
+    @Test("聊天总开关关闭时 sendAndProcessMessage 不注入快捷指令工具")
+    func testShortcutToolsSkippedWhenGlobalSwitchDisabled() async {
+        let originalProviders = ConfigLoader.loadProviders()
+        let originalShortcutTools = ShortcutToolStore.loadTools()
+        let originalGlobalSwitch = ShortcutToolManager.shared.chatToolsEnabled
+
+        defer {
+            for provider in ConfigLoader.loadProviders() {
+                ConfigLoader.deleteProvider(provider)
+            }
+            for provider in originalProviders {
+                ConfigLoader.saveProvider(provider)
+            }
+            ShortcutToolStore.saveTools(originalShortcutTools)
+            ShortcutToolManager.shared.setChatToolsEnabled(originalGlobalSwitch)
+            ShortcutToolManager.shared.reloadFromDisk()
+        }
+
+        for provider in ConfigLoader.loadProviders() {
+            ConfigLoader.deleteProvider(provider)
+        }
+
+        let provider = Provider(
+            name: "Test Provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "test-model", displayName: "Test Model", isActivated: true)
+            ]
+        )
+        ConfigLoader.saveProvider(provider)
+
+        let shortcutTool = ShortcutToolDefinition(
+            name: "Injected Tool",
+            isEnabled: true,
+            generatedDescription: "for unit test"
+        )
+        ShortcutToolStore.saveTools([shortcutTool])
+        ShortcutToolManager.shared.setChatToolsEnabled(false)
+        ShortcutToolManager.shared.reloadFromDisk()
+
+        let adapter = ShortcutInjectionMockAdapter()
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [ShortcutInjectionURLProtocol.self]
+        let session = URLSession(configuration: sessionConfig)
+
+        let service = ChatService(
+            adapters: ["openai-compatible": adapter],
+            memoryManager: MemoryManager(),
+            urlSession: session
+        )
+
+        await service.sendAndProcessMessage(
+            content: "hello",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let toolNames = adapter.receivedTools?.map(\.name) ?? []
+        #expect(!toolNames.contains(where: { $0.hasPrefix(ShortcutToolNaming.toolAliasPrefix) }))
     }
 }
 

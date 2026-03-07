@@ -21,6 +21,7 @@ public final class ShortcutToolManager: ObservableObject {
     public nonisolated static var toolAliasPrefix: String { ShortcutToolNaming.toolAliasPrefix }
     public nonisolated static let officialImportShortcutShareURLString = "https://www.icloud.com/shortcuts/22ebff9dcd6a4d3aa096d3f15d34a94e"
     public nonisolated static let officialImportShortcutDefaultName = "ELS Export"
+    private nonisolated static let chatToolsEnabledUserDefaultsKey = "shortcut.chatToolsEnabled"
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ShortcutToolManager")
     private let executionTimeoutSeconds: UInt64 = 45
@@ -38,6 +39,7 @@ public final class ShortcutToolManager: ObservableObject {
     @Published public private(set) var importProgressCompleted: Int = 0
     @Published public private(set) var importProgressTotal: Int = 0
     @Published public private(set) var importCurrentItemName: String?
+    @Published public private(set) var chatToolsEnabled: Bool
 
     private var routedTools: [String: ShortcutToolDefinition] = [:]
     private var pendingExecutions: [String: PendingExecution] = [:]
@@ -53,6 +55,7 @@ public final class ShortcutToolManager: ObservableObject {
     }
 
     private init() {
+        chatToolsEnabled = UserDefaults.standard.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
         reloadFromDisk()
     }
 
@@ -96,6 +99,13 @@ public final class ShortcutToolManager: ObservableObject {
             UserDefaults.standard.set(next, forKey: officialImportShortcutNameUserDefaultsKey)
             objectWillChange.send()
         }
+    }
+
+    public func setChatToolsEnabled(_ isEnabled: Bool) {
+        guard chatToolsEnabled != isEnabled else { return }
+        chatToolsEnabled = isEnabled
+        UserDefaults.standard.set(isEnabled, forKey: Self.chatToolsEnabledUserDefaultsKey)
+        logger.info("快捷指令聊天工具总开关已\(isEnabled ? "开启" : "关闭")。")
     }
 
     // MARK: - CRUD
@@ -340,7 +350,8 @@ public final class ShortcutToolManager: ObservableObject {
     // MARK: - Chat Integration
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
-        tools
+        guard chatToolsEnabled else { return [] }
+        let chatTools: [InternalToolDefinition] = tools
             .filter { $0.isEnabled }
             .map { tool in
                 let alias = ShortcutToolNaming.alias(for: tool)
@@ -356,6 +367,7 @@ public final class ShortcutToolManager: ObservableObject {
                 }
                 return InternalToolDefinition(name: alias, description: description, parameters: parameters, isBlocking: true)
             }
+        return chatTools
     }
 
     public func displayLabel(for toolName: String) -> String? {
@@ -364,6 +376,9 @@ public final class ShortcutToolManager: ObservableObject {
     }
 
     public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
+        guard chatToolsEnabled else {
+            throw ShortcutToolError.executionFailed(NSLocalizedString("快捷指令工具总开关已关闭。", comment: ""))
+        }
         guard let tool = routedTools[toolName] else {
             throw ShortcutToolError.unknownTool
         }
@@ -377,6 +392,18 @@ public final class ShortcutToolManager: ObservableObject {
     }
 
     public func executeRelayRequest(_ request: ShortcutToolExecutionRequest) async -> ShortcutToolExecutionResult {
+        guard chatToolsEnabled else {
+            return ShortcutToolExecutionResult(
+                requestID: request.requestID,
+                toolName: request.toolName,
+                success: false,
+                result: nil,
+                errorMessage: NSLocalizedString("快捷指令工具总开关已关闭。", comment: ""),
+                transport: .relay,
+                startedAt: request.requestedAt,
+                finishedAt: Date()
+            )
+        }
         guard let tool = routedTools[request.toolName] else {
             return ShortcutToolExecutionResult(
                 requestID: request.requestID,

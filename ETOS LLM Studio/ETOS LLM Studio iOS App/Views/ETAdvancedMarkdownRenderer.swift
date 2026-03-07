@@ -103,16 +103,16 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         let stableWidth = max(1, floor(availableWidth))
-        let payload = Payload(
-            content: content,
+        let payload = Payload(content: content, availableWidth: stableWidth)
+        let shellConfiguration = ShellConfiguration(
             enableMarkdown: enableMarkdown,
-            isOutgoing: isOutgoing,
-            availableWidth: stableWidth
+            isOutgoing: isOutgoing
         )
-
-        guard context.coordinator.lastPayload != payload else { return }
-        context.coordinator.lastPayload = payload
-        webView.loadHTMLString(payload.htmlDocument, baseURL: nil)
+        context.coordinator.render(
+            payload,
+            shellConfiguration: shellConfiguration,
+            on: webView
+        )
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
@@ -120,9 +120,41 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
         @Binding var renderedHeight: CGFloat
         var lastPayload: Payload?
+        var lastShellConfiguration: ShellConfiguration?
+        var pendingPayload: Payload?
+        var isShellLoaded = false
 
-        init(renderedHeight: Binding<CGFloat>) {
-            self._renderedHeight = renderedHeight
+        init(renderedHeight: Binding<CGFloat>) { self._renderedHeight = renderedHeight }
+
+        func render(
+            _ payload: Payload,
+            shellConfiguration: ShellConfiguration,
+            on webView: WKWebView
+        ) {
+            let shouldReloadShell = lastShellConfiguration != shellConfiguration || !isShellLoaded
+            guard lastPayload != payload || shouldReloadShell else { return }
+
+            lastPayload = payload
+            pendingPayload = payload
+
+            if shouldReloadShell {
+                lastShellConfiguration = shellConfiguration
+                isShellLoaded = false
+                webView.loadHTMLString(shellConfiguration.htmlDocument, baseURL: nil)
+                return
+            }
+
+            applyPendingPayloadIfPossible(on: webView)
+        }
+
+        private func applyPendingPayloadIfPossible(on webView: WKWebView) {
+            guard isShellLoaded, let payload = pendingPayload else { return }
+            pendingPayload = nil
+            webView.evaluateJavaScript(payload.javaScriptInvocation) { _, error in
+                if error != nil {
+                    self.pendingPayload = payload
+                }
+            }
         }
 
         func userContentController(
@@ -141,24 +173,35 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            let script = "window.__etNotifyHeight && window.__etNotifyHeight();"
-            webView.evaluateJavaScript(script, completionHandler: nil)
+            isShellLoaded = true
+            applyPendingPayloadIfPossible(on: webView)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFail navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            isShellLoaded = false
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            isShellLoaded = false
         }
     }
 
-    struct Payload: Equatable {
-        let content: String
+    struct ShellConfiguration: Equatable {
         let enableMarkdown: Bool
         let isOutgoing: Bool
-        let availableWidth: CGFloat
 
         var htmlDocument: String {
-            let sourceJSON = jsonEscaped(content)
             let textColor = isOutgoing ? "#FFFFFF" : "#1C1C1E"
             let secondaryTextColor = isOutgoing ? "rgba(255,255,255,0.85)" : "#3C3C43"
             let linkColor = isOutgoing ? "rgba(255,255,255,0.95)" : "#0A84FF"
-            let maxContentWidth = max(1, floor(availableWidth))
-            let initialFallbackHTML = htmlEscaped(content).replacingOccurrences(of: "\n", with: "<br/>")
 
             return """
 <!doctype html>
@@ -177,7 +220,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       --text: \(textColor);
       --secondary: \(secondaryTextColor);
       --link: \(linkColor);
-      --max-width: \(maxContentWidth)px;
+      --max-width: 1px;
     }
 
     html, body {
@@ -284,12 +327,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
   </style>
 </head>
 <body>
-  <div id="content">\(initialFallbackHTML)</div>
+  <div id="content"></div>
 
   <script>
-    const __raw = \(sourceJSON);
     const __enableMarkdown = \(enableMarkdown ? "true" : "false");
-    const __rawHasMath = __raw.includes("$$") || __raw.includes("\\\\(") || __raw.includes("\\\\[");
+    const __state = {
+      raw: "",
+      availableWidth: 1
+    };
 
     function __escapeHTML(input) {
       return input
@@ -302,8 +347,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     function __setFallbackContent() {
       const container = document.getElementById("content");
-      const escaped = __escapeHTML(__raw).replaceAll("\\n", "<br/>");
+      const escaped = __escapeHTML(__state.raw).replaceAll("\\n", "<br/>");
       container.innerHTML = escaped;
+    }
+
+    function __setContentWidth(width) {
+      const stableWidth = Math.max(1, Math.floor(width || 1));
+      document.documentElement.style.setProperty("--max-width", `${stableWidth}px`);
     }
 
     function __notifyHeightNow() {
@@ -394,11 +444,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     function __render() {
       const container = document.getElementById("content");
+      const raw = __state.raw;
+      const rawHasMath = raw.includes("$$") || raw.includes("\\\\(") || raw.includes("\\\\[");
 
       if (__enableMarkdown && window.marked) {
-        const tokenized = __tokenizeDisplayMath(__raw);
+        const tokenized = __tokenizeDisplayMath(raw);
         container.innerHTML = window.marked.parse(tokenized.markdown, {
-          breaks: !__rawHasMath,
+          breaks: !rawHasMath,
           gfm: true
         });
         __renderMathBlocks(container, tokenized.blocks);
@@ -426,7 +478,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       __notifyHeightNow();
     }
 
-    function __bootstrap(retryCount = 0) {
+    function __scheduleBootstrap(retryCount = 0) {
       __render();
 
       const markdownReady = !__enableMarkdown || !!window.marked;
@@ -435,7 +487,35 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         return;
       }
 
-      setTimeout(() => __bootstrap(retryCount + 1), 50);
+      if (window.__etBootstrapTimer) {
+        clearTimeout(window.__etBootstrapTimer);
+      }
+      window.__etBootstrapTimer = setTimeout(() => {
+        window.__etBootstrapTimer = null;
+        __scheduleBootstrap(retryCount + 1);
+      }, 50);
+    }
+
+    window.__etApplyPayload = function(payload) {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+
+      if (payload.content == null) {
+        __state.raw = "";
+      } else if (typeof payload.content === "string") {
+        __state.raw = payload.content;
+      } else {
+        __state.raw = String(payload.content);
+      }
+
+      const numericWidth = Number(payload.availableWidth);
+      if (Number.isFinite(numericWidth) && numericWidth > 0) {
+        __state.availableWidth = numericWidth;
+      }
+
+      __setContentWidth(__state.availableWidth);
+      __scheduleBootstrap(0);
     }
 
     if (window.ResizeObserver) {
@@ -446,7 +526,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       }
     }
 
-    window.addEventListener("load", () => __bootstrap(0));
+    window.addEventListener("load", () => {
+      __setContentWidth(__state.availableWidth);
+      __scheduleBootstrap(0);
+    });
     window.addEventListener("resize", () => __notifyHeightNow());
   </script>
 
@@ -466,23 +549,31 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 </html>
 """
         }
+    }
 
-        private func jsonEscaped(_ value: String) -> String {
+    struct Payload: Equatable {
+        let content: String
+        let availableWidth: CGFloat
+
+        var javaScriptInvocation: String {
+            let widthString = String(format: "%.0f", availableWidth)
+            let contentJSON = Self.jsonStringLiteral(content)
+            return """
+window.__etApplyPayload && window.__etApplyPayload({
+  content: \(contentJSON),
+  availableWidth: \(widthString)
+});
+window.__etNotifyHeight && window.__etNotifyHeight();
+"""
+        }
+
+        private static func jsonStringLiteral(_ value: String) -> String {
             guard let data = try? JSONSerialization.data(withJSONObject: [value]),
                   let json = String(data: data, encoding: .utf8),
                   json.count >= 2 else {
                 return "\"\""
             }
             return String(json.dropFirst().dropLast())
-        }
-
-        private func htmlEscaped(_ value: String) -> String {
-            value
-                .replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-                .replacingOccurrences(of: "\"", with: "&quot;")
-                .replacingOccurrences(of: "'", with: "&#39;")
         }
     }
 }
