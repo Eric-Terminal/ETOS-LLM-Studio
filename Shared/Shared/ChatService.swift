@@ -1184,6 +1184,7 @@ public class ChatService {
         let enableMemory: Bool
         let enableMemoryWrite: Bool
         let enableMemoryActiveRetrieval: Bool
+        let includeAppTools: Bool
         let includeMCPTools: Bool
         let includeShortcutTools: Bool
     }
@@ -1200,6 +1201,7 @@ public class ChatService {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                includeAppTools: true,
                 includeMCPTools: true,
                 includeShortcutTools: true
             )
@@ -1210,6 +1212,7 @@ public class ChatService {
             enableMemory: false,
             enableMemoryWrite: false,
             enableMemoryActiveRetrieval: false,
+            includeAppTools: false,
             includeMCPTools: false,
             includeShortcutTools: false
         )
@@ -1234,6 +1237,10 @@ public class ChatService {
         }
         if policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
             resolvedTools.append(searchMemoryTool)
+        }
+        if policy.includeAppTools {
+            let appTools = await MainActor.run { AppToolManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: appTools)
         }
         if policy.includeMCPTools {
             let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
@@ -1947,6 +1954,48 @@ public class ChatService {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
                     displayResult = content
                     logger.error("  - 快捷指令工具调用失败: \(error.localizedDescription)")
+                }
+            }
+
+        case _ where AppToolManager.isAppToolName(toolCall.toolName):
+            let toolLabel = await MainActor.run {
+                AppToolManager.shared.displayLabel(for: toolCall.toolName)
+            } ?? toolCall.toolName
+            let appToolsEnabled = await MainActor.run { AppToolManager.shared.chatToolsEnabled }
+            guard appToolsEnabled else {
+                content = "拓展工具总开关已关闭。"
+                displayResult = content
+                logger.info("  - 拓展工具调用被总开关拒绝: \(toolCall.toolName)")
+                break
+            }
+            let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
+                toolName: toolCall.toolName,
+                displayName: toolLabel,
+                arguments: toolCall.arguments
+            )
+            switch permissionDecision {
+            case .deny:
+                content = "\(toolLabel) 调用已被用户拒绝。"
+                displayResult = content
+                logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
+            case .supplement:
+                content = "\(toolLabel) 调用已被用户拒绝。"
+                displayResult = content
+                shouldAwaitUserSupplement = true
+                logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
+            case .allowOnce, .allowForTool, .allowAll:
+                do {
+                    let result = try await AppToolManager.shared.executeToolFromChat(
+                        toolName: toolCall.toolName,
+                        argumentsJSON: toolCall.arguments
+                    )
+                    content = result
+                    displayResult = result
+                    logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
+                } catch {
+                    content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                    displayResult = content
+                    logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
                 }
             }
             

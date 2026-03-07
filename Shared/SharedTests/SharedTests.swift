@@ -2034,6 +2034,8 @@ fileprivate struct ChatServiceTests {
         let originalBooks = store.loadWorldbooks()
         let originalShortcutTools = ShortcutToolStore.loadTools()
         let originalShortcutToolsEnabled = await MainActor.run { ShortcutToolManager.shared.chatToolsEnabled }
+        let originalAppToolsEnabled = await MainActor.run { AppToolManager.shared.chatToolsEnabled }
+        let originalAppToolKinds = await MainActor.run { AppToolManager.shared.enabledToolKinds }
 
         await memoryManager.addMemory(content: "memory-should-hide")
 
@@ -2047,6 +2049,10 @@ fileprivate struct ChatServiceTests {
         await MainActor.run {
             ShortcutToolManager.shared.reloadFromDisk()
             ShortcutToolManager.shared.setChatToolsEnabled(true)
+            AppToolManager.shared.restoreStateForTests(
+                chatToolsEnabled: true,
+                enabledKinds: [.echoText]
+            )
         }
 
         let book = Worldbook(
@@ -2101,6 +2107,10 @@ fileprivate struct ChatServiceTests {
         await MainActor.run {
             ShortcutToolManager.shared.reloadFromDisk()
             ShortcutToolManager.shared.setChatToolsEnabled(originalShortcutToolsEnabled)
+            AppToolManager.shared.restoreStateForTests(
+                chatToolsEnabled: originalAppToolsEnabled,
+                enabledKinds: originalAppToolKinds
+            )
         }
         store.saveWorldbooks(originalBooks)
 
