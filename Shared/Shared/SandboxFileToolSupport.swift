@@ -141,6 +141,74 @@ public struct SandboxFileMoveResult: Codable, Hashable, Sendable {
     }
 }
 
+public struct SandboxFileCopyResult: Codable, Hashable, Sendable {
+    public let sourcePath: String
+    public let destinationPath: String
+    public let wasDirectory: Bool
+    public let createdParentDirectories: Bool
+    public let overwroteDestination: Bool
+
+    public init(
+        sourcePath: String,
+        destinationPath: String,
+        wasDirectory: Bool,
+        createdParentDirectories: Bool,
+        overwroteDestination: Bool
+    ) {
+        self.sourcePath = sourcePath
+        self.destinationPath = destinationPath
+        self.wasDirectory = wasDirectory
+        self.createdParentDirectories = createdParentDirectories
+        self.overwroteDestination = overwroteDestination
+    }
+}
+
+public struct SandboxDirectoryCreateResult: Codable, Hashable, Sendable {
+    public let path: String
+    public let created: Bool
+    public let createdParentDirectories: Bool
+
+    public init(path: String, created: Bool, createdParentDirectories: Bool) {
+        self.path = path
+        self.created = created
+        self.createdParentDirectories = createdParentDirectories
+    }
+}
+
+public struct SandboxBatchEditRule: Codable, Hashable, Sendable {
+    public let oldText: String
+    public let newText: String
+
+    public init(oldText: String, newText: String) {
+        self.oldText = oldText
+        self.newText = newText
+    }
+}
+
+public struct SandboxFileBatchEditResult: Codable, Hashable, Sendable {
+    public let path: String
+    public let replacements: Int
+    public let rulesApplied: Int
+    public let size: Int64
+
+    public init(path: String, replacements: Int, rulesApplied: Int, size: Int64) {
+        self.path = path
+        self.replacements = replacements
+        self.rulesApplied = rulesApplied
+        self.size = size
+    }
+}
+
+public struct SandboxFileUndoResult: Codable, Hashable, Sendable {
+    public let operation: String
+    public let recordedAt: String
+
+    public init(operation: String, recordedAt: String) {
+        self.operation = operation
+        self.recordedAt = recordedAt
+    }
+}
+
 public enum SandboxFileToolError: LocalizedError {
     case invalidPath
     case escapedSandbox
@@ -158,6 +226,9 @@ public enum SandboxFileToolError: LocalizedError {
     case destinationAlreadyExists(String)
     case cannotMoveIntoSelf
     case sourceAndDestinationSame
+    case cannotCopyIntoSelf
+    case emptyBatchRules
+    case noUndoHistory
 
     public var errorDescription: String? {
         switch self {
@@ -211,11 +282,30 @@ public enum SandboxFileToolError: LocalizedError {
             return NSLocalizedString("不能把目录移动到其自身或子目录下。", comment: "Sandbox tool move into self")
         case .sourceAndDestinationSame:
             return NSLocalizedString("源路径与目标路径相同，无需移动。", comment: "Sandbox tool source destination same")
+        case .cannotCopyIntoSelf:
+            return NSLocalizedString("不能把目录复制到其自身或子目录下。", comment: "Sandbox tool copy into self")
+        case .emptyBatchRules:
+            return NSLocalizedString("批量编辑规则不能为空。", comment: "Sandbox tool empty batch rules")
+        case .noUndoHistory:
+            return NSLocalizedString("当前没有可撤销的沙盒修改记录。", comment: "Sandbox tool no undo history")
         }
     }
 }
 
 public enum SandboxFileToolSupport {
+    private struct SandboxUndoEntry {
+        let rootPath: String
+        let operation: String
+        let recordedAt: Date
+        let undo: () throws -> Void
+        let discard: () -> Void
+    }
+
+    private static let undoDateFormatter = ISO8601DateFormatter()
+    private static let undoLock = NSLock()
+    private static var undoStack: [SandboxUndoEntry] = []
+    private static let maxUndoEntries = 64
+
     public static func listDirectory(
         relativePath: String,
         rootDirectory: URL = StorageUtility.documentsDirectory
@@ -286,6 +376,7 @@ public enum SandboxFileToolSupport {
     ) throws -> SandboxFileWriteResult {
         let fileURL = try resolveURL(relativePath: relativePath, rootDirectory: rootDirectory, allowRoot: false)
         let parentDirectory = fileURL.deletingLastPathComponent()
+        let displayPath = normalizedDisplayPath(for: fileURL, rootDirectory: rootDirectory)
 
         var isDirectory: ObjCBool = false
         let parentExists = FileManager.default.fileExists(atPath: parentDirectory.path, isDirectory: &isDirectory)
@@ -312,12 +403,52 @@ public enum SandboxFileToolSupport {
             )
         }
 
+        var targetIsDirectory: ObjCBool = false
+        let existedBeforeWrite = FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &targetIsDirectory)
+        if existedBeforeWrite && targetIsDirectory.boolValue {
+            throw SandboxFileToolError.writeFailed(
+                String(
+                    format: NSLocalizedString("路径“%@”是目录，不能按文件写入。", comment: "Sandbox tool target is directory"),
+                    displayPath
+                )
+            )
+        }
+
+        let previousData = existedBeforeWrite ? (try? Data(contentsOf: fileURL)) : nil
+
         let data = Data(content.utf8)
         do {
             try data.write(to: fileURL, options: [.atomic])
             StorageUtility.notifyFilesystemMutation(at: fileURL)
+
+            if existedBeforeWrite {
+                let restoreData = previousData
+                pushUndoEntry(
+                    rootDirectory: rootDirectory,
+                    operation: "write_sandbox_file"
+                ) {
+                    if let restoreData {
+                        try restoreData.write(to: fileURL, options: [.atomic])
+                        StorageUtility.notifyFilesystemMutation(at: fileURL)
+                    } else if FileManager.default.fileExists(atPath: fileURL.path) {
+                        try FileManager.default.removeItem(at: fileURL)
+                        StorageUtility.notifyFilesystemMutation(at: fileURL)
+                    }
+                }
+            } else {
+                pushUndoEntry(
+                    rootDirectory: rootDirectory,
+                    operation: "write_sandbox_file"
+                ) {
+                    if FileManager.default.fileExists(atPath: fileURL.path) {
+                        try FileManager.default.removeItem(at: fileURL)
+                        StorageUtility.notifyFilesystemMutation(at: fileURL)
+                    }
+                }
+            }
+
             return SandboxFileWriteResult(
-                path: normalizedDisplayPath(for: fileURL, rootDirectory: rootDirectory),
+                path: displayPath,
                 size: Int64(data.count),
                 createdParentDirectories: createdDirectories
             )
@@ -405,12 +536,283 @@ public enum SandboxFileToolSupport {
             throw SandboxFileToolError.fileNotFound(normalizedDisplayPath(for: targetURL, rootDirectory: rootDirectory))
         }
 
+        let backupURL = try backupItem(at: targetURL)
+        let displayPath = normalizedDisplayPath(for: targetURL, rootDirectory: rootDirectory)
         try FileManager.default.removeItem(at: targetURL)
         StorageUtility.notifyFilesystemMutation(at: targetURL)
+        pushUndoEntry(
+            rootDirectory: rootDirectory,
+            operation: "delete_sandbox_item",
+            discard: { try? FileManager.default.removeItem(at: backupURL) }
+        ) {
+            guard !FileManager.default.fileExists(atPath: targetURL.path) else {
+                throw SandboxFileToolError.destinationAlreadyExists(displayPath)
+            }
+            try FileManager.default.copyItem(at: backupURL, to: targetURL)
+            StorageUtility.notifyFilesystemMutation(at: targetURL)
+            try? FileManager.default.removeItem(at: backupURL)
+        }
+
         return SandboxFileDeleteResult(
-            path: normalizedDisplayPath(for: targetURL, rootDirectory: rootDirectory),
+            path: displayPath,
             wasDirectory: isDirectory.boolValue
         )
+    }
+
+    public static func createDirectory(
+        relativePath: String,
+        createIntermediateDirectories: Bool = true,
+        rootDirectory: URL = StorageUtility.documentsDirectory
+    ) throws -> SandboxDirectoryCreateResult {
+        let directoryURL = try resolveURL(relativePath: relativePath, rootDirectory: rootDirectory, allowRoot: false)
+        let displayPath = normalizedDisplayPath(for: directoryURL, rootDirectory: rootDirectory)
+
+        var isDirectory: ObjCBool = false
+        let alreadyExists = FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory)
+        if alreadyExists {
+            guard isDirectory.boolValue else {
+                throw SandboxFileToolError.writeFailed(
+                    String(
+                        format: NSLocalizedString("路径“%@”已存在且不是目录。", comment: "Sandbox create directory path exists"),
+                        displayPath
+                    )
+                )
+            }
+            return SandboxDirectoryCreateResult(
+                path: displayPath,
+                created: false,
+                createdParentDirectories: false
+            )
+        }
+
+        let parentURL = directoryURL.deletingLastPathComponent()
+        var parentIsDirectory: ObjCBool = false
+        let parentExists = FileManager.default.fileExists(atPath: parentURL.path, isDirectory: &parentIsDirectory)
+        let createdParentDirectories = !parentExists && createIntermediateDirectories
+
+        if parentExists {
+            guard parentIsDirectory.boolValue else {
+                throw SandboxFileToolError.writeFailed(
+                    String(
+                        format: NSLocalizedString("父路径“%@”不是目录，无法创建目录。", comment: "Sandbox create directory parent not directory"),
+                        normalizedDisplayPath(for: parentURL, rootDirectory: rootDirectory)
+                    )
+                )
+            }
+        } else if !createIntermediateDirectories {
+            throw SandboxFileToolError.writeFailed(
+                String(
+                    format: NSLocalizedString("父目录“%@”不存在，且当前未允许自动创建。", comment: "Sandbox create directory parent missing"),
+                    normalizedDisplayPath(for: parentURL, rootDirectory: rootDirectory)
+                )
+            )
+        }
+
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: createIntermediateDirectories
+        )
+        StorageUtility.notifyFilesystemMutation(at: directoryURL)
+
+        pushUndoEntry(
+            rootDirectory: rootDirectory,
+            operation: "create_sandbox_directory"
+        ) {
+            if FileManager.default.fileExists(atPath: directoryURL.path) {
+                try FileManager.default.removeItem(at: directoryURL)
+                StorageUtility.notifyFilesystemMutation(at: directoryURL)
+            }
+        }
+
+        return SandboxDirectoryCreateResult(
+            path: displayPath,
+            created: true,
+            createdParentDirectories: createdParentDirectories
+        )
+    }
+
+    public static func copyItem(
+        from sourceRelativePath: String,
+        to destinationRelativePath: String,
+        overwrite: Bool = false,
+        createIntermediateDirectories: Bool = true,
+        rootDirectory: URL = StorageUtility.documentsDirectory
+    ) throws -> SandboxFileCopyResult {
+        let sourceURL = try resolveURL(relativePath: sourceRelativePath, rootDirectory: rootDirectory, allowRoot: false)
+        let destinationURL = try resolveURL(relativePath: destinationRelativePath, rootDirectory: rootDirectory, allowRoot: false)
+
+        let sourceDisplayPath = normalizedDisplayPath(for: sourceURL, rootDirectory: rootDirectory)
+        let destinationDisplayPath = normalizedDisplayPath(for: destinationURL, rootDirectory: rootDirectory)
+        guard sourceURL.path != destinationURL.path else {
+            throw SandboxFileToolError.sourceAndDestinationSame
+        }
+
+        var sourceIsDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: sourceURL.path, isDirectory: &sourceIsDirectory) else {
+            throw SandboxFileToolError.fileNotFound(sourceDisplayPath)
+        }
+
+        if sourceIsDirectory.boolValue {
+            let sourcePath = sourceURL.standardizedFileURL.path
+            let destinationPath = destinationURL.standardizedFileURL.path
+            if destinationPath.hasPrefix(sourcePath + "/") {
+                throw SandboxFileToolError.cannotCopyIntoSelf
+            }
+        }
+
+        let destinationParent = destinationURL.deletingLastPathComponent()
+        var parentIsDirectory: ObjCBool = false
+        let parentExists = FileManager.default.fileExists(atPath: destinationParent.path, isDirectory: &parentIsDirectory)
+        var createdParentDirectories = false
+        if parentExists {
+            guard parentIsDirectory.boolValue else {
+                throw SandboxFileToolError.writeFailed(
+                    String(
+                        format: NSLocalizedString("父路径“%@”不是目录，无法复制。", comment: "Sandbox copy parent not directory"),
+                        normalizedDisplayPath(for: destinationParent, rootDirectory: rootDirectory)
+                    )
+                )
+            }
+        } else if createIntermediateDirectories {
+            try FileManager.default.createDirectory(at: destinationParent, withIntermediateDirectories: true)
+            createdParentDirectories = true
+        } else {
+            throw SandboxFileToolError.writeFailed(
+                String(
+                    format: NSLocalizedString("父目录“%@”不存在，且当前未允许自动创建。", comment: "Sandbox copy parent missing"),
+                    normalizedDisplayPath(for: destinationParent, rootDirectory: rootDirectory)
+                )
+            )
+        }
+
+        let destinationExists = FileManager.default.fileExists(atPath: destinationURL.path)
+        var overwrittenBackupURL: URL?
+        if destinationExists {
+            guard overwrite else {
+                throw SandboxFileToolError.destinationAlreadyExists(destinationDisplayPath)
+            }
+            overwrittenBackupURL = try backupItem(at: destinationURL)
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        StorageUtility.notifyFilesystemMutation(at: destinationURL)
+
+        let backupURLForUndo = overwrittenBackupURL
+        pushUndoEntry(
+            rootDirectory: rootDirectory,
+            operation: "copy_sandbox_item",
+            discard: {
+                if let backupURLForUndo {
+                    try? FileManager.default.removeItem(at: backupURLForUndo)
+                }
+            }
+        ) {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+                StorageUtility.notifyFilesystemMutation(at: destinationURL)
+            }
+            if let backupURLForUndo {
+                try FileManager.default.copyItem(at: backupURLForUndo, to: destinationURL)
+                try? FileManager.default.removeItem(at: backupURLForUndo)
+                StorageUtility.notifyFilesystemMutation(at: destinationURL)
+            }
+        }
+
+        return SandboxFileCopyResult(
+            sourcePath: sourceDisplayPath,
+            destinationPath: destinationDisplayPath,
+            wasDirectory: sourceIsDirectory.boolValue,
+            createdParentDirectories: createdParentDirectories,
+            overwroteDestination: destinationExists
+        )
+    }
+
+    public static func batchReplaceText(
+        relativePath: String,
+        rules: [SandboxBatchEditRule],
+        replaceAll: Bool = false,
+        ignoreMissing: Bool = false,
+        rootDirectory: URL = StorageUtility.documentsDirectory
+    ) throws -> SandboxFileBatchEditResult {
+        guard !rules.isEmpty else {
+            throw SandboxFileToolError.emptyBatchRules
+        }
+        let originalContent = try readTextFile(relativePath: relativePath, rootDirectory: rootDirectory)
+        var currentContent = originalContent
+
+        var totalReplacements = 0
+        var appliedRules = 0
+        for rule in rules {
+            guard !rule.oldText.isEmpty else {
+                throw SandboxFileToolError.emptyMatchText
+            }
+
+            let matchCount = occurrenceCount(of: rule.oldText, in: currentContent)
+            if matchCount == 0 {
+                if ignoreMissing {
+                    continue
+                }
+                throw SandboxFileToolError.oldTextNotFound
+            }
+            if matchCount > 1 && !replaceAll {
+                throw SandboxFileToolError.ambiguousMatch(count: matchCount)
+            }
+
+            if replaceAll {
+                currentContent = currentContent.replacingOccurrences(of: rule.oldText, with: rule.newText)
+                totalReplacements += matchCount
+            } else if let firstRange = currentContent.range(of: rule.oldText) {
+                currentContent = currentContent.replacingCharacters(in: firstRange, with: rule.newText)
+                totalReplacements += 1
+            }
+            appliedRules += 1
+        }
+
+        if currentContent == originalContent {
+            let fileURL = try resolveURL(relativePath: relativePath, rootDirectory: rootDirectory, allowRoot: false)
+            let data = try Data(contentsOf: fileURL)
+            return SandboxFileBatchEditResult(
+                path: normalizedDisplayPath(for: fileURL, rootDirectory: rootDirectory),
+                replacements: totalReplacements,
+                rulesApplied: appliedRules,
+                size: Int64(data.count)
+            )
+        }
+
+        let writeResult = try writeTextFile(
+            relativePath: relativePath,
+            content: currentContent,
+            createIntermediateDirectories: true,
+            rootDirectory: rootDirectory
+        )
+        return SandboxFileBatchEditResult(
+            path: writeResult.path,
+            replacements: totalReplacements,
+            rulesApplied: appliedRules,
+            size: writeResult.size
+        )
+    }
+
+    public static func undoLastMutation(
+        rootDirectory: URL = StorageUtility.documentsDirectory
+    ) throws -> SandboxFileUndoResult {
+        let rootPath = rootDirectory.standardizedFileURL.path
+        guard let entry = popUndoEntry(for: rootPath) else {
+            throw SandboxFileToolError.noUndoHistory
+        }
+
+        do {
+            try entry.undo()
+            entry.discard()
+            return SandboxFileUndoResult(
+                operation: entry.operation,
+                recordedAt: undoDateFormatter.string(from: entry.recordedAt)
+            )
+        } catch {
+            restoreUndoEntry(entry)
+            throw error
+        }
     }
 
     public static func searchItems(
@@ -606,16 +1008,46 @@ public enum SandboxFileToolSupport {
 
         var destinationIsDirectory: ObjCBool = false
         let destinationExists = FileManager.default.fileExists(atPath: destinationURL.path, isDirectory: &destinationIsDirectory)
+        var overwrittenBackupURL: URL?
         if destinationExists {
             guard overwrite else {
                 throw SandboxFileToolError.destinationAlreadyExists(destinationDisplayPath)
             }
+            overwrittenBackupURL = try backupItem(at: destinationURL)
             try FileManager.default.removeItem(at: destinationURL)
         }
 
         try FileManager.default.moveItem(at: sourceURL, to: destinationURL)
         StorageUtility.notifyFilesystemMutation(at: sourceURL)
         StorageUtility.notifyFilesystemMutation(at: destinationURL)
+
+        let backupURLForUndo = overwrittenBackupURL
+        pushUndoEntry(
+            rootDirectory: rootDirectory,
+            operation: "move_sandbox_item",
+            discard: {
+                if let backupURLForUndo {
+                    try? FileManager.default.removeItem(at: backupURLForUndo)
+                }
+            }
+        ) {
+            guard !FileManager.default.fileExists(atPath: sourceURL.path) else {
+                throw SandboxFileToolError.destinationAlreadyExists(sourceDisplayPath)
+            }
+            guard FileManager.default.fileExists(atPath: destinationURL.path) else {
+                throw SandboxFileToolError.fileNotFound(destinationDisplayPath)
+            }
+
+            try FileManager.default.moveItem(at: destinationURL, to: sourceURL)
+            StorageUtility.notifyFilesystemMutation(at: destinationURL)
+            StorageUtility.notifyFilesystemMutation(at: sourceURL)
+
+            if let backupURLForUndo {
+                try FileManager.default.copyItem(at: backupURLForUndo, to: destinationURL)
+                try? FileManager.default.removeItem(at: backupURLForUndo)
+                StorageUtility.notifyFilesystemMutation(at: destinationURL)
+            }
+        }
 
         return SandboxFileMoveResult(
             sourcePath: sourceDisplayPath,
@@ -694,6 +1126,60 @@ public enum SandboxFileToolSupport {
         let relative = String(targetPath.dropFirst(rootPath.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return relative.isEmpty ? "Documents" : "Documents/\(relative)"
+    }
+
+    private static func pushUndoEntry(
+        rootDirectory: URL,
+        operation: String,
+        discard: @escaping () -> Void = {},
+        undo: @escaping () throws -> Void
+    ) {
+        let entry = SandboxUndoEntry(
+            rootPath: rootDirectory.standardizedFileURL.path,
+            operation: operation,
+            recordedAt: Date(),
+            undo: undo,
+            discard: discard
+        )
+
+        undoLock.lock()
+        undoStack.append(entry)
+        if undoStack.count > maxUndoEntries {
+            let stale = undoStack.removeFirst()
+            stale.discard()
+        }
+        undoLock.unlock()
+    }
+
+    private static func popUndoEntry(for rootPath: String) -> SandboxUndoEntry? {
+        undoLock.lock()
+        defer { undoLock.unlock() }
+        guard let index = undoStack.lastIndex(where: { $0.rootPath == rootPath }) else {
+            return nil
+        }
+        return undoStack.remove(at: index)
+    }
+
+    private static func restoreUndoEntry(_ entry: SandboxUndoEntry) {
+        undoLock.lock()
+        undoStack.append(entry)
+        undoLock.unlock()
+    }
+
+    private static func backupItem(at url: URL) throws -> URL {
+        let backupRoot = try backupRootDirectory()
+        let backupURL = backupRoot.appendingPathComponent(UUID().uuidString, isDirectory: false)
+        try FileManager.default.copyItem(at: url, to: backupURL)
+        return backupURL
+    }
+
+    private static func backupRootDirectory() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS_LLM_Studio_SandboxToolBackups", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: root.path) {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        }
+        return root
     }
 
     private static func occurrenceCount(of needle: String, in haystack: String) -> Int {

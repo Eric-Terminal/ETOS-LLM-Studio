@@ -18,6 +18,11 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
     case searchSandboxFiles = "search_sandbox_files"
     case readSandboxFileChunk = "read_sandbox_file_chunk"
     case moveSandboxItem = "move_sandbox_item"
+    case copySandboxItem = "copy_sandbox_item"
+    case createSandboxDirectory = "create_sandbox_directory"
+    case batchEditSandboxFile = "batch_edit_sandbox_file"
+    case listMemories = "list_memories"
+    case undoSandboxMutation = "undo_sandbox_mutation"
     case diffSandboxFile = "diff_sandbox_file"
     case editSandboxFile = "edit_sandbox_file"
     case deleteSandboxItem = "delete_sandbox_item"
@@ -42,6 +47,16 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "app_read_sandbox_file_chunk"
         case .moveSandboxItem:
             return "app_move_sandbox_item"
+        case .copySandboxItem:
+            return "app_copy_sandbox_item"
+        case .createSandboxDirectory:
+            return "app_create_sandbox_directory"
+        case .batchEditSandboxFile:
+            return "app_batch_edit_sandbox_file"
+        case .listMemories:
+            return "app_list_memories"
+        case .undoSandboxMutation:
+            return "app_undo_sandbox_mutation"
         case .diffSandboxFile:
             return "app_diff_sandbox_file"
         case .editSandboxFile:
@@ -69,6 +84,16 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("分块读取沙盒文件", comment: "Read sandbox file chunk tool name")
         case .moveSandboxItem:
             return NSLocalizedString("移动沙盒路径", comment: "Move sandbox item tool name")
+        case .copySandboxItem:
+            return NSLocalizedString("复制沙盒路径", comment: "Copy sandbox item tool name")
+        case .createSandboxDirectory:
+            return NSLocalizedString("创建沙盒目录", comment: "Create sandbox directory tool name")
+        case .batchEditSandboxFile:
+            return NSLocalizedString("批量编辑沙盒文件", comment: "Batch edit sandbox file tool name")
+        case .listMemories:
+            return NSLocalizedString("列出记忆", comment: "List memories tool name")
+        case .undoSandboxMutation:
+            return NSLocalizedString("撤销沙盒修改", comment: "Undo sandbox mutation tool name")
         case .diffSandboxFile:
             return NSLocalizedString("比较沙盒文件差异", comment: "Diff sandbox file tool name")
         case .editSandboxFile:
@@ -96,6 +121,16 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("按行号分块读取沙盒文本文件。", comment: "Read sandbox file chunk tool summary")
         case .moveSandboxItem:
             return NSLocalizedString("在沙盒内移动或重命名文件与目录。", comment: "Move sandbox item tool summary")
+        case .copySandboxItem:
+            return NSLocalizedString("在沙盒内复制文件或目录。", comment: "Copy sandbox item tool summary")
+        case .createSandboxDirectory:
+            return NSLocalizedString("在沙盒内创建目录结构。", comment: "Create sandbox directory tool summary")
+        case .batchEditSandboxFile:
+            return NSLocalizedString("按多条规则批量替换沙盒文本文件内容。", comment: "Batch edit sandbox file tool summary")
+        case .listMemories:
+            return NSLocalizedString("分页查看记忆列表并支持关键词筛选。", comment: "List memories tool summary")
+        case .undoSandboxMutation:
+            return NSLocalizedString("撤销最近一次沙盒文件修改。", comment: "Undo sandbox mutation tool summary")
         case .diffSandboxFile:
             return NSLocalizedString("比较当前文件内容和拟修改内容之间的差异。", comment: "Diff sandbox file tool summary")
         case .editSandboxFile:
@@ -123,6 +158,16 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("工具详情：分块读取沙盒文件", comment: "Read sandbox file chunk tool detail description")
         case .moveSandboxItem:
             return NSLocalizedString("工具详情：移动沙盒路径", comment: "Move sandbox item tool detail description")
+        case .copySandboxItem:
+            return NSLocalizedString("工具详情：复制沙盒路径", comment: "Copy sandbox item tool detail description")
+        case .createSandboxDirectory:
+            return NSLocalizedString("工具详情：创建沙盒目录", comment: "Create sandbox directory tool detail description")
+        case .batchEditSandboxFile:
+            return NSLocalizedString("工具详情：批量编辑沙盒文件", comment: "Batch edit sandbox file tool detail description")
+        case .listMemories:
+            return NSLocalizedString("工具详情：列出记忆", comment: "List memories tool detail description")
+        case .undoSandboxMutation:
+            return NSLocalizedString("工具详情：撤销沙盒修改", comment: "Undo sandbox mutation tool detail description")
         case .diffSandboxFile:
             return NSLocalizedString("工具详情：比较沙盒文件差异", comment: "Diff sandbox file tool detail description")
         case .editSandboxFile:
@@ -276,6 +321,112 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                 ]),
                 "required": .array([.string("source_path"), .string("destination_path")])
             ])
+        case .copySandboxItem:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "source_path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要复制的源相对路径，基于 Documents 根目录。", comment: "Copy sandbox item source path parameter description"))
+                    ]),
+                    "destination_path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("复制后的目标相对路径，基于 Documents 根目录。", comment: "Copy sandbox item destination path parameter description"))
+                    ]),
+                    "overwrite": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("目标已存在时是否覆盖，默认 false。", comment: "Copy sandbox item overwrite parameter description"))
+                    ]),
+                    "create_parent_directories": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("目标父目录不存在时是否自动创建，默认 true。", comment: "Copy sandbox item create directories parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("source_path"), .string("destination_path")])
+            ])
+        case .createSandboxDirectory:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要创建的目录相对路径，基于 Documents 根目录。", comment: "Create sandbox directory path parameter description"))
+                    ]),
+                    "create_parent_directories": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("父目录不存在时是否自动创建，默认 true。", comment: "Create sandbox directory create directories parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("path")])
+            ])
+        case .batchEditSandboxFile:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "path": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要批量编辑的相对文件路径，基于 Documents 根目录。", comment: "Batch edit sandbox file path parameter description"))
+                    ]),
+                    "rules": .dictionary([
+                        "type": .string("array"),
+                        "description": .string(NSLocalizedString("批量替换规则数组，每项包含 old_text 与 new_text。", comment: "Batch edit sandbox file rules parameter description")),
+                        "items": .dictionary([
+                            "type": .string("object"),
+                            "properties": .dictionary([
+                                "old_text": .dictionary([
+                                    "type": .string("string"),
+                                    "description": .string(NSLocalizedString("需要被替换的旧文本。", comment: "Batch edit sandbox file rule old text parameter description"))
+                                ]),
+                                "new_text": .dictionary([
+                                    "type": .string("string"),
+                                    "description": .string(NSLocalizedString("替换后的新文本。", comment: "Batch edit sandbox file rule new text parameter description"))
+                                ])
+                            ]),
+                            "required": .array([.string("old_text"), .string("new_text")])
+                        ])
+                    ]),
+                    "replace_all": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("每条规则是否替换全部匹配项，默认 false。", comment: "Batch edit sandbox file replace all parameter description"))
+                    ]),
+                    "ignore_missing": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("规则未命中时是否忽略，默认 false。", comment: "Batch edit sandbox file ignore missing parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("path"), .string("rules")])
+            ])
+        case .listMemories:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "query": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("按记忆内容模糊匹配的关键词。", comment: "List memories query parameter description"))
+                    ]),
+                    "include_archived": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("是否包含已归档记忆，默认 true。", comment: "List memories include archived parameter description"))
+                    ]),
+                    "offset": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("分页起始偏移，默认 0。", comment: "List memories offset parameter description"))
+                    ]),
+                    "limit": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("返回数量上限，默认 20，最大 200。", comment: "List memories limit parameter description"))
+                    ]),
+                    "order": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("排序方向，支持 desc 或 asc，默认 desc。", comment: "List memories order parameter description"))
+                    ])
+                ])
+            ])
+        case .undoSandboxMutation:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([:])
+            ])
         case .diffSandboxFile:
             return JSONValue.dictionary([
                 "type": .string("object"),
@@ -369,6 +520,31 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString(
                 "在应用沙盒 Documents 目录内移动或重命名文件、子目录。只能访问沙盒内部路径。",
                 comment: "Move sandbox item description sent to model"
+            )
+        case .copySandboxItem:
+            return NSLocalizedString(
+                "在应用沙盒 Documents 目录内复制文件或子目录，可选是否覆盖已有路径。只能访问沙盒内部路径。",
+                comment: "Copy sandbox item description sent to model"
+            )
+        case .createSandboxDirectory:
+            return NSLocalizedString(
+                "在应用沙盒 Documents 目录内创建目录，可选自动创建父目录。只能访问沙盒内部路径。",
+                comment: "Create sandbox directory description sent to model"
+            )
+        case .batchEditSandboxFile:
+            return NSLocalizedString(
+                "按多条规则批量编辑应用沙盒 Documents 目录中的 UTF-8 文本文件。只能访问沙盒内部路径。",
+                comment: "Batch edit sandbox file description sent to model"
+            )
+        case .listMemories:
+            return NSLocalizedString(
+                "分页列出长期记忆并支持关键词筛选，可选择是否包含归档记忆。",
+                comment: "List memories description sent to model"
+            )
+        case .undoSandboxMutation:
+            return NSLocalizedString(
+                "撤销最近一次由拓展工具造成的沙盒文件修改。",
+                comment: "Undo sandbox mutation description sent to model"
             )
         case .diffSandboxFile:
             return NSLocalizedString(
@@ -773,6 +949,151 @@ public final class AppToolManager: ObservableObject {
                 "wasDirectory": result.wasDirectory,
                 "createdParentDirectories": result.createdParentDirectories,
                 "overwroteDestination": result.overwroteDestination
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .copySandboxItem:
+            struct CopyItemArgs: Decodable {
+                let source_path: String
+                let destination_path: String
+                let overwrite: Bool?
+                let create_parent_directories: Bool?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(CopyItemArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 copy_sandbox_item 的参数，请提供 source_path 和 destination_path。", comment: "Copy sandbox item invalid arguments")
+                )
+            }
+
+            let result = try SandboxFileToolSupport.copyItem(
+                from: args.source_path,
+                to: args.destination_path,
+                overwrite: args.overwrite ?? false,
+                createIntermediateDirectories: args.create_parent_directories ?? true
+            )
+            let payload: [String: Any] = [
+                "sourcePath": result.sourcePath,
+                "destinationPath": result.destinationPath,
+                "wasDirectory": result.wasDirectory,
+                "createdParentDirectories": result.createdParentDirectories,
+                "overwroteDestination": result.overwroteDestination
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .createSandboxDirectory:
+            struct CreateDirectoryArgs: Decodable {
+                let path: String
+                let create_parent_directories: Bool?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(CreateDirectoryArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 create_sandbox_directory 的参数，请提供 path。", comment: "Create sandbox directory invalid arguments")
+                )
+            }
+
+            let result = try SandboxFileToolSupport.createDirectory(
+                relativePath: args.path,
+                createIntermediateDirectories: args.create_parent_directories ?? true
+            )
+            let payload: [String: Any] = [
+                "path": result.path,
+                "created": result.created,
+                "createdParentDirectories": result.createdParentDirectories
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .batchEditSandboxFile:
+            struct BatchRuleArgs: Decodable {
+                let old_text: String
+                let new_text: String
+            }
+            struct BatchEditArgs: Decodable {
+                let path: String
+                let rules: [BatchRuleArgs]
+                let replace_all: Bool?
+                let ignore_missing: Bool?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(BatchEditArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 batch_edit_sandbox_file 的参数，请提供 path 和 rules。", comment: "Batch edit sandbox file invalid arguments")
+                )
+            }
+
+            let rules = args.rules.map { rule in
+                SandboxBatchEditRule(oldText: rule.old_text, newText: rule.new_text)
+            }
+            let result = try SandboxFileToolSupport.batchReplaceText(
+                relativePath: args.path,
+                rules: rules,
+                replaceAll: args.replace_all ?? false,
+                ignoreMissing: args.ignore_missing ?? false
+            )
+            let payload: [String: Any] = [
+                "path": result.path,
+                "replacements": result.replacements,
+                "rulesApplied": result.rulesApplied,
+                "size": result.size
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .listMemories:
+            struct ListMemoriesArgs: Decodable {
+                let query: String?
+                let include_archived: Bool?
+                let offset: Int?
+                let limit: Int?
+                let order: String?
+            }
+
+            let argsData = argumentsJSON.data(using: .utf8)
+            let args = argsData.flatMap { try? JSONDecoder().decode(ListMemoriesArgs.self, from: $0) }
+
+            let includeArchived = args?.include_archived ?? true
+            let offset = max(0, args?.offset ?? 0)
+            let limit = min(max(1, args?.limit ?? 20), 200)
+            let keyword = args?.query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let sortDescending = (args?.order ?? "desc").lowercased() != "asc"
+
+            let allMemories = await MemoryManager.shared.getAllMemories()
+            let filtered = allMemories.filter { memory in
+                guard includeArchived || !memory.isArchived else { return false }
+                guard !keyword.isEmpty else { return true }
+                return memory.content.localizedCaseInsensitiveContains(keyword)
+            }
+
+            let sorted = filtered.sorted { lhs, rhs in
+                let leftDate = lhs.updatedAt ?? lhs.createdAt
+                let rightDate = rhs.updatedAt ?? rhs.createdAt
+                if sortDescending {
+                    return leftDate > rightDate
+                }
+                return leftDate < rightDate
+            }
+
+            let paged = Array(sorted.dropFirst(offset).prefix(limit))
+            let formatter = ISO8601DateFormatter()
+            let payload: [String: Any] = [
+                "total": sorted.count,
+                "offset": offset,
+                "limit": limit,
+                "items": paged.map { item in
+                    [
+                        "memory_id": item.id.uuidString,
+                        "content": item.content,
+                        "isArchived": item.isArchived,
+                        "createdAt": formatter.string(from: item.createdAt),
+                        "updatedAt": item.updatedAt.map(formatter.string(from:)) as Any
+                    ]
+                }
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .undoSandboxMutation:
+            let result = try SandboxFileToolSupport.undoLastMutation()
+            let payload: [String: Any] = [
+                "operation": result.operation,
+                "recordedAt": result.recordedAt
             ]
             return prettyPrintedJSONString(from: payload)
         case .diffSandboxFile:

@@ -170,6 +170,120 @@ struct SandboxFileToolSupportTests {
         #expect(result.destinationPath == "Documents/archive/2026/todo-final.txt")
     }
 
+    @Test("创建目录工具可新建目录并返回创建状态")
+    func testCreateDirectoryBuildsPath() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let result = try SandboxFileToolSupport.createDirectory(
+            relativePath: "workspace/docs/specs",
+            createIntermediateDirectories: true,
+            rootDirectory: root
+        )
+        let createdURL = root.appendingPathComponent("workspace/docs/specs", isDirectory: true)
+
+        #expect(result.created == true)
+        #expect(result.createdParentDirectories == true)
+        #expect(result.path == "Documents/workspace/docs/specs")
+        #expect(FileManager.default.fileExists(atPath: createdURL.path))
+    }
+
+    @Test("复制工具可复制文件并覆盖目标")
+    func testCopyItemCanOverwriteTarget() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "src/config.txt",
+            content: "new-value",
+            rootDirectory: root
+        )
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "dst/config.txt",
+            content: "old-value",
+            rootDirectory: root
+        )
+
+        let result = try SandboxFileToolSupport.copyItem(
+            from: "src/config.txt",
+            to: "dst/config.txt",
+            overwrite: true,
+            rootDirectory: root
+        )
+        let copied = try SandboxFileToolSupport.readTextFile(
+            relativePath: "dst/config.txt",
+            rootDirectory: root
+        )
+
+        #expect(result.overwroteDestination == true)
+        #expect(copied == "new-value")
+    }
+
+    @Test("批量编辑会按规则替换文本")
+    func testBatchReplaceTextAppliesRules() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "docs/page.txt",
+            content: "title: old\nowner: alice",
+            rootDirectory: root
+        )
+
+        let result = try SandboxFileToolSupport.batchReplaceText(
+            relativePath: "docs/page.txt",
+            rules: [
+                SandboxBatchEditRule(oldText: "old", newText: "new"),
+                SandboxBatchEditRule(oldText: "alice", newText: "bob")
+            ],
+            replaceAll: false,
+            ignoreMissing: false,
+            rootDirectory: root
+        )
+        let updated = try SandboxFileToolSupport.readTextFile(
+            relativePath: "docs/page.txt",
+            rootDirectory: root
+        )
+
+        #expect(result.replacements == 2)
+        #expect(result.rulesApplied == 2)
+        #expect(updated == "title: new\nowner: bob")
+    }
+
+    @Test("撤销会回滚最近一次写入")
+    func testUndoLastMutationRevertsWrite() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "undo/record.txt",
+            content: "v1",
+            rootDirectory: root
+        )
+        _ = try SandboxFileToolSupport.writeTextFile(
+            relativePath: "undo/record.txt",
+            content: "v2",
+            rootDirectory: root
+        )
+
+        let undo = try SandboxFileToolSupport.undoLastMutation(rootDirectory: root)
+        let restored = try SandboxFileToolSupport.readTextFile(
+            relativePath: "undo/record.txt",
+            rootDirectory: root
+        )
+
+        #expect(undo.operation == "write_sandbox_file")
+        #expect(restored == "v1")
+    }
+
     @Test("diff 会输出新增与删除行")
     func testDiffTextFileReturnsUnifiedLikeOutput() throws {
         let root = FileManager.default.temporaryDirectory
