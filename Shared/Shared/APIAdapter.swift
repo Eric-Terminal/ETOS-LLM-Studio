@@ -1143,7 +1143,10 @@ public class OpenAIAdapter: APIAdapter {
         return MessageTokenUsage(
             promptTokens: usage.prompt_tokens,
             completionTokens: usage.completion_tokens,
-            totalTokens: usage.total_tokens
+            totalTokens: usage.total_tokens,
+            thinkingTokens: nil,
+            cacheWriteTokens: nil,
+            cacheReadTokens: nil
         )
     }
 }
@@ -2203,13 +2206,19 @@ public class GeminiAdapter: APIAdapter {
     
     private func makeTokenUsage(from usage: GeminiResponse.UsageMetadata?) -> MessageTokenUsage? {
         guard let usage = usage else { return nil }
-        if usage.promptTokenCount == nil && usage.candidatesTokenCount == nil && usage.totalTokenCount == nil {
+        if usage.promptTokenCount == nil
+            && usage.candidatesTokenCount == nil
+            && usage.totalTokenCount == nil
+            && usage.thoughtsTokenCount == nil {
             return nil
         }
         return MessageTokenUsage(
             promptTokens: usage.promptTokenCount,
             completionTokens: usage.candidatesTokenCount,
-            totalTokens: usage.totalTokenCount
+            totalTokens: usage.totalTokenCount,
+            thinkingTokens: usage.thoughtsTokenCount,
+            cacheWriteTokens: nil,
+            cacheReadTokens: nil
         )
     }
     
@@ -2754,15 +2763,19 @@ public class AnthropicAdapter: APIAdapter {
     
     private func makeTokenUsage(from usage: AnthropicResponse.Usage?) -> MessageTokenUsage? {
         guard let usage = usage else { return nil }
-        if usage.input_tokens == nil && usage.output_tokens == nil {
+        if usage.input_tokens == nil
+            && usage.output_tokens == nil
+            && usage.cache_creation_input_tokens == nil
+            && usage.cache_read_input_tokens == nil {
             return nil
         }
-        let inputTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
-        let outputTokens = usage.output_tokens ?? 0
         return MessageTokenUsage(
-            promptTokens: inputTokens,
-            completionTokens: outputTokens,
-            totalTokens: inputTokens + outputTokens
+            promptTokens: usage.input_tokens,
+            completionTokens: usage.output_tokens,
+            totalTokens: nil,
+            thinkingTokens: nil,
+            cacheWriteTokens: usage.cache_creation_input_tokens,
+            cacheReadTokens: usage.cache_read_input_tokens
         )
     }
     

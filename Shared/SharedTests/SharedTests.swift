@@ -1290,6 +1290,68 @@ struct GeminiAdapterTests {
         #expect(typeSchema["type"] as? String == "string")
         #expect(!(properties["type"] is String))
     }
+
+    @Test("Gemini 响应可解析思考 Token 字段")
+    func testGeminiResponseParsesThinkingTokens() throws {
+        let payload = """
+        {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  { "text": "你好" }
+                ]
+              }
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 12,
+            "candidatesTokenCount": 34,
+            "totalTokenCount": 46,
+            "thoughtsTokenCount": 7
+          }
+        }
+        """
+
+        let data = Data(payload.utf8)
+        let message = try adapter.parseResponse(data: data)
+        let usage = try #require(message.tokenUsage)
+        #expect(usage.promptTokens == 12)
+        #expect(usage.completionTokens == 34)
+        #expect(usage.totalTokens == 46)
+        #expect(usage.thinkingTokens == 7)
+    }
+}
+
+@Suite("AnthropicAdapter Tests")
+struct AnthropicAdapterTests {
+    private let adapter = AnthropicAdapter()
+
+    @Test("Anthropic 响应可解析缓存 Token 字段")
+    func testAnthropicResponseParsesCacheTokens() throws {
+        let payload = """
+        {
+          "content": [
+            { "type": "text", "text": "done" }
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 8,
+            "cache_creation_input_tokens": 3,
+            "cache_read_input_tokens": 5
+          }
+        }
+        """
+
+        let data = Data(payload.utf8)
+        let message = try adapter.parseResponse(data: data)
+        let usage = try #require(message.tokenUsage)
+        #expect(usage.promptTokens == 20)
+        #expect(usage.completionTokens == 8)
+        #expect(usage.cacheWriteTokens == 3)
+        #expect(usage.cacheReadTokens == 5)
+        #expect(usage.totalTokens == nil)
+    }
 }
 
 // MARK: - ChatService Integration Tests
@@ -1380,6 +1442,7 @@ fileprivate struct ChatServiceTests {
         if !allMems.isEmpty {
             await memoryManager.deleteMemories(allMems)
         }
+        Persistence.clearRequestLogs()
         UserDefaults.standard.removeObject(forKey: "titleGenerationModelIdentifier")
         // 清理模拟响应，避免测试间互相影响
         MockURLProtocol.mockResponses = [:]
@@ -1405,6 +1468,47 @@ fileprivate struct ChatServiceTests {
 
     private func activatedChatModels() -> [RunnableModel] {
         chatService.activatedRunnableModels.filter { $0.model.capabilities.contains(.chat) }
+    }
+
+    @Test("Chat request writes independent request log")
+    func testChatRequestWritesIndependentRequestLog() async {
+        await cleanup()
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(
+            role: .assistant,
+            content: "日志测试回复",
+            tokenUsage: MessageTokenUsage(
+                promptTokens: 13,
+                completionTokens: 21,
+                totalTokens: 34,
+                thinkingTokens: 5,
+                cacheWriteTokens: nil,
+                cacheReadTokens: nil
+            )
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请记录这次请求",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let logs = Persistence.loadRequestLogs(query: .init(limit: 1))
+        #expect(logs.count == 1)
+        #expect(logs[0].providerName == "Test")
+        #expect(logs[0].modelID == "test-model")
+        #expect(logs[0].status == .success)
+        #expect(logs[0].tokenUsage?.promptTokens == 13)
+        #expect(logs[0].tokenUsage?.completionTokens == 21)
+        #expect(logs[0].tokenUsage?.thinkingTokens == 5)
     }
 
     @Test("Auto-naming handles network error during title generation")
@@ -2409,6 +2513,10 @@ fileprivate struct PersistenceTests {
         chatsDirectory.appendingPathComponent("legacy")
     }
 
+    private var requestLogsDirectory: URL {
+        chatsDirectory.appendingPathComponent("RequestLogs")
+    }
+
     private var legacySessionsIndexURL: URL {
         chatsDirectory.appendingPathComponent("sessions.json")
     }
@@ -2436,11 +2544,13 @@ fileprivate struct PersistenceTests {
     // Clean up files created during tests
     private func cleanup(sessions: [ChatSession]) {
         Persistence.saveChatSessions([])
+        Persistence.clearRequestLogs()
         for session in sessions {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
         removeIfExists(currentIndexFileURL)
         removeIfExists(currentSessionsDirectory)
+        removeIfExists(requestLogsDirectory)
         removeIfExists(legacyV3Directory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyRootDirectory)
@@ -2641,6 +2751,170 @@ fileprivate struct PersistenceTests {
         #expect(!FileManager.default.fileExists(atPath: legacyV3Directory.path))
 
         cleanup(sessions: [ChatSession(id: sessionId, name: sessionName, isTemporary: false)])
+    }
+
+    @Test("Append and Load Request Logs")
+    func testAppendAndLoadRequestLogs() {
+        cleanup(sessions: [])
+
+        let requestA = RequestLogEntry(
+            requestID: UUID(),
+            sessionID: UUID(),
+            providerID: UUID(),
+            providerName: "OpenAI",
+            modelID: "gpt-5",
+            requestedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            finishedAt: Date(timeIntervalSince1970: 1_700_000_002),
+            isStreaming: true,
+            status: .success,
+            tokenUsage: MessageTokenUsage(
+                promptTokens: 100,
+                completionTokens: 50,
+                totalTokens: 150,
+                thinkingTokens: 10,
+                cacheWriteTokens: 0,
+                cacheReadTokens: 0
+            )
+        )
+        let requestB = RequestLogEntry(
+            requestID: UUID(),
+            sessionID: UUID(),
+            providerID: UUID(),
+            providerName: "Anthropic",
+            modelID: "claude-sonnet-4",
+            requestedAt: Date(timeIntervalSince1970: 1_700_000_010),
+            finishedAt: Date(timeIntervalSince1970: 1_700_000_012),
+            isStreaming: false,
+            status: .failed,
+            tokenUsage: nil
+        )
+
+        Persistence.appendRequestLog(requestA)
+        Persistence.appendRequestLog(requestB)
+
+        let loaded = Persistence.loadRequestLogs()
+        #expect(loaded.count == 2)
+        #expect(loaded.first?.providerName == "Anthropic")
+        #expect(loaded.last?.providerName == "OpenAI")
+        #expect(loaded.last?.tokenUsage?.thinkingTokens == 10)
+
+        let successOnly = Persistence.loadRequestLogs(query: .init(statuses: Set([.success])))
+        #expect(successOnly.count == 1)
+        #expect(successOnly.first?.modelID == "gpt-5")
+
+        cleanup(sessions: [])
+    }
+
+    @Test("Summarize Request Logs")
+    func testSummarizeRequestLogs() {
+        cleanup(sessions: [])
+
+        let now = Date(timeIntervalSince1970: 1_700_100_000)
+        let entries: [RequestLogEntry] = [
+            .init(
+                requestID: UUID(),
+                sessionID: UUID(),
+                providerID: UUID(),
+                providerName: "OpenAI",
+                modelID: "gpt-5",
+                requestedAt: now,
+                finishedAt: now.addingTimeInterval(1),
+                isStreaming: true,
+                status: .success,
+                tokenUsage: .init(
+                    promptTokens: 10,
+                    completionTokens: 20,
+                    totalTokens: 30,
+                    thinkingTokens: 2,
+                    cacheWriteTokens: nil,
+                    cacheReadTokens: nil
+                )
+            ),
+            .init(
+                requestID: UUID(),
+                sessionID: UUID(),
+                providerID: UUID(),
+                providerName: "OpenAI",
+                modelID: "gpt-5",
+                requestedAt: now.addingTimeInterval(2),
+                finishedAt: now.addingTimeInterval(3),
+                isStreaming: true,
+                status: .failed,
+                tokenUsage: nil
+            ),
+            .init(
+                requestID: UUID(),
+                sessionID: UUID(),
+                providerID: UUID(),
+                providerName: "Anthropic",
+                modelID: "claude-sonnet-4",
+                requestedAt: now.addingTimeInterval(4),
+                finishedAt: now.addingTimeInterval(5),
+                isStreaming: false,
+                status: .cancelled,
+                tokenUsage: .init(
+                    promptTokens: 5,
+                    completionTokens: 7,
+                    totalTokens: nil,
+                    thinkingTokens: nil,
+                    cacheWriteTokens: 3,
+                    cacheReadTokens: 4
+                )
+            )
+        ]
+
+        for entry in entries {
+            Persistence.appendRequestLog(entry)
+        }
+
+        let summary = Persistence.summarizeRequestLogs()
+        #expect(summary.totalRequests == 3)
+        #expect(summary.successCount == 1)
+        #expect(summary.failedCount == 1)
+        #expect(summary.cancelledCount == 1)
+        #expect(summary.tokenTotals.sentTokens == 15)
+        #expect(summary.tokenTotals.receivedTokens == 27)
+        #expect(summary.tokenTotals.thinkingTokens == 2)
+        #expect(summary.tokenTotals.cacheWriteTokens == 3)
+        #expect(summary.tokenTotals.cacheReadTokens == 4)
+        #expect(summary.tokenTotals.totalTokens == 30)
+        #expect(summary.byProvider.count == 2)
+        #expect(summary.byModel.count == 2)
+
+        cleanup(sessions: [])
+    }
+
+    @Test("Request Logs Retention Limit")
+    func testRequestLogsRetentionLimit() {
+        cleanup(sessions: [])
+
+        let total = 10_020
+        let dropped = total - 10_000
+        let baseDate = Date(timeIntervalSince1970: 1_700_200_000)
+        for index in 0..<total {
+            let time = baseDate.addingTimeInterval(TimeInterval(index))
+            Persistence.appendRequestLog(
+                .init(
+                    requestID: UUID(),
+                    sessionID: UUID(),
+                    providerID: UUID(),
+                    providerName: "Retention",
+                    modelID: "model-\(index)",
+                    requestedAt: time,
+                    finishedAt: time.addingTimeInterval(0.1),
+                    isStreaming: false,
+                    status: .success,
+                    tokenUsage: nil
+                )
+            )
+        }
+
+        let loaded = Persistence.loadRequestLogs()
+        #expect(loaded.count == 10_000)
+        #expect(loaded.first?.modelID == "model-\(total - 1)")
+        #expect(loaded.last?.modelID == "model-\(dropped)")
+
+        cleanup(sessions: [])
     }
 }
 

@@ -147,6 +147,16 @@ public class ChatService {
         let prompt: String
     }
 
+    private struct RequestLogContext {
+        let requestID: UUID
+        let sessionID: UUID?
+        let providerID: UUID?
+        let providerName: String
+        let modelID: String
+        let isStreaming: Bool
+        let requestedAt: Date
+    }
+
     private func cachedAttachmentData(
         for fileName: String,
         cache: NSCache<NSString, NSData>,
@@ -2272,14 +2282,28 @@ public class ChatService {
         }
         
         let commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
+        let requestStartedAt = Date()
+        let requestLogContext = RequestLogContext(
+            requestID: UUID(),
+            sessionID: currentSessionID,
+            providerID: runnableModel.provider.id,
+            providerName: runnableModel.provider.name,
+            modelID: runnableModel.model.modelName,
+            isStreaming: enableStreaming,
+            requestedAt: requestStartedAt
+        )
         
         guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
             addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
             requestStatusSubject.send(.error)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
             return
         }
-        
-        let requestStartedAt = Date()
 
         if enableStreaming {
             await handleStreamedResponse(
@@ -2299,7 +2323,8 @@ public class ChatService {
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                requestStartedAt: requestStartedAt
+                requestStartedAt: requestStartedAt,
+                requestLogContext: requestLogContext
             )
         } else {
             await handleStandardResponse(
@@ -2319,7 +2344,8 @@ public class ChatService {
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                requestStartedAt: requestStartedAt
+                requestStartedAt: requestStartedAt,
+                requestLogContext: requestLogContext
             )
         }
     }
@@ -3006,7 +3032,10 @@ public class ChatService {
         MessageTokenUsage(
             promptTokens: incoming.promptTokens ?? existing?.promptTokens,
             completionTokens: incoming.completionTokens ?? existing?.completionTokens,
-            totalTokens: incoming.totalTokens ?? existing?.totalTokens
+            totalTokens: incoming.totalTokens ?? existing?.totalTokens,
+            thinkingTokens: incoming.thinkingTokens ?? existing?.thinkingTokens,
+            cacheWriteTokens: incoming.cacheWriteTokens ?? existing?.cacheWriteTokens,
+            cacheReadTokens: incoming.cacheReadTokens ?? existing?.cacheReadTokens
         )
     }
 
@@ -3042,6 +3071,28 @@ public class ChatService {
             tokenPerSecond: tokenPerSecond,
             isTokenPerSecondEstimated: isEstimated
         )
+    }
+
+    private func persistRequestLog(
+        context: RequestLogContext,
+        status: RequestLogStatus,
+        tokenUsage: MessageTokenUsage?,
+        finishedAt: Date
+    ) {
+        let normalizedUsage = tokenUsage?.hasAnyData == true ? tokenUsage : nil
+        let logEntry = RequestLogEntry(
+            requestID: context.requestID,
+            sessionID: context.sessionID,
+            providerID: context.providerID,
+            providerName: context.providerName,
+            modelID: context.modelID,
+            requestedAt: context.requestedAt,
+            finishedAt: finishedAt,
+            isStreaming: context.isStreaming,
+            status: status,
+            tokenUsage: normalizedUsage
+        )
+        Persistence.appendRequestLog(logEntry)
     }
 
     private func fetchData(for request: URLRequest) async throws -> Data {
@@ -3193,7 +3244,8 @@ public class ChatService {
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
-        requestStartedAt: Date
+        requestStartedAt: Date,
+        requestLogContext: RequestLogContext
     ) async {
         do {
             let data = try await fetchData(for: request)
@@ -3216,6 +3268,12 @@ public class ChatService {
                         isEstimated: false
                     )
                 }
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .success,
+                    tokenUsage: parsedMessage.tokenUsage,
+                    finishedAt: Date()
+                )
                 await processResponseMessage(
                     responseMessage: parsedMessage,
                     loadingMessageID: loadingMessageID,
@@ -3234,6 +3292,12 @@ public class ChatService {
                 )
             } catch is CancellationError {
                 logger.info("请求在解析阶段被取消，已忽略后续处理。")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             } catch {
                 logger.error("解析响应失败: \(error.localizedDescription)")
                 addErrorMessage(String(
@@ -3241,9 +3305,21 @@ public class ChatService {
                     rawResponse
                 ))
                 requestStatusSubject.send(.error)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             }
         } catch is CancellationError {
             logger.info("请求在拉取数据时被取消。")
+            persistRequestLog(
+                context: requestLogContext,
+                status: .cancelled,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodyString: String
             if let bodyData, let utf8Text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !utf8Text.isEmpty {
@@ -3258,16 +3334,34 @@ public class ChatService {
             }
             addErrorMessage(bodyString, httpStatusCode: code)
             requestStatusSubject.send(.error)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
             if isCancellationError(error) {
                 logger.info("请求在拉取数据时被取消 (URLError)。")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             } else {
                 addErrorMessage(String(
                     format: NSLocalizedString("网络错误: %@", comment: "Network error with description"),
                     error.localizedDescription
                 ))
                 requestStatusSubject.send(.error)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
             }
         }
     }
@@ -3468,8 +3562,10 @@ public class ChatService {
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
         enableResponseSpeedMetrics: Bool,
-        requestStartedAt: Date
+        requestStartedAt: Date,
+        requestLogContext: RequestLogContext
     ) async {
+        var latestTokenUsage: MessageTokenUsage?
         do {
             let bytes = try await streamData(for: request)
 
@@ -3477,7 +3573,6 @@ public class ChatService {
             var toolCallBuilders: [Int: (id: String?, name: String?, arguments: String, providerSpecificFields: [String: JSONValue]?)] = [:]
             var toolCallOrder: [Int] = []
             var toolCallIndexByID: [String: Int] = [:]
-            var latestTokenUsage: MessageTokenUsage?
             var latestOfficialCompletionTokens: Int?
             var accumulatedOutputText = ""
             var firstTokenAt: Date?
@@ -3660,6 +3755,12 @@ public class ChatService {
             }
             
             if let finalAssistantMessage = finalAssistantMessage {
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .success,
+                    tokenUsage: finalAssistantMessage.tokenUsage,
+                    finishedAt: Date()
+                )
                 await processResponseMessage(
                     responseMessage: finalAssistantMessage,
                     loadingMessageID: loadingMessageID,
@@ -3677,11 +3778,23 @@ public class ChatService {
                     includeSystemTime: includeSystemTime
                 )
             } else {
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .success,
+                    tokenUsage: nil,
+                    finishedAt: Date()
+                )
                 requestStatusSubject.send(.finished)
             }
 
         } catch is CancellationError {
             logger.info("流式请求在处理中被取消。")
+            persistRequestLog(
+                context: requestLogContext,
+                status: .cancelled,
+                tokenUsage: latestTokenUsage,
+                finishedAt: Date()
+            )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodySnippet: String
             if let bodyData, let text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
@@ -3696,16 +3809,34 @@ public class ChatService {
             }
             addErrorMessage(bodySnippet, httpStatusCode: code)
             requestStatusSubject.send(.error)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: latestTokenUsage,
+                finishedAt: Date()
+            )
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
             if isCancellationError(error) {
                 logger.info("流式请求在处理中被取消 (URLError)。")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: latestTokenUsage,
+                    finishedAt: Date()
+                )
             } else {
                 addErrorMessage(String(
                     format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
                     error.localizedDescription
                 ))
                 requestStatusSubject.send(.error)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: latestTokenUsage,
+                    finishedAt: Date()
+                )
             }
         }
     }

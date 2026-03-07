@@ -221,6 +221,35 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decoded.tokenUsage?.totalTokens, 30)
     }
 
+    /// 测试扩展 Token 字段的序列化与反序列化兼容
+    func testExtendedTokenUsageRoundTrip() throws {
+        let originalUsage = MessageTokenUsage(
+            promptTokens: 11,
+            completionTokens: 22,
+            totalTokens: nil,
+            thinkingTokens: 7,
+            cacheWriteTokens: 3,
+            cacheReadTokens: 5
+        )
+        let original = ChatMessage(
+            role: .assistant,
+            content: "Token 扩展字段",
+            tokenUsage: originalUsage
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ChatMessage.self, from: data)
+        let decodedUsage = try XCTUnwrap(decoded.tokenUsage)
+
+        XCTAssertEqual(decodedUsage.promptTokens, 11)
+        XCTAssertEqual(decodedUsage.completionTokens, 22)
+        XCTAssertEqual(decodedUsage.thinkingTokens, 7)
+        XCTAssertEqual(decodedUsage.cacheWriteTokens, 3)
+        XCTAssertEqual(decodedUsage.cacheReadTokens, 5)
+        XCTAssertNil(decodedUsage.totalTokens)
+        XCTAssertTrue(decodedUsage.hasAnyData)
+    }
+
     /// 测试工具调用的服务商专有字段在序列化往返中不丢失
     func testToolCallProviderSpecificFieldsRoundTrip() throws {
         let toolCall = InternalToolCall(

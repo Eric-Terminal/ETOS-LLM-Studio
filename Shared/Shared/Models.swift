@@ -686,16 +686,193 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
 public struct MessageTokenUsage: Codable, Hashable, Sendable {
     public var promptTokens: Int?
     public var completionTokens: Int?
+    public var thinkingTokens: Int?
+    public var cacheWriteTokens: Int?
+    public var cacheReadTokens: Int?
     public var totalTokens: Int?
     
-    public init(promptTokens: Int?, completionTokens: Int?, totalTokens: Int?) {
+    public init(
+        promptTokens: Int?,
+        completionTokens: Int?,
+        totalTokens: Int?,
+        thinkingTokens: Int? = nil,
+        cacheWriteTokens: Int? = nil,
+        cacheReadTokens: Int? = nil
+    ) {
         self.promptTokens = promptTokens
         self.completionTokens = completionTokens
+        self.thinkingTokens = thinkingTokens
+        self.cacheWriteTokens = cacheWriteTokens
+        self.cacheReadTokens = cacheReadTokens
         self.totalTokens = totalTokens
     }
     
     public var hasData: Bool {
         promptTokens != nil || completionTokens != nil || totalTokens != nil
+    }
+
+    public var hasAnyData: Bool {
+        promptTokens != nil
+            || completionTokens != nil
+            || thinkingTokens != nil
+            || cacheWriteTokens != nil
+            || cacheReadTokens != nil
+            || totalTokens != nil
+    }
+}
+
+/// 请求日志状态
+public enum RequestLogStatus: String, Codable, Hashable, Sendable {
+    case success
+    case failed
+    case cancelled
+}
+
+/// 单次模型请求日志
+public struct RequestLogEntry: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var requestID: UUID
+    public var sessionID: UUID?
+    public var providerID: UUID?
+    public var providerName: String
+    public var modelID: String
+    public var requestedAt: Date
+    public var finishedAt: Date
+    public var isStreaming: Bool
+    public var status: RequestLogStatus
+    public var tokenUsage: MessageTokenUsage?
+
+    public init(
+        id: UUID = UUID(),
+        requestID: UUID,
+        sessionID: UUID?,
+        providerID: UUID?,
+        providerName: String,
+        modelID: String,
+        requestedAt: Date,
+        finishedAt: Date,
+        isStreaming: Bool,
+        status: RequestLogStatus,
+        tokenUsage: MessageTokenUsage? = nil
+    ) {
+        self.id = id
+        self.requestID = requestID
+        self.sessionID = sessionID
+        self.providerID = providerID
+        self.providerName = providerName
+        self.modelID = modelID
+        self.requestedAt = requestedAt
+        self.finishedAt = finishedAt
+        self.isStreaming = isStreaming
+        self.status = status
+        self.tokenUsage = tokenUsage
+    }
+}
+
+/// 请求日志查询条件
+public struct RequestLogQuery: Hashable, Sendable {
+    public var from: Date?
+    public var to: Date?
+    public var providerID: UUID?
+    public var modelID: String?
+    public var statuses: Set<RequestLogStatus>?
+    public var limit: Int?
+
+    public init(
+        from: Date? = nil,
+        to: Date? = nil,
+        providerID: UUID? = nil,
+        modelID: String? = nil,
+        statuses: Set<RequestLogStatus>? = nil,
+        limit: Int? = nil
+    ) {
+        self.from = from
+        self.to = to
+        self.providerID = providerID
+        self.modelID = modelID
+        self.statuses = statuses
+        self.limit = limit
+    }
+}
+
+/// 请求日志 Token 汇总值
+public struct RequestLogTokenTotals: Codable, Hashable, Sendable {
+    public var sentTokens: Int
+    public var receivedTokens: Int
+    public var thinkingTokens: Int
+    public var cacheWriteTokens: Int
+    public var cacheReadTokens: Int
+    public var totalTokens: Int
+
+    public init(
+        sentTokens: Int = 0,
+        receivedTokens: Int = 0,
+        thinkingTokens: Int = 0,
+        cacheWriteTokens: Int = 0,
+        cacheReadTokens: Int = 0,
+        totalTokens: Int = 0
+    ) {
+        self.sentTokens = sentTokens
+        self.receivedTokens = receivedTokens
+        self.thinkingTokens = thinkingTokens
+        self.cacheWriteTokens = cacheWriteTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.totalTokens = totalTokens
+    }
+}
+
+/// 请求日志分组统计
+public struct RequestLogSummaryBucket: Codable, Hashable, Sendable {
+    public var key: String
+    public var requestCount: Int
+    public var successCount: Int
+    public var failedCount: Int
+    public var cancelledCount: Int
+    public var tokenTotals: RequestLogTokenTotals
+
+    public init(
+        key: String,
+        requestCount: Int = 0,
+        successCount: Int = 0,
+        failedCount: Int = 0,
+        cancelledCount: Int = 0,
+        tokenTotals: RequestLogTokenTotals = .init()
+    ) {
+        self.key = key
+        self.requestCount = requestCount
+        self.successCount = successCount
+        self.failedCount = failedCount
+        self.cancelledCount = cancelledCount
+        self.tokenTotals = tokenTotals
+    }
+}
+
+/// 请求日志汇总
+public struct RequestLogSummary: Codable, Hashable, Sendable {
+    public var totalRequests: Int
+    public var successCount: Int
+    public var failedCount: Int
+    public var cancelledCount: Int
+    public var tokenTotals: RequestLogTokenTotals
+    public var byProvider: [RequestLogSummaryBucket]
+    public var byModel: [RequestLogSummaryBucket]
+
+    public init(
+        totalRequests: Int = 0,
+        successCount: Int = 0,
+        failedCount: Int = 0,
+        cancelledCount: Int = 0,
+        tokenTotals: RequestLogTokenTotals = .init(),
+        byProvider: [RequestLogSummaryBucket] = [],
+        byModel: [RequestLogSummaryBucket] = []
+    ) {
+        self.totalRequests = totalRequests
+        self.successCount = successCount
+        self.failedCount = failedCount
+        self.cancelledCount = cancelledCount
+        self.tokenTotals = tokenTotals
+        self.byProvider = byProvider
+        self.byModel = byModel
     }
 }
 
