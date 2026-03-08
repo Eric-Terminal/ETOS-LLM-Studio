@@ -236,6 +236,7 @@ public struct MCPGovernanceLogEntry: Identifiable, Hashable {
 public final class MCPManager: ObservableObject {
 
     public static let shared = MCPManager()
+    public let objectWillChange = ObservableObjectPublisher()
     public nonisolated static var toolNamePrefix: String { "mcp://" }
     public nonisolated static var toolAliasPrefix: String { "mcp_" }
     private nonisolated static var resourceNamePrefix: String { "mcpres://" }

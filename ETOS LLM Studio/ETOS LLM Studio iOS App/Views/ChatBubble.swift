@@ -1014,6 +1014,7 @@ private struct AttachmentImageView: View {
 // MARK: - Audio Player Manager
 
 class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    let objectWillChange = ObservableObjectPublisher()
     @Published var isPlaying = false
     @Published var progress: Double = 0
     @Published var currentFileName: String?

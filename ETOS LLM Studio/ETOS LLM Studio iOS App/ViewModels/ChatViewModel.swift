@@ -23,6 +23,8 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatVie
 
 @MainActor
 final class ChatViewModel: ObservableObject {
+    let objectWillChange = ObservableObjectPublisher()
+
     // MARK: - Published UI State
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
