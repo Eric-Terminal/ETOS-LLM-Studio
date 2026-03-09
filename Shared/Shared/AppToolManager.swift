@@ -582,9 +582,27 @@ public struct AppToolCatalogItem: Identifiable, Equatable, Sendable {
     }
 }
 
+public enum AppToolApprovalPolicy: String, Codable, Hashable, CaseIterable, Sendable {
+    case askEveryTime = "ask_every_time"
+    case alwaysAllow = "always_allow"
+    case alwaysDeny = "always_deny"
+
+    public var displayName: String {
+        switch self {
+        case .askEveryTime:
+            return NSLocalizedString("每次询问", comment: "Ask every time approval policy")
+        case .alwaysAllow:
+            return NSLocalizedString("总是允许", comment: "Always allow approval policy")
+        case .alwaysDeny:
+            return NSLocalizedString("始终拒绝", comment: "Always deny approval policy")
+        }
+    }
+}
+
 public enum AppToolExecutionError: LocalizedError {
     case toolGroupDisabled
     case toolDisabled(String)
+    case toolDeniedByPolicy(String)
     case unknownTool
     case invalidArguments(String)
 
@@ -595,6 +613,11 @@ public enum AppToolExecutionError: LocalizedError {
         case .toolDisabled(let name):
             return String(
                 format: NSLocalizedString("拓展工具“%@”当前未启用。", comment: "App tool disabled"),
+                name
+            )
+        case .toolDeniedByPolicy(let name):
+            return String(
+                format: NSLocalizedString("拓展工具“%@”当前审批策略为始终拒绝。", comment: "App tool denied by approval policy"),
                 name
             )
         case .unknownTool:
@@ -613,14 +636,22 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AppToolManager")
     private nonisolated static let chatToolsEnabledUserDefaultsKey = "appTools.chatToolsEnabled"
     private nonisolated static let enabledToolIDsUserDefaultsKey = "appTools.enabledToolIDs"
+    private nonisolated static let toolApprovalPoliciesUserDefaultsKey = "appTools.toolApprovalPolicies"
 
     @Published public private(set) var chatToolsEnabled: Bool
     @Published private var enabledToolIDs: Set<String>
+    @Published private var toolApprovalPolicies: [String: AppToolApprovalPolicy]
 
     private init(defaults: UserDefaults = .standard) {
         chatToolsEnabled = defaults.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
         let storedIDs = defaults.stringArray(forKey: Self.enabledToolIDsUserDefaultsKey) ?? []
         enabledToolIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
+        let storedPolicyRawValues = defaults.dictionary(forKey: Self.toolApprovalPoliciesUserDefaultsKey) as? [String: String] ?? [:]
+        toolApprovalPolicies = storedPolicyRawValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
+            guard AppToolKind(rawValue: pair.key) != nil else { return }
+            guard let policy = AppToolApprovalPolicy(rawValue: pair.value), policy != .askEveryTime else { return }
+            result[pair.key] = policy
+        }
     }
 
     public nonisolated static func isAppToolName(_ name: String) -> Bool {
@@ -635,6 +666,13 @@ public final class AppToolManager: ObservableObject {
 
     internal var enabledToolKinds: Set<AppToolKind> {
         Set(enabledToolIDs.compactMap(AppToolKind.init(rawValue:)))
+    }
+
+    internal var configuredApprovalPoliciesByKind: [AppToolKind: AppToolApprovalPolicy] {
+        toolApprovalPolicies.reduce(into: [AppToolKind: AppToolApprovalPolicy]()) { result, pair in
+            guard let kind = AppToolKind(rawValue: pair.key) else { return }
+            result[kind] = pair.value
+        }
     }
 
     public func setChatToolsEnabled(_ isEnabled: Bool) {
@@ -658,10 +696,30 @@ public final class AppToolManager: ObservableObject {
         Self.logger.info("拓展工具 \(kind.rawValue, privacy: .public) 已\(isEnabled ? "启用" : "禁用")。")
     }
 
+    public func approvalPolicy(for kind: AppToolKind) -> AppToolApprovalPolicy {
+        toolApprovalPolicies[kind.rawValue] ?? .askEveryTime
+    }
+
+    public func approvalPolicy(for toolName: String) -> AppToolApprovalPolicy? {
+        guard let kind = AppToolKind.resolve(from: toolName) else { return nil }
+        return approvalPolicy(for: kind)
+    }
+
+    public func setToolApprovalPolicy(kind: AppToolKind, policy: AppToolApprovalPolicy) {
+        if policy == .askEveryTime {
+            toolApprovalPolicies.removeValue(forKey: kind.rawValue)
+        } else {
+            toolApprovalPolicies[kind.rawValue] = policy
+        }
+        persistToolApprovalPolicies()
+        Self.logger.info("拓展工具 \(kind.rawValue, privacy: .public) 审批策略已更新为 \(policy.rawValue, privacy: .public)。")
+    }
+
     public func chatToolsForLLM() -> [InternalToolDefinition] {
         guard chatToolsEnabled else { return [] }
         return tools
             .filter(\.isEnabled)
+            .filter { approvalPolicy(for: $0.kind) != .alwaysDeny }
             .map { item in
                 InternalToolDefinition(
                     name: item.kind.toolName,
@@ -685,6 +743,9 @@ public final class AppToolManager: ObservableObject {
         }
         guard isToolEnabled(kind) else {
             throw AppToolExecutionError.toolDisabled(kind.displayName)
+        }
+        if approvalPolicy(for: kind) == .alwaysDeny {
+            throw AppToolExecutionError.toolDeniedByPolicy(kind.displayName)
         }
 
         switch kind {
@@ -1163,16 +1224,32 @@ public final class AppToolManager: ObservableObject {
         }
     }
 
-    internal func restoreStateForTests(chatToolsEnabled: Bool, enabledKinds: Set<AppToolKind>) {
+    internal func restoreStateForTests(
+        chatToolsEnabled: Bool,
+        enabledKinds: Set<AppToolKind>,
+        approvalPolicies: [AppToolKind: AppToolApprovalPolicy] = [:]
+    ) {
         self.chatToolsEnabled = chatToolsEnabled
         enabledToolIDs = Set(enabledKinds.map(\.rawValue))
+        toolApprovalPolicies = approvalPolicies.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
+            guard pair.value != .askEveryTime else { return }
+            result[pair.key.rawValue] = pair.value
+        }
         UserDefaults.standard.set(chatToolsEnabled, forKey: Self.chatToolsEnabledUserDefaultsKey)
         UserDefaults.standard.set(Array(enabledToolIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+        let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
+        UserDefaults.standard.set(rawPolicyValues, forKey: Self.toolApprovalPoliciesUserDefaultsKey)
         objectWillChange.send()
     }
 
     private func persistEnabledToolIDs() {
         UserDefaults.standard.set(Array(enabledToolIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+        objectWillChange.send()
+    }
+
+    private func persistToolApprovalPolicies() {
+        let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
+        UserDefaults.standard.set(rawPolicyValues, forKey: Self.toolApprovalPoliciesUserDefaultsKey)
         objectWillChange.send()
     }
 

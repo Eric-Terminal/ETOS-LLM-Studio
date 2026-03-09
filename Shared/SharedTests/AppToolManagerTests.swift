@@ -19,10 +19,12 @@ struct AppToolManagerTests {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
-                enabledKinds: originalEnabledKinds
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
             )
         }
 
@@ -59,10 +61,12 @@ struct AppToolManagerTests {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
-                enabledKinds: originalEnabledKinds
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
             )
         }
 
@@ -78,15 +82,71 @@ struct AppToolManagerTests {
     }
 
     @MainActor
+    @Test("始终拒绝策略会阻止拓展工具暴露给模型")
+    func testAlwaysDenyPolicyHidesToolFromLLMExposure() {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.echoText],
+            approvalPolicies: [.echoText: .alwaysDeny]
+        )
+
+        #expect(manager.approvalPolicy(for: .echoText) == .alwaysDeny)
+        #expect(manager.chatToolsForLLM().isEmpty)
+    }
+
+    @MainActor
+    @Test("始终拒绝策略会阻止拓展工具执行")
+    func testAlwaysDenyPolicyBlocksExecution() async {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.echoText],
+            approvalPolicies: [.echoText: .alwaysDeny]
+        )
+
+        await #expect(throws: AppToolExecutionError.self) {
+            _ = try await manager.executeToolFromChat(
+                toolName: AppToolKind.echoText.toolName,
+                argumentsJSON: #"{"text":"测试文本"}"#
+            )
+        }
+    }
+
+    @MainActor
     @Test("示例工具会回显传入文本")
     func testExecuteEchoTool() async throws {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
-                enabledKinds: originalEnabledKinds
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
             )
         }
 

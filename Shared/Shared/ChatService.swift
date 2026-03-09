@@ -2020,22 +2020,15 @@ public class ChatService {
                 logger.info("  - 拓展工具调用被总开关拒绝: \(toolCall.toolName)")
                 break
             }
-            let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
-                toolName: toolCall.toolName,
-                displayName: toolLabel,
-                arguments: toolCall.arguments
-            )
-            switch permissionDecision {
-            case .deny:
-                content = "\(toolLabel) 调用已被用户拒绝。"
+            let approvalPolicy = await MainActor.run {
+                AppToolManager.shared.approvalPolicy(for: toolCall.toolName) ?? .askEveryTime
+            }
+            switch approvalPolicy {
+            case .alwaysDeny:
+                content = "\(toolLabel) 已被策略禁止调用。"
                 displayResult = content
-                logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
-            case .supplement:
-                content = "\(toolLabel) 调用已被用户拒绝。"
-                displayResult = content
-                shouldAwaitUserSupplement = true
-                logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
-            case .allowOnce, .allowForTool, .allowAll:
+                logger.info("  - 拓展工具调用被策略拒绝: \(toolCall.toolName)")
+            case .alwaysAllow:
                 do {
                     let result = try await AppToolManager.shared.executeToolFromChat(
                         toolName: toolCall.toolName,
@@ -2048,6 +2041,37 @@ public class ChatService {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
                     displayResult = content
                     logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
+                }
+            case .askEveryTime:
+                let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
+                    toolName: toolCall.toolName,
+                    displayName: toolLabel,
+                    arguments: toolCall.arguments
+                )
+                switch permissionDecision {
+                case .deny:
+                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    displayResult = content
+                    logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
+                case .supplement:
+                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    displayResult = content
+                    shouldAwaitUserSupplement = true
+                    logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
+                case .allowOnce, .allowForTool, .allowAll:
+                    do {
+                        let result = try await AppToolManager.shared.executeToolFromChat(
+                            toolName: toolCall.toolName,
+                            argumentsJSON: toolCall.arguments
+                        )
+                        content = result
+                        displayResult = result
+                        logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
+                    } catch {
+                        content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                        displayResult = content
+                        logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
+                    }
                 }
             }
             
