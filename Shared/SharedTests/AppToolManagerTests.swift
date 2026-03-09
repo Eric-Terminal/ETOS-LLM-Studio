@@ -74,6 +74,7 @@ struct AppToolManagerTests {
         let tools = manager.chatToolsForLLM()
         #expect(tools.count == 1)
         #expect(tools.first?.name == AppToolKind.echoText.toolName)
+        #expect(tools.first?.isBlocking == true)
     }
 
     @MainActor

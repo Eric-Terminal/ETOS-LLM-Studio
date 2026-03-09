@@ -667,7 +667,7 @@ public final class AppToolManager: ObservableObject {
                     name: item.kind.toolName,
                     description: item.kind.toolDescription,
                     parameters: item.kind.parameters,
-                    isBlocking: false
+                    isBlocking: true
                 )
             }
     }
