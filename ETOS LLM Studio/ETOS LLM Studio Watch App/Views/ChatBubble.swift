@@ -819,15 +819,12 @@ struct ChatBubble: View {
     ) -> some View {
         let toolNames = toolCalls.map { toolDisplayLabel(for: $0.toolName) }
         let expansion = expanded ?? $isToolCallsExpanded
-        let summaries: [String]
-        if enableExperimentalToolResultDisplay {
-            summaries = toolCalls
+        let summaries: [String] = enableExperimentalToolResultDisplay
+            ? toolCalls
                 .map { toolResultDisplayModel(for: ($0.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)) }
                 .map(\.summaryText)
                 .filter { !$0.isEmpty }
-        } else {
-            summaries = []
-        }
+            : []
         VStack(alignment: .leading, spacing: 5) {
             if isPending {
                 HStack {
