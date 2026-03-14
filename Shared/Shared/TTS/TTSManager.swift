@@ -709,9 +709,11 @@ public final class TTSManager: NSObject, ObservableObject {
     private func startProgressTimer() {
         stopProgressTimer()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self, let audioPlayer = self.audioPlayer else { return }
-            self.playbackState.position = audioPlayer.currentTime
-            self.playbackState.duration = audioPlayer.duration
+            Task { @MainActor [weak self] in
+                guard let self, let audioPlayer = self.audioPlayer else { return }
+                self.playbackState.position = audioPlayer.currentTime
+                self.playbackState.duration = audioPlayer.duration
+            }
         }
     }
 
@@ -743,6 +745,7 @@ public final class TTSManager: NSObject, ObservableObject {
 }
 
 #if canImport(AVFoundation)
+@MainActor
 extension TTSManager: AVAudioPlayerDelegate {
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         playbackState.status = .ended
@@ -765,7 +768,20 @@ extension TTSManager: AVAudioPlayerDelegate {
 
 #if os(iOS)
 extension TTSManager: AVSpeechSynthesizerDelegate {
-    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor [weak self] in
+            self?.handleSpeechSynthesizerDidFinish()
+        }
+    }
+
+    nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor [weak self] in
+            self?.handleSpeechSynthesizerDidCancel()
+        }
+    }
+
+    @MainActor
+    private func handleSpeechSynthesizerDidFinish() {
         playbackState.status = .ended
         if let continuation = speechContinuation {
             speechContinuation = nil
@@ -773,7 +789,8 @@ extension TTSManager: AVSpeechSynthesizerDelegate {
         }
     }
 
-    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+    @MainActor
+    private func handleSpeechSynthesizerDidCancel() {
         if let continuation = speechContinuation {
             speechContinuation = nil
             continuation.resume(throwing: CancellationError())
