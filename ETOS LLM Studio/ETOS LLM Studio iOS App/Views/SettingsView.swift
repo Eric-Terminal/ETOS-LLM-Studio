@@ -182,7 +182,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("后台通知", comment: "Background notification section title")) {
+            Section {
                 Toggle(
                     NSLocalizedString("后台收到 AI 回复后通知我", comment: "Toggle for background AI reply notification"),
                     isOn: $viewModel.enableBackgroundReplyNotification
@@ -196,6 +196,8 @@ struct SettingsView: View {
                 Button(NSLocalizedString("打开系统通知设置", comment: "Open system notification settings button")) {
                     viewModel.openSystemNotificationSettings()
                 }
+            } header: {
+                Text(NSLocalizedString("后台通知", comment: "Background notification section title"))
             } footer: {
                 Text(
                     NSLocalizedString(
