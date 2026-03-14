@@ -975,7 +975,7 @@ final class ChatViewModel: ObservableObject {
                 errorMessage: nil,
                 referenceCount: imageGenerationFeedback.referenceCount
             )
-        default:
+        @unknown default:
             imageGenerationFeedback = .idle
         }
     }
