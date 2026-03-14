@@ -1233,3 +1233,15 @@
 "旧文本在文件中出现了 %d 次，请改用 replace_all 或提供更精确的片段。" = "The old text appears %d times in the file. Use replace_all or provide a more specific snippet.";
 "不允许删除 Documents 根目录。" = "Deleting the Documents root directory is not allowed.";
 "内容没有变化。" = "There are no content changes.";
+"后台通知" = "Background Notifications";
+"后台收到 AI 回复后通知我" = "Notify me when AI replies in background";
+"请求通知权限" = "Request Notification Permission";
+"打开系统通知设置" = "Open System Notification Settings";
+"当应用在后台完成回复时，发送系统通知提醒。" = "Send a system notification when a reply finishes while the app is in background.";
+"AI 回复已完成" = "AI Reply Completed";
+"会话“%@”已收到新回复：%@" = "Session \"%@\" received a new reply: %@";
+"已收到新回复：%@" = "New reply received: %@";
+"你收到了新的图片回复。" = "You received a new image reply.";
+"你收到了新的语音回复。" = "You received a new audio reply.";
+"你收到了新的文件回复。" = "You received a new file reply.";
+"你收到了新的回复。" = "You received a new reply.";
