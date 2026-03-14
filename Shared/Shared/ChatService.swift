@@ -1081,6 +1081,14 @@ public class ChatService {
         Persistence.saveChatSessions(sessions)
         logger.info("已强制保存所有会话。")
     }
+
+    /// 从持久化层重新加载当前会话消息并刷新 UI，不会触发写盘。
+    public func reloadCurrentSessionMessagesFromPersistence() {
+        guard let currentSession = currentSessionSubject.value else { return }
+        let reloadedMessages = Persistence.loadMessages(for: currentSession.id)
+        publishMessages(reloadedMessages)
+        logger.info("已从持久化层刷新当前会话消息: \(currentSession.id.uuidString)")
+    }
     
     public func setCurrentSession(_ session: ChatSession?) {
         if session?.id == currentSessionSubject.value?.id { return }

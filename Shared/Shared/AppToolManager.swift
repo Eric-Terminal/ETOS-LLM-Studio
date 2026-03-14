@@ -914,6 +914,7 @@ public final class AppToolManager: ObservableObject {
                 content: args.content,
                 createIntermediateDirectories: args.create_parent_directories ?? true
             )
+            refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
                 "size": result.size,
@@ -1006,6 +1007,9 @@ public final class AppToolManager: ObservableObject {
                 overwrite: args.overwrite ?? false,
                 createIntermediateDirectories: args.create_parent_directories ?? true
             )
+            refreshCurrentSessionMessagesIfNeeded(
+                mutatedPaths: [result.sourcePath, result.destinationPath]
+            )
             let payload: [String: Any] = [
                 "sourcePath": result.sourcePath,
                 "destinationPath": result.destinationPath,
@@ -1035,6 +1039,7 @@ public final class AppToolManager: ObservableObject {
                 overwrite: args.overwrite ?? false,
                 createIntermediateDirectories: args.create_parent_directories ?? true
             )
+            refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.destinationPath])
             let payload: [String: Any] = [
                 "sourcePath": result.sourcePath,
                 "destinationPath": result.destinationPath,
@@ -1094,6 +1099,7 @@ public final class AppToolManager: ObservableObject {
                 replaceAll: args.replace_all ?? false,
                 ignoreMissing: args.ignore_missing ?? false
             )
+            refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
                 "replacements": result.replacements,
@@ -1197,6 +1203,7 @@ public final class AppToolManager: ObservableObject {
                 newText: args.new_text,
                 replaceAll: args.replace_all ?? false
             )
+            refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
                 "replacements": result.replacements,
@@ -1216,6 +1223,7 @@ public final class AppToolManager: ObservableObject {
             }
 
             let result = try SandboxFileToolSupport.deleteItem(relativePath: args.path)
+            refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
                 "wasDirectory": result.wasDirectory
@@ -1251,6 +1259,50 @@ public final class AppToolManager: ObservableObject {
         let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
         UserDefaults.standard.set(rawPolicyValues, forKey: Self.toolApprovalPoliciesUserDefaultsKey)
         objectWillChange.send()
+    }
+
+    private func refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [String]) {
+        let currentSessionID = ChatService.shared.currentSessionSubject.value?.id
+        guard Self.shouldRefreshCurrentSessionMessages(
+            afterMutatingPaths: mutatedPaths,
+            currentSessionID: currentSessionID
+        ) else {
+            return
+        }
+        ChatService.shared.reloadCurrentSessionMessagesFromPersistence()
+        Self.logger.info("检测到当前会话文件被拓展工具修改，已从磁盘刷新会话消息。")
+    }
+
+    internal nonisolated static func shouldRefreshCurrentSessionMessages(
+        afterMutatingPaths paths: [String],
+        currentSessionID: UUID?
+    ) -> Bool {
+        guard let currentSessionID else { return false }
+        let normalizedPaths = Set(paths.compactMap(normalizedSandboxPathForComparison))
+        guard !normalizedPaths.isEmpty else { return false }
+
+        let currentID = currentSessionID.uuidString.lowercased()
+        let candidates = Set([
+            "documents/chatsessions/sessions/\(currentID).json",
+            "documents/chatsessions/\(currentID).json"
+        ])
+        return !normalizedPaths.intersection(candidates).isEmpty
+    }
+
+    private nonisolated static func normalizedSandboxPathForComparison(_ rawPath: String) -> String? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let components = trimmed
+            .replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard !components.isEmpty else { return nil }
+
+        if components[0].lowercased() == "documents" {
+            return components.joined(separator: "/").lowercased()
+        }
+        return (["Documents"] + components).joined(separator: "/").lowercased()
     }
 
     private func prettyPrintedJSONString(from payload: [String: Any]) -> String {
