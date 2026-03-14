@@ -153,6 +153,7 @@ public struct Model: Codable, Identifiable, Hashable {
     public enum Capability: String, Codable, Hashable {
         case chat
         case speechToText
+        case textToSpeech
         case embedding
         case imageGeneration
     }
@@ -325,6 +326,10 @@ private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet,
 public extension Model {
     var supportsSpeechToText: Bool {
         capabilities.contains(.speechToText)
+    }
+
+    var supportsTextToSpeech: Bool {
+        capabilities.contains(.textToSpeech)
     }
     
     var supportsEmbedding: Bool {

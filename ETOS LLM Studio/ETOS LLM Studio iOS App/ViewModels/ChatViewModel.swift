@@ -46,6 +46,8 @@ final class ChatViewModel: ObservableObject {
     @Published var memories: [MemoryItem] = []
     @Published var selectedEmbeddingModel: RunnableModel?
     @Published var selectedTitleGenerationModel: RunnableModel?
+    @Published var selectedTTSModel: RunnableModel?
+    @Published var ttsModels: [RunnableModel] = []
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var isSendingMessage: Bool = false
@@ -103,6 +105,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
+    @AppStorage("ttsModelIdentifier") var ttsModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
@@ -160,6 +163,7 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Private Properties
     
     private let chatService: ChatService
+    private let ttsManager: TTSManager
     private var additionalHistoryLoaded: Int = 0
     private var lastSessionID: UUID?
     private let incrementalHistoryBatchSize = 5
@@ -179,6 +183,7 @@ final class ChatViewModel: ObservableObject {
     private var isApplicationActive: Bool = true
     private var pendingBackgroundReplyNotificationContext: PendingBackgroundReplyNotificationContext?
     private var lastNotifiedAssistantMarker: AssistantReplyMarker?
+    private var lastAutoPlayedAssistantMessageID: UUID?
 #if canImport(UIKit)
     private var activeBackgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
 #endif
@@ -233,6 +238,7 @@ final class ChatViewModel: ObservableObject {
     
     init(chatService: ChatService) {
         self.chatService = chatService
+        self.ttsManager = .shared
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
         
         setupSubscriptions()
@@ -320,7 +326,9 @@ final class ChatViewModel: ObservableObject {
                 self.configuredModels = chatService.configuredRunnableModels
                 self.activatedModels = chatService.activatedRunnableModels
                 self.speechModels = chatService.activatedSpeechModels
+                self.ttsModels = chatService.activatedTTSModels
                 self.syncSpeechModelSelection()
+                self.syncTTSModelSelection()
                 self.syncEmbeddingModelSelection()
                 self.syncTitleGenerationModelSelection()
             }
@@ -348,6 +356,7 @@ final class ChatViewModel: ObservableObject {
                     endBackgroundTaskIfNeeded()
                     if case .finished = status {
                         notifyIfAssistantReplyFinishedInBackground()
+                        autoPlayLatestAssistantMessageIfNeeded()
                     } else {
                         pendingBackgroundReplyNotificationContext = nil
                     }
@@ -409,8 +418,19 @@ final class ChatViewModel: ObservableObject {
                 self?.refreshBackgroundImages()
             }
             .store(in: &cancellables)
+
+        ttsManager.$isSpeaking
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] speaking in
+                guard let self else { return }
+                if !speaking {
+                    self.ttsManager.updateSelectedModel(self.selectedTTSModel)
+                }
+            }
+            .store(in: &cancellables)
         
         syncSpeechModelSelection()
+        syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
     }
@@ -609,6 +629,15 @@ final class ChatViewModel: ObservableObject {
             speechModelIdentifier = newIdentifier
         }
     }
+
+    func setSelectedTTSModel(_ model: RunnableModel?) {
+        selectedTTSModel = model
+        let newIdentifier = model?.id ?? ""
+        if ttsModelIdentifier != newIdentifier {
+            ttsModelIdentifier = newIdentifier
+        }
+        ttsManager.updateSelectedModel(model)
+    }
     
     func setSelectedEmbeddingModel(_ model: RunnableModel?) {
         selectedEmbeddingModel = model
@@ -655,6 +684,28 @@ final class ChatViewModel: ObservableObject {
         
         selectedSpeechModel = nil
         speechModelIdentifier = ""
+    }
+
+    private func syncTTSModelSelection() {
+        if let match = ttsModels.first(where: { $0.id == ttsModelIdentifier }) {
+            if selectedTTSModel?.id != match.id {
+                selectedTTSModel = match
+            }
+            ttsManager.updateSelectedModel(match)
+            return
+        }
+
+        guard !ttsModelIdentifier.isEmpty else {
+            selectedTTSModel = nil
+            ttsManager.updateSelectedModel(nil)
+            return
+        }
+
+        guard !ttsModels.isEmpty else { return }
+
+        selectedTTSModel = nil
+        ttsModelIdentifier = ""
+        ttsManager.updateSelectedModel(nil)
     }
     
     private func syncEmbeddingModelSelection() {
@@ -712,6 +763,34 @@ final class ChatViewModel: ObservableObject {
     
     func addErrorMessage(_ content: String) {
         chatService.addErrorMessage(content)
+    }
+
+    func speakMessage(_ message: ChatMessage) {
+        guard message.role == .assistant || message.role == .tool || message.role == .system else { return }
+        let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return }
+        ttsManager.updateSelectedModel(selectedTTSModel)
+        ttsManager.speak(content, messageID: message.id, flush: true)
+    }
+
+    func stopSpeakingMessage() {
+        ttsManager.stop()
+    }
+
+    func pauseSpeakingMessage() {
+        ttsManager.pause()
+    }
+
+    func resumeSpeakingMessage() {
+        ttsManager.resume()
+    }
+
+    func fastForwardSpeaking(by seconds: TimeInterval = 5) {
+        ttsManager.seekBy(seconds: seconds)
+    }
+
+    func setSpeakingSpeed(_ speed: Float) {
+        ttsManager.setPlaybackSpeed(speed)
     }
     
     func retryLastMessage() {
@@ -1247,6 +1326,20 @@ final class ChatViewModel: ObservableObject {
             )
         }
 #endif
+    }
+
+    private func autoPlayLatestAssistantMessageIfNeeded() {
+        let settings = TTSSettingsStore.shared.snapshot
+        guard settings.autoPlayAfterAssistantResponse else { return }
+        guard let latest = allMessagesForSession.last(where: { $0.role == .assistant }) else { return }
+        guard !latest.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard latest.id != lastAutoPlayedAssistantMessageID else { return }
+        if ttsManager.currentSpeakingMessageID == latest.id, ttsManager.isSpeaking {
+            return
+        }
+        lastAutoPlayedAssistantMessageID = latest.id
+        ttsManager.updateSelectedModel(selectedTTSModel)
+        ttsManager.speak(latest.content, messageID: latest.id, flush: true)
     }
 
     private var isApplicationInBackground: Bool {

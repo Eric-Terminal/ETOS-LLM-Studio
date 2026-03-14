@@ -48,6 +48,7 @@ struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @ObservedObject private var ttsManager = TTSManager.shared
     @State private var showScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     @State private var navigationDestination: ChatNavigationDestination?
@@ -240,6 +241,12 @@ struct ChatView: View {
                     }
                     .allowsHitTesting(!isOverlayPanelPresented)
                 }
+
+                VStack {
+                    Spacer()
+                    TTSFloatingController()
+                }
+                .animation(.easeInOut(duration: 0.2), value: ttsManager.isSpeaking)
 
                 if showModelPickerPanel {
                     modelPickerOverlay
@@ -1153,6 +1160,21 @@ struct ChatView: View {
             showBranchOptions = true
         } label: {
             Label("从此处创建分支", systemImage: "arrow.triangle.branch")
+        }
+
+        if message.role == .assistant || message.role == .tool || message.role == .system {
+            Button {
+                if ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking {
+                    viewModel.stopSpeakingMessage()
+                } else {
+                    viewModel.speakMessage(message)
+                }
+            } label: {
+                Label(
+                    ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "停止朗读" : "朗读消息",
+                    systemImage: ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "stop.circle" : "speaker.wave.2"
+                )
+            }
         }
         
         Divider()

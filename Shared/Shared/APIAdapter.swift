@@ -208,6 +208,9 @@ public class OpenAIAdapter: APIAdapter {
     private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
         let lowered = modelName.lowercased()
         var capabilities: [Model.Capability] = [.chat]
+        if lowered.contains("tts") || lowered.contains("text-to-speech") || lowered.contains("speech") {
+            capabilities.append(.textToSpeech)
+        }
         if lowered.contains("gpt-image") || lowered.contains("image") || lowered.contains("dall") {
             capabilities.append(.imageGeneration)
         }
@@ -1214,6 +1217,9 @@ public class GeminiAdapter: APIAdapter {
     private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
         let lowered = modelName.lowercased()
         var capabilities: [Model.Capability] = [.chat]
+        if lowered.contains("tts") || lowered.contains("speech") {
+            capabilities.append(.textToSpeech)
+        }
         if lowered.contains("imagen") || lowered.contains("image") {
             capabilities.append(.imageGeneration)
         }

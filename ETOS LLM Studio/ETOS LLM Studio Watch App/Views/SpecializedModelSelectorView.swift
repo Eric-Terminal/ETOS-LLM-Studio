@@ -27,6 +27,13 @@ struct SpecializedModelSelectorView: View {
         )
     }
 
+    private var ttsModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedTTSModel },
+            set: { viewModel.setSelectedTTSModel($0) }
+        )
+    }
+
     private var titleModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.selectedTitleGenerationModel },
@@ -48,6 +55,13 @@ struct SpecializedModelSelectorView: View {
                 options: viewModel.speechModels,
                 selection: speechModelBinding,
                 footer: "用于语音转文字，也可在模型高级设置中修改。"
+            )
+
+            modelSelectionSection(
+                title: "TTS 模型",
+                options: viewModel.ttsModels,
+                selection: ttsModelBinding,
+                footer: "用于文字转语音，也可在 TTS 设置中修改。"
             )
 
             modelSelectionSection(

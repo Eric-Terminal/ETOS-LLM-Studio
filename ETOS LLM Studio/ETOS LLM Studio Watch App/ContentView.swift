@@ -93,6 +93,11 @@ struct ContentView: View {
                     viewModel.saveCurrentSessionDetails()
                 }
             }
+
+            VStack {
+                Spacer()
+                TTSFloatingController()
+            }
         }
     }
     
@@ -230,6 +235,12 @@ struct ContentView: View {
                     },
                     onRetry: { message in
                         viewModel.retryMessage(message)
+                    },
+                    onSpeak: { message in
+                        viewModel.speakMessage(message)
+                    },
+                    onStopSpeaking: {
+                        viewModel.stopSpeakingMessage()
                     },
                     onDelete: {
                         viewModel.deleteMessage(message)
