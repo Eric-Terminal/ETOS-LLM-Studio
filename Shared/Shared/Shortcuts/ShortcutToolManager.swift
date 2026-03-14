@@ -16,6 +16,7 @@ import WatchKit
 @MainActor
 public final class ShortcutToolManager: ObservableObject {
     public static let shared = ShortcutToolManager()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
 
     public nonisolated static var toolNamePrefix: String { "shortcut://" }
     public nonisolated static var toolAliasPrefix: String { ShortcutToolNaming.toolAliasPrefix }

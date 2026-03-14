@@ -210,6 +210,7 @@ struct ContentView: View {
             enableBackground: viewModel.enableBackground,
             enableLiquidGlass: isLiquidGlassEnabled,
             enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
+            enableExperimentalToolResultDisplay: viewModel.enableExperimentalToolResultDisplay,
             enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
             showsStreamingIndicators: showsStreamingIndicators,
             mergeWithPrevious: mergeWithPrevious,

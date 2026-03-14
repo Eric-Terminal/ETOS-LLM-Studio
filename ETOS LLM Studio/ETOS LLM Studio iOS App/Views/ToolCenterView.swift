@@ -125,7 +125,9 @@ struct ToolCenterView: View {
 
     private var availableAppToolCount: Int {
         guard appToolManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
-        return configuredAppToolCount
+        return appToolManager.tools.filter {
+            $0.isEnabled && appToolManager.approvalPolicy(for: $0.kind) != .alwaysDeny
+        }.count
     }
 
     private var availableMCPCount: Int {
@@ -221,7 +223,7 @@ struct ToolCenterView: View {
     private var appToolSection: some View {
         Section(
             header: Text(NSLocalizedString("拓展工具", comment: "App tools section title")),
-            footer: Text(NSLocalizedString("这里用于承接后续要给 AI 写的本地工具，默认关闭，开启后才会暴露给模型。", comment: "App tools footer"))
+            footer: Text(NSLocalizedString("这里用于承接后续要给 AI 写的本地工具，可按工具单独设置审批策略与自动同意行为。", comment: "App tools footer"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         ) {
@@ -495,19 +497,25 @@ struct ToolCenterView: View {
     }
 
     private func appToolStatusText(for item: AppToolCatalogItem) -> String {
+        let policy = appToolManager.approvalPolicy(for: item.kind)
         if currentSessionIsolationActive {
             return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
         }
         if !appToolManager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
         }
-        return item.isEnabled
-            ? NSLocalizedString("该工具当前可参与聊天。", comment: "Tool available in chat")
-            : NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
+        if !item.isEnabled {
+            return NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
+        }
+        if policy == .alwaysDeny {
+            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        return policy.displayName
     }
 
     private func appToolStatusColor(for item: AppToolCatalogItem) -> Color {
-        if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || !item.isEnabled {
+        let policy = appToolManager.approvalPolicy(for: item.kind)
+        if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || !item.isEnabled || policy == .alwaysDeny {
             return .secondary
         }
         return .green
@@ -857,6 +865,7 @@ private struct AppToolCenterDetailView: View {
     let currentSessionIsolationActive: Bool
 
     @ObservedObject private var manager = AppToolManager.shared
+    @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
 
     var body: some View {
         List {
@@ -888,6 +897,57 @@ private struct AppToolCenterDetailView: View {
                 )
             }
 
+            Section(
+                header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
+                footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
+                    ForEach(AppToolApprovalPolicy.allCases, id: \.self) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            Section(
+                header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
+                footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("全局启用倒计时自动同意", comment: "Enable global auto approve"),
+                    isOn: Binding(
+                        get: { permissionCenter.autoApproveEnabled },
+                        set: { permissionCenter.setAutoApproveEnabled($0) }
+                    )
+                )
+
+                Stepper(
+                    value: Binding(
+                        get: { permissionCenter.autoApproveCountdownSeconds },
+                        set: { permissionCenter.setAutoApproveCountdownSeconds($0) }
+                    ),
+                    in: 1...30
+                ) {
+                    Text(
+                        String(
+                            format: NSLocalizedString("倒计时：%ds", comment: "Auto approve countdown value"),
+                            permissionCenter.autoApproveCountdownSeconds
+                        )
+                    )
+                }
+                .disabled(!permissionCenter.autoApproveEnabled)
+
+                Toggle(
+                    NSLocalizedString("允许该工具自动同意", comment: "Allow auto approve for this tool"),
+                    isOn: autoApproveToolBinding
+                )
+                .disabled(!permissionCenter.autoApproveEnabled)
+            }
+
             Section(NSLocalizedString("工具描述", comment: "Tool description section")) {
                 Text(kind.detailDescription)
                     .font(.footnote)
@@ -904,16 +964,39 @@ private struct AppToolCenterDetailView: View {
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
         }
-        return manager.isToolEnabled(kind)
-            ? NSLocalizedString("该工具当前可参与聊天。", comment: "Tool available in chat")
-            : NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
+        if !manager.isToolEnabled(kind) {
+            return NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
+        }
+        if manager.approvalPolicy(for: kind) == .alwaysDeny {
+            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        return manager.approvalPolicy(for: kind).displayName
     }
 
     private var currentStatusColor: Color {
-        if currentSessionIsolationActive || !manager.chatToolsEnabled || !manager.isToolEnabled(kind) {
+        if currentSessionIsolationActive
+            || !manager.chatToolsEnabled
+            || !manager.isToolEnabled(kind)
+            || manager.approvalPolicy(for: kind) == .alwaysDeny {
             return .secondary
         }
         return .green
+    }
+
+    private var toolApprovalPolicyBinding: Binding<AppToolApprovalPolicy> {
+        Binding {
+            manager.approvalPolicy(for: kind)
+        } set: { newValue in
+            manager.setToolApprovalPolicy(kind: kind, policy: newValue)
+        }
+    }
+
+    private var autoApproveToolBinding: Binding<Bool> {
+        Binding {
+            !permissionCenter.isAutoApproveDisabled(for: kind.toolName)
+        } set: { isEnabled in
+            permissionCenter.setAutoApproveDisabled(!isEnabled, for: kind.toolName)
+        }
     }
 }
 

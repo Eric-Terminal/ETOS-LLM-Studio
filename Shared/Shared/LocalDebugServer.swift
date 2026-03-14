@@ -20,6 +20,8 @@ import WatchKit
 /// 反向探针调试客户端
 @MainActor
 public class LocalDebugServer: ObservableObject {
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
+
     public struct OpenAIRequestSummary: Identifiable, Hashable {
         public let id: UUID
         public let model: String?

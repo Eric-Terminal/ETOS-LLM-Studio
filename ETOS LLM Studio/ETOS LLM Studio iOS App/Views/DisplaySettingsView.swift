@@ -19,6 +19,7 @@ struct DisplaySettingsView: View {
     @Binding var backgroundContentMode: String
     @Binding var enableLiquidGlass: Bool
     @Binding var enableAdvancedRenderer: Bool
+    @Binding var enableExperimentalToolResultDisplay: Bool
     
     let allBackgrounds: [String]
     
@@ -32,6 +33,10 @@ struct DisplaySettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                Toggle("增强工具结果显示（实验性）", isOn: $enableExperimentalToolResultDisplay)
+                Text("启用后会优先提取工具结果正文并折叠原始 JSON；关闭后恢复为原始结果文本展示。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 if #available(iOS 26.0, *) {
                     Toggle("液态玻璃效果", isOn: $enableLiquidGlass)
                 }

@@ -18,11 +18,16 @@ import os.log
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
 @MainActor
 final class ChatViewModel: ObservableObject {
+    nonisolated let objectWillChange = ObservableObjectPublisher()
+
     // MARK: - Published UI State
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
@@ -70,6 +75,7 @@ final class ChatViewModel: ObservableObject {
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
     @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false
+    @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }
@@ -101,6 +107,16 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
+    @AppStorage("enableBackgroundReplyNotification") var enableBackgroundReplyNotification: Bool = true {
+        didSet {
+#if canImport(UserNotifications)
+            guard enableBackgroundReplyNotification else { return }
+            Task {
+                _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
+            }
+#endif
+        }
+    }
     
     var audioRecordingFormat: AudioRecordingFormat {
         get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
@@ -160,6 +176,12 @@ final class ChatViewModel: ObservableObject {
         return cache
     }()
     private var backgroundBlurTask: Task<Void, Never>?
+    private var isApplicationActive: Bool = true
+    private var pendingBackgroundReplyNotificationContext: PendingBackgroundReplyNotificationContext?
+    private var lastNotifiedAssistantMarker: AssistantReplyMarker?
+#if canImport(UIKit)
+    private var activeBackgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
+#endif
 
     enum ImageGenerationFeedbackPhase {
         case idle
@@ -188,6 +210,20 @@ final class ChatViewModel: ObservableObject {
             referenceCount: 0
         )
     }
+
+    private struct AssistantReplyMarker: Equatable {
+        let id: UUID
+        let versionIndex: Int
+        let normalizedContent: String
+        let imageCount: Int
+        let hasAudio: Bool
+        let fileCount: Int
+    }
+
+    private struct PendingBackgroundReplyNotificationContext {
+        let baselineMarker: AssistantReplyMarker?
+        let sessionName: String?
+    }
     
     // MARK: - Init
     
@@ -207,6 +243,25 @@ final class ChatViewModel: ObservableObject {
     
     private func registerLifecycleObservers() {
 #if canImport(UIKit)
+        isApplicationActive = UIApplication.shared.applicationState == .active
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillResignActive),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDidBecomeActive),
@@ -215,8 +270,21 @@ final class ChatViewModel: ObservableObject {
         )
 #endif
     }
-    
+
+    @objc private func handleWillResignActive() {
+        isApplicationActive = false
+    }
+
+    @objc private func handleDidEnterBackground() {
+        isApplicationActive = false
+    }
+
+    @objc private func handleWillEnterForeground() {
+        isApplicationActive = false
+    }
+
     @objc private func handleDidBecomeActive() {
+        isApplicationActive = true
         // 预留: 恢复 UI 或触发刷新
     }
     
@@ -273,10 +341,20 @@ final class ChatViewModel: ObservableObject {
                 switch status {
                 case .started:
                     isSendingMessage = true
+                    beginBackgroundTaskIfNeeded()
+                    prepareBackgroundReplyNotificationContext()
                 case .finished, .error, .cancelled:
                     isSendingMessage = false
+                    endBackgroundTaskIfNeeded()
+                    if case .finished = status {
+                        notifyIfAssistantReplyFinishedInBackground()
+                    } else {
+                        pendingBackgroundReplyNotificationContext = nil
+                    }
                 @unknown default:
                     isSendingMessage = false
+                    endBackgroundTaskIfNeeded()
+                    pendingBackgroundReplyNotificationContext = nil
                 }
             }
             .store(in: &cancellables)
@@ -616,6 +694,21 @@ final class ChatViewModel: ObservableObject {
         selectedTitleGenerationModel = nil
         titleGenerationModelIdentifier = ""
     }
+
+    func requestBackgroundReplyNotificationPermission() {
+#if canImport(UserNotifications)
+        Task {
+            _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
+        }
+#endif
+    }
+
+    func openSystemNotificationSettings() {
+#if canImport(UIKit)
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+#endif
+    }
     
     func addErrorMessage(_ content: String) {
         chatService.addErrorMessage(content)
@@ -882,7 +975,7 @@ final class ChatViewModel: ObservableObject {
                 errorMessage: nil,
                 referenceCount: imageGenerationFeedback.referenceCount
             )
-        default:
+        @unknown default:
             imageGenerationFeedback = .idle
         }
     }
@@ -1117,6 +1210,174 @@ final class ChatViewModel: ObservableObject {
             }
         )
     }
+
+    private func prepareBackgroundReplyNotificationContext() {
+        let baseline = latestAssistantReplyMarker(from: allMessagesForSession)
+        pendingBackgroundReplyNotificationContext = PendingBackgroundReplyNotificationContext(
+            baselineMarker: baseline,
+            sessionName: currentSession?.name
+        )
+    }
+
+    private func notifyIfAssistantReplyFinishedInBackground() {
+        guard enableBackgroundReplyNotification else {
+            pendingBackgroundReplyNotificationContext = nil
+            return
+        }
+        guard isApplicationInBackground else {
+            pendingBackgroundReplyNotificationContext = nil
+            return
+        }
+        guard let context = pendingBackgroundReplyNotificationContext else { return }
+        pendingBackgroundReplyNotificationContext = nil
+
+        guard let latestMarker = latestAssistantReplyMarker(from: allMessagesForSession) else { return }
+        guard latestMarker != context.baselineMarker else { return }
+        guard latestMarker != lastNotifiedAssistantMarker else { return }
+        lastNotifiedAssistantMarker = latestMarker
+
+        let snippet = notificationSnippet(for: latestMarker)
+#if canImport(UserNotifications)
+        Task {
+            guard await requestBackgroundReplyNotificationAuthorizationIfNeeded() else { return }
+            await postBackgroundReplyLocalNotification(
+                sessionName: context.sessionName,
+                snippet: snippet,
+                messageID: latestMarker.id
+            )
+        }
+#endif
+    }
+
+    private var isApplicationInBackground: Bool {
+#if canImport(UIKit)
+        return UIApplication.shared.applicationState != .active || !isApplicationActive
+#else
+        return false
+#endif
+    }
+
+    private func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {
+        for message in messages.reversed() where message.role == .assistant {
+            let normalizedText = normalizedNotificationText(message.content)
+            let imageCount = message.imageFileNames?.count ?? 0
+            let hasAudio = message.audioFileName != nil
+            let fileCount = message.fileFileNames?.count ?? 0
+            if normalizedText.isEmpty && imageCount == 0 && !hasAudio && fileCount == 0 {
+                continue
+            }
+            return AssistantReplyMarker(
+                id: message.id,
+                versionIndex: message.getCurrentVersionIndex(),
+                normalizedContent: normalizedText,
+                imageCount: imageCount,
+                hasAudio: hasAudio,
+                fileCount: fileCount
+            )
+        }
+        return nil
+    }
+
+    private func notificationSnippet(for marker: AssistantReplyMarker) -> String {
+        if !marker.normalizedContent.isEmpty {
+            return truncatedText(marker.normalizedContent, maxLength: 80)
+        }
+        if marker.imageCount > 0 {
+            return NSLocalizedString("你收到了新的图片回复。", comment: "Background reply notification fallback for image response")
+        }
+        if marker.hasAudio {
+            return NSLocalizedString("你收到了新的语音回复。", comment: "Background reply notification fallback for audio response")
+        }
+        if marker.fileCount > 0 {
+            return NSLocalizedString("你收到了新的文件回复。", comment: "Background reply notification fallback for file response")
+        }
+        return NSLocalizedString("你收到了新的回复。", comment: "Background reply notification fallback for generic response")
+    }
+
+    private func normalizedNotificationText(_ text: String) -> String {
+        let collapsed = text
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return collapsed
+    }
+
+    private func truncatedText(_ text: String, maxLength: Int) -> String {
+        guard text.count > maxLength else { return text }
+        return String(text.prefix(maxLength - 1)) + "…"
+    }
+
+#if canImport(UIKit)
+    private func beginBackgroundTaskIfNeeded() {
+        guard activeBackgroundTaskIdentifier == .invalid else { return }
+        activeBackgroundTaskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "chat.reply.background") { [weak self] in
+            guard let self else { return }
+            self.endBackgroundTaskIfNeeded()
+        }
+    }
+
+    private func endBackgroundTaskIfNeeded() {
+        guard activeBackgroundTaskIdentifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(activeBackgroundTaskIdentifier)
+        activeBackgroundTaskIdentifier = .invalid
+    }
+#else
+    private func beginBackgroundTaskIfNeeded() {}
+    private func endBackgroundTaskIfNeeded() {}
+#endif
+
+#if canImport(UserNotifications)
+    private func requestBackgroundReplyNotificationAuthorizationIfNeeded() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await withCheckedContinuation { continuation in
+            center.getNotificationSettings { continuation.resume(returning: $0) }
+        }
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .denied:
+            return false
+        case .notDetermined:
+            return await withCheckedContinuation { continuation in
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                    continuation.resume(returning: granted)
+                }
+            }
+        @unknown default:
+            return false
+        }
+    }
+
+    private func postBackgroundReplyLocalNotification(sessionName: String?, snippet: String, messageID: UUID) async {
+        let content = UNMutableNotificationContent()
+        content.title = NSLocalizedString("AI 回复已完成", comment: "Background reply notification title")
+        if let sessionName, !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            content.body = String(
+                format: NSLocalizedString("会话“%@”已收到新回复：%@", comment: "Background reply notification body with session name"),
+                sessionName,
+                snippet
+            )
+        } else {
+            content.body = String(
+                format: NSLocalizedString("已收到新回复：%@", comment: "Background reply notification body without session name"),
+                snippet
+            )
+        }
+        content.sound = .default
+        content.threadIdentifier = "chat.reply.finished"
+
+        let request = UNNotificationRequest(
+            identifier: "chat.reply.finished.\(messageID.uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().add(request) { _ in
+                continuation.resume(returning: ())
+            }
+        }
+    }
+#endif
 
     private func loadBackgroundImage(named name: String) -> UIImage? {
         if let cached = backgroundImageCache.object(forKey: name as NSString) {

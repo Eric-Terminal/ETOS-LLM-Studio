@@ -162,6 +162,7 @@ struct SettingsView: View {
                         backgroundContentMode: $viewModel.backgroundContentMode,
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
+                        enableExperimentalToolResultDisplay: $viewModel.enableExperimentalToolResultDisplay,
                         allBackgrounds: viewModel.backgroundImages
                     )
                 } label: {
@@ -179,6 +180,31 @@ struct SettingsView: View {
                 } label: {
                     Label("关于 ETOS LLM Studio", systemImage: "info.circle")
                 }
+            }
+
+            Section {
+                Toggle(
+                    NSLocalizedString("后台收到 AI 回复后通知我", comment: "Toggle for background AI reply notification"),
+                    isOn: $viewModel.enableBackgroundReplyNotification
+                )
+
+                Button(NSLocalizedString("请求通知权限", comment: "Request notification permission button")) {
+                    viewModel.requestBackgroundReplyNotificationPermission()
+                }
+                .disabled(!viewModel.enableBackgroundReplyNotification)
+
+                Button(NSLocalizedString("打开系统通知设置", comment: "Open system notification settings button")) {
+                    viewModel.openSystemNotificationSettings()
+                }
+            } header: {
+                Text(NSLocalizedString("后台通知", comment: "Background notification section title"))
+            } footer: {
+                Text(
+                    NSLocalizedString(
+                        "当应用在后台完成回复时，发送系统通知提醒。",
+                        comment: "Background AI reply notification section footer"
+                    )
+                )
             }
             
             // MARK: - 公告通知 Section

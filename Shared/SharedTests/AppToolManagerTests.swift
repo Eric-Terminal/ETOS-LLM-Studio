@@ -19,10 +19,12 @@ struct AppToolManagerTests {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
-                enabledKinds: originalEnabledKinds
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
             )
         }
 
@@ -59,10 +61,12 @@ struct AppToolManagerTests {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
-                enabledKinds: originalEnabledKinds
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
             )
         }
 
@@ -74,6 +78,61 @@ struct AppToolManagerTests {
         let tools = manager.chatToolsForLLM()
         #expect(tools.count == 1)
         #expect(tools.first?.name == AppToolKind.echoText.toolName)
+        #expect(tools.first?.isBlocking == true)
+    }
+
+    @MainActor
+    @Test("始终拒绝策略会阻止拓展工具暴露给模型")
+    func testAlwaysDenyPolicyHidesToolFromLLMExposure() {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.echoText],
+            approvalPolicies: [.echoText: .alwaysDeny]
+        )
+
+        #expect(manager.approvalPolicy(for: .echoText) == .alwaysDeny)
+        #expect(manager.chatToolsForLLM().isEmpty)
+    }
+
+    @MainActor
+    @Test("始终拒绝策略会阻止拓展工具执行")
+    func testAlwaysDenyPolicyBlocksExecution() async {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.echoText],
+            approvalPolicies: [.echoText: .alwaysDeny]
+        )
+
+        await #expect(throws: AppToolExecutionError.self) {
+            _ = try await manager.executeToolFromChat(
+                toolName: AppToolKind.echoText.toolName,
+                argumentsJSON: #"{"text":"测试文本"}"#
+            )
+        }
     }
 
     @MainActor
@@ -82,10 +141,12 @@ struct AppToolManagerTests {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
-                enabledKinds: originalEnabledKinds
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
             )
         }
 
@@ -100,5 +161,43 @@ struct AppToolManagerTests {
         )
 
         #expect(result == "文本回显结果：测试文本")
+    }
+
+    @Test("当前会话文件路径命中时应触发会话刷新判断")
+    func testShouldRefreshCurrentSessionMessagesWhenCurrentSessionFileMutated() {
+        let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let shouldRefresh = AppToolManager.shouldRefreshCurrentSessionMessages(
+            afterMutatingPaths: [
+                "Documents/ChatSessions/sessions/\(sessionID.uuidString.lowercased()).json",
+                "Documents/Other/file.txt"
+            ],
+            currentSessionID: sessionID
+        )
+        #expect(shouldRefresh)
+    }
+
+    @Test("旧版会话文件路径命中时也应触发会话刷新判断")
+    func testShouldRefreshCurrentSessionMessagesWhenLegacySessionFileMutated() {
+        let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let shouldRefresh = AppToolManager.shouldRefreshCurrentSessionMessages(
+            afterMutatingPaths: [
+                "ChatSessions/\(sessionID.uuidString).json"
+            ],
+            currentSessionID: sessionID
+        )
+        #expect(shouldRefresh)
+    }
+
+    @Test("非当前会话文件变更不应触发会话刷新判断")
+    func testShouldNotRefreshCurrentSessionMessagesForUnrelatedMutation() {
+        let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let shouldRefresh = AppToolManager.shouldRefreshCurrentSessionMessages(
+            afterMutatingPaths: [
+                "Documents/ChatSessions/sessions/FFFFFFFF-1111-2222-3333-444444444444.json",
+                "Documents/Memory/index.json"
+            ],
+            currentSessionID: sessionID
+        )
+        #expect(!shouldRefresh)
     }
 }

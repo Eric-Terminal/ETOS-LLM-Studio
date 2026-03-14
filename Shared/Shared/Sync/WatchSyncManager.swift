@@ -27,6 +27,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     }
     
     public static let shared = WatchSyncManager()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
     
     @Published public private(set) var state: SyncState = .idle
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty

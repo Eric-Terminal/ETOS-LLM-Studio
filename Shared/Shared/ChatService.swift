@@ -1081,6 +1081,14 @@ public class ChatService {
         Persistence.saveChatSessions(sessions)
         logger.info("已强制保存所有会话。")
     }
+
+    /// 从持久化层重新加载当前会话消息并刷新 UI，不会触发写盘。
+    public func reloadCurrentSessionMessagesFromPersistence() {
+        guard let currentSession = currentSessionSubject.value else { return }
+        let reloadedMessages = Persistence.loadMessages(for: currentSession.id)
+        publishMessages(reloadedMessages)
+        logger.info("已从持久化层刷新当前会话消息: \(currentSession.id.uuidString)")
+    }
     
     public func setCurrentSession(_ session: ChatSession?) {
         if session?.id == currentSessionSubject.value?.id { return }
@@ -2020,22 +2028,15 @@ public class ChatService {
                 logger.info("  - 拓展工具调用被总开关拒绝: \(toolCall.toolName)")
                 break
             }
-            let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
-                toolName: toolCall.toolName,
-                displayName: toolLabel,
-                arguments: toolCall.arguments
-            )
-            switch permissionDecision {
-            case .deny:
-                content = "\(toolLabel) 调用已被用户拒绝。"
+            let approvalPolicy = await MainActor.run {
+                AppToolManager.shared.approvalPolicy(for: toolCall.toolName) ?? .askEveryTime
+            }
+            switch approvalPolicy {
+            case .alwaysDeny:
+                content = "\(toolLabel) 已被策略禁止调用。"
                 displayResult = content
-                logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
-            case .supplement:
-                content = "\(toolLabel) 调用已被用户拒绝。"
-                displayResult = content
-                shouldAwaitUserSupplement = true
-                logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
-            case .allowOnce, .allowForTool, .allowAll:
+                logger.info("  - 拓展工具调用被策略拒绝: \(toolCall.toolName)")
+            case .alwaysAllow:
                 do {
                     let result = try await AppToolManager.shared.executeToolFromChat(
                         toolName: toolCall.toolName,
@@ -2048,6 +2049,37 @@ public class ChatService {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
                     displayResult = content
                     logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
+                }
+            case .askEveryTime:
+                let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
+                    toolName: toolCall.toolName,
+                    displayName: toolLabel,
+                    arguments: toolCall.arguments
+                )
+                switch permissionDecision {
+                case .deny:
+                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    displayResult = content
+                    logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
+                case .supplement:
+                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    displayResult = content
+                    shouldAwaitUserSupplement = true
+                    logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
+                case .allowOnce, .allowForTool, .allowAll:
+                    do {
+                        let result = try await AppToolManager.shared.executeToolFromChat(
+                            toolName: toolCall.toolName,
+                            argumentsJSON: toolCall.arguments
+                        )
+                        content = result
+                        displayResult = result
+                        logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
+                    } catch {
+                        content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                        displayResult = content
+                        logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
+                    }
                 }
             }
             

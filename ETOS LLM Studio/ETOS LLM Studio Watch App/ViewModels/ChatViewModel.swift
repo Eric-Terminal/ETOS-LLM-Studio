@@ -25,6 +25,8 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatVie
 
 @MainActor
 class ChatViewModel: ObservableObject {
+    nonisolated let objectWillChange = ObservableObjectPublisher()
+
     // MARK: - @Published 属性 (UI 状态)
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
@@ -81,6 +83,7 @@ class ChatViewModel: ObservableObject {
             }
         }
     }
+    @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }
@@ -1025,7 +1028,7 @@ class ChatViewModel: ObservableObject {
                 errorMessage: nil,
                 referenceCount: imageGenerationFeedback.referenceCount
             )
-        default:
+        @unknown default:
             imageGenerationFeedback = .idle
         }
     }

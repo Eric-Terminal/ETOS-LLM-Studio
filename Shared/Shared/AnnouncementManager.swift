@@ -143,6 +143,7 @@ public class AnnouncementManager: ObservableObject {
     // MARK: - 单例
     
     public static let shared = AnnouncementManager()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
     
     // MARK: - Published 属性
     
