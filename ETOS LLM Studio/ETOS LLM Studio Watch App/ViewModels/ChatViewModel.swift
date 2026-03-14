@@ -1278,16 +1278,34 @@ class ChatViewModel: ObservableObject {
 
     private func autoPlayLatestAssistantMessageIfNeeded() {
         let settings = TTSSettingsStore.shared.snapshot
-        guard settings.autoPlayAfterAssistantResponse else { return }
-        guard let latest = allMessagesForSession.last(where: { $0.role == .assistant }) else { return }
-        guard !latest.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        guard latest.id != lastAutoPlayedAssistantMessageID else { return }
-        if ttsManager.currentSpeakingMessageID == latest.id, ttsManager.isSpeaking {
-            return
-        }
+        let latest = allMessagesForSession.last(where: { $0.role == .assistant })
+        guard Self.shouldAutoPlayAssistantMessage(
+            autoPlayEnabled: settings.autoPlayAfterAssistantResponse,
+            latestAssistantMessage: latest,
+            lastAutoPlayedAssistantMessageID: lastAutoPlayedAssistantMessageID,
+            currentSpeakingMessageID: ttsManager.currentSpeakingMessageID,
+            isCurrentlySpeaking: ttsManager.isSpeaking
+        ), let latest else { return }
         lastAutoPlayedAssistantMessageID = latest.id
         ttsManager.updateSelectedModel(selectedTTSModel)
         ttsManager.speak(latest.content, messageID: latest.id, flush: true)
+    }
+
+    nonisolated static func shouldAutoPlayAssistantMessage(
+        autoPlayEnabled: Bool,
+        latestAssistantMessage: ChatMessage?,
+        lastAutoPlayedAssistantMessageID: UUID?,
+        currentSpeakingMessageID: UUID?,
+        isCurrentlySpeaking: Bool
+    ) -> Bool {
+        guard autoPlayEnabled else { return false }
+        guard let latestAssistantMessage else { return false }
+        guard !latestAssistantMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard latestAssistantMessage.id != lastAutoPlayedAssistantMessageID else { return false }
+        if currentSpeakingMessageID == latestAssistantMessage.id, isCurrentlySpeaking {
+            return false
+        }
+        return true
     }
     
     private func startExtendedSession() {

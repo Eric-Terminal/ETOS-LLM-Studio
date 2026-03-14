@@ -13,13 +13,50 @@
 //  Created by Eric on 2026/1/10.
 //
 
+import Foundation
 import Testing
+import Shared
 @testable import ETOS_LLM_Studio_Watch_App
 
 struct ETOS_LLM_Studio_Watch_AppTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    @Test("自动朗读触发条件判断")
+    func testShouldAutoPlayAssistantMessage() {
+        let messageID = UUID()
+        let latestMessage = ChatMessage(id: messageID, role: .assistant, content: "这是一条可朗读回复")
+
+        let shouldAutoPlay = ChatViewModel.shouldAutoPlayAssistantMessage(
+            autoPlayEnabled: true,
+            latestAssistantMessage: latestMessage,
+            lastAutoPlayedAssistantMessageID: nil,
+            currentSpeakingMessageID: nil,
+            isCurrentlySpeaking: false
+        )
+        #expect(shouldAutoPlay)
+
+        let shouldSkipDuplicate = ChatViewModel.shouldAutoPlayAssistantMessage(
+            autoPlayEnabled: true,
+            latestAssistantMessage: latestMessage,
+            lastAutoPlayedAssistantMessageID: messageID,
+            currentSpeakingMessageID: nil,
+            isCurrentlySpeaking: false
+        )
+        #expect(!shouldSkipDuplicate)
+
+        let shouldSkipCurrentlySpeaking = ChatViewModel.shouldAutoPlayAssistantMessage(
+            autoPlayEnabled: true,
+            latestAssistantMessage: latestMessage,
+            lastAutoPlayedAssistantMessageID: nil,
+            currentSpeakingMessageID: messageID,
+            isCurrentlySpeaking: true
+        )
+        #expect(!shouldSkipCurrentlySpeaking)
+    }
+
+    @Test("App 层可调用文本分片函数")
+    func testSplitTextFromAppLayer() {
+        let chunks = TTSManager.splitTextForPlayback("你好世界。今天继续测试分片能力！", maxLength: 6)
+        #expect(chunks == ["你好世界。", "今天继续测试", "分片能力！"])
     }
 
 }

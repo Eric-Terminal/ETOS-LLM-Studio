@@ -1,13 +1,13 @@
 import Foundation
 import Combine
 
-public enum TTSPlaybackMode: String, CaseIterable, Codable {
+public enum TTSPlaybackMode: String, CaseIterable, Codable, Sendable {
     case system
     case cloud
     case auto
 }
 
-public enum TTSProviderKind: String, CaseIterable, Codable {
+public enum TTSProviderKind: String, CaseIterable, Codable, Sendable {
     case openAICompatible = "openai-compatible"
     case gemini
     case qwen
@@ -15,7 +15,7 @@ public enum TTSProviderKind: String, CaseIterable, Codable {
     case groq
 }
 
-public enum TTSPlaybackStatus: String, Codable {
+public enum TTSPlaybackStatus: String, Codable, Sendable {
     case idle
     case buffering
     case playing
@@ -24,7 +24,7 @@ public enum TTSPlaybackStatus: String, Codable {
     case error
 }
 
-public struct TTSPlaybackState: Equatable {
+public struct TTSPlaybackState: Equatable, Sendable {
     public var status: TTSPlaybackStatus = .idle
     public var position: TimeInterval = 0
     public var duration: TimeInterval = 0
@@ -52,7 +52,7 @@ public struct TTSPlaybackState: Equatable {
     }
 }
 
-public struct TTSSettingsSnapshot: Equatable {
+public struct TTSSettingsSnapshot: Equatable, Sendable {
     public var playbackMode: TTSPlaybackMode
     public var providerKind: TTSProviderKind
     public var autoPlayAfterAssistantResponse: Bool

@@ -76,6 +76,14 @@ struct TTSModelSelectionTests {
         #expect(activated.first?.model.modelName == "gpt-4o")
     }
 
+    @Test("文本分片函数会按标点与长度切分")
+    func testSplitTextForPlayback() {
+        let text = "你好世界。今天继续测试分片能力！最后一句"
+        let chunks = TTSManager.splitTextForPlayback(text, maxLength: 6)
+
+        #expect(chunks == ["你好世界。", "今天继续测试", "分片能力！", "最后一句"])
+    }
+
     private func clearAllProviders() {
         let current = ConfigLoader.loadProviders()
         current.forEach { ConfigLoader.deleteProvider($0) }

@@ -20,6 +20,8 @@ public final class TTSManager: NSObject, ObservableObject {
     private var selectedModel: RunnableModel?
     private var queue: [QueueItem] = []
     private var workerTask: Task<Void, Never>?
+    private var prefetchTasks: [UUID: Task<AudioClip, Error>] = [:]
+    private let prefetchWindowSize: Int = 1
     private var isPausedByUser = false
     private var activeBackend: ActiveBackend = .none
 
@@ -50,7 +52,7 @@ public final class TTSManager: NSObject, ObservableObject {
         case cloud
     }
 
-    private struct AudioClip {
+    private struct AudioClip: Sendable {
         var data: Data
         var format: String
         var sampleRate: Int?
@@ -77,6 +79,7 @@ public final class TTSManager: NSObject, ObservableObject {
             workerTask?.cancel()
             workerTask = nil
             stopCurrentPlayback(clearQueueOnly: true)
+            clearPrefetchState()
             queue = []
             playbackState.currentChunkIndex = 0
             playbackState.totalChunks = 0
@@ -135,6 +138,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
     public func stop() {
         stopCurrentPlayback(clearQueueOnly: false)
+        clearPrefetchState()
         queue = []
         workerTask?.cancel()
         workerTask = nil
@@ -185,19 +189,22 @@ public final class TTSManager: NSObject, ObservableObject {
 
             do {
                 let effectiveMode = resolvePlaybackMode(settings.playbackMode)
+                if effectiveMode != .cloud {
+                    clearPrefetchState()
+                }
                 switch effectiveMode {
                 case .system, .auto:
                     do {
                         try await speakBySystem(item.text, settings: settings)
                     } catch {
                         if settings.playbackMode == .auto {
-                            try await speakByCloud(item.text, settings: settings)
+                            try await speakByCloud(item, settings: settings)
                         } else {
                             throw error
                         }
                     }
                 case .cloud:
-                    try await speakByCloud(item.text, settings: settings)
+                    try await speakByCloud(item, settings: settings)
                 }
             } catch {
                 if error is CancellationError || Task.isCancelled {
@@ -220,6 +227,7 @@ public final class TTSManager: NSObject, ObservableObject {
         isSpeaking = false
         currentSpeakingMessageID = nil
         activeBackend = .none
+        clearPrefetchState()
         workerTask = nil
     }
 
@@ -240,13 +248,52 @@ public final class TTSManager: NSObject, ObservableObject {
 #endif
     }
 
-    private func speakByCloud(_ text: String, settings: TTSSettingsSnapshot) async throws {
+    private func speakByCloud(_ item: QueueItem, settings: TTSSettingsSnapshot) async throws {
+        let candidates = [item] + Array(queue.prefix(prefetchWindowSize))
+        scheduleCloudPrefetch(for: candidates, settings: settings)
+        let clip = try await resolveCloudClip(for: item, settings: settings)
+        try await playAudio(clip: clip, speed: settings.playbackSpeed)
+    }
+
+    private func resolveCloudClip(for item: QueueItem, settings: TTSSettingsSnapshot) async throws -> AudioClip {
+        if let task = prefetchTasks[item.id] {
+            prefetchTasks.removeValue(forKey: item.id)
+            return try await task.value
+        }
+
+        let model = try resolveCloudModel()
+        return try await synthesizeCloudAudio(text: item.text, settings: settings, model: model)
+    }
+
+    private func scheduleCloudPrefetch(for candidates: [QueueItem], settings: TTSSettingsSnapshot) {
+        guard !candidates.isEmpty else { return }
+
+        for item in candidates {
+            if prefetchTasks[item.id] != nil {
+                continue
+            }
+
+            let text = item.text
+            prefetchTasks[item.id] = Task { [weak self] in
+                guard let self else { throw CancellationError() }
+                let model = try self.resolveCloudModel()
+                return try await self.synthesizeCloudAudio(text: text, settings: settings, model: model)
+            }
+        }
+    }
+
+    private func clearPrefetchState() {
+        for task in prefetchTasks.values {
+            task.cancel()
+        }
+        prefetchTasks.removeAll()
+    }
+
+    private func resolveCloudModel() throws -> RunnableModel {
         guard let model = selectedModel ?? ChatService.shared.resolveSelectedTTSModel() else {
             throw NSError(domain: "TTS", code: -1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未选择可用的 TTS 模型。", comment: "")])
         }
-
-        let clip = try await synthesizeCloudAudio(text: text, settings: settings, model: model)
-        try await playAudio(clip: clip, speed: settings.playbackSpeed)
+        return model
     }
 
     private func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
@@ -529,6 +576,10 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     private func splitText(_ text: String, maxLength: Int = 160) -> [String] {
+        Self.splitTextForPlayback(text, maxLength: maxLength)
+    }
+
+    public nonisolated static func splitTextForPlayback(_ text: String, maxLength: Int = 160) -> [String] {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
 
         let punctuation = CharacterSet(charactersIn: "。！？；!?;\n")
