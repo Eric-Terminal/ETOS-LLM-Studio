@@ -12,7 +12,7 @@ import Foundation
 @MainActor
 public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public let id: UUID
-    public let objectWillChange = ObservableObjectPublisher()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
     @Published public private(set) var message: ChatMessage
     
     public init(message: ChatMessage) {

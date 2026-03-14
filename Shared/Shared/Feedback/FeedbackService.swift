@@ -72,7 +72,7 @@ public enum FeedbackServiceError: LocalizedError {
 @MainActor
 public final class FeedbackService: ObservableObject {
     public static let shared = FeedbackService()
-    public let objectWillChange = ObservableObjectPublisher()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
 
     @Published public private(set) var tickets: [FeedbackTicket] = []
     @Published public private(set) var isSubmitting = false

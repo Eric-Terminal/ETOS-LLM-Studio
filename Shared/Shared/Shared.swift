@@ -35,7 +35,7 @@ public struct ToolPermissionRequest: Identifiable, Equatable {
 @MainActor
 public final class ToolPermissionCenter: ObservableObject {
     public static let shared = ToolPermissionCenter()
-    public let objectWillChange = ObservableObjectPublisher()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
     
     @Published public private(set) var activeRequest: ToolPermissionRequest?
     @Published public private(set) var autoApproveEnabled: Bool

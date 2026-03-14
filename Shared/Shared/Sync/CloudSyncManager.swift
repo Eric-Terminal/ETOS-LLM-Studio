@@ -71,7 +71,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public static let shared = CloudSyncManager()
-    public let objectWillChange = ObservableObjectPublisher()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
     public static let enabledKey = "cloudSync.enabled"
     public static let autoSyncEnabledKey = "cloudSync.autoSyncEnabled"
 

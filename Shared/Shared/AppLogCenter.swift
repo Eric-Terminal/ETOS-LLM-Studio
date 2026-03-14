@@ -123,7 +123,7 @@ public enum AppLog {
 @MainActor
 public final class AppLogCenter: ObservableObject {
     public static let shared = AppLogCenter()
-    public let objectWillChange = ObservableObjectPublisher()
+    public nonisolated let objectWillChange = ObservableObjectPublisher()
 
     @Published public private(set) var developerLogs: [AppLogEvent] = []
     @Published public private(set) var userLogs: [AppLogEvent] = []
