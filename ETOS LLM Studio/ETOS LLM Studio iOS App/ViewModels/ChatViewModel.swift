@@ -121,6 +121,7 @@ final class ChatViewModel: ObservableObject {
 #endif
         }
     }
+    @AppStorage("hasRequestedBackgroundReplyNotificationPermission") var hasRequestedBackgroundReplyNotificationPermission: Bool = false
     
     var audioRecordingFormat: AudioRecordingFormat {
         get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
@@ -246,6 +247,9 @@ final class ChatViewModel: ObservableObject {
         rotateBackgroundImageIfNeeded()
         registerLifecycleObservers()
         refreshBlurredBackgroundImage()
+#if canImport(UserNotifications)
+        requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded()
+#endif
     }
     
     private func registerLifecycleObservers() {
@@ -1438,6 +1442,15 @@ final class ChatViewModel: ObservableObject {
 #endif
 
 #if canImport(UserNotifications)
+    private func requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded() {
+        guard enableBackgroundReplyNotification else { return }
+        guard !hasRequestedBackgroundReplyNotificationPermission else { return }
+        hasRequestedBackgroundReplyNotificationPermission = true
+        Task {
+            _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
+        }
+    }
+
     private func requestBackgroundReplyNotificationAuthorizationIfNeeded() async -> Bool {
         let center = UNUserNotificationCenter.current()
         let settings = await withCheckedContinuation { continuation in

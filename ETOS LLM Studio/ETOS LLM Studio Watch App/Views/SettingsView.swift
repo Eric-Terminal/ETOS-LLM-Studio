@@ -96,10 +96,6 @@ struct SettingsView: View {
                         Label("提供商与模型管理", systemImage: "list.bullet.rectangle.portrait")
                     }
                     
-                    let speechModelBinding = Binding<RunnableModel?>(
-                        get: { viewModel.selectedSpeechModel },
-                        set: { viewModel.setSelectedSpeechModel($0) }
-                    )
                     NavigationLink(destination: ModelAdvancedSettingsView(
                         aiTemperature: $viewModel.aiTemperature,
                         aiTopP: $viewModel.aiTopP,
@@ -110,18 +106,27 @@ struct SettingsView: View {
                         enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
                         currentSession: $viewModel.currentSession,
-                        enableSpeechInput: $viewModel.enableSpeechInput,
-                        selectedSpeechModel: speechModelBinding,
-                        sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
-                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
-                        audioRecordingFormat: $viewModel.audioRecordingFormat,
-                        speechModels: viewModel.speechModels
+                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt
                     )) {
                         Label("模型高级设置", systemImage: "brain.head.profile")
                     }
 
                     NavigationLink(destination: TTSSettingsView().environmentObject(viewModel)) {
                         Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
+                    }
+
+                    let speechModelBinding = Binding<RunnableModel?>(
+                        get: { viewModel.selectedSpeechModel },
+                        set: { viewModel.setSelectedSpeechModel($0) }
+                    )
+                    NavigationLink(destination: SpeechInputSettingsView(
+                        enableSpeechInput: $viewModel.enableSpeechInput,
+                        selectedSpeechModel: speechModelBinding,
+                        sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
+                        audioRecordingFormat: $viewModel.audioRecordingFormat,
+                        speechModels: viewModel.speechModels
+                    )) {
+                        Label("语音输入", systemImage: "mic")
                     }
                     
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
