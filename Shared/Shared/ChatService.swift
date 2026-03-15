@@ -58,6 +58,7 @@ public class ChatService {
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
     private static let modelOrderStorageKey = "modelOrder.runnableModels"
     private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
+    private static let ttsModelStorageKey = "ttsModelIdentifier"
 
     // MARK: - 单例
     public static let shared = ChatService()
@@ -297,6 +298,11 @@ public class ChatService {
         let speechCapable = activatedRunnableModels.filter { $0.model.supportsSpeechToText }
         return speechCapable.isEmpty ? activatedRunnableModels : speechCapable
     }
+
+    public var activatedTTSModels: [RunnableModel] {
+        let ttsCapable = activatedRunnableModels.filter { $0.model.supportsTextToSpeech }
+        return ttsCapable.isEmpty ? activatedRunnableModels : ttsCapable
+    }
     
     private func resolveSelectedSpeechModel() -> RunnableModel? {
         let storedIdentifier = UserDefaults.standard.string(forKey: "speechModelIdentifier")
@@ -305,6 +311,15 @@ public class ChatService {
             return match
         }
         return activatedSpeechModels.first
+    }
+
+    public func resolveSelectedTTSModel() -> RunnableModel? {
+        let storedIdentifier = UserDefaults.standard.string(forKey: Self.ttsModelStorageKey) ?? ""
+        if !storedIdentifier.isEmpty,
+           let match = activatedTTSModels.first(where: { $0.id == storedIdentifier }) {
+            return match
+        }
+        return activatedTTSModels.first
     }
 
     private func orderedRunnableModels(from models: [RunnableModel]) -> [RunnableModel] {

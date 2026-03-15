@@ -19,6 +19,8 @@ struct MessageActionsView: View {
     let canRetry: Bool
     let onEdit: () -> Void
     let onRetry: (ChatMessage) -> Void
+    let onSpeak: (ChatMessage) -> Void
+    let onStopSpeaking: () -> Void
     let onDelete: () -> Void
     let onDeleteCurrentVersion: () -> Void
     let onSwitchVersion: (Int) -> Void
@@ -36,6 +38,8 @@ struct MessageActionsView: View {
         canRetry: Bool,
         onEdit: @escaping () -> Void,
         onRetry: @escaping (ChatMessage) -> Void,
+        onSpeak: @escaping (ChatMessage) -> Void,
+        onStopSpeaking: @escaping () -> Void,
         onDelete: @escaping () -> Void,
         onDeleteCurrentVersion: @escaping () -> Void,
         onSwitchVersion: @escaping (Int) -> Void,
@@ -51,6 +55,8 @@ struct MessageActionsView: View {
         self.canRetry = canRetry
         self.onEdit = onEdit
         self.onRetry = onRetry
+        self.onSpeak = onSpeak
+        self.onStopSpeaking = onStopSpeaking
         self.onDelete = onDelete
         self.onDeleteCurrentVersion = onDeleteCurrentVersion
         self.onSwitchVersion = onSwitchVersion
@@ -69,6 +75,7 @@ struct MessageActionsView: View {
     @State private var showDeleteConfirm = false
     @State private var showDeleteVersionConfirm = false
     @State private var showBranchOptions = false
+    @ObservedObject private var ttsManager = TTSManager.shared
 
     // MARK: - 视图主体
     
@@ -110,6 +117,22 @@ struct MessageActionsView: View {
                     showBranchOptions = true
                 } label: {
                     Label("从此处创建分支", systemImage: "arrow.triangle.branch")
+                }
+
+                if message.role == .assistant || message.role == .tool || message.role == .system {
+                    Button {
+                        if ttsManager.currentSpeakingMessageID == message.id, ttsManager.isSpeaking {
+                            onStopSpeaking()
+                        } else {
+                            onSpeak(message)
+                        }
+                        dismiss()
+                    } label: {
+                        Label(
+                            ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "停止朗读" : "朗读消息",
+                            systemImage: ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "stop.circle" : "speaker.wave.2"
+                        )
+                    }
                 }
 
                 if supportsMathRenderToggle {

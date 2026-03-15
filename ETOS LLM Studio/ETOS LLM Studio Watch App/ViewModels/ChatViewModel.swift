@@ -25,7 +25,8 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatVie
 
 @MainActor
 class ChatViewModel: ObservableObject {
-    nonisolated let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则 @Published 变更不会驱动 SwiftUI 刷新（会导致输入/弹窗等交互失效）。
 
     // MARK: - @Published 属性 (UI 状态)
     
@@ -52,7 +53,9 @@ class ChatViewModel: ObservableObject {
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var isSendingMessage: Bool = false
     @Published var speechModels: [RunnableModel] = []
+    @Published var ttsModels: [RunnableModel] = []
     @Published var selectedSpeechModel: RunnableModel?
+    @Published var selectedTTSModel: RunnableModel?
     @Published var selectedEmbeddingModel: RunnableModel?
     @Published var selectedTitleGenerationModel: RunnableModel?
     @Published var isSpeechRecorderPresented: Bool = false
@@ -111,6 +114,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
+    @AppStorage("ttsModelIdentifier") var ttsModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
@@ -172,6 +176,7 @@ class ChatViewModel: ObservableObject {
     
     private var extendedSession: WKExtendedRuntimeSession?
     private let chatService: ChatService
+    private let ttsManager: TTSManager
     private var cancellables = Set<AnyCancellable>()
     private var additionalHistoryLoaded: Int = 0
     private var lastSessionID: UUID?
@@ -182,6 +187,7 @@ class ChatViewModel: ObservableObject {
     private var recordingTimer: Timer?
     private let waveformSampleCount: Int = 24
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    private var lastAutoPlayedAssistantMessageID: UUID?
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 6
@@ -233,6 +239,7 @@ class ChatViewModel: ObservableObject {
     internal init(chatService: ChatService) {
         logger.info("ChatViewModel initializing with specific service.")
         self.chatService = chatService
+        self.ttsManager = .shared
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
 
         // 设置 Combine 订阅
@@ -290,7 +297,9 @@ class ChatViewModel: ObservableObject {
                 self.configuredModels = self.chatService.configuredRunnableModels
                 self.activatedModels = self.chatService.activatedRunnableModels
                 self.speechModels = self.chatService.activatedSpeechModels
+                self.ttsModels = self.chatService.activatedTTSModels
                 self.syncSpeechModelSelection()
+                self.syncTTSModelSelection()
                 self.syncEmbeddingModelSelection()
                 self.syncTitleGenerationModelSelection()
             }
@@ -314,6 +323,9 @@ class ChatViewModel: ObservableObject {
                 case .finished, .error, .cancelled:
                     self?.isSendingMessage = false
                     self?.stopExtendedSession()
+                    if case .finished = status {
+                        self?.autoPlayLatestAssistantMessageIfNeeded()
+                    }
                 @unknown default:
                     // 为未来可能的状态保留，不做任何操作
                     break
@@ -371,8 +383,19 @@ class ChatViewModel: ObservableObject {
                 self?.refreshBackgroundImages()
             }
             .store(in: &cancellables)
+
+        ttsManager.$isSpeaking
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] speaking in
+                guard let self else { return }
+                if !speaking {
+                    self.ttsManager.updateSelectedModel(self.selectedTTSModel)
+                }
+            }
+            .store(in: &cancellables)
         
         syncSpeechModelSelection()
+        syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
     }
@@ -522,6 +545,34 @@ class ChatViewModel: ObservableObject {
     func addErrorMessage(_ content: String) {
         chatService.addErrorMessage(content)
     }
+
+    func speakMessage(_ message: ChatMessage) {
+        guard message.role == .assistant || message.role == .tool || message.role == .system else { return }
+        let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return }
+        ttsManager.updateSelectedModel(selectedTTSModel)
+        ttsManager.speak(content, messageID: message.id, flush: true)
+    }
+
+    func stopSpeakingMessage() {
+        ttsManager.stop()
+    }
+
+    func pauseSpeakingMessage() {
+        ttsManager.pause()
+    }
+
+    func resumeSpeakingMessage() {
+        ttsManager.resume()
+    }
+
+    func fastForwardSpeaking(by seconds: TimeInterval = 5) {
+        ttsManager.seekBy(seconds: seconds)
+    }
+
+    func setSpeakingSpeed(_ speed: Float) {
+        ttsManager.setPlaybackSpeed(speed)
+    }
     
     func retryMessage(_ message: ChatMessage) {
         Task {
@@ -570,6 +621,15 @@ class ChatViewModel: ObservableObject {
         if speechModelIdentifier != newIdentifier {
             speechModelIdentifier = newIdentifier
         }
+    }
+
+    func setSelectedTTSModel(_ model: RunnableModel?) {
+        selectedTTSModel = model
+        let newIdentifier = model?.id ?? ""
+        if ttsModelIdentifier != newIdentifier {
+            ttsModelIdentifier = newIdentifier
+        }
+        ttsManager.updateSelectedModel(model)
     }
     
     func setSelectedEmbeddingModel(_ model: RunnableModel?) {
@@ -1161,6 +1221,25 @@ class ChatViewModel: ObservableObject {
         selectedSpeechModel = nil
         speechModelIdentifier = ""
     }
+
+    private func syncTTSModelSelection() {
+        if let match = ttsModels.first(where: { $0.id == ttsModelIdentifier }) {
+            if selectedTTSModel?.id != match.id {
+                selectedTTSModel = match
+            }
+            ttsManager.updateSelectedModel(match)
+            return
+        }
+        guard !ttsModelIdentifier.isEmpty else {
+            selectedTTSModel = nil
+            ttsManager.updateSelectedModel(nil)
+            return
+        }
+        guard !ttsModels.isEmpty else { return }
+        selectedTTSModel = nil
+        ttsModelIdentifier = ""
+        ttsManager.updateSelectedModel(nil)
+    }
     
     private func syncEmbeddingModelSelection() {
         if let match = embeddingModelOptions.first(where: { $0.id == memoryEmbeddingModelIdentifier }) {
@@ -1196,6 +1275,38 @@ class ChatViewModel: ObservableObject {
         }
         selectedTitleGenerationModel = nil
         titleGenerationModelIdentifier = ""
+    }
+
+    private func autoPlayLatestAssistantMessageIfNeeded() {
+        let settings = TTSSettingsStore.shared.snapshot
+        let latest = allMessagesForSession.last(where: { $0.role == .assistant })
+        guard Self.shouldAutoPlayAssistantMessage(
+            autoPlayEnabled: settings.autoPlayAfterAssistantResponse,
+            latestAssistantMessage: latest,
+            lastAutoPlayedAssistantMessageID: lastAutoPlayedAssistantMessageID,
+            currentSpeakingMessageID: ttsManager.currentSpeakingMessageID,
+            isCurrentlySpeaking: ttsManager.isSpeaking
+        ), let latest else { return }
+        lastAutoPlayedAssistantMessageID = latest.id
+        ttsManager.updateSelectedModel(selectedTTSModel)
+        ttsManager.speak(latest.content, messageID: latest.id, flush: true)
+    }
+
+    nonisolated static func shouldAutoPlayAssistantMessage(
+        autoPlayEnabled: Bool,
+        latestAssistantMessage: ChatMessage?,
+        lastAutoPlayedAssistantMessageID: UUID?,
+        currentSpeakingMessageID: UUID?,
+        isCurrentlySpeaking: Bool
+    ) -> Bool {
+        guard autoPlayEnabled else { return false }
+        guard let latestAssistantMessage else { return false }
+        guard !latestAssistantMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard latestAssistantMessage.id != lastAutoPlayedAssistantMessageID else { return false }
+        if currentSpeakingMessageID == latestAssistantMessage.id, isCurrentlySpeaking {
+            return false
+        }
+        return true
     }
     
     private func startExtendedSession() {

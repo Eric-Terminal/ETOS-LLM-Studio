@@ -119,6 +119,10 @@ struct SettingsView: View {
                     )) {
                         Label("模型高级设置", systemImage: "brain.head.profile")
                     }
+
+                    NavigationLink(destination: TTSSettingsView().environmentObject(viewModel)) {
+                        Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
+                    }
                     
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
                         Label("拓展功能", systemImage: "puzzlepiece.extension")

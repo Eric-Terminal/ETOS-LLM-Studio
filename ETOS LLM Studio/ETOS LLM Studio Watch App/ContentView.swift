@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
+    @State private var isSettingsPresented = false
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     private let inputControlHeight: CGFloat = 38
@@ -78,6 +79,9 @@ struct ContentView: View {
                     }
                 }
                 .navigationTitle(viewModel.currentSession?.name ?? "新对话")
+                .sheet(isPresented: $isSettingsPresented) {
+                    SettingsView(viewModel: viewModel)
+                }
                 .sheet(item: $viewModel.activeSheet) { item in
                     sheetView(for: item)
                 }
@@ -92,6 +96,11 @@ struct ContentView: View {
                 if viewModel.activeSheet == nil {
                     viewModel.saveCurrentSessionDetails()
                 }
+            }
+
+            VStack {
+                Spacer()
+                TTSFloatingController()
             }
         }
     }
@@ -167,7 +176,10 @@ struct ContentView: View {
         .background(Color.clear)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: { viewModel.activeSheet = .settings }) {
+                Button(action: {
+                    viewModel.activeSheet = nil
+                    isSettingsPresented = true
+                }) {
                     Image(systemName: "gearshape.fill")
                 }
             }
@@ -230,6 +242,12 @@ struct ContentView: View {
                     },
                     onRetry: { message in
                         viewModel.retryMessage(message)
+                    },
+                    onSpeak: { message in
+                        viewModel.speakMessage(message)
+                    },
+                    onStopSpeaking: {
+                        viewModel.stopSpeakingMessage()
                     },
                     onDelete: {
                         viewModel.deleteMessage(message)

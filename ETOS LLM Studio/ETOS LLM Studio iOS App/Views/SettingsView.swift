@@ -93,6 +93,13 @@ struct SettingsView: View {
                 } label: {
                     Label("高级模型设置", systemImage: "slider.vertical.3")
                 }
+
+                NavigationLink {
+                    TTSSettingsView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
+                }
             }
 
             Section("拓展能力") {

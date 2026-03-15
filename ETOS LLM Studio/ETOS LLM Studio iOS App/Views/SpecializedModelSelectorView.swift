@@ -23,6 +23,13 @@ struct SpecializedModelSelectorView: View {
             )
 
             modelPickerSection(
+                title: "TTS 模型",
+                options: viewModel.ttsModels,
+                selectionID: ttsModelIdentifierBinding,
+                footer: "用于文字转语音；也可在“TTS 设置”中修改。"
+            )
+
+            modelPickerSection(
                 title: "嵌入模型",
                 options: viewModel.embeddingModelOptions,
                 selectionID: embeddingModelIdentifierBinding,
@@ -75,6 +82,20 @@ struct SpecializedModelSelectorView: View {
                 }
                 let selected = viewModel.embeddingModelOptions.first(where: { $0.id == newIdentifier })
                 viewModel.setSelectedEmbeddingModel(selected)
+            }
+        )
+    }
+
+    private var ttsModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedTTSModel?.id ?? "" },
+            set: { newIdentifier in
+                guard !newIdentifier.isEmpty else {
+                    viewModel.setSelectedTTSModel(nil)
+                    return
+                }
+                let selected = viewModel.ttsModels.first(where: { $0.id == newIdentifier })
+                viewModel.setSelectedTTSModel(selected)
             }
         )
     }
