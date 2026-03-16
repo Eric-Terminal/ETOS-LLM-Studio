@@ -159,7 +159,6 @@ struct ContentView: View {
                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
                 messageRow(
                     for: state,
-                    proxy: proxy,
                     mergeWithPrevious: mergeWithPrevious,
                     mergeWithNext: mergeWithNext
                 )
@@ -201,7 +200,8 @@ struct ContentView: View {
     }
     
     /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
-    private func messageRow(for state: ChatMessageRenderState, proxy: ScrollViewProxy, mergeWithPrevious: Bool, mergeWithNext: Bool) -> some View {
+    @ViewBuilder
+    private func messageRow(for state: ChatMessageRenderState, mergeWithPrevious: Bool, mergeWithNext: Bool) -> some View {
         let message = state.message
         let isReasoningExpandedBinding = Binding<Bool>(
             get: { viewModel.reasoningExpandedState[message.id, default: false] },
@@ -213,8 +213,9 @@ struct ContentView: View {
             set: { viewModel.toolCallsExpandedState[message.id] = $0 }
         )
         let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
-        
-        return ChatBubble(
+        let hasActivePermission = hasActiveToolPermissionRequest(for: message)
+
+        let bubble = ChatBubble(
             messageState: state,
             isReasoningExpanded: isReasoningExpandedBinding,
             isToolCallsExpanded: isToolCallsExpandedBinding,
@@ -231,52 +232,76 @@ struct ContentView: View {
         .id(state.id)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
-        .swipeActions(edge: .leading) {
-            NavigationLink {
-                MessageActionsView(
-                    message: message,
-                    canRetry: viewModel.canRetry(message: message),
-                    onEdit: {
-                        viewModel.messageToEdit = message
-                        viewModel.activeSheet = .editMessage
-                    },
-                    onRetry: { message in
-                        viewModel.retryMessage(message)
-                    },
-                    onSpeak: { message in
-                        viewModel.speakMessage(message)
-                    },
-                    onStopSpeaking: {
-                        viewModel.stopSpeakingMessage()
-                    },
-                    onDelete: {
-                        viewModel.deleteMessage(message)
-                    },
-                    onDeleteCurrentVersion: {
-                        viewModel.deleteCurrentVersion(of: message)
-                    },
-                    onSwitchVersion: { index in
-                        viewModel.switchToVersion(index, of: message)
-                    },
-                    onBranch: { copyPrompts in
-                        _ = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: copyPrompts)
-                    },
-                    onShowFullError: { content in
-                        fullErrorContent = content
-                    },
-                    supportsMathRenderToggle: viewModel.enableAdvancedRenderer && messageContainsMath(message.content),
-                    isMathRenderingEnabled: viewModel.isMathRenderingEnabled(for: message.id),
-                    onToggleMathRendering: {
-                        viewModel.toggleMathRendering(for: message.id)
-                    },
-                    messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
-                    totalMessages: viewModel.allMessagesForSession.count
-                )
-            } label: {
-                Label("更多", systemImage: "ellipsis")
-            }
-            .tint(.gray)
+
+        if hasActivePermission {
+            bubble
+        } else {
+            bubble
+                .swipeActions(edge: .leading) {
+                    messageActionsNavigationLink(for: message)
+                }
         }
+    }
+
+    private func hasActiveToolPermissionRequest(for message: ChatMessage) -> Bool {
+        guard let request = toolPermissionCenter.activeRequest,
+              let toolCalls = message.toolCalls,
+              !toolCalls.isEmpty else {
+            return false
+        }
+        let normalizedRequestArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        return toolCalls.contains { call in
+            call.toolName == request.toolName
+                && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedRequestArguments
+        }
+    }
+
+    @ViewBuilder
+    private func messageActionsNavigationLink(for message: ChatMessage) -> some View {
+        NavigationLink {
+            MessageActionsView(
+                message: message,
+                canRetry: viewModel.canRetry(message: message),
+                onEdit: {
+                    viewModel.messageToEdit = message
+                    viewModel.activeSheet = .editMessage
+                },
+                onRetry: { message in
+                    viewModel.retryMessage(message)
+                },
+                onSpeak: { message in
+                    viewModel.speakMessage(message)
+                },
+                onStopSpeaking: {
+                    viewModel.stopSpeakingMessage()
+                },
+                onDelete: {
+                    viewModel.deleteMessage(message)
+                },
+                onDeleteCurrentVersion: {
+                    viewModel.deleteCurrentVersion(of: message)
+                },
+                onSwitchVersion: { index in
+                    viewModel.switchToVersion(index, of: message)
+                },
+                onBranch: { copyPrompts in
+                    _ = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: copyPrompts)
+                },
+                onShowFullError: { content in
+                    fullErrorContent = content
+                },
+                supportsMathRenderToggle: viewModel.enableAdvancedRenderer && messageContainsMath(message.content),
+                isMathRenderingEnabled: viewModel.isMathRenderingEnabled(for: message.id),
+                onToggleMathRendering: {
+                    viewModel.toggleMathRendering(for: message.id)
+                },
+                messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
+                totalMessages: viewModel.allMessagesForSession.count
+            )
+        } label: {
+            Label("更多", systemImage: "ellipsis")
+        }
+        .tint(.gray)
     }
     
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
