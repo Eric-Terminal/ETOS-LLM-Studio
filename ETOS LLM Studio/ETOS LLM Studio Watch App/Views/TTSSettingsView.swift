@@ -100,7 +100,9 @@ struct TTSSettingsView: View {
             }
 
             Section("云端高级参数") {
-                DisclosureGroup("手动覆盖参数", isExpanded: $showCustomCloudParameters) {
+                Toggle("手动覆盖参数", isOn: $showCustomCloudParameters)
+
+                if showCustomCloudParameters {
                     TextField("Voice", text: $settingsStore.voice.watchKeyboardNewlineBinding())
                     if supportsResponseFormat {
                         TextField("格式", text: $settingsStore.responseFormat.watchKeyboardNewlineBinding())

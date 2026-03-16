@@ -65,7 +65,7 @@ struct TTSSettingsView: View {
                 }
             }
 
-            Section("云端快捷预设") {
+            Section {
                 Picker("Voice", selection: voicePresetBinding) {
                     ForEach(providerVoiceOptions, id: \.self) { option in
                         Text(option).tag(option)
@@ -99,6 +99,8 @@ struct TTSSettingsView: View {
                         Text(customOptionLabel(for: settingsStore.miniMaxEmotion)).tag(Self.customPickerTag)
                     }
                 }
+            } header: {
+                Text("云端快捷预设")
             } footer: {
                 Text("预设适合快速上手；若需手动输入，可在下方高级参数中覆盖。")
             }
