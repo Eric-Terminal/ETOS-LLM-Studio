@@ -1138,8 +1138,29 @@ public class ChatService {
         // 格式化错误内容，使其更简洁易读
         let (formattedContent, fullContent) = formatErrorContent(content, httpStatusCode: httpStatusCode)
         
+        let loadingIndex: Int? = {
+            // 优先使用当前请求记录的 loading 消息，避免误命中历史中的空 assistant（例如工具调用占位消息）。
+            if let loadingMessageID = currentLoadingMessageID,
+               let index = messages.firstIndex(where: { $0.id == loadingMessageID && $0.role == .assistant }) {
+                return index
+            }
+
+            // 兼容重试场景：当 retryTargetMessageID 仍存在时，优先定位该消息。
+            if let targetID = retryTargetMessageID,
+               let index = messages.firstIndex(where: { $0.id == targetID && $0.role == .assistant }) {
+                return index
+            }
+
+            // 回退策略仅允许替换“最后一条消息且为空 assistant”，避免破坏中间历史结构。
+            guard let lastIndex = messages.indices.last else { return nil }
+            let lastMessage = messages[lastIndex]
+            let isLastLoadingAssistant = lastMessage.role == .assistant
+                && lastMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return isLastLoadingAssistant ? lastIndex : nil
+        }()
+
         // 找到正在加载中的消息
-        if let loadingIndex = messages.lastIndex(where: { $0.role == .assistant && $0.content.isEmpty }) {
+        if let loadingIndex {
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
             if let targetID = retryTargetMessageID,
                messages[loadingIndex].id == targetID {
@@ -1334,11 +1355,12 @@ public class ChatService {
         session: ChatSession?
     ) -> [ChatMessage] {
         let baseMessages = messages.filter { $0.role != .error && $0.id != loadingMessageID }
+        let normalizedMessages = normalizedMessagesForToolCallChain(baseMessages)
         guard session?.isWorldbookContextIsolationActive == true else {
-            return baseMessages
+            return normalizedMessages
         }
 
-        return baseMessages.compactMap { message in
+        return normalizedMessages.compactMap { message in
             guard message.role != .tool else { return nil }
             var sanitized = message
             sanitized.toolCalls = nil
@@ -1350,6 +1372,104 @@ public class ChatService {
             }
             return sanitized
         }
+    }
+
+    /// 规范化历史中的工具调用链，避免把不完整/损坏的工具消息带入下一次请求。
+    /// 这一步会：
+    /// 1. 丢弃无法关联到 assistant.toolCalls 的孤立 tool 消息；
+    /// 2. 对没有匹配结果的 assistant.toolCalls 做裁剪（必要时直接移除该 assistant 占位消息）。
+    private func normalizedMessagesForToolCallChain(_ source: [ChatMessage]) -> [ChatMessage] {
+        guard !source.isEmpty else { return source }
+
+        var normalized: [ChatMessage] = []
+        normalized.reserveCapacity(source.count)
+
+        var index = 0
+        while index < source.count {
+            let message = source[index]
+
+            // 单独出现的 tool 消息视为孤儿消息，直接跳过，避免触发上游 400。
+            if message.role == .tool {
+                index += 1
+                continue
+            }
+
+            guard message.role == .assistant,
+                  let toolCalls = message.toolCalls,
+                  !toolCalls.isEmpty else {
+                normalized.append(message)
+                index += 1
+                continue
+            }
+
+            let validToolCallIDs = orderedToolCallIDs(from: toolCalls)
+            let validToolCallIDSet = Set(validToolCallIDs)
+
+            var nextIndex = index + 1
+            var contiguousToolMessages: [ChatMessage] = []
+            while nextIndex < source.count, source[nextIndex].role == .tool {
+                contiguousToolMessages.append(source[nextIndex])
+                nextIndex += 1
+            }
+
+            var matchedToolMessages: [ChatMessage] = []
+            var matchedToolCallIDs = Set<String>()
+            if !validToolCallIDSet.isEmpty {
+                for toolMessage in contiguousToolMessages {
+                    guard let toolCallID = normalizedToolCallID(from: toolMessage),
+                          validToolCallIDSet.contains(toolCallID),
+                          matchedToolCallIDs.insert(toolCallID).inserted else {
+                        continue
+                    }
+                    matchedToolMessages.append(toolMessage)
+                }
+            }
+
+            let hasMainContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let filteredCalls = toolCalls.filter { call in
+                guard let toolCallID = normalizedToolCallID(call.id) else { return false }
+                return matchedToolCallIDs.contains(toolCallID)
+            }
+
+            if filteredCalls.isEmpty {
+                // 若 assistant 只有工具调用占位且无正文，直接删除；否则仅清理 toolCalls。
+                if hasMainContent {
+                    var sanitizedAssistant = message
+                    sanitizedAssistant.toolCalls = nil
+                    sanitizedAssistant.toolCallsPlacement = nil
+                    normalized.append(sanitizedAssistant)
+                }
+            } else {
+                var sanitizedAssistant = message
+                sanitizedAssistant.toolCalls = filteredCalls
+                normalized.append(sanitizedAssistant)
+                normalized.append(contentsOf: matchedToolMessages)
+            }
+
+            index = max(nextIndex, index + 1)
+        }
+
+        return normalized
+    }
+
+    private func orderedToolCallIDs(from toolCalls: [InternalToolCall]) -> [String] {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for call in toolCalls {
+            guard let id = normalizedToolCallID(call.id), seen.insert(id).inserted else { continue }
+            ordered.append(id)
+        }
+        return ordered
+    }
+
+    private func normalizedToolCallID(from message: ChatMessage) -> String? {
+        guard let id = message.toolCalls?.first?.id else { return nil }
+        return normalizedToolCallID(id)
+    }
+
+    private func normalizedToolCallID(_ id: String) -> String? {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
         
     public func sendAndProcessMessage(
