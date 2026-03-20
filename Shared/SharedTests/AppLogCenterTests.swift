@@ -44,6 +44,46 @@ struct AppLogCenterTests {
         #expect(output?["model"] == "gpt")
     }
 
+    @Test("请求体日志会隐藏消息字段并保留参数字段")
+    func testRequestBodySanitizationForLogs() {
+        let source: [String: Any] = [
+            "model": "gpt-5",
+            "temperature": 0.6,
+            "messages": [
+                ["role": "user", "content": "你好"]
+            ],
+            "tools": [["type": "function"]]
+        ]
+
+        let output = AppLogRedactor.sanitizeRequestBodyForLog(source, maxLength: 2_000)
+        #expect(output != nil)
+        #expect(output?.contains("\"model\" : \"gpt-5\"") == true)
+        #expect(output?.contains("\"messages\" : \"[已隐藏数组") == true)
+        #expect(output?.contains("你好") == false)
+    }
+
+    @Test("请求 URL 日志会隐藏敏感查询参数")
+    func testRequestURLSanitizationForLogs() {
+        let url = URL(string: "https://api.example.com/v1/chat?key=abc123&mode=debug")
+        let output = AppLogRedactor.sanitizeURLForLog(url)
+        #expect(output.contains("key=%5B%E5%B7%B2%E9%9A%90%E8%97%8F%5D"))
+        #expect(output.contains("mode=debug"))
+    }
+
+    @Test("请求头日志会隐藏鉴权字段")
+    func testRequestHeaderSanitizationForLogs() {
+        let headers: [String: String] = [
+            "Authorization": "Bearer secret-token",
+            "Content-Type": "application/json",
+            "X-API-Key": "abc"
+        ]
+
+        let output = AppLogRedactor.sanitizeHeadersForLog(headers)
+        #expect(output?.contains("Authorization: [已隐藏]") == true)
+        #expect(output?.contains("X-API-Key: [已隐藏]") == true)
+        #expect(output?.contains("Content-Type: application/json") == true)
+    }
+
     @Test("循环缓冲区仅保留最近 N 条")
     func testRingBufferKeepsLatestN() {
         var buffer = AppLogRingBuffer(capacity: 3)

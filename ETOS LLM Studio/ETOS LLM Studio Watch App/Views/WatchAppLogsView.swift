@@ -50,6 +50,13 @@ struct WatchAppLogsView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
+
+                            if let payload = entry.payload, !payload.isEmpty {
+                                Text(formatPayload(payload))
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(4)
+                            }
                         }
                         .padding(.vertical, 2)
                     }
@@ -89,7 +96,12 @@ struct WatchAppLogsView: View {
     private func formatTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "MM-dd HH:mm:ss"
+        formatter.dateFormat = "HH:mm:ss.SSS"
         return formatter.string(from: date)
+    }
+
+    private func formatPayload(_ payload: [String: String]) -> String {
+        let sorted = payload.sorted { $0.key < $1.key }
+        return sorted.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
     }
 }

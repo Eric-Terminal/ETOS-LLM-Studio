@@ -239,6 +239,7 @@ public struct ConfigLoader {
 
         // 使用 provider 的 ID 作为文件名以确保唯一性
         let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
+        let previousProvider = loadPersistedProvider(at: fileURL)
         logger.info("正在保存提供商 \(provider.name) 到 \(fileURL.path)")
         
         do {
@@ -260,8 +261,47 @@ public struct ConfigLoader {
             let data = try encoder.encode(persistedProvider)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
             logger.info("  - 保存成功。")
+
+            let changedFields = changedFieldsForProviderUpdate(old: previousProvider, new: persistedProvider)
+            let action = previousProvider == nil ? "新增提供商配置" : "更新提供商配置"
+            var payload: [String: String] = [
+                "providerID": persistedProvider.id.uuidString,
+                "providerName": persistedProvider.name,
+                "apiFormat": persistedProvider.apiFormat,
+                "baseURL": persistedProvider.baseURL,
+                "modelCount": "\(persistedProvider.models.count)",
+                "headerCount": "\(persistedProvider.headerOverrides.count)",
+                "apiKeyCount": "\(normalizedAPIKeys.count)",
+                "changedFields": changedFields.joined(separator: "、")
+            ]
+            if !persistedProvider.headerOverrides.isEmpty {
+                let sortedHeaderKeys = persistedProvider.headerOverrides.keys.sorted().joined(separator: ", ")
+                payload["headerKeys"] = sortedHeaderKeys
+            }
+
+            AppLog.userOperation(
+                category: "配置",
+                action: action,
+                payload: payload
+            )
+            AppLog.developer(
+                category: "config",
+                action: action,
+                message: "提供商配置已保存：\(persistedProvider.name)",
+                payload: payload
+            )
         } catch {
             logger.error("  - 保存失败: \(error.localizedDescription)")
+            AppLog.developer(
+                level: .error,
+                category: "config",
+                action: "保存提供商配置失败",
+                message: "保存提供商 \(provider.name) 失败：\(error.localizedDescription)",
+                payload: [
+                    "providerID": provider.id.uuidString,
+                    "providerName": provider.name
+                ]
+            )
         }
     }
     
@@ -273,6 +313,58 @@ public struct ConfigLoader {
         removeFileIfExists(at: fileURL)
         _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
         logger.info("  - 删除成功。")
+        let payload: [String: String] = [
+            "providerID": provider.id.uuidString,
+            "providerName": provider.name,
+            "apiFormat": provider.apiFormat,
+            "baseURL": provider.baseURL,
+            "modelCount": "\(provider.models.count)"
+        ]
+        AppLog.userOperation(
+            category: "配置",
+            action: "删除提供商配置",
+            payload: payload
+        )
+        AppLog.developer(
+            category: "config",
+            action: "删除提供商配置",
+            message: "提供商配置已删除：\(provider.name)",
+            payload: payload
+        )
+    }
+
+    private static func loadPersistedProvider(at fileURL: URL) -> Provider? {
+        guard FileManager.default.fileExists(atPath: fileURL.path),
+              let data = try? Data(contentsOf: fileURL) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(Provider.self, from: data)
+    }
+
+    private static func changedFieldsForProviderUpdate(old: Provider?, new: Provider) -> [String] {
+        guard let old else { return ["首次保存"] }
+
+        var fields: [String] = []
+        if old.name != new.name {
+            fields.append("名称")
+        }
+        if old.baseURL != new.baseURL {
+            fields.append("Base URL")
+        }
+        if old.apiFormat != new.apiFormat {
+            fields.append("API 格式")
+        }
+        if old.models != new.models {
+            fields.append("模型列表")
+        }
+        if old.headerOverrides != new.headerOverrides {
+            fields.append("请求头覆写")
+        }
+        if old.apiKeys != new.apiKeys {
+            fields.append("API Key 列表")
+        }
+
+        return fields.isEmpty ? ["无字段变化（覆盖保存）"] : fields
     }
 
     private static func providersShareSamePersistentConfiguration(_ lhs: Provider, _ rhs: Provider) -> Bool {

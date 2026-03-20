@@ -64,9 +64,15 @@ struct AppLogsView: View {
     private func copyLogsToClipboard() {
         let content = displayedLogs
             .map { entry in
-                "[\(formatTime(entry.timestamp))] [\(entry.level.displayName)] [\(entry.category)] [\(entry.action)] \(entry.message)"
+                var lines: [String] = [
+                    "[\(formatTime(entry.timestamp))] [\(entry.level.displayName)] [\(entry.category)] [\(entry.action)] \(entry.message)"
+                ]
+                if let payload = entry.payload, !payload.isEmpty {
+                    lines.append(formatPayload(payload))
+                }
+                return lines.joined(separator: "\n")
             }
-            .joined(separator: "\n")
+            .joined(separator: "\n\n")
 
         #if canImport(UIKit)
         UIPasteboard.general.string = content
@@ -76,7 +82,7 @@ struct AppLogsView: View {
     private func formatTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "MM-dd HH:mm:ss"
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return formatter.string(from: date)
     }
 }
@@ -115,6 +121,12 @@ private struct AppLogRow: View {
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.secondary.opacity(0.08))
+                    )
             }
         }
         .padding(.vertical, 2)
@@ -138,12 +150,12 @@ private struct AppLogRow: View {
     private func formatTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "MM-dd HH:mm:ss"
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return formatter.string(from: date)
     }
 
     private func formatPayload(_ payload: [String: String]) -> String {
         let sorted = payload.sorted { $0.key < $1.key }
-        return sorted.map { "\($0.key)=\($0.value)" }.joined(separator: " · ")
+        return sorted.map { "\($0.key):\n\($0.value)" }.joined(separator: "\n\n")
     }
 }

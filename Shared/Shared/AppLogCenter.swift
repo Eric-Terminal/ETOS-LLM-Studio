@@ -301,6 +301,27 @@ enum AppLogRedactor {
     private static let sensitiveFragments = [
         "message", "messages", "content", "prompt", "input", "output", "text"
     ]
+    private static let requestBodySensitiveKeys: Set<String> = [
+        "message",
+        "messages",
+        "content",
+        "contents",
+        "prompt",
+        "system",
+        "system_instruction"
+    ]
+    private static let sensitiveQueryFragments = [
+        "key", "api_key", "token", "secret", "signature", "sig", "auth"
+    ]
+    private static let sensitiveHeaderNames: Set<String> = [
+        "authorization",
+        "proxy-authorization",
+        "x-api-key",
+        "api-key",
+        "x-goog-api-key",
+        "cookie",
+        "set-cookie"
+    ]
 
     static func redactedMessage(_ message: String?) -> String {
         guard let message else { return redactionToken }
@@ -323,6 +344,94 @@ enum AppLogRedactor {
             }
         }
         return result
+    }
+
+    static func sanitizeRequestBodyForLog(_ payload: [String: Any], maxLength: Int = 4_000) -> String? {
+        let sanitized = sanitizeJSONValue(payload)
+        guard JSONSerialization.isValidJSONObject(sanitized),
+              let data = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]),
+              var text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let safeMaxLength = max(200, maxLength)
+        if text.count > safeMaxLength {
+            text = String(text.prefix(safeMaxLength)) + "\n...(已截断，原始长度 \(text.count) 字符)"
+        }
+        return text
+    }
+
+    static func sanitizeURLForLog(_ url: URL?) -> String {
+        guard let url else { return "无" }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
+        }
+
+        if let items = components.queryItems, !items.isEmpty {
+            components.queryItems = items.map { item in
+                let normalizedName = item.name.lowercased()
+                let isSensitive = sensitiveQueryFragments.contains { fragment in
+                    normalizedName.contains(fragment)
+                }
+                guard isSensitive else { return item }
+                return URLQueryItem(name: item.name, value: redactionToken)
+            }
+        }
+
+        return components.string ?? url.absoluteString
+    }
+
+    static func sanitizeHeadersForLog(_ headers: [String: String]?) -> String? {
+        guard let headers, !headers.isEmpty else { return nil }
+        let lines = headers
+            .map { key, value -> (String, String) in
+                let normalizedName = key.lowercased()
+                let isSensitive = sensitiveHeaderNames.contains(normalizedName) ||
+                    normalizedName.contains("token") ||
+                    normalizedName.contains("secret")
+                return (key, isSensitive ? redactionToken : value)
+            }
+            .sorted { $0.0 < $1.0 }
+            .map { "\($0.0): \($0.1)" }
+
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    private static func sanitizeJSONValue(_ value: Any) -> Any {
+        if let dictionary = value as? [String: Any] {
+            var result: [String: Any] = [:]
+            for (key, rawValue) in dictionary {
+                if shouldHideRequestBodyField(key) {
+                    result[key] = redactionPlaceholder(for: rawValue)
+                } else {
+                    result[key] = sanitizeJSONValue(rawValue)
+                }
+            }
+            return result
+        }
+
+        if let array = value as? [Any] {
+            return array.map { sanitizeJSONValue($0) }
+        }
+
+        return value
+    }
+
+    private static func shouldHideRequestBodyField(_ key: String) -> Bool {
+        requestBodySensitiveKeys.contains(key.lowercased())
+    }
+
+    private static func redactionPlaceholder(for value: Any) -> String {
+        if let array = value as? [Any] {
+            return "[已隐藏数组，元素数: \(array.count)]"
+        }
+        if let dictionary = value as? [String: Any] {
+            return "[已隐藏对象，字段数: \(dictionary.count)]"
+        }
+        if let text = value as? String {
+            return "[已隐藏文本，长度: \(text.count)]"
+        }
+        return redactionToken
     }
 
     private static func isSensitiveKey(_ key: String) -> Bool {
