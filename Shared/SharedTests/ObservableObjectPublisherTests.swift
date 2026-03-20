@@ -18,7 +18,6 @@ struct ObservableObjectPublisherTests {
     @Test("启动阶段关键 ObservableObject 持有显式 publisher")
     @MainActor
     func startupObservableObjectsStoreExplicitPublisher() {
-        let sampleMessage = ChatMessage(role: .assistant, content: "测试消息")
         let samples: [(String, Any)] = [
             ("AnnouncementManager", AnnouncementManager.shared),
             ("CloudSyncManager", CloudSyncManager.shared),
@@ -28,8 +27,7 @@ struct ObservableObjectPublisherTests {
             ("AppToolManager", AppToolManager.shared),
             ("AppLogCenter", AppLogCenter.shared),
             ("ShortcutToolManager", ShortcutToolManager.shared),
-            ("LocalDebugServer", LocalDebugServer()),
-            ("ChatMessageRenderState", ChatMessageRenderState(message: sampleMessage))
+            ("LocalDebugServer", LocalDebugServer())
         ]
 
         for (name, object) in samples {
@@ -43,7 +41,6 @@ struct ObservableObjectPublisherTests {
     @Test("启动阶段关键 ObservableObject 可直接读取 publisher")
     @MainActor
     func startupObservableObjectsExposePublisherGetterSafely() {
-        let sampleMessage = ChatMessage(role: .assistant, content: "测试消息")
         let publishers: [(String, () -> ObservableObjectPublisher)] = [
             ("AnnouncementManager", { AnnouncementManager.shared.objectWillChange }),
             ("CloudSyncManager", { CloudSyncManager.shared.objectWillChange }),
@@ -53,13 +50,32 @@ struct ObservableObjectPublisherTests {
             ("AppToolManager", { AppToolManager.shared.objectWillChange }),
             ("AppLogCenter", { AppLogCenter.shared.objectWillChange }),
             ("ShortcutToolManager", { ShortcutToolManager.shared.objectWillChange }),
-            ("LocalDebugServer", { LocalDebugServer().objectWillChange }),
-            ("ChatMessageRenderState", { ChatMessageRenderState(message: sampleMessage).objectWillChange })
+            ("LocalDebugServer", { LocalDebugServer().objectWillChange })
         ]
 
         for (name, makePublisher) in publishers {
             let publisher = makePublisher()
             #expect(type(of: publisher) == ObservableObjectPublisher.self, "\(name) 的 objectWillChange 类型应为 ObservableObjectPublisher。")
         }
+    }
+
+    @Test("ChatMessageRenderState 更新会触发 objectWillChange")
+    @MainActor
+    func chatMessageRenderStatePublishesOnUpdate() {
+        let messageID = UUID()
+        let initial = ChatMessage(id: messageID, role: .assistant, content: "旧内容")
+        let updated = ChatMessage(id: messageID, role: .assistant, content: "新内容")
+        let state = ChatMessageRenderState(message: initial)
+
+        var changeCount = 0
+        let cancellable = state.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        state.update(with: updated)
+
+        #expect(state.message.content == "新内容")
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
     }
 }
