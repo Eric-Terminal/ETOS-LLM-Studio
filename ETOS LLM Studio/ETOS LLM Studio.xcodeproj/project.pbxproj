@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		07B5C2A22F6D3B2100A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */; };
+		07B5C2A32F6D3B2200A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */; };
 		073D1C562E8F55EB00E6D9E1 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; };
 		073D1C572E8F55EB00E6D9E1 /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 077CD2612E962D8D00AD6556 /* MarkdownUI */; };
@@ -77,6 +79,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		073CA6DB2E8CFD65004516A0 /* ETOS LLM Studio App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ETOS LLM Studio App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		073CA70E2E8D0834004516A0 /* Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		076105A42E92305500B6D5FF /* SharedTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SharedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -127,6 +130,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07B5C2A22F6D3B2100A11AA1 /* AppIntents.framework in Frameworks */,
 				073D1C562E8F55EB00E6D9E1 /* Shared.framework in Frameworks */,
 				077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */,
 			);
@@ -143,6 +147,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07B5C2A32F6D3B2200A11AA1 /* AppIntents.framework in Frameworks */,
 				079679BE2F1279C8006562BC /* MarkdownUI in Frameworks */,
 				079679C02F1279CC006562BC /* Shared.framework in Frameworks */,
 			);
@@ -192,6 +197,7 @@
 		073CA70D2E8D0834004516A0 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */,
 				079679BF2F1279CC006562BC /* Shared.framework */,
 				073CA70E2E8D0834004516A0 /* Shared.framework */,
 			);
