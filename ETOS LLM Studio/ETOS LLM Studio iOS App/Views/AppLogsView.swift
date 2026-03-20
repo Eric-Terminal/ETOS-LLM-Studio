@@ -18,6 +18,10 @@ import UIKit
 struct AppLogsView: View {
     @StateObject private var logCenter = AppLogCenter.shared
     @State private var selectedChannel: AppLogChannel = .user
+    @State private var keywordFilter: String = ""
+    @State private var categoryFilter: String = ""
+    @State private var levelFilter: LevelFilter = .all
+    @State private var configChangesOnly = false
 
     var body: some View {
         List {
@@ -27,6 +31,31 @@ struct AppLogsView: View {
                     Text("开发者").tag(AppLogChannel.developer)
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section("筛选") {
+                TextField("关键词（消息 / 动作 / payload）", text: $keywordFilter)
+                    .textInputAutocapitalization(.never)
+                TextField("分类（category）", text: $categoryFilter)
+                    .textInputAutocapitalization(.never)
+
+                Picker("等级", selection: $levelFilter) {
+                    ForEach(LevelFilter.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Toggle("仅看配置变更", isOn: $configChangesOnly)
+
+                if hasActiveFilters {
+                    Button("重置筛选") {
+                        keywordFilter = ""
+                        categoryFilter = ""
+                        levelFilter = .all
+                        configChangesOnly = false
+                    }
+                }
             }
 
             Section(header: Text(selectedChannel.displayName)) {
@@ -58,7 +87,21 @@ struct AppLogsView: View {
     }
 
     private var displayedLogs: [AppLogEvent] {
-        Array(logCenter.recentLogs(for: selectedChannel, limit: 300).reversed())
+        let source = Array(logCenter.recentLogs(for: selectedChannel, limit: 300).reversed())
+        let filter = AppLogFilter(
+            level: levelFilter.level,
+            keyword: keywordFilter,
+            categoryKeyword: categoryFilter,
+            configChangesOnly: configChangesOnly
+        )
+        return AppLogFilterEngine.filter(source, with: filter)
+    }
+
+    private var hasActiveFilters: Bool {
+        !keywordFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        !categoryFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        levelFilter != .all ||
+        configChangesOnly
     }
 
     private func copyLogsToClipboard() {
@@ -84,6 +127,46 @@ struct AppLogsView: View {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return formatter.string(from: date)
+    }
+}
+
+private enum LevelFilter: String, CaseIterable, Identifiable {
+    case all
+    case debug
+    case info
+    case warning
+    case error
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "全部"
+        case .debug:
+            return "DEBUG"
+        case .info:
+            return "INFO"
+        case .warning:
+            return "WARN"
+        case .error:
+            return "ERROR"
+        }
+    }
+
+    var level: AppLogLevel? {
+        switch self {
+        case .all:
+            return nil
+        case .debug:
+            return .debug
+        case .info:
+            return .info
+        case .warning:
+            return .warning
+        case .error:
+            return .error
+        }
     }
 }
 

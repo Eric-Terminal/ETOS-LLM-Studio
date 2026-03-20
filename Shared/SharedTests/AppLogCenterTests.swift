@@ -84,6 +84,46 @@ struct AppLogCenterTests {
         #expect(output?.contains("Content-Type: application/json") == true)
     }
 
+    @Test("日志筛选器支持按等级过滤")
+    func testLogFilterByLevel() {
+        let events = makeFilterFixtureEvents()
+        let filtered = AppLogFilterEngine.filter(
+            events,
+            with: AppLogFilter(level: .error)
+        )
+
+        #expect(filtered.count == 1)
+        #expect(filtered.first?.level == .error)
+    }
+
+    @Test("日志筛选器支持按分类与关键词过滤")
+    func testLogFilterByCategoryAndKeyword() {
+        let events = makeFilterFixtureEvents()
+        let filtered = AppLogFilterEngine.filter(
+            events,
+            with: AppLogFilter(
+                keyword: "providerA",
+                categoryKeyword: "配置"
+            )
+        )
+
+        #expect(filtered.count == 1)
+        #expect(filtered.first?.category == "配置")
+        #expect(filtered.first?.payload?["providerName"] == "providerA")
+    }
+
+    @Test("日志筛选器支持仅查看配置变更")
+    func testLogFilterConfigChangesOnly() {
+        let events = makeFilterFixtureEvents()
+        let filtered = AppLogFilterEngine.filter(
+            events,
+            with: AppLogFilter(configChangesOnly: true)
+        )
+
+        #expect(filtered.count == 2)
+        #expect(filtered.allSatisfy { $0.category == "配置" || $0.category.lowercased() == "config" })
+    }
+
     @Test("循环缓冲区仅保留最近 N 条")
     func testRingBufferKeepsLatestN() {
         var buffer = AppLogRingBuffer(capacity: 3)
@@ -140,5 +180,34 @@ struct AppLogCenterTests {
         let remainingFiles = try fileManager.contentsOfDirectory(at: tempDirectory, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.hasPrefix("app-log-") && $0.pathExtension == "jsonl" }
         #expect(remainingFiles.count == 7)
+    }
+
+    private func makeFilterFixtureEvents() -> [AppLogEvent] {
+        [
+            AppLogEvent(
+                channel: .developer,
+                level: .info,
+                category: "配置",
+                action: "更新提供商配置",
+                message: "配置已更新",
+                payload: ["providerName": "providerA"]
+            ),
+            AppLogEvent(
+                channel: .developer,
+                level: .error,
+                category: "请求",
+                action: "构建请求失败",
+                message: "网络错误",
+                payload: nil
+            ),
+            AppLogEvent(
+                channel: .user,
+                level: .info,
+                category: "config",
+                action: "删除提供商配置",
+                message: "[已隐藏]",
+                payload: ["providerName": "providerB"]
+            )
+        ]
     }
 }

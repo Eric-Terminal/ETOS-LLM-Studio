@@ -78,6 +78,86 @@ public struct AppLogEvent: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// 应用日志筛选条件。
+public struct AppLogFilter: Sendable, Equatable {
+    public var level: AppLogLevel?
+    public var keyword: String
+    public var categoryKeyword: String
+    public var configChangesOnly: Bool
+
+    public init(
+        level: AppLogLevel? = nil,
+        keyword: String = "",
+        categoryKeyword: String = "",
+        configChangesOnly: Bool = false
+    ) {
+        self.level = level
+        self.keyword = keyword
+        self.categoryKeyword = categoryKeyword
+        self.configChangesOnly = configChangesOnly
+    }
+}
+
+/// 日志筛选执行器。
+public enum AppLogFilterEngine {
+    public static func filter(_ events: [AppLogEvent], with filter: AppLogFilter) -> [AppLogEvent] {
+        let normalizedKeyword = filter.keyword.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedCategoryKeyword = filter.categoryKeyword.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return events.filter { event in
+            if let level = filter.level, event.level != level {
+                return false
+            }
+
+            if !normalizedCategoryKeyword.isEmpty {
+                let category = event.category.lowercased()
+                if !category.contains(normalizedCategoryKeyword) {
+                    return false
+                }
+            }
+
+            if filter.configChangesOnly, !isConfigChangeEvent(event) {
+                return false
+            }
+
+            if normalizedKeyword.isEmpty {
+                return true
+            }
+
+            let searchableParts = searchableParts(for: event)
+            return searchableParts.contains { part in
+                part.lowercased().contains(normalizedKeyword)
+            }
+        }
+    }
+
+    private static func searchableParts(for event: AppLogEvent) -> [String] {
+        var parts: [String] = [event.category, event.action, event.message]
+        if let payload = event.payload, !payload.isEmpty {
+            for (key, value) in payload {
+                parts.append(key)
+                parts.append(value)
+            }
+        }
+        return parts
+    }
+
+    private static func isConfigChangeEvent(_ event: AppLogEvent) -> Bool {
+        let category = event.category.lowercased()
+        let action = event.action.lowercased()
+        if category == "配置" || category == "config" {
+            return true
+        }
+        if action.contains("配置") || action.contains("config") {
+            return true
+        }
+        if let payload = event.payload, payload["providerID"] != nil {
+            return true
+        }
+        return false
+    }
+}
+
 /// 对外暴露的日志 API。
 ///
 /// 约束：
