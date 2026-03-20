@@ -111,7 +111,7 @@ struct AppLogsView: View {
                     "[\(formatTime(entry.timestamp))] [\(entry.level.displayName)] [\(entry.category)] [\(entry.action)] \(entry.message)"
                 ]
                 if let payload = entry.payload, !payload.isEmpty {
-                    lines.append(formatPayload(payload))
+                    lines.append(formatLogPayload(payload))
                 }
                 return lines.joined(separator: "\n")
             }
@@ -200,7 +200,7 @@ private struct AppLogRow: View {
                 .foregroundStyle(.secondary)
 
             if let payload = entry.payload, !payload.isEmpty {
-                Text(formatPayload(payload))
+                Text(formatLogPayload(payload))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .textSelection(.enabled)
@@ -236,9 +236,9 @@ private struct AppLogRow: View {
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return formatter.string(from: date)
     }
+}
 
-    private func formatPayload(_ payload: [String: String]) -> String {
-        let sorted = payload.sorted { $0.key < $1.key }
-        return sorted.map { "\($0.key):\n\($0.value)" }.joined(separator: "\n\n")
-    }
+private func formatLogPayload(_ payload: [String: String]) -> String {
+    let sorted = payload.sorted { $0.key < $1.key }
+    return sorted.map { "\($0.key):\n\($0.value)" }.joined(separator: "\n\n")
 }
