@@ -65,10 +65,6 @@ struct SettingsView: View {
                     Label("提供商与模型管理", systemImage: "list.bullet.rectangle.portrait")
                 }
                 
-                let speechModelBinding = Binding<RunnableModel?>(
-                    get: { viewModel.selectedSpeechModel },
-                    set: { viewModel.setSelectedSpeechModel($0) }
-                )
                 NavigationLink {
                     ModelAdvancedSettingsView(
                         aiTemperature: $viewModel.aiTemperature,
@@ -80,15 +76,7 @@ struct SettingsView: View {
                         enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
                         currentSession: $viewModel.currentSession,
-                        enableSpeechInput: $viewModel.enableSpeechInput,
-                        selectedSpeechModel: speechModelBinding,
-                        sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
-                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
-                        audioRecordingFormat: Binding(
-                            get: { viewModel.audioRecordingFormat },
-                            set: { viewModel.audioRecordingFormat = $0 }
-                        ),
-                        speechModels: viewModel.speechModels
+                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt
                     )
                 } label: {
                     Label("高级模型设置", systemImage: "slider.vertical.3")
@@ -103,6 +91,10 @@ struct SettingsView: View {
             }
 
             Section("拓展能力") {
+                let speechModelBinding = Binding<RunnableModel?>(
+                    get: { viewModel.selectedSpeechModel },
+                    set: { viewModel.setSelectedSpeechModel($0) }
+                )
                 NavigationLink {
                     ToolCenterView()
                         .environmentObject(viewModel)
@@ -140,6 +132,21 @@ struct SettingsView: View {
                     WorldbookSettingsView().environmentObject(viewModel)
                 } label: {
                     Label("世界书", systemImage: "book.pages")
+                }
+
+                NavigationLink {
+                    SpeechInputSettingsView(
+                        enableSpeechInput: $viewModel.enableSpeechInput,
+                        selectedSpeechModel: speechModelBinding,
+                        sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
+                        audioRecordingFormat: Binding(
+                            get: { viewModel.audioRecordingFormat },
+                            set: { viewModel.audioRecordingFormat = $0 }
+                        ),
+                        speechModels: viewModel.speechModels
+                    )
+                } label: {
+                    Label("语音输入", systemImage: "mic")
                 }
 
                 NavigationLink {

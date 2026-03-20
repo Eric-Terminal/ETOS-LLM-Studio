@@ -4,6 +4,9 @@ import Shared
 struct TTSSettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
+    @State private var showCustomCloudParameters: Bool = false
+
+    private static let customPickerTag = "__custom__"
 
     var body: some View {
         Form {
@@ -55,21 +58,77 @@ struct TTSSettingsView: View {
                     Text("Groq").tag(TTSProviderKind.groq)
                 }
 
-                TextField("Voice", text: $settingsStore.voice)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+                Button {
+                    applyRecommendedCloudPreset()
+                } label: {
+                    Label("套用当前提供商推荐参数", systemImage: "wand.and.stars")
+                }
+            }
 
-                TextField("响应格式（mp3/wav）", text: $settingsStore.responseFormat)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+            Section {
+                Picker("Voice", selection: voicePresetBinding) {
+                    ForEach(providerVoiceOptions, id: \.self) { option in
+                        Text(option).tag(option)
+                    }
+                    Text(customOptionLabel(for: settingsStore.voice)).tag(Self.customPickerTag)
+                }
 
-                TextField("语言类型（Qwen）", text: $settingsStore.languageType)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+                if supportsResponseFormat {
+                    Picker("格式", selection: responseFormatPresetBinding) {
+                        ForEach(providerResponseFormatOptions, id: \.self) { option in
+                            Text(option).tag(option)
+                        }
+                        Text(customOptionLabel(for: settingsStore.responseFormat)).tag(Self.customPickerTag)
+                    }
+                }
 
-                TextField("情感（MiniMax）", text: $settingsStore.miniMaxEmotion)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+                if supportsLanguageType {
+                    Picker("语言", selection: languageTypePresetBinding) {
+                        ForEach(providerLanguageTypeOptions, id: \.self) { option in
+                            Text(option).tag(option)
+                        }
+                        Text(customOptionLabel(for: settingsStore.languageType)).tag(Self.customPickerTag)
+                    }
+                }
+
+                if supportsMiniMaxEmotion {
+                    Picker("情感", selection: miniMaxEmotionPresetBinding) {
+                        ForEach(providerMiniMaxEmotionOptions, id: \.self) { option in
+                            Text(option).tag(option)
+                        }
+                        Text(customOptionLabel(for: settingsStore.miniMaxEmotion)).tag(Self.customPickerTag)
+                    }
+                }
+            } header: {
+                Text("云端快捷预设")
+            } footer: {
+                Text("预设适合快速上手；若需手动输入，可在下方高级参数中覆盖。")
+            }
+
+            Section("云端高级参数") {
+                DisclosureGroup("手动覆盖参数（可选）", isExpanded: $showCustomCloudParameters) {
+                    TextField("Voice", text: $settingsStore.voice)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    if supportsResponseFormat {
+                        TextField("响应格式（mp3/wav）", text: $settingsStore.responseFormat)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+
+                    if supportsLanguageType {
+                        TextField("语言类型（Qwen）", text: $settingsStore.languageType)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+
+                    if supportsMiniMaxEmotion {
+                        TextField("情感（MiniMax）", text: $settingsStore.miniMaxEmotion)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                }
             }
 
             Section("朗读行为") {
@@ -122,6 +181,98 @@ struct TTSSettingsView: View {
             }
         }
         .navigationTitle("TTS 设置")
+    }
+
+    private var providerVoiceOptions: [String] {
+        TTSProviderPresetCatalog.voiceOptions(for: settingsStore.providerKind)
+    }
+
+    private var providerResponseFormatOptions: [String] {
+        TTSProviderPresetCatalog.responseFormatOptions(for: settingsStore.providerKind)
+    }
+
+    private var providerLanguageTypeOptions: [String] {
+        TTSProviderPresetCatalog.languageTypeOptions(for: settingsStore.providerKind)
+    }
+
+    private var providerMiniMaxEmotionOptions: [String] {
+        TTSProviderPresetCatalog.miniMaxEmotionOptions(for: settingsStore.providerKind)
+    }
+
+    private var supportsResponseFormat: Bool {
+        !providerResponseFormatOptions.isEmpty
+    }
+
+    private var supportsLanguageType: Bool {
+        !providerLanguageTypeOptions.isEmpty
+    }
+
+    private var supportsMiniMaxEmotion: Bool {
+        !providerMiniMaxEmotionOptions.isEmpty
+    }
+
+    private var voicePresetBinding: Binding<String> {
+        Binding(
+            get: {
+                providerVoiceOptions.contains(settingsStore.voice) ? settingsStore.voice : Self.customPickerTag
+            },
+            set: { newValue in
+                guard newValue != Self.customPickerTag else { return }
+                settingsStore.voice = newValue
+            }
+        )
+    }
+
+    private var responseFormatPresetBinding: Binding<String> {
+        Binding(
+            get: {
+                providerResponseFormatOptions.contains(settingsStore.responseFormat) ? settingsStore.responseFormat : Self.customPickerTag
+            },
+            set: { newValue in
+                guard newValue != Self.customPickerTag else { return }
+                settingsStore.responseFormat = newValue
+            }
+        )
+    }
+
+    private var languageTypePresetBinding: Binding<String> {
+        Binding(
+            get: {
+                providerLanguageTypeOptions.contains(settingsStore.languageType) ? settingsStore.languageType : Self.customPickerTag
+            },
+            set: { newValue in
+                guard newValue != Self.customPickerTag else { return }
+                settingsStore.languageType = newValue
+            }
+        )
+    }
+
+    private var miniMaxEmotionPresetBinding: Binding<String> {
+        Binding(
+            get: {
+                providerMiniMaxEmotionOptions.contains(settingsStore.miniMaxEmotion) ? settingsStore.miniMaxEmotion : Self.customPickerTag
+            },
+            set: { newValue in
+                guard newValue != Self.customPickerTag else { return }
+                settingsStore.miniMaxEmotion = newValue
+            }
+        )
+    }
+
+    private func applyRecommendedCloudPreset() {
+        let preset = TTSProviderPresetCatalog.recommendedPreset(for: settingsStore.providerKind)
+        settingsStore.voice = preset.voice
+        settingsStore.responseFormat = preset.responseFormat
+        settingsStore.languageType = preset.languageType
+        settingsStore.miniMaxEmotion = preset.miniMaxEmotion
+    }
+
+    private func customOptionLabel(for value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return "自定义（当前为空）"
+        }
+        return "自定义（当前：\(trimmed)）"
     }
 
     private var selectedModelText: String {

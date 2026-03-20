@@ -861,7 +861,7 @@ struct ChatBubble: View {
                             Text(summaries.joined(separator: " · "))
                                 .font(.caption2)
                                 .foregroundColor(.secondary.opacity(0.9))
-                                .lineLimit(1)
+                                .lineLimit(3)
                                 .multilineTextAlignment(.leading)
                         }
                     }
@@ -895,25 +895,20 @@ struct ChatBubble: View {
             Text(label)
                 .font(.caption2.weight(.semibold))
                 .foregroundColor(.secondary)
-            if let primaryContentText = display.primaryContentText,
-               !primaryContentText.isEmpty {
-                toolResultSection(
-                    title: display.shouldShowRawSection ? "主要内容" : "结果内容",
-                    text: primaryContentText,
-                    font: .caption2,
-                    maxHeight: 110
-                )
-            }
             if display.shouldShowRawSection {
-                if display.primaryContentText != nil {
-                    Divider()
-                        .background(Color.secondary.opacity(0.2))
-                }
                 toolResultSection(
                     title: "原始返回",
                     text: display.rawDisplayText,
                     font: .system(.caption2, design: .monospaced),
                     maxHeight: 90
+                )
+            } else if let primaryContentText = display.primaryContentText,
+                      !primaryContentText.isEmpty {
+                toolResultSection(
+                    title: "结果内容",
+                    text: primaryContentText,
+                    font: .caption2,
+                    maxHeight: 110
                 )
             }
         }

@@ -12,7 +12,8 @@ import Foundation
 @MainActor
 public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public let id: UUID
-    public nonisolated let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则流式更新 message 时不会稳定触发 SwiftUI 刷新。
     @Published public private(set) var message: ChatMessage
     
     public init(message: ChatMessage) {

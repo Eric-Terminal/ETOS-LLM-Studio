@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */; };
 		072CF2442E92C1B400A8E9D0 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA6A52E8CFCF3004516A0 /* Shared.framework */; };
 /* End PBXBuildFile section */
 
@@ -21,6 +22,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		072CF2402E92C1B400A8E9D0 /* SharedTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SharedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		073CA6A52E8CFCF3004516A0 /* Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -51,6 +53,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -62,6 +65,7 @@
 			children = (
 				073CA6A72E8CFCF3004516A0 /* Shared */,
 				072CF2412E92C1B400A8E9D0 /* SharedTests */,
+				07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */,
 				073CA6A62E8CFCF3004516A0 /* Products */,
 			);
 			sourceTree = "<group>";

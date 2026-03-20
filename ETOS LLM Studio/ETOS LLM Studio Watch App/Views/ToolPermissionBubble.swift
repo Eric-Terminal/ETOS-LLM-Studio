@@ -87,14 +87,14 @@ struct ToolPermissionBubble: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 header
 
                 if let argumentPreview {
                     Text(argumentPreview)
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
 
                 if let countdownText {
@@ -103,31 +103,25 @@ struct ToolPermissionBubble: View {
                         .foregroundStyle(.secondary)
                 }
 
-                VStack(spacing: 6) {
-                    Button("允许一次") {
-                        onDecision(.allowOnce)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-
-                    Button("拒绝", role: .destructive) {
-                        onDecision(.deny)
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
+                Button("允许一次") {
+                    onDecision(.allowOnce)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
 
                 Button {
                     isPresentingDetails = true
                 } label: {
                     Label(argumentPreview == nil ? "更多权限" : "查看详情与更多", systemImage: "ellipsis.circle")
-                        .font(.caption)
+                        .font(.caption2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
             }
-            .padding(10)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
             .background(bubbleBackground)
 
             Spacer(minLength: 0)
@@ -147,9 +141,9 @@ struct ToolPermissionBubble: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .top, spacing: 5) {
             Image(systemName: "hand.raised.circle")
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
                 Text("工具审批")
@@ -166,7 +160,7 @@ struct ToolPermissionBubble: View {
 
     @ViewBuilder
     private var bubbleBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         if enableLiquidGlass {
             if #available(watchOS 26.0, *) {
                 shape
@@ -239,6 +233,12 @@ private struct ToolPermissionDetailSheet: View {
 
                 detailSection(title: "更多权限") {
                     VStack(spacing: 8) {
+                        Button("拒绝", role: .destructive) {
+                            resolve(.deny)
+                        }
+                        .buttonStyle(.bordered)
+                        .frame(maxWidth: .infinity)
+
                         Button("保持允许") {
                             resolve(.allowForTool)
                         }

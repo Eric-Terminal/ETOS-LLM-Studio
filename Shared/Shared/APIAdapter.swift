@@ -60,6 +60,36 @@ private func inferredImageMimeType(from data: Data) -> String {
     return "image/png"
 }
 
+private func logChatRequestSnapshot(
+    adapterName: String,
+    request: URLRequest,
+    payload: [String: Any]
+) {
+    var detailPayload: [String: String] = [
+        "适配器": adapterName,
+        "方法": request.httpMethod ?? "POST",
+        "地址": AppLogRedactor.sanitizeURLForLog(request.url),
+        "请求体字节数": "\(request.httpBody?.count ?? 0)"
+    ]
+
+    if let headers = AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields) {
+        detailPayload["请求头"] = headers
+    }
+    if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload) {
+        detailPayload["请求体(不含消息字段)"] = body
+    } else {
+        detailPayload["请求体(不含消息字段)"] = "[无法序列化]"
+    }
+
+    AppLog.developer(
+        level: .debug,
+        category: "请求",
+        action: "构建\(adapterName)请求",
+        message: "\(adapterName) 请求体已生成",
+        payload: detailPayload
+    )
+}
+
 /// 代表从流式 API 响应中解析出的单个数据片段。
 public struct ChatMessagePart {
     public struct ToolCallDelta {
@@ -785,6 +815,7 @@ public class OpenAIAdapter: APIAdapter {
                     logger.debug("构建的聊天请求体 (Raw Request Body):\n---\n\(jsonString)\n---")
                 }
             }
+            logChatRequestSnapshot(adapterName: "OpenAI兼容", request: request, payload: finalPayload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
@@ -1849,6 +1880,7 @@ public class GeminiAdapter: APIAdapter {
             if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
                 logger.debug("构建的 Gemini 聊天请求体:\n---\n\(jsonString)\n---")
             }
+            logChatRequestSnapshot(adapterName: "Gemini", request: request, payload: payload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
@@ -2582,6 +2614,7 @@ public class AnthropicAdapter: APIAdapter {
             if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
                 logger.debug("构建的 Anthropic 聊天请求体:\n---\n\(jsonString)\n---")
             }
+            logChatRequestSnapshot(adapterName: "Anthropic", request: request, payload: payload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
