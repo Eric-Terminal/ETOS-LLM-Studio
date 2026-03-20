@@ -59,6 +59,24 @@ struct ObservableObjectPublisherTests {
         }
     }
 
+    @Test("MCPManager 切换聊天工具总开关会触发 objectWillChange")
+    @MainActor
+    func mcpManagerPublishesWhenTogglingChatToolsEnabled() {
+        let manager = MCPManager.shared
+        let original = manager.chatToolsEnabled
+
+        var changeCount = 0
+        let cancellable = manager.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        manager.setChatToolsEnabled(!original)
+        manager.setChatToolsEnabled(original)
+
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
     @Test("ChatMessageRenderState 更新会触发 objectWillChange")
     @MainActor
     func chatMessageRenderStatePublishesOnUpdate() {
