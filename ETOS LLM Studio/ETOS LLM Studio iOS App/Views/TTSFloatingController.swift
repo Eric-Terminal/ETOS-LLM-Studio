@@ -4,66 +4,99 @@ import Shared
 struct TTSFloatingController: View {
     @ObservedObject private var ttsManager = TTSManager.shared
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
+    @State private var keepVisibleAfterFinished: Bool = false
 
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
 
-    private var shouldShow: Bool {
+    private var isPlaybackActive: Bool {
         ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
+    }
+
+    private var shouldShow: Bool {
+        isPlaybackActive || keepVisibleAfterFinished
     }
 
     var body: some View {
         if shouldShow {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Button {
-                        if ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering {
-                            ttsManager.pause()
-                        } else {
-                            ttsManager.resume()
+                if isPlaybackActive {
+                    HStack(spacing: 10) {
+                        Button {
+                            if ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering {
+                                ttsManager.pause()
+                            } else {
+                                ttsManager.resume()
+                            }
+                        } label: {
+                            Image(systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill")
+                                .frame(width: 28, height: 28)
                         }
-                    } label: {
-                        Image(systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill")
-                            .frame(width: 28, height: 28)
+                        .buttonStyle(.borderedProminent)
+
+                        Button {
+                            ttsManager.stop()
+                            dismissController()
+                        } label: {
+                            Image(systemName: "stop.fill")
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
+                            ttsManager.seekBy(seconds: 5)
+                        } label: {
+                            Image(systemName: "goforward.5")
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
+                            cycleSpeed()
+                        } label: {
+                            Text(String(format: "x%.1f", settingsStore.playbackSpeed))
+                                .font(.caption.monospacedDigit())
+                                .frame(minWidth: 42)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.borderedProminent)
 
-                    Button {
-                        ttsManager.stop()
-                    } label: {
-                        Image(systemName: "stop.fill")
-                            .frame(width: 28, height: 28)
+                    ProgressView(value: progressValue)
+                        .progressViewStyle(.linear)
+
+                    HStack(spacing: 6) {
+                        Text(chunkText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 4)
+                        Text(timeText)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.bordered)
+                } else {
+                    HStack(spacing: 8) {
+                        Text(statusText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
 
-                    Button {
-                        ttsManager.seekBy(seconds: 5)
-                    } label: {
-                        Image(systemName: "goforward.5")
-                            .frame(width: 28, height: 28)
+                        Spacer(minLength: 4)
+
+                        if ttsManager.canReplayLastRequest {
+                            Button("重试") {
+                                ttsManager.replayLastRequest()
+                                keepVisibleAfterFinished = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .font(.caption2)
+                        }
+
+                        Button {
+                            dismissController()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
                     }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        cycleSpeed()
-                    } label: {
-                        Text(String(format: "x%.1f", settingsStore.playbackSpeed))
-                            .font(.caption.monospacedDigit())
-                            .frame(minWidth: 42)
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                ProgressView(value: progressValue)
-                    .progressViewStyle(.linear)
-
-                HStack(spacing: 6) {
-                    Text(chunkText)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 4)
-                    Text(timeText)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 12)
@@ -77,6 +110,15 @@ struct TTSFloatingController: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 74)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onAppear {
+                updateVisibilityState()
+            }
+            .onChange(of: isPlaybackActive) { _, _ in
+                updateVisibilityState()
+            }
+            .onChange(of: ttsManager.playbackState.status) { _, _ in
+                updateVisibilityState()
+            }
         }
     }
 
@@ -107,5 +149,38 @@ struct TTSFloatingController: View {
         let next = speedSteps[(idx + 1) % speedSteps.count]
         settingsStore.playbackSpeed = next
         ttsManager.setPlaybackSpeed(next)
+    }
+
+    private var statusText: String {
+        switch ttsManager.playbackState.status {
+        case .error:
+            return "朗读失败，可重试"
+        case .ended:
+            return "朗读已结束"
+        default:
+            return "朗读已停止"
+        }
+    }
+
+    private func dismissController() {
+        keepVisibleAfterFinished = false
+    }
+
+    private func updateVisibilityState() {
+        guard !isPlaybackActive else {
+            keepVisibleAfterFinished = true
+            return
+        }
+
+        switch ttsManager.playbackState.status {
+        case .ended, .error:
+            keepVisibleAfterFinished = true
+        case .idle:
+            keepVisibleAfterFinished = false
+        case .paused, .buffering, .playing:
+            keepVisibleAfterFinished = true
+        @unknown default:
+            keepVisibleAfterFinished = false
+        }
     }
 }

@@ -46,6 +46,12 @@ public final class TTSManager: NSObject, ObservableObject {
         let text: String
     }
 
+    /// 用于在朗读结束后执行“重试朗读”
+    private struct ReplayRequest {
+        let messageID: UUID?
+        let text: String
+    }
+
     private enum ActiveBackend {
         case none
         case system
@@ -57,6 +63,8 @@ public final class TTSManager: NSObject, ObservableObject {
         var format: String
         var sampleRate: Int?
     }
+
+    private var lastReplayRequest: ReplayRequest?
 
     public init(urlSession: URLSession = .shared) {
         self.urlSession = urlSession
@@ -74,6 +82,8 @@ public final class TTSManager: NSObject, ObservableObject {
 
         let chunks = splitText(processed)
         guard !chunks.isEmpty else { return }
+
+        lastReplayRequest = ReplayRequest(messageID: messageID, text: text)
 
         if flush {
             workerTask?.cancel()
@@ -96,6 +106,17 @@ public final class TTSManager: NSObject, ObservableObject {
                 await self?.processQueue()
             }
         }
+    }
+
+    public var canReplayLastRequest: Bool {
+        guard let request = lastReplayRequest else { return false }
+        return !request.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 重新朗读上一条成功提交的文本，便于在播放结束后快速重试
+    public func replayLastRequest() {
+        guard let request = lastReplayRequest else { return }
+        speak(request.text, messageID: request.messageID, flush: true)
     }
 
     public func pause() {

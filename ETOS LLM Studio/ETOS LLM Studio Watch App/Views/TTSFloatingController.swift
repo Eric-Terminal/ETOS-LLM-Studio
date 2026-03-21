@@ -5,10 +5,8 @@ struct TTSFloatingController: View {
     @ObservedObject private var ttsManager = TTSManager.shared
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
     @State private var keepVisibleAfterFinished: Bool = false
-    @State private var autoHideTask: Task<Void, Never>?
 
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
-    private let finishLingerDuration: TimeInterval = 6
 
     private var isPlaybackActive: Bool {
         ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
@@ -67,6 +65,15 @@ struct TTSFloatingController: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 4)
+
+                        if ttsManager.canReplayLastRequest {
+                            Button("重试") {
+                                ttsManager.replayLastRequest()
+                                keepVisibleAfterFinished = true
+                            }
+                            .font(.caption2)
+                        }
+
                         Button {
                             dismissImmediately()
                         } label: {
@@ -92,6 +99,9 @@ struct TTSFloatingController: View {
             .onChange(of: isPlaybackActive) { _, isActive in
                 updateVisibilityState(isActive: isActive)
             }
+            .onChange(of: ttsManager.playbackState.status) { _, _ in
+                updateVisibilityState(isActive: isPlaybackActive)
+            }
         }
     }
 
@@ -113,15 +123,10 @@ struct TTSFloatingController: View {
     }
 
     private func dismissImmediately() {
-        autoHideTask?.cancel()
-        autoHideTask = nil
         keepVisibleAfterFinished = false
     }
 
     private func updateVisibilityState(isActive: Bool) {
-        autoHideTask?.cancel()
-        autoHideTask = nil
-
         guard !isActive else {
             keepVisibleAfterFinished = true
             return
@@ -130,15 +135,6 @@ struct TTSFloatingController: View {
         switch ttsManager.playbackState.status {
         case .ended, .error:
             keepVisibleAfterFinished = true
-            autoHideTask = Task { [finishLingerDuration] in
-                try? await Task.sleep(nanoseconds: UInt64(finishLingerDuration * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    if !isPlaybackActive {
-                        keepVisibleAfterFinished = false
-                    }
-                }
-            }
         case .idle:
             keepVisibleAfterFinished = false
         case .paused, .buffering, .playing:
