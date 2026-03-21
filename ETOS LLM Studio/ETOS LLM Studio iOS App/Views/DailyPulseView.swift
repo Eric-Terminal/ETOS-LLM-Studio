@@ -31,7 +31,6 @@ struct DailyPulseView: View {
             feedbackHistorySection
             externalSourcesSection
             todayPulseSection
-            archivePulseSection
         }
         .navigationTitle("每日脉冲")
         .navigationBarTitleDisplayMode(.inline)
@@ -90,7 +89,7 @@ struct DailyPulseView: View {
             }
             .disabled(pulseManager.isGenerating)
         } footer: {
-            Text("当前会优先使用最近聊天、长期记忆、请求日志、反馈历史、明日策展和你的关注焦点，并可选结合外部上下文生成约 3 张卡片。每日脉冲会优先突出今天这一期，往期内容会弱化归档。")
+            Text("当前会优先使用最近聊天、长期记忆、请求日志、反馈历史、明日策展和你的关注焦点，并可选结合外部上下文生成约 3 张卡片。为了更接近 Pulse，主界面现在只保留今天这一期。")
         }
     }
 
@@ -175,14 +174,14 @@ struct DailyPulseView: View {
                     .padding(.vertical, 2)
                 }
 
-                Button(role: .destructive) {
-                    pulseManager.clearFeedbackHistory()
+                NavigationLink {
+                    DailyPulseFeedbackHistoryView()
                 } label: {
-                    Label("清空反馈历史", systemImage: "trash")
+                    Label("查看完整反馈历史", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                 }
             }
         } footer: {
-            Text("反馈历史会作为长期偏好信号保留；清空后，后续推荐会更多依赖聊天、记忆与当前上下文。")
+            Text("反馈历史会作为长期偏好信号保留；进入完整历史页后，你可以逐条删除或整体清空。")
         }
     }
 
@@ -218,19 +217,6 @@ struct DailyPulseView: View {
                 Text("今天还没有生成新的每日脉冲。你可以立即生成，或者先写一点“明日想看什么”再回来。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var archivePulseSection: some View {
-        if !pulseManager.archivedRuns.isEmpty {
-            Section("往期归档") {
-                ForEach(Array(pulseManager.archivedRuns.prefix(3))) { run in
-                    archivedRunRow(run)
-                }
-            } footer: {
-                Text("往期内容默认弱化展示；如果你把某张卡保存为正式会话，它会继续留在聊天记录里。")
             }
         }
     }
@@ -304,22 +290,6 @@ struct DailyPulseView: View {
         .padding(.vertical, 6)
     }
 
-    private func archivedRunRow(_ run: DailyPulseRun) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(run.headline)
-                .font(.subheadline.weight(.medium))
-            Text(summaryText(for: run))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let firstCard = run.visibleCards.first {
-                Text(firstCard.title)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
     private func feedbackButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
@@ -366,7 +336,7 @@ struct DailyPulseView: View {
 
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
-        return "生成于 \(dateText) · 可见卡片 \(run.visibleCards.count)/\(run.cards.count)"
+        return "生成于 \(dateText) · 可见卡片 \(run.visibleCards.count)/\(run.cards.count) · 仅保留当天"
     }
 
     private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {

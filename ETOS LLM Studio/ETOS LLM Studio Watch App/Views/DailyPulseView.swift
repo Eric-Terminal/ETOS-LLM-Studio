@@ -106,10 +106,11 @@ struct DailyPulseView: View {
                         Text(historyTitle(for: event))
                             .font(.caption2)
                     }
-                    Button(role: .destructive) {
-                        pulseManager.clearFeedbackHistory()
+
+                    NavigationLink {
+                        DailyPulseFeedbackHistoryView()
                     } label: {
-                        Label("清空历史", systemImage: "trash")
+                        Label("查看完整历史", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                     }
                 }
             }
@@ -141,19 +142,6 @@ struct DailyPulseView: View {
                 }
             }
 
-            if !pulseManager.archivedRuns.isEmpty {
-                Section("往期归档") {
-                    ForEach(Array(pulseManager.archivedRuns.prefix(2))) { run in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(run.headline)
-                                .font(.caption)
-                            Text(summaryText(for: run))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
         }
         .navigationTitle("每日脉冲")
         .task {
@@ -256,7 +244,7 @@ struct DailyPulseView: View {
 
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
-        return "\(dateText) · \(run.visibleCards.count)/\(run.cards.count) 张可见"
+        return "\(dateText) · \(run.visibleCards.count)/\(run.cards.count) 张可见 · 仅保留当天"
     }
 
     private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {
