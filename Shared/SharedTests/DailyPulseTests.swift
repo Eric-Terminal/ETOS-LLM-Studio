@@ -506,6 +506,54 @@ struct DailyPulseTests {
         #expect(remaining.first?.id == first.id)
     }
 
+    @Test("准备状态会按当天开启和收口")
+    @MainActor
+    func preparationStateLifecycle() {
+        let manager = DailyPulseManager(
+            chatService: ChatService(),
+            memoryManager: MemoryManager()
+        )
+        let formatter = ISO8601DateFormatter()
+        let referenceDate = formatter.date(from: "2026-03-22T09:30:00Z")!
+
+        manager.beginPreparation(referenceDate: referenceDate)
+        #expect(manager.preparingDayKey == "2026-03-22")
+        #expect(DailyPulseManager.isPreparingPulse(
+            preparingDayKey: manager.preparingDayKey,
+            todayRunDayKey: manager.todayRun?.dayKey,
+            referenceDate: referenceDate
+        ))
+        #expect(manager.lastPreparationStartedAt == referenceDate)
+
+        manager.finishPreparation()
+        #expect(manager.preparingDayKey == nil)
+        #expect(!DailyPulseManager.isPreparingPulse(
+            preparingDayKey: manager.preparingDayKey,
+            todayRunDayKey: manager.todayRun?.dayKey,
+            referenceDate: referenceDate
+        ))
+    }
+
+    @Test("今天正在准备时不应误判为普通空白")
+    @MainActor
+    func preparingTodayPulseUsesPreparingState() {
+        let manager = DailyPulseManager(
+            chatService: ChatService(),
+            memoryManager: MemoryManager()
+        )
+        let formatter = ISO8601DateFormatter()
+        let referenceDate = formatter.date(from: "2026-03-22T09:30:00Z")!
+
+        manager.beginPreparation(referenceDate: referenceDate)
+        #expect(manager.todayRun == nil)
+        #expect(DailyPulseManager.isPreparingPulse(
+            preparingDayKey: manager.preparingDayKey,
+            todayRunDayKey: manager.todayRun?.dayKey,
+            referenceDate: referenceDate
+        ))
+        #expect(!manager.hasUnviewedTodayRun)
+    }
+
 #if canImport(UserNotifications)
     @Test("Daily Pulse 通知路由能识别目标 userInfo")
     func dailyPulseNotificationRouteDetection() {

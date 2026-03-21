@@ -427,8 +427,11 @@ public final class DailyPulseManager: ObservableObject {
     }
 
     public var isPreparingTodayPulse: Bool {
-        let todayKey = Self.dayKey(for: Date())
-        return preparingDayKey == todayKey && todayRun == nil
+        Self.isPreparingPulse(
+            preparingDayKey: preparingDayKey,
+            todayRunDayKey: todayRun?.dayKey,
+            referenceDate: Date()
+        )
     }
 
     public var feedbackHistoryPreview: [DailyPulseFeedbackEvent] {
@@ -618,6 +621,15 @@ public final class DailyPulseManager: ObservableObject {
     internal static func hasUnviewedRun(todayRunDayKey: String?, lastViewedDayKey: String?) -> Bool {
         guard let todayRunDayKey, !todayRunDayKey.isEmpty else { return false }
         return todayRunDayKey != lastViewedDayKey
+    }
+
+    internal static func isPreparingPulse(
+        preparingDayKey: String?,
+        todayRunDayKey: String?,
+        referenceDate: Date
+    ) -> Bool {
+        let todayKey = dayKey(for: referenceDate)
+        return preparingDayKey == todayKey && todayRunDayKey == nil
     }
 
     internal static func removingFeedbackEvent(id: UUID, from history: [DailyPulseFeedbackEvent]) -> [DailyPulseFeedbackEvent] {
