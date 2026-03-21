@@ -111,6 +111,10 @@ struct SettingsView: View {
                         Label("模型高级设置", systemImage: "brain.head.profile")
                     }
 
+                    NavigationLink(destination: DailyPulseView(viewModel: viewModel)) {
+                        Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                    }
+
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
                         Label("拓展功能", systemImage: "puzzlepiece.extension")
                     }
