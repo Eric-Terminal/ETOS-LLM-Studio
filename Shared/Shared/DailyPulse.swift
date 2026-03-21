@@ -299,6 +299,8 @@ public final class DailyPulseManager: ObservableObject {
     @Published public private(set) var lastErrorMessage: String?
     @Published public private(set) var lastViewedDayKey: String?
     @Published public private(set) var lastDeliveryAttemptDayKey: String?
+    @Published public private(set) var preparingDayKey: String?
+    @Published public private(set) var lastPreparationStartedAt: Date?
     @Published public var focusText: String {
         didSet {
             defaults.set(focusText, forKey: Self.focusDefaultsKey)
@@ -424,6 +426,11 @@ public final class DailyPulseManager: ObservableObject {
         Self.hasUnviewedRun(todayRunDayKey: todayRun?.dayKey, lastViewedDayKey: lastViewedDayKey)
     }
 
+    public var isPreparingTodayPulse: Bool {
+        let todayKey = Self.dayKey(for: Date())
+        return preparingDayKey == todayKey && todayRun == nil
+    }
+
     public var feedbackHistoryPreview: [DailyPulseFeedbackEvent] {
         Array(feedbackHistory.prefix(5))
     }
@@ -465,6 +472,16 @@ public final class DailyPulseManager: ObservableObject {
         guard lastViewedDayKey != todayKey else { return }
         lastViewedDayKey = todayKey
         defaults.set(todayKey, forKey: Self.lastViewedDayKeyDefaultsKey)
+    }
+
+    internal func beginPreparation(referenceDate: Date = Date()) {
+        let todayKey = Self.dayKey(for: referenceDate)
+        preparingDayKey = todayKey
+        lastPreparationStartedAt = referenceDate
+    }
+
+    internal func finishPreparation() {
+        preparingDayKey = nil
     }
 
     public func generateForScheduledDeliveryIfNeeded(
@@ -712,9 +729,13 @@ public final class DailyPulseManager: ObservableObject {
         guard force || autoGenerateEnabled || trigger == .manual || trigger == .delivery else { return }
         prunePendingCurationIfNeeded(referenceDate: Date())
 
+        beginPreparation(referenceDate: Date())
         isGenerating = true
         lastErrorMessage = nil
-        defer { isGenerating = false }
+        defer {
+            isGenerating = false
+            finishPreparation()
+        }
 
         do {
             let input = await buildGenerationInput()
