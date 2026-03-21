@@ -71,6 +71,7 @@ struct ContentView: View {
         // 启动时检查公告
         .task {
             await announcementManager.checkAnnouncement()
+            await viewModel.prepareDailyPulseIfNeeded()
         }
     }
 }

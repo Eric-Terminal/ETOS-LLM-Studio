@@ -103,6 +103,13 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    DailyPulseView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                }
+
+                NavigationLink {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
