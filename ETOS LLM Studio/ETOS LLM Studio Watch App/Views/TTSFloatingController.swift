@@ -7,8 +7,8 @@ struct TTSFloatingController: View {
     @State private var keepVisibleAfterFinished: Bool = false
 
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
-    private let panelCornerRadius: CGFloat = 14
-    private let panelMaxWidth: CGFloat = 178
+    private let panelCornerRadius: CGFloat = 12
+    private let panelMaxWidth: CGFloat = 172
 
     private var isPlaybackActive: Bool {
         ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
@@ -20,26 +20,24 @@ struct TTSFloatingController: View {
 
     var body: some View {
         if shouldShow {
-            Group {
+            VStack(spacing: 6) {
                 if isPlaybackActive {
                     activePanel
                 } else {
                     finishedPanel
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 6)
             .frame(maxWidth: panelMaxWidth)
             .background {
                 RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.68)
+                    .fill(Color.black.opacity(0.30))
             }
             .overlay {
                 RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.16), lineWidth: 0.8)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
             }
-            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
             .padding(.bottom, 58)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .onAppear {
@@ -48,36 +46,42 @@ struct TTSFloatingController: View {
             .onChange(of: isPlaybackActive) { _, isActive in
                 updateVisibilityState(isActive: isActive)
             }
-            .onChange(of: ttsManager.playbackState.status) { _, _ in
-                updateVisibilityState(isActive: isPlaybackActive)
-            }
         }
     }
 
     private var activePanel: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
-                compactControlButton(
-                    systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill",
-                    prominent: true
-                ) {
+                Button {
                     if ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering {
                         ttsManager.pause()
                     } else {
                         ttsManager.resume()
                     }
+                } label: {
+                    Image(systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill")
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
 
-                compactControlButton(systemName: "goforward.5") {
+                Button {
                     ttsManager.seekBy(seconds: 5)
+                } label: {
+                    Image(systemName: "goforward.5")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
 
                 speedButton
 
-                compactControlButton(systemName: "stop.fill") {
+                Button {
                     ttsManager.stop()
                     dismissImmediately()
+                } label: {
+                    Image(systemName: "stop.fill")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
 
             ProgressView(value: progressValue)
@@ -94,26 +98,34 @@ struct TTSFloatingController: View {
     private var finishedPanel: some View {
         HStack(spacing: 6) {
             Image(systemName: statusIcon)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
 
             Text(statusText)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 2)
 
             if ttsManager.canReplayLastRequest {
-                compactControlButton(systemName: "arrow.clockwise") {
+                Button {
                     ttsManager.replayLastRequest()
                     keepVisibleAfterFinished = true
+                } label: {
+                    Image(systemName: "arrow.clockwise")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .accessibilityLabel("重试朗读")
             }
 
-            compactControlButton(systemName: "xmark") {
+            Button {
                 dismissImmediately()
+            } label: {
+                Image(systemName: "xmark")
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .accessibilityLabel("关闭朗读控制")
         }
     }
@@ -123,28 +135,11 @@ struct TTSFloatingController: View {
             cycleSpeed()
         } label: {
             Text(String(format: "x%.1f", settingsStore.playbackSpeed))
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .frame(minWidth: 34, minHeight: 24)
+                .font(.caption2.monospacedDigit())
+                .frame(minWidth: 36)
         }
-        .buttonStyle(.plain)
-        .background {
-            Capsule()
-                .fill(Color.primary.opacity(0.14))
-        }
-    }
-
-    private func compactControlButton(systemName: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 11, weight: .semibold))
-                .frame(width: 24, height: 24)
-                .foregroundStyle(prominent ? Color.white : Color.primary)
-                .background {
-                    Circle()
-                        .fill(prominent ? Color.accentColor : Color.primary.opacity(0.14))
-                }
-        }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
     }
 
     private var progressValue: Double {
