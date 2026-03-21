@@ -166,6 +166,7 @@ struct DailyPulseTests {
     func generationInputAcceptsExternalContextOnly() {
         let input = DailyPulseGenerationInput(
             focusText: "",
+            curationText: "",
             sessionExcerpts: [],
             memories: [],
             requestLogSummary: "",
@@ -289,6 +290,7 @@ struct DailyPulseTests {
     func generationInputAcceptsRecentExternalSnapshotOnly() {
         let input = DailyPulseGenerationInput(
             focusText: "",
+            curationText: "",
             sessionExcerpts: [],
             memories: [],
             requestLogSummary: "",
@@ -302,5 +304,82 @@ struct DailyPulseTests {
 
         #expect(input.hasUsableContext)
         #expect(input.sourceDigest.contains("最近快捷指令结果"))
+    }
+
+    @Test("反馈历史会参与偏好画像构建")
+    func makePreferenceProfileUsesFeedbackHistory() {
+        let profile = DailyPulseManager.makePreferenceProfile(
+            history: [
+                DailyPulseFeedbackEvent(
+                    dayKey: "2026-03-22",
+                    topicHint: "项目推进 下一步",
+                    cardTitle: "继续推进项目",
+                    action: .saved
+                ),
+                DailyPulseFeedbackEvent(
+                    dayKey: "2026-03-21",
+                    topicHint: "旅行安排 订票",
+                    cardTitle: "旅行安排提醒",
+                    action: .hidden
+                )
+            ],
+            recentRuns: [
+                DailyPulseRun(
+                    dayKey: "2026-03-22",
+                    generatedAt: Date(timeIntervalSince1970: 200),
+                    headline: "今天",
+                    cards: [
+                        DailyPulseCard(
+                            title: "继续推进项目",
+                            whyRecommended: "原因",
+                            summary: "把阻塞点拆开",
+                            detailsMarkdown: "详情",
+                            suggestedPrompt: "追问"
+                        )
+                    ],
+                    sourceDigest: "digest"
+                )
+            ]
+        )
+
+        #expect(profile.positiveHints.contains(where: { $0.contains("项目推进") }))
+        #expect(profile.negativeHints.contains(where: { $0.contains("旅行安排") }))
+        #expect(profile.recentVisibleHints.contains(where: { $0.contains("继续推进项目") }))
+    }
+
+    @Test("相同主题与动作的反馈历史会被去重覆盖")
+    func appendingFeedbackEventDeduplicatesSameTopicAction() {
+        let older = DailyPulseFeedbackEvent(
+            id: UUID(uuidString: "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb")!,
+            createdAt: Date(timeIntervalSince1970: 100),
+            dayKey: "2026-03-22",
+            topicHint: "继续推进项目",
+            cardTitle: "继续推进项目",
+            action: .liked
+        )
+        let newer = DailyPulseFeedbackEvent(
+            id: UUID(uuidString: "cccccccc-1111-2222-3333-dddddddddddd")!,
+            createdAt: Date(timeIntervalSince1970: 200),
+            dayKey: "2026-03-22",
+            topicHint: "继续推进项目 下一步",
+            cardTitle: "继续推进项目",
+            action: .liked
+        )
+
+        let history = DailyPulseManager.appendingFeedbackEvent(newer, to: [older], limit: 10)
+
+        #expect(history.count == 1)
+        #expect(history.first?.id == newer.id)
+    }
+
+    @Test("明日策展只会在目标日期命中时进入生成上下文")
+    func activeCurationTextOnlyMatchesTargetDay() {
+        let note = DailyPulseCurationNote(
+            targetDayKey: "2026-03-23",
+            text: "明天优先帮我看 PR 审查"
+        )
+
+        #expect(DailyPulseManager.activeCurationText(for: "2026-03-23", pendingCuration: note) == "明天优先帮我看 PR 审查")
+        #expect(DailyPulseManager.activeCurationText(for: "2026-03-22", pendingCuration: note).isEmpty)
     }
 }
