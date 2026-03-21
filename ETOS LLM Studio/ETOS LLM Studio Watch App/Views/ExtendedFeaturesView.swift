@@ -34,6 +34,35 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    TTSSettingsView()
+                        .environmentObject(viewModel)
+                } label: {
+                    Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+
+                NavigationLink {
+                    SpeechInputSettingsView(
+                        enableSpeechInput: $viewModel.enableSpeechInput,
+                        selectedSpeechModel: speechModelBinding,
+                        sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
+                        audioRecordingFormat: $viewModel.audioRecordingFormat,
+                        speechModels: viewModel.speechModels
+                    )
+                } label: {
+                    Label("语音输入", systemImage: "mic")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("统一管理语音输入与语音朗读。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     FeedbackCenterView()
                 } label: {
                     Label(NSLocalizedString("反馈助手", comment: "反馈入口"), systemImage: "text.bubble")
@@ -147,6 +176,13 @@ public struct ExtendedFeaturesView: View {
             }
         }
         .navigationTitle("拓展功能")
+    }
+
+    private var speechModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedSpeechModel },
+            set: { viewModel.setSelectedSpeechModel($0) }
+        )
     }
 }
 

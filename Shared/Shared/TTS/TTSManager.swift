@@ -31,17 +31,25 @@ public final class TTSManager: NSObject, ObservableObject {
     private var progressTimer: Timer?
 #endif
 
-#if os(iOS)
+#if os(iOS) || os(watchOS)
     private lazy var speechSynthesizer: AVSpeechSynthesizer = {
         let synthesizer = AVSpeechSynthesizer()
         synthesizer.delegate = self
         return synthesizer
     }()
     private var speechContinuation: CheckedContinuation<Void, Error>?
+    private var speechMonitorTask: Task<Void, Never>?
+    private var speechDidStart = false
 #endif
 
     private struct QueueItem: Identifiable {
         let id = UUID()
+        let messageID: UUID?
+        let text: String
+    }
+
+    /// 用于在朗读结束后执行“重试朗读”
+    private struct ReplayRequest {
         let messageID: UUID?
         let text: String
     }
@@ -58,6 +66,8 @@ public final class TTSManager: NSObject, ObservableObject {
         var sampleRate: Int?
     }
 
+    private var lastReplayRequest: ReplayRequest?
+
     public init(urlSession: URLSession = .shared) {
         self.urlSession = urlSession
         super.init()
@@ -68,12 +78,29 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     public func speak(_ text: String, messageID: UUID? = nil, flush: Bool = true) {
+        logger.info("TTS 收到朗读请求：原始长度=\(text.count, privacy: .public)")
+#if DEBUG
+        print("[TTS] 收到朗读请求，原始长度=\(text.count)")
+#endif
+
         let settings = settingsStore.snapshot
-        let processed = preprocessText(text, settings: settings)
+        let boundedText = boundedSpeechInput(text, settings: settings)
+        if boundedText.count < text.count {
+            logger.info("TTS 文本已截断：截断后长度=\(boundedText.count, privacy: .public)")
+#if DEBUG
+            print("[TTS] 文本已截断，截断后长度=\(boundedText.count)")
+#endif
+        }
+
+        let processed = preprocessText(boundedText, settings: settings)
         guard !processed.isEmpty else { return }
 
         let chunks = splitText(processed)
         guard !chunks.isEmpty else { return }
+
+        logger.info("TTS 入队：分段数=\(chunks.count, privacy: .public)，播放模式=\(settings.playbackMode.rawValue, privacy: .public)")
+
+        lastReplayRequest = ReplayRequest(messageID: messageID, text: text)
 
         if flush {
             workerTask?.cancel()
@@ -98,6 +125,17 @@ public final class TTSManager: NSObject, ObservableObject {
         }
     }
 
+    public var canReplayLastRequest: Bool {
+        guard let request = lastReplayRequest else { return false }
+        return !request.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 重新朗读上一条成功提交的文本，便于在播放结束后快速重试
+    public func replayLastRequest() {
+        guard let request = lastReplayRequest else { return }
+        speak(request.text, messageID: request.messageID, flush: true)
+    }
+
     public func pause() {
         guard isSpeaking else { return }
         isPausedByUser = true
@@ -107,7 +145,7 @@ public final class TTSManager: NSObject, ObservableObject {
             audioPlayer?.pause()
             playbackState.status = .paused
         case .system:
-#if os(iOS)
+#if os(iOS) || os(watchOS)
             _ = speechSynthesizer.pauseSpeaking(at: .word)
             playbackState.status = .paused
 #endif
@@ -126,7 +164,7 @@ public final class TTSManager: NSObject, ObservableObject {
             audioPlayer?.play()
             playbackState.status = .playing
         case .system:
-#if os(iOS)
+#if os(iOS) || os(watchOS)
             _ = speechSynthesizer.continueSpeaking()
             playbackState.status = .playing
 #endif
@@ -180,6 +218,8 @@ public final class TTSManager: NSObject, ObservableObject {
             currentSpeakingMessageID = item.messageID
             isSpeaking = true
 
+            logger.info("TTS 开始朗读分段：剩余分段=\(self.queue.count, privacy: .public)")
+
             playbackState.currentChunkIndex += 1
             playbackState.totalChunks = max(playbackState.currentChunkIndex, playbackState.currentChunkIndex + queue.count)
             playbackState.status = .buffering
@@ -198,7 +238,12 @@ public final class TTSManager: NSObject, ObservableObject {
                         try await speakBySystem(item.text, settings: settings)
                     } catch {
                         if settings.playbackMode == .auto {
+#if os(watchOS)
+                            // watchOS 上系统 TTS 异常时不自动切云端，避免网络不稳定导致长时间卡在加载态。
+                            throw error
+#else
                             try await speakByCloud(item, settings: settings)
+#endif
                         } else {
                             throw error
                         }
@@ -232,7 +277,7 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     private func resolvePlaybackMode(_ mode: TTSPlaybackMode) -> TTSPlaybackMode {
-#if os(iOS)
+#if os(iOS) || os(watchOS)
         if mode == .auto {
             return .system
         }
@@ -296,16 +341,27 @@ public final class TTSManager: NSObject, ObservableObject {
         return model
     }
 
+    private var cloudRequestTimeoutSeconds: TimeInterval {
+#if os(watchOS)
+        25
+#else
+        120
+#endif
+    }
+
     private func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
-#if os(iOS)
+#if os(iOS) || os(watchOS)
         activeBackend = .system
         playbackState.status = .playing
         playbackState.speed = settings.playbackSpeed
         playbackState.duration = estimateDuration(for: text, speechRate: settings.speechRate)
         playbackState.position = 0
 
+        logger.info("系统 TTS 开始：文本长度=\(text.count, privacy: .public)")
+
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             speechContinuation = continuation
+            speechDidStart = false
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = settings.speechRate.ttsClamped(to: 0.1...0.6)
             utterance.pitchMultiplier = settings.pitch.ttsClamped(to: 0.5...2.0)
@@ -315,11 +371,97 @@ public final class TTSManager: NSObject, ObservableObject {
                 }
             }
             speechSynthesizer.speak(utterance)
+            startSpeechCompletionMonitor(estimatedDuration: playbackState.duration)
         }
 #else
         throw NSError(domain: "TTS", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前平台不支持系统 TTS。", comment: "")])
 #endif
     }
+
+#if os(iOS) || os(watchOS)
+    /// 兜底监控系统 TTS 的回调，避免在 watchOS 上出现无回调导致队列永久卡住。
+    private func startSpeechCompletionMonitor(estimatedDuration: TimeInterval) {
+        stopSpeechMonitor(resetDidStart: false)
+        let startupGrace: TimeInterval = 5
+        let hardDeadline = min(75, max(30, estimatedDuration * 2.2 + 8))
+
+        speechMonitorTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let startedAt = Date()
+            var speechBeganAt: Date?
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+
+                guard let continuation = self.speechContinuation else { break }
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let isSpeakingNow = self.speechSynthesizer.isSpeaking
+                let isPausedNow = self.speechSynthesizer.isPaused
+
+                if elapsed >= hardDeadline {
+                    self.logger.error("系统 TTS 长时间无回调，自动恢复播放队列。")
+                    if isSpeakingNow {
+                        self.speechSynthesizer.stopSpeaking(at: .immediate)
+                    }
+                    self.speechContinuation = nil
+                    self.stopSpeechMonitor()
+                    continuation.resume(throwing: NSError(
+                        domain: "TTS",
+                        code: -14,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("系统朗读长时间无响应，已自动恢复。", comment: "")]
+                    ))
+                    break
+                }
+
+                if isSpeakingNow {
+                    self.speechDidStart = true
+                    if speechBeganAt == nil {
+                        speechBeganAt = Date()
+                    }
+                    if let speechBeganAt, self.playbackState.duration > 0 {
+                        let speakingElapsed = Date().timeIntervalSince(speechBeganAt)
+                        self.playbackState.position = min(self.playbackState.duration, speakingElapsed)
+                    }
+                    continue
+                }
+
+                if isPausedNow {
+                    continue
+                }
+
+                if self.speechDidStart {
+                    self.logger.warning("系统 TTS 未收到 didFinish 回调，已通过状态轮询自动收尾。")
+                    self.playbackState.status = .ended
+                    self.playbackState.position = self.playbackState.duration
+                    self.speechContinuation = nil
+                    self.stopSpeechMonitor()
+                    continuation.resume()
+                    break
+                }
+
+                if elapsed >= startupGrace {
+                    self.logger.error("系统 TTS 启动失败，自动恢复播放流程。")
+                    self.speechContinuation = nil
+                    self.stopSpeechMonitor()
+                    continuation.resume(throwing: NSError(
+                        domain: "TTS",
+                        code: -13,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("系统朗读未能启动，请重试或切换云端。", comment: "")]
+                    ))
+                    break
+                }
+            }
+        }
+    }
+
+    private func stopSpeechMonitor(resetDidStart: Bool = true) {
+        speechMonitorTask?.cancel()
+        speechMonitorTask = nil
+        if resetDidStart {
+            speechDidStart = false
+        }
+    }
+#endif
 
     private func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         switch settings.providerKind {
@@ -351,7 +493,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -395,7 +537,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -438,7 +580,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("enable", forHTTPHeaderField: "X-DashScope-SSE")
@@ -486,7 +628,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -570,9 +712,30 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     private func preprocessText(_ text: String, settings: TTSSettingsSnapshot) -> String {
-        let stripped = stripMarkdown(text)
+        let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
+        let stripped: String
+#if os(watchOS)
+        if settings.watchUseLightweightPreprocess {
+            // watchOS 端可选轻量预处理，降低主线程卡顿风险
+            stripped = normalized
+        } else {
+            stripped = stripMarkdown(normalized)
+        }
+#else
+        stripped = stripMarkdown(normalized)
+#endif
         let quoted = settings.onlyReadQuotedContent ? extractQuotedContent(from: stripped) : stripped
         return quoted.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func boundedSpeechInput(_ text: String, settings: TTSSettingsSnapshot) -> String {
+#if os(watchOS)
+        let maxLength = min(max(settings.watchSpeechMaxCharacters, 500), 6_000)
+#else
+        let maxLength = 12_000
+#endif
+        guard text.count > maxLength else { return text }
+        return String(text.prefix(maxLength))
     }
 
     private func splitText(_ text: String, maxLength: Int = 160) -> [String] {
@@ -617,7 +780,8 @@ public final class TTSManager: NSObject, ObservableObject {
         stopProgressTimer()
 #endif
 
-#if os(iOS)
+#if os(iOS) || os(watchOS)
+        stopSpeechMonitor()
         if speechSynthesizer.isSpeaking {
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
@@ -766,8 +930,14 @@ extension TTSManager: AVAudioPlayerDelegate {
 }
 #endif
 
-#if os(iOS)
+#if os(iOS) || os(watchOS)
 extension TTSManager: AVSpeechSynthesizerDelegate {
+    nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        Task { @MainActor [weak self] in
+            self?.speechDidStart = true
+        }
+    }
+
     nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor [weak self] in
             self?.handleSpeechSynthesizerDidFinish()
@@ -782,7 +952,9 @@ extension TTSManager: AVSpeechSynthesizerDelegate {
 
     @MainActor
     private func handleSpeechSynthesizerDidFinish() {
+        stopSpeechMonitor()
         playbackState.status = .ended
+        playbackState.position = playbackState.duration
         if let continuation = speechContinuation {
             speechContinuation = nil
             continuation.resume()
@@ -791,6 +963,7 @@ extension TTSManager: AVSpeechSynthesizerDelegate {
 
     @MainActor
     private func handleSpeechSynthesizerDidCancel() {
+        stopSpeechMonitor()
         if let continuation = speechContinuation {
             speechContinuation = nil
             continuation.resume(throwing: CancellationError())

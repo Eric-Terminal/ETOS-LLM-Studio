@@ -20,6 +20,9 @@ import AVFAudio
 #if canImport(CoreImage)
 import CoreImage
 #endif
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
@@ -119,6 +122,20 @@ class ChatViewModel: ObservableObject {
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
+    @AppStorage("enableBackgroundReplyNotification") private var enableBackgroundReplyNotification: Bool = true {
+        didSet {
+#if canImport(UserNotifications)
+            guard enableBackgroundReplyNotification else {
+                enableBackgroundReplyNotification = true
+                return
+            }
+            Task {
+                _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
+            }
+#endif
+        }
+    }
+    @AppStorage("hasRequestedBackgroundReplyNotificationPermissionWatch") private var hasRequestedBackgroundReplyNotificationPermission: Bool = false
     
     var audioRecordingFormat: AudioRecordingFormat {
         get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
@@ -251,6 +268,10 @@ class ChatViewModel: ObservableObject {
         // 自动轮换背景逻辑
         rotateBackgroundImageIfNeeded()
         refreshBlurredBackgroundImage()
+#if canImport(UserNotifications)
+        enforceBackgroundReplyNotificationEnabled()
+        requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded()
+#endif
         
         logger.info("ChatViewModel initialized and subscribed to ChatService.")
     }
@@ -1463,6 +1484,44 @@ class ChatViewModel: ObservableObject {
             }
         )
     }
+
+#if canImport(UserNotifications)
+    private func enforceBackgroundReplyNotificationEnabled() {
+        if !enableBackgroundReplyNotification {
+            enableBackgroundReplyNotification = true
+        }
+    }
+
+    private func requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded() {
+        enforceBackgroundReplyNotificationEnabled()
+        guard !hasRequestedBackgroundReplyNotificationPermission else { return }
+        hasRequestedBackgroundReplyNotificationPermission = true
+        Task {
+            _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
+        }
+    }
+
+    private func requestBackgroundReplyNotificationAuthorizationIfNeeded() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await withCheckedContinuation { continuation in
+            center.getNotificationSettings { continuation.resume(returning: $0) }
+        }
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .denied:
+            return false
+        case .notDetermined:
+            return await withCheckedContinuation { continuation in
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                    continuation.resume(returning: granted)
+                }
+            }
+        @unknown default:
+            return false
+        }
+    }
+#endif
 
     private func loadBackgroundImage(named name: String) -> UIImage? {
         if let cached = backgroundImageCache.object(forKey: name as NSString) {

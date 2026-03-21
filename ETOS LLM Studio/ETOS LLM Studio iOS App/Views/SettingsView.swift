@@ -197,16 +197,6 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle(
-                    NSLocalizedString("后台收到 AI 回复后通知我", comment: "Toggle for background AI reply notification"),
-                    isOn: $viewModel.enableBackgroundReplyNotification
-                )
-
-                Button(NSLocalizedString("请求通知权限", comment: "Request notification permission button")) {
-                    viewModel.requestBackgroundReplyNotificationPermission()
-                }
-                .disabled(!viewModel.enableBackgroundReplyNotification)
-
                 Button(NSLocalizedString("打开系统通知设置", comment: "Open system notification settings button")) {
                     viewModel.openSystemNotificationSettings()
                 }
@@ -215,8 +205,8 @@ struct SettingsView: View {
             } footer: {
                 Text(
                     NSLocalizedString(
-                        "当应用在后台完成回复时，发送系统通知提醒。",
-                        comment: "Background AI reply notification section footer"
+                        "后台回复通知已默认开启，应用会在首次启动时自动请求通知权限；若此前拒绝，请在系统设置中手动开启。",
+                        comment: "Background AI reply notification section footer when forced enabled"
                     )
                 )
             }

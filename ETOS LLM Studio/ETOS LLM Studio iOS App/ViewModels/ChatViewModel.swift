@@ -111,10 +111,13 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
-    @AppStorage("enableBackgroundReplyNotification") var enableBackgroundReplyNotification: Bool = true {
+    @AppStorage("enableBackgroundReplyNotification") private var enableBackgroundReplyNotification: Bool = true {
         didSet {
 #if canImport(UserNotifications)
-            guard enableBackgroundReplyNotification else { return }
+            guard enableBackgroundReplyNotification else {
+                enableBackgroundReplyNotification = true
+                return
+            }
             Task {
                 _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
             }
@@ -248,6 +251,7 @@ final class ChatViewModel: ObservableObject {
         registerLifecycleObservers()
         refreshBlurredBackgroundImage()
 #if canImport(UserNotifications)
+        enforceBackgroundReplyNotificationEnabled()
         requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded()
 #endif
     }
@@ -764,6 +768,12 @@ final class ChatViewModel: ObservableObject {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
 #endif
+    }
+
+    private func enforceBackgroundReplyNotificationEnabled() {
+        if !enableBackgroundReplyNotification {
+            enableBackgroundReplyNotification = true
+        }
     }
     
     func addErrorMessage(_ content: String) {
@@ -1304,10 +1314,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func notifyIfAssistantReplyFinishedInBackground() {
-        guard enableBackgroundReplyNotification else {
-            pendingBackgroundReplyNotificationContext = nil
-            return
-        }
+        enforceBackgroundReplyNotificationEnabled()
         guard isApplicationInBackground else {
             pendingBackgroundReplyNotificationContext = nil
             return
@@ -1443,7 +1450,7 @@ final class ChatViewModel: ObservableObject {
 
 #if canImport(UserNotifications)
     private func requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded() {
-        guard enableBackgroundReplyNotification else { return }
+        enforceBackgroundReplyNotificationEnabled()
         guard !hasRequestedBackgroundReplyNotificationPermission else { return }
         hasRequestedBackgroundReplyNotificationPermission = true
         Task {

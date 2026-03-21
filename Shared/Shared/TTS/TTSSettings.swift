@@ -57,6 +57,8 @@ public struct TTSSettingsSnapshot: Equatable, Sendable {
     public var providerKind: TTSProviderKind
     public var autoPlayAfterAssistantResponse: Bool
     public var onlyReadQuotedContent: Bool
+    public var watchUseLightweightPreprocess: Bool
+    public var watchSpeechMaxCharacters: Int
     public var speechRate: Float
     public var pitch: Float
     public var playbackSpeed: Float
@@ -70,6 +72,8 @@ public struct TTSSettingsSnapshot: Equatable, Sendable {
         providerKind: TTSProviderKind,
         autoPlayAfterAssistantResponse: Bool,
         onlyReadQuotedContent: Bool,
+        watchUseLightweightPreprocess: Bool,
+        watchSpeechMaxCharacters: Int,
         speechRate: Float,
         pitch: Float,
         playbackSpeed: Float,
@@ -82,6 +86,8 @@ public struct TTSSettingsSnapshot: Equatable, Sendable {
         self.providerKind = providerKind
         self.autoPlayAfterAssistantResponse = autoPlayAfterAssistantResponse
         self.onlyReadQuotedContent = onlyReadQuotedContent
+        self.watchUseLightweightPreprocess = watchUseLightweightPreprocess
+        self.watchSpeechMaxCharacters = watchSpeechMaxCharacters
         self.speechRate = speechRate
         self.pitch = pitch
         self.playbackSpeed = playbackSpeed
@@ -101,6 +107,8 @@ public final class TTSSettingsStore: ObservableObject {
         static let providerKind = "tts.providerKind"
         static let autoPlayAfterAssistantResponse = "tts.autoPlayAfterAssistantResponse"
         static let onlyReadQuotedContent = "tts.onlyReadQuotedContent"
+        static let watchUseLightweightPreprocess = "tts.watchUseLightweightPreprocess"
+        static let watchSpeechMaxCharacters = "tts.watchSpeechMaxCharacters"
         static let speechRate = "tts.speechRate"
         static let pitch = "tts.pitch"
         static let playbackSpeed = "tts.playbackSpeed"
@@ -126,6 +134,21 @@ public final class TTSSettingsStore: ObservableObject {
 
     @Published public var onlyReadQuotedContent: Bool {
         didSet { defaults.set(onlyReadQuotedContent, forKey: Keys.onlyReadQuotedContent) }
+    }
+
+    @Published public var watchUseLightweightPreprocess: Bool {
+        didSet { defaults.set(watchUseLightweightPreprocess, forKey: Keys.watchUseLightweightPreprocess) }
+    }
+
+    @Published public var watchSpeechMaxCharacters: Int {
+        didSet {
+            let clamped = watchSpeechMaxCharacters.clamped(to: 500...6_000)
+            if clamped != watchSpeechMaxCharacters {
+                watchSpeechMaxCharacters = clamped
+                return
+            }
+            defaults.set(clamped, forKey: Keys.watchSpeechMaxCharacters)
+        }
     }
 
     @Published public var speechRate: Float {
@@ -183,6 +206,8 @@ public final class TTSSettingsStore: ObservableObject {
             providerKind: providerKind,
             autoPlayAfterAssistantResponse: autoPlayAfterAssistantResponse,
             onlyReadQuotedContent: onlyReadQuotedContent,
+            watchUseLightweightPreprocess: watchUseLightweightPreprocess,
+            watchSpeechMaxCharacters: watchSpeechMaxCharacters,
             speechRate: speechRate,
             pitch: pitch,
             playbackSpeed: playbackSpeed,
@@ -204,6 +229,10 @@ public final class TTSSettingsStore: ObservableObject {
 
         autoPlayAfterAssistantResponse = defaults.object(forKey: Keys.autoPlayAfterAssistantResponse) as? Bool ?? false
         onlyReadQuotedContent = defaults.object(forKey: Keys.onlyReadQuotedContent) as? Bool ?? false
+        watchUseLightweightPreprocess = defaults.object(forKey: Keys.watchUseLightweightPreprocess) as? Bool ?? true
+
+        let rawWatchSpeechMaxCharacters = defaults.object(forKey: Keys.watchSpeechMaxCharacters) as? Int ?? 2_000
+        watchSpeechMaxCharacters = rawWatchSpeechMaxCharacters.clamped(to: 500...6_000)
 
         let rawSpeechRate = defaults.object(forKey: Keys.speechRate) as? Float ?? 1.0
         speechRate = rawSpeechRate.clamped(to: 0.1...3.0)
@@ -223,6 +252,12 @@ public final class TTSSettingsStore: ObservableObject {
 
 private extension Float {
     func clamped(to range: ClosedRange<Float>) -> Float {
-        min(max(self, range.lowerBound), range.upperBound)
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+private extension Int {
+    func clamped(to range: ClosedRange<Int>) -> Int {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }

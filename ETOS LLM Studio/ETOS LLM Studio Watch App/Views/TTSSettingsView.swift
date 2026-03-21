@@ -17,7 +17,7 @@ struct TTSSettingsView: View {
                     Text("自动").tag(TTSPlaybackMode.auto)
                 }
 
-                Text("watchOS 上系统 TTS 受限时会自动降级云端。")
+                Text("自动模式会优先使用本地系统 TTS，失败时会自动降级到云端。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -119,6 +119,24 @@ struct TTSSettingsView: View {
             Section("朗读行为") {
                 Toggle("自动朗读回复", isOn: $settingsStore.autoPlayAfterAssistantResponse)
                 Toggle("仅朗读引号", isOn: $settingsStore.onlyReadQuotedContent)
+            }
+
+            Section("watchOS 兼容") {
+                Toggle("轻量预处理（推荐）", isOn: $settingsStore.watchUseLightweightPreprocess)
+
+                Stepper(value: $settingsStore.watchSpeechMaxCharacters, in: 500...6_000, step: 250) {
+                    HStack {
+                        Text("最大字符")
+                        Spacer()
+                        Text("\(settingsStore.watchSpeechMaxCharacters)")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+
+                Text("如果点朗读会卡住，建议保持轻量预处理开启，并下调最大字符。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("播放参数") {
