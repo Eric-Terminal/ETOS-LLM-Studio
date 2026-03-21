@@ -7,6 +7,8 @@ struct TTSFloatingController: View {
     @State private var keepVisibleAfterFinished: Bool = false
 
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
+    private let panelCornerRadius: CGFloat = 18
+    private let panelMaxWidth: CGFloat = 320
 
     private var isPlaybackActive: Bool {
         ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
@@ -18,96 +20,28 @@ struct TTSFloatingController: View {
 
     var body: some View {
         if shouldShow {
-            VStack(alignment: .leading, spacing: 8) {
+            Group {
                 if isPlaybackActive {
-                    HStack(spacing: 10) {
-                        Button {
-                            if ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering {
-                                ttsManager.pause()
-                            } else {
-                                ttsManager.resume()
-                            }
-                        } label: {
-                            Image(systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill")
-                                .frame(width: 28, height: 28)
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Button {
-                            ttsManager.stop()
-                            dismissController()
-                        } label: {
-                            Image(systemName: "stop.fill")
-                                .frame(width: 28, height: 28)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button {
-                            ttsManager.seekBy(seconds: 5)
-                        } label: {
-                            Image(systemName: "goforward.5")
-                                .frame(width: 28, height: 28)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button {
-                            cycleSpeed()
-                        } label: {
-                            Text(String(format: "x%.1f", settingsStore.playbackSpeed))
-                                .font(.caption.monospacedDigit())
-                                .frame(minWidth: 42)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    ProgressView(value: progressValue)
-                        .progressViewStyle(.linear)
-
-                    HStack(spacing: 6) {
-                        Text(chunkText)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 4)
-                        Text(timeText)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
+                    activePanel
                 } else {
-                    HStack(spacing: 8) {
-                        Text(statusText)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        Spacer(minLength: 4)
-
-                        if ttsManager.canReplayLastRequest {
-                            Button("重试") {
-                                ttsManager.replayLastRequest()
-                                keepVisibleAfterFinished = true
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .font(.caption2)
-                        }
-
-                        Button {
-                            dismissController()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                        }
-                        .buttonStyle(.plain)
-                        .font(.caption)
-                    }
+                    finishedPanel
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            .padding(.vertical, 9)
+            .frame(maxWidth: panelMaxWidth, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.72)
             }
-            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
-            .padding(.horizontal, 12)
+            .overlay {
+                RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
+                    .stroke(Color.primary.opacity(0.14), lineWidth: 0.8)
+            }
+            .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 3)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.trailing, 12)
             .padding(.bottom, 74)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .onAppear {
@@ -120,6 +54,110 @@ struct TTSFloatingController: View {
                 updateVisibilityState()
             }
         }
+    }
+
+    private var activePanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                circularControlButton(
+                    systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill",
+                    prominent: true
+                ) {
+                    if ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering {
+                        ttsManager.pause()
+                    } else {
+                        ttsManager.resume()
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(playbackStatusText)
+                        .font(.caption.weight(.semibold))
+                    Text("\(chunkText) · \(timeText)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 6)
+
+                circularControlButton(systemName: "goforward.5") {
+                    ttsManager.seekBy(seconds: 5)
+                }
+                speedButton
+                circularControlButton(systemName: "stop.fill") {
+                    ttsManager.stop()
+                    dismissController()
+                }
+            }
+
+            ProgressView(value: progressValue)
+                .progressViewStyle(.linear)
+                .tint(.accentColor)
+        }
+    }
+
+    private var finishedPanel: some View {
+        HStack(spacing: 8) {
+            Image(systemName: statusIcon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(statusText)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 4)
+
+            if ttsManager.canReplayLastRequest {
+                Button("重试") {
+                    ttsManager.replayLastRequest()
+                    keepVisibleAfterFinished = true
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background {
+                    Capsule()
+                        .fill(Color.accentColor.opacity(0.2))
+                }
+            }
+
+            circularControlButton(systemName: "xmark") {
+                dismissController()
+            }
+        }
+    }
+
+    private var speedButton: some View {
+        Button {
+            cycleSpeed()
+        } label: {
+            Text(String(format: "x%.1f", settingsStore.playbackSpeed))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .frame(minWidth: 44)
+                .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+        .background {
+            Capsule()
+                .fill(Color.primary.opacity(0.12))
+        }
+    }
+
+    private func circularControlButton(systemName: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .foregroundStyle(prominent ? Color.white : Color.primary)
+                .background {
+                    Circle()
+                        .fill(prominent ? Color.accentColor : Color.primary.opacity(0.12))
+                }
+        }
+        .buttonStyle(.plain)
     }
 
     private var progressValue: Double {
@@ -137,6 +175,19 @@ struct TTSFloatingController: View {
         let current = Int(max(0, ttsManager.playbackState.position))
         let total = Int(max(0, ttsManager.playbackState.duration))
         return String(format: "%d:%02d / %d:%02d", current / 60, current % 60, total / 60, total % 60)
+    }
+
+    private var playbackStatusText: String {
+        switch ttsManager.playbackState.status {
+        case .paused:
+            return "已暂停"
+        case .buffering:
+            return "正在加载"
+        case .playing:
+            return "正在朗读"
+        default:
+            return "语音朗读"
+        }
     }
 
     private func cycleSpeed() {
@@ -159,6 +210,17 @@ struct TTSFloatingController: View {
             return "朗读已结束"
         default:
             return "朗读已停止"
+        }
+    }
+
+    private var statusIcon: String {
+        switch ttsManager.playbackState.status {
+        case .error:
+            return "exclamationmark.circle"
+        case .ended:
+            return "checkmark.circle"
+        default:
+            return "stop.circle"
         }
     }
 
