@@ -161,8 +161,19 @@ struct TTSFloatingController: View {
     }
 
     private var progressValue: Double {
-        guard ttsManager.playbackState.duration > 0 else { return 0 }
-        return min(1, max(0, ttsManager.playbackState.position / ttsManager.playbackState.duration))
+        let totalChunks = max(1, ttsManager.playbackState.totalChunks)
+        let currentChunk = min(totalChunks, max(1, ttsManager.playbackState.currentChunkIndex))
+
+        let chunkProgress: Double
+        if ttsManager.playbackState.duration > 0 {
+            chunkProgress = min(1, max(0, ttsManager.playbackState.position / ttsManager.playbackState.duration))
+        } else {
+            chunkProgress = ttsManager.playbackState.status == .ended ? 1 : 0
+        }
+
+        guard totalChunks > 1 else { return chunkProgress }
+        let combined = (Double(currentChunk - 1) + chunkProgress) / Double(totalChunks)
+        return min(1, max(0, combined))
     }
 
     private var chunkText: String {

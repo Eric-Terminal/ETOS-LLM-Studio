@@ -388,6 +388,7 @@ public final class TTSManager: NSObject, ObservableObject {
         speechMonitorTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let startedAt = Date()
+            var speechBeganAt: Date?
 
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 250_000_000)
@@ -395,6 +396,7 @@ public final class TTSManager: NSObject, ObservableObject {
                 guard let continuation = self.speechContinuation else { break }
                 let elapsed = Date().timeIntervalSince(startedAt)
                 let isSpeakingNow = self.speechSynthesizer.isSpeaking
+                let isPausedNow = self.speechSynthesizer.isPaused
 
                 if elapsed >= hardDeadline {
                     self.logger.error("系统 TTS 长时间无回调，自动恢复播放队列。")
@@ -413,12 +415,24 @@ public final class TTSManager: NSObject, ObservableObject {
 
                 if isSpeakingNow {
                     self.speechDidStart = true
+                    if speechBeganAt == nil {
+                        speechBeganAt = Date()
+                    }
+                    if let speechBeganAt, self.playbackState.duration > 0 {
+                        let speakingElapsed = Date().timeIntervalSince(speechBeganAt)
+                        self.playbackState.position = min(self.playbackState.duration, speakingElapsed)
+                    }
+                    continue
+                }
+
+                if isPausedNow {
                     continue
                 }
 
                 if self.speechDidStart {
                     self.logger.warning("系统 TTS 未收到 didFinish 回调，已通过状态轮询自动收尾。")
                     self.playbackState.status = .ended
+                    self.playbackState.position = self.playbackState.duration
                     self.speechContinuation = nil
                     self.stopSpeechMonitor()
                     continuation.resume()
@@ -940,6 +954,7 @@ extension TTSManager: AVSpeechSynthesizerDelegate {
     private func handleSpeechSynthesizerDidFinish() {
         stopSpeechMonitor()
         playbackState.status = .ended
+        playbackState.position = playbackState.duration
         if let continuation = speechContinuation {
             speechContinuation = nil
             continuation.resume()
