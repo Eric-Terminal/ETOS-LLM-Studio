@@ -77,8 +77,21 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     public func speak(_ text: String, messageID: UUID? = nil, flush: Bool = true) {
+        logger.info("TTS 收到朗读请求：原始长度=\(text.count, privacy: .public)")
+#if DEBUG
+        print("[TTS] 收到朗读请求，原始长度=\(text.count)")
+#endif
+
         let settings = settingsStore.snapshot
-        let processed = preprocessText(text, settings: settings)
+        let boundedText = boundedSpeechInput(text)
+        if boundedText.count < text.count {
+            logger.info("TTS 文本已截断：截断后长度=\(boundedText.count, privacy: .public)")
+#if DEBUG
+            print("[TTS] 文本已截断，截断后长度=\(boundedText.count)")
+#endif
+        }
+
+        let processed = preprocessText(boundedText, settings: settings)
         guard !processed.isEmpty else { return }
 
         let chunks = splitText(processed)
@@ -628,9 +641,26 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     private func preprocessText(_ text: String, settings: TTSSettingsSnapshot) -> String {
-        let stripped = stripMarkdown(text)
+        let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
+        let stripped: String
+#if os(watchOS)
+        // watchOS 端避免复杂正则清洗，降低主线程卡顿风险
+        stripped = normalized
+#else
+        stripped = stripMarkdown(normalized)
+#endif
         let quoted = settings.onlyReadQuotedContent ? extractQuotedContent(from: stripped) : stripped
         return quoted.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func boundedSpeechInput(_ text: String) -> String {
+#if os(watchOS)
+        let maxLength = 2_000
+#else
+        let maxLength = 12_000
+#endif
+        guard text.count > maxLength else { return text }
+        return String(text.prefix(maxLength))
     }
 
     private func splitText(_ text: String, maxLength: Int = 160) -> [String] {
