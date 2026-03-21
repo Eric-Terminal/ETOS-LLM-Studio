@@ -32,6 +32,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let worldbooks = SyncOptions(rawValue: 1 << 8) // 世界书同步选项
     public static let feedbackTickets = SyncOptions(rawValue: 1 << 9) // 反馈工单同步选项
     public static let appStorage = SyncOptions(rawValue: 1 << 10) // AppStorage（软件设置）同步选项
+    public static let dailyPulse = SyncOptions(rawValue: 1 << 11) // 每日脉冲同步选项
     @available(*, deprecated, message: "请改用 appStorage 选项。")
     public static let globalSystemPrompt = appStorage
     
@@ -111,13 +112,14 @@ public struct SyncPackage: Codable {
     public var shortcutTools: [ShortcutToolDefinition]
     public var worldbooks: [Worldbook]
     public var feedbackTickets: [FeedbackTicket]
+    public var dailyPulseRuns: [DailyPulseRun]
     /// 完整 AppStorage 快照（二进制 Plist），用于同步软件设置
     public var appStorageSnapshot: Data?
     /// 兼容旧版本：仅携带 systemPrompt 时回退使用
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, appStorageSnapshot, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
@@ -132,6 +134,7 @@ public struct SyncPackage: Codable {
         shortcutTools: [ShortcutToolDefinition] = [],
         worldbooks: [Worldbook] = [],
         feedbackTickets: [FeedbackTicket] = [],
+        dailyPulseRuns: [DailyPulseRun] = [],
         appStorageSnapshot: Data? = nil,
         globalSystemPrompt: String? = nil
     ) {
@@ -146,6 +149,7 @@ public struct SyncPackage: Codable {
         self.shortcutTools = shortcutTools
         self.worldbooks = worldbooks
         self.feedbackTickets = feedbackTickets
+        self.dailyPulseRuns = dailyPulseRuns
         self.appStorageSnapshot = appStorageSnapshot
         self.globalSystemPrompt = globalSystemPrompt
     }
@@ -163,6 +167,7 @@ public struct SyncPackage: Codable {
         shortcutTools = try container.decodeIfPresent([ShortcutToolDefinition].self, forKey: .shortcutTools) ?? []
         worldbooks = try container.decodeIfPresent([Worldbook].self, forKey: .worldbooks) ?? []
         feedbackTickets = try container.decodeIfPresent([FeedbackTicket].self, forKey: .feedbackTickets) ?? []
+        dailyPulseRuns = try container.decodeIfPresent([DailyPulseRun].self, forKey: .dailyPulseRuns) ?? []
         appStorageSnapshot = try container.decodeIfPresent(Data.self, forKey: .appStorageSnapshot)
         globalSystemPrompt = try container.decodeIfPresent(String.self, forKey: .globalSystemPrompt)
     }
@@ -190,6 +195,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedWorldbooks: Int
     public var importedFeedbackTickets: Int
     public var skippedFeedbackTickets: Int
+    public var importedDailyPulseRuns: Int
+    public var skippedDailyPulseRuns: Int
     public var importedAppStorageValues: Int
     public var skippedAppStorageValues: Int
     
@@ -214,6 +221,8 @@ public struct SyncMergeSummary: Equatable {
         skippedWorldbooks: 0,
         importedFeedbackTickets: 0,
         skippedFeedbackTickets: 0,
+        importedDailyPulseRuns: 0,
+        skippedDailyPulseRuns: 0,
         importedAppStorageValues: 0,
         skippedAppStorageValues: 0
     )
@@ -236,6 +245,8 @@ public struct SyncMergeSummary: Equatable {
 public extension Notification.Name {
     /// 背景图片发生变化时广播，便于各端刷新列表
     static let syncBackgroundsUpdated = Notification.Name("com.ETOS.sync.backgrounds.updated")
+    /// 每日脉冲发生变化时广播，便于当前设备刷新卡片列表
+    static let syncDailyPulseUpdated = Notification.Name("com.ETOS.sync.dailyPulse.updated")
 }
 
 // MARK: - 模型等价辅助

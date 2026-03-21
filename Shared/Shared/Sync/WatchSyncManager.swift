@@ -130,6 +130,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if isSyncOptionEnabled(key: "sync.options.shortcutTools", defaultValue: true) { options.insert(.shortcutTools) }
         if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
         if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
+        if isSyncOptionEnabled(key: "sync.options.dailyPulse", defaultValue: true) { options.insert(.dailyPulse) }
         let legacyAppStorageDefault = isSyncOptionEnabled(key: "sync.options.globalPrompt", defaultValue: true)
         if isSyncOptionEnabled(key: "sync.options.appStorage", defaultValue: legacyAppStorageDefault) { options.insert(.appStorage) }
         return options
@@ -176,6 +177,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }
         if summary.importedWorldbooks > 0 { parts.append("世界书 +\(summary.importedWorldbooks)") }
         if summary.importedFeedbackTickets > 0 { parts.append("工单 +\(summary.importedFeedbackTickets)") }
+        if summary.importedDailyPulseRuns > 0 { parts.append("每日脉冲 +\(summary.importedDailyPulseRuns)") }
         if summary.importedAppStorageValues > 0 { parts.append("软件设置 +\(summary.importedAppStorageValues)") }
         return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
     }

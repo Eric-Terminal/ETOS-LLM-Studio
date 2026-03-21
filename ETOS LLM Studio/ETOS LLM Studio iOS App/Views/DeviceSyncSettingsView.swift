@@ -22,6 +22,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.shortcutTools") private var syncShortcutTools = true
     @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
     @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
+    @AppStorage("sync.options.dailyPulse") private var syncDailyPulse = true
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
@@ -40,6 +41,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("快捷指令工具", isOn: $syncShortcutTools)
                 Toggle("世界书", isOn: $syncWorldbooks)
                 Toggle("反馈工单", isOn: $syncFeedbackTickets)
+                Toggle("每日脉冲", isOn: $syncDailyPulse)
                 Toggle("软件设置（AppStorage）", isOn: $syncAppStorage)
             }
 
@@ -119,6 +121,7 @@ struct DeviceSyncSettingsView: View {
         if syncShortcutTools { option.insert(.shortcutTools) }
         if syncWorldbooks { option.insert(.worldbooks) }
         if syncFeedbackTickets { option.insert(.feedbackTickets) }
+        if syncDailyPulse { option.insert(.dailyPulse) }
         if syncAppStorage { option.insert(.appStorage) }
         return option
     }
@@ -247,6 +250,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedFeedbackTickets > 0 {
             parts.append(String(format: NSLocalizedString("工单 +%d", comment: ""), summary.importedFeedbackTickets))
+        }
+        if summary.importedDailyPulseRuns > 0 {
+            parts.append(String(format: NSLocalizedString("每日脉冲 +%d", comment: ""), summary.importedDailyPulseRuns))
         }
         if summary.importedAppStorageValues > 0 {
             parts.append(String(format: NSLocalizedString("软件设置 +%d", comment: ""), summary.importedAppStorageValues))

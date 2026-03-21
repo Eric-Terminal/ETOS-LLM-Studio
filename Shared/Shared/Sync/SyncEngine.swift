@@ -30,6 +30,7 @@ public enum SyncEngine {
         var shortcutTools: [ShortcutToolDefinition] = []
         var worldbooks: [Worldbook] = []
         var feedbackTickets: [FeedbackTicket] = []
+        var dailyPulseRuns: [DailyPulseRun] = []
         var appStorageSnapshot: Data?
         var legacyGlobalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
@@ -88,6 +89,10 @@ public enum SyncEngine {
             feedbackTickets = FeedbackStore.loadTickets()
         }
 
+        if options.contains(.dailyPulse) {
+            dailyPulseRuns = Persistence.loadDailyPulseRuns()
+        }
+
         if options.contains(.appStorage) {
             let snapshot = collectAppStorageSnapshot(userDefaults: userDefaults)
             appStorageSnapshot = encodeAppStorageSnapshot(snapshot)
@@ -143,6 +148,7 @@ public enum SyncEngine {
             shortcutTools: shortcutTools,
             worldbooks: worldbooks,
             feedbackTickets: feedbackTickets,
+            dailyPulseRuns: dailyPulseRuns,
             appStorageSnapshot: appStorageSnapshot,
             globalSystemPrompt: legacyGlobalSystemPrompt
         )
@@ -213,6 +219,15 @@ public enum SyncEngine {
             let result = mergeFeedbackTickets(package.feedbackTickets)
             summary.importedFeedbackTickets = result.imported
             summary.skippedFeedbackTickets = result.skipped
+        }
+
+        if package.options.contains(.dailyPulse) {
+            let result = mergeDailyPulseRuns(package.dailyPulseRuns)
+            summary.importedDailyPulseRuns = result.imported
+            summary.skippedDailyPulseRuns = result.skipped
+            if result.imported > 0 {
+                NotificationCenter.default.post(name: .syncDailyPulseUpdated, object: nil)
+            }
         }
         
         // 音频文件同步
@@ -433,6 +448,42 @@ public enum SyncEngine {
 
     private static func mergeFeedbackTickets(_ incoming: [FeedbackTicket]) -> (imported: Int, skipped: Int) {
         FeedbackStore.mergeTickets(incoming)
+    }
+
+    // MARK: - Daily Pulse
+
+    private static func mergeDailyPulseRuns(_ incoming: [DailyPulseRun]) -> (imported: Int, skipped: Int) {
+        guard !incoming.isEmpty else { return (0, 0) }
+
+        var localRuns = Persistence.loadDailyPulseRuns()
+        var imported = 0
+        var skipped = 0
+
+        for run in incoming.sorted(by: { $0.generatedAt < $1.generatedAt }) {
+            if let existingIndex = localRuns.firstIndex(where: { $0.dayKey == run.dayKey }) {
+                let merged = DailyPulseManager.mergeRun(local: localRuns[existingIndex], incoming: run)
+                if merged == localRuns[existingIndex] {
+                    skipped += 1
+                    continue
+                }
+                localRuns[existingIndex] = merged
+                imported += 1
+                continue
+            }
+
+            localRuns.append(run)
+            imported += 1
+        }
+
+        if imported > 0 {
+            let trimmedRuns = DailyPulseManager.trimmedRuns(
+                localRuns,
+                limit: DailyPulseManager.persistedRetentionLimit
+            )
+            Persistence.saveDailyPulseRuns(trimmedRuns)
+        }
+
+        return (imported, skipped)
     }
 
     // MARK: - AppStorage
