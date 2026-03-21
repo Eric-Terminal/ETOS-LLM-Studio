@@ -70,6 +70,7 @@ struct DailyPulseView: View {
             Section("外部上下文") {
                 Toggle("MCP 能力", isOn: $pulseManager.includeMCPContext)
                 Toggle("快捷指令能力", isOn: $pulseManager.includeShortcutContext)
+                Toggle("最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
             }
 
             if let run = pulseManager.latestRun {

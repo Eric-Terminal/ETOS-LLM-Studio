@@ -104,8 +104,9 @@ struct DailyPulseView: View {
         Section("外部上下文") {
             Toggle("纳入 MCP 服务器能力", isOn: $pulseManager.includeMCPContext)
             Toggle("纳入快捷指令能力", isOn: $pulseManager.includeShortcutContext)
+            Toggle("纳入最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
         } footer: {
-            Text("开启后，每日脉冲会读取已配置的 MCP 元数据和已启用快捷指令描述，把它们当作“可调用能力”而不是已获取到的实时事实。")
+            Text("前两项会纳入可调用能力描述；“最近外部结果”则会纳入你最近一次 MCP 调试输出或快捷指令执行结果摘要，它们更接近已经获取到的真实外部内容。")
         }
     }
 
