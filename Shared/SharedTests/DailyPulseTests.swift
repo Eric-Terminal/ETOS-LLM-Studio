@@ -161,4 +161,101 @@ struct DailyPulseTests {
         #expect(merged.cards.first?.feedback == .hidden)
         #expect(merged.cards.first?.savedSessionID == savedSessionID)
     }
+
+    @Test("仅有外部上下文时也可视为可生成每日脉冲")
+    func generationInputAcceptsExternalContextOnly() {
+        let input = DailyPulseGenerationInput(
+            focusText: "",
+            sessionExcerpts: [],
+            memories: [],
+            requestLogSummary: "",
+            preferenceProfile: .empty,
+            externalContext: DailyPulseExternalContext(
+                mcpSourceLines: ["- GitHub：已选中用于聊天；工具 2 个（search_code、list_pull_requests）"],
+                shortcutSourceLines: []
+            )
+        )
+
+        #expect(input.hasUsableContext)
+        #expect(input.sourceDigest.contains("GitHub"))
+    }
+
+    @Test("MCP 外部上下文会优先保留选中的服务器与能力摘要")
+    func makeMCPContextEntriesPrioritizesSelectedServers() {
+        let selectedServer = MCPServerConfiguration(
+            id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+            displayName: "GitHub",
+            notes: "用于代码与 PR 资料",
+            transport: .http(endpoint: URL(string: "https://example.com/github")!, apiKey: nil, additionalHeaders: [:]),
+            isSelectedForChat: true,
+            disabledToolIds: ["issues.list"]
+        )
+        let passiveServer = MCPServerConfiguration(
+            id: UUID(uuidString: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")!,
+            displayName: "Calendar",
+            transport: .http(endpoint: URL(string: "https://example.com/calendar")!, apiKey: nil, additionalHeaders: [:]),
+            isSelectedForChat: false
+        )
+
+        let entries = DailyPulseManager.makeMCPContextEntries(
+            servers: [passiveServer, selectedServer],
+            metadataByServerID: [
+                selectedServer.id: MCPServerMetadataCache(
+                    info: nil,
+                    tools: [
+                        MCPToolDescription(toolId: "search_code", description: nil, inputSchema: nil, examples: nil),
+                        MCPToolDescription(toolId: "list_pull_requests", description: nil, inputSchema: nil, examples: nil),
+                        MCPToolDescription(toolId: "issues.list", description: nil, inputSchema: nil, examples: nil)
+                    ],
+                    resources: [
+                        MCPResourceDescription(resourceId: "repo://open-prs", description: nil, outputSchema: nil, querySchema: nil)
+                    ],
+                    resourceTemplates: [],
+                    prompts: [
+                        MCPPromptDescription(name: "review_pr", description: nil, arguments: nil)
+                    ],
+                    roots: []
+                ),
+                passiveServer.id: nil
+            ],
+            limit: 2
+        )
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.contains("GitHub") == true)
+        #expect(entries.first?.contains("已选中用于聊天") == true)
+        #expect(entries.first?.contains("search_code") == true)
+        #expect(entries.first?.contains("issues.list") == false)
+    }
+
+    @Test("快捷指令外部上下文仅纳入已启用工具")
+    func makeShortcutContextEntriesIncludesEnabledToolsOnly() {
+        let entries = DailyPulseManager.makeShortcutContextEntries(
+            tools: [
+                ShortcutToolDefinition(
+                    name: "今日摘要",
+                    source: "官方导入",
+                    runModeHint: .bridge,
+                    isEnabled: true,
+                    generatedDescription: "帮我整理今天的重要提醒。",
+                    updatedAt: Date(timeIntervalSince1970: 200)
+                ),
+                ShortcutToolDefinition(
+                    name: "禁用工具",
+                    source: "测试",
+                    runModeHint: .direct,
+                    isEnabled: false,
+                    generatedDescription: "不应出现。",
+                    updatedAt: Date(timeIntervalSince1970: 300)
+                )
+            ],
+            limit: 3
+        )
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.contains("今日摘要") == true)
+        #expect(entries.first?.contains("桥接执行") == true)
+        #expect(entries.first?.contains("官方导入") == true)
+        #expect(entries.first?.contains("禁用工具") == false)
+    }
 }
