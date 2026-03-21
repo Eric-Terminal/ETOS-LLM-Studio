@@ -19,6 +19,11 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var syncManager = WatchSyncManager.shared
     @StateObject private var cloudSyncManager = CloudSyncManager.shared
     @StateObject private var mcpManager = MCPManager.shared
+    @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+
+    init() {
+        DailyPulseDeliveryCoordinator.shared.activate()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -37,6 +42,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     cloudSyncManager.performAutoSyncIfEnabled()
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
+                    dailyPulseDeliveryCoordinator.activate()
                 }
         }
     }

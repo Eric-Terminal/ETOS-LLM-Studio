@@ -11,12 +11,20 @@
 import SwiftUI
 import Shared
 
+enum WatchSettingsNavigationDestination: String, Hashable, Identifiable {
+    case dailyPulse
+
+    var id: String { rawValue }
+}
+
 /// 设置视图
 struct SettingsView: View {
     
     // MARK: - 视图模型
     
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject private var pulseManager = DailyPulseManager.shared
+    @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     
     // MARK: - 公告管理器
     
@@ -25,6 +33,15 @@ struct SettingsView: View {
     // MARK: - 环境
     
     @Environment(\.dismiss) var dismiss
+    @Binding private var requestedDestination: WatchSettingsNavigationDestination?
+
+    init(
+        viewModel: ChatViewModel,
+        requestedDestination: Binding<WatchSettingsNavigationDestination?> = .constant(nil)
+    ) {
+        self.viewModel = viewModel
+        self._requestedDestination = requestedDestination
+    }
     
     // MARK: - 视图主体
     
@@ -112,7 +129,15 @@ struct SettingsView: View {
                     }
 
                     NavigationLink(destination: DailyPulseView(viewModel: viewModel)) {
-                        Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                        HStack(spacing: 8) {
+                            Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                            Spacer()
+                            if let status = dailyPulseEntryStatusText {
+                                Text(status)
+                                    .font(.caption2)
+                                    .foregroundStyle(pulseManager.hasUnviewedTodayRun ? .blue : .secondary)
+                            }
+                        }
                     }
 
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
@@ -171,6 +196,12 @@ struct SettingsView: View {
             .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
                 ensureSelectedModel(in: viewModel.activatedModels)
             }
+            .navigationDestination(item: $requestedDestination) { destination in
+                switch destination {
+                case .dailyPulse:
+                    DailyPulseView(viewModel: viewModel)
+                }
+            }
         }
     }
     
@@ -222,6 +253,19 @@ struct SettingsView: View {
         }
         guard let first = options.first else { return "" }
         return "\(first.model.displayName) | \(first.provider.name)"
+    }
+
+    private var dailyPulseEntryStatusText: String? {
+        if pulseManager.hasUnviewedTodayRun {
+            return "待查看"
+        }
+        if pulseManager.todayRun != nil {
+            return "已生成"
+        }
+        if deliveryCoordinator.reminderEnabled {
+            return deliveryCoordinator.reminderTimeText
+        }
+        return nil
     }
 }
 

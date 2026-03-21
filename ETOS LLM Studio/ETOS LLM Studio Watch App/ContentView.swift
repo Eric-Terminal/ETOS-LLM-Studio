@@ -21,11 +21,13 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var announcementManager = AnnouncementManager.shared
+    @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
     @State private var isSettingsPresented = false
+    @State private var settingsDestination: WatchSettingsNavigationDestination?
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     private let inputControlHeight: CGFloat = 38
@@ -80,7 +82,7 @@ struct ContentView: View {
                 }
                 .navigationTitle(viewModel.currentSession?.name ?? "新对话")
                 .sheet(isPresented: $isSettingsPresented) {
-                    SettingsView(viewModel: viewModel)
+                    SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
                 }
                 .sheet(item: $viewModel.activeSheet) { item in
                     sheetView(for: item)
@@ -91,6 +93,9 @@ struct ContentView: View {
                 )) { wrapper in
                     FullErrorContentView(content: wrapper.content)
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
+                openDailyPulse()
             }
             .onChange(of: viewModel.activeSheet) {
                 if viewModel.activeSheet == nil {
@@ -595,7 +600,18 @@ struct ContentView: View {
             .task {
                 await announcementManager.checkAnnouncement()
                 await viewModel.prepareDailyPulseIfNeeded()
+                if notificationCenter.consumePendingRoute() == .dailyPulse {
+                    openDailyPulse()
+                }
             }
+    }
+
+    private func openDailyPulse() {
+        isSettingsPresented = true
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            settingsDestination = .dailyPulse
+        }
     }
 
     private var inputPlaceholderText: String {

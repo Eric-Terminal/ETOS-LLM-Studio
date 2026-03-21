@@ -10,10 +10,23 @@ import SwiftUI
 import Foundation
 import Shared
 
+enum SettingsNavigationDestination: String, Hashable, Identifiable {
+    case dailyPulse
+
+    var id: String { rawValue }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var announcementManager = AnnouncementManager.shared
+    @ObservedObject private var pulseManager = DailyPulseManager.shared
+    @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @Binding private var requestedDestination: SettingsNavigationDestination?
+
+    init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
+        self._requestedDestination = requestedDestination
+    }
     
     var body: some View {
         List {
@@ -106,7 +119,15 @@ struct SettingsView: View {
                     DailyPulseView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                    HStack(spacing: 12) {
+                        Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                        Spacer()
+                        if let status = dailyPulseEntryStatusText {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundStyle(pulseManager.hasUnviewedTodayRun ? .blue : .secondary)
+                        }
+                    }
                 }
 
                 NavigationLink {
@@ -250,6 +271,13 @@ struct SettingsView: View {
                 viewModel.enableAdvancedRenderer = false
             }
         }
+        .navigationDestination(item: $requestedDestination) { destination in
+            switch destination {
+            case .dailyPulse:
+                DailyPulseView()
+                    .environmentObject(viewModel)
+            }
+        }
     }
     
     // MARK: - 辅助方法
@@ -291,6 +319,19 @@ struct SettingsView: View {
                 ChatService.shared.setSelectedModel(model)
             }
         )
+    }
+
+    private var dailyPulseEntryStatusText: String? {
+        if pulseManager.hasUnviewedTodayRun {
+            return "今日待查看"
+        }
+        if pulseManager.todayRun != nil {
+            return "今日已生成"
+        }
+        if deliveryCoordinator.reminderEnabled {
+            return "明早 \(deliveryCoordinator.reminderTimeText)"
+        }
+        return nil
     }
 
     private func selectedModelLabel(in options: [RunnableModel]) -> String {

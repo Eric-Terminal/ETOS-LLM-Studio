@@ -13,7 +13,9 @@ import Shared
 struct ContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
+    @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @State private var selection: Tab = .chat
+    @State private var settingsDestination: SettingsNavigationDestination?
     
     enum Tab: Hashable {
         case chat
@@ -40,7 +42,7 @@ struct ContentView: View {
             .tag(Tab.sessions)
             
             NavigationStack {
-                SettingsView()
+                SettingsView(requestedDestination: $settingsDestination)
             }
             .tabItem {
                 Label("设置", systemImage: "gearshape.fill")
@@ -51,6 +53,9 @@ struct ContentView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selection = .chat
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
+            openDailyPulse()
         }
         .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
             Button("确定", role: .cancel) {}
@@ -72,6 +77,19 @@ struct ContentView: View {
         .task {
             await announcementManager.checkAnnouncement()
             await viewModel.prepareDailyPulseIfNeeded()
+            if notificationCenter.consumePendingRoute() == .dailyPulse {
+                openDailyPulse()
+            }
+        }
+    }
+
+    private func openDailyPulse() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selection = .settings
+        }
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            settingsDestination = .dailyPulse
         }
     }
 }

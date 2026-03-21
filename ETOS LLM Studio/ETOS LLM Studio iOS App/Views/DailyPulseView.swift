@@ -16,6 +16,8 @@ import Shared
 struct DailyPulseView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var pulseManager = DailyPulseManager.shared
+    @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
 
     @State private var expandedCardIDs: Set<UUID> = []
     @State private var statusMessage: String?
@@ -23,6 +25,7 @@ struct DailyPulseView: View {
     var body: some View {
         List {
             generationSection
+            deliverySection
             focusSection
             tomorrowCurationSection
             feedbackHistorySection
@@ -42,6 +45,11 @@ struct DailyPulseView: View {
         }
         .task {
             await pulseManager.generateIfNeeded()
+            pulseManager.markTodayRunViewed()
+            await notificationCenter.refreshAuthorizationStatus()
+        }
+        .onChange(of: pulseManager.todayRun?.dayKey) { _, _ in
+            pulseManager.markTodayRunViewed()
         }
     }
 
@@ -83,6 +91,28 @@ struct DailyPulseView: View {
             .disabled(pulseManager.isGenerating)
         } footer: {
             Text("当前会优先使用最近聊天、长期记忆、请求日志、反馈历史、明日策展和你的关注焦点，并可选结合外部上下文生成约 3 张卡片。每日脉冲会优先突出今天这一期，往期内容会弱化归档。")
+        }
+    }
+
+    private var deliverySection: some View {
+        Section("主动送达") {
+            Toggle("晨间提醒", isOn: $deliveryCoordinator.reminderEnabled)
+
+            if deliveryCoordinator.reminderEnabled {
+                DatePicker(
+                    "提醒时间",
+                    selection: reminderTimeBinding,
+                    displayedComponents: .hourAndMinute
+                )
+
+                if notificationCenter.authorizationStatus == .denied {
+                    Button("打开系统通知设置") {
+                        viewModel.openSystemNotificationSettings()
+                    }
+                }
+            }
+        } footer: {
+            Text(deliveryCoordinator.reminderStatusText)
         }
     }
 
@@ -363,6 +393,23 @@ struct DailyPulseView: View {
                 guard !isPresented else { return }
                 statusMessage = nil
                 pulseManager.clearError()
+            }
+        )
+    }
+
+    private var reminderTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var components = DateComponents()
+                components.calendar = Calendar(identifier: .gregorian)
+                components.hour = deliveryCoordinator.reminderHour
+                components.minute = deliveryCoordinator.reminderMinute
+                return components.date ?? Date()
+            },
+            set: { newValue in
+                let components = Calendar(identifier: .gregorian).dateComponents([.hour, .minute], from: newValue)
+                deliveryCoordinator.reminderHour = components.hour ?? deliveryCoordinator.reminderHour
+                deliveryCoordinator.reminderMinute = components.minute ?? deliveryCoordinator.reminderMinute
             }
         )
     }

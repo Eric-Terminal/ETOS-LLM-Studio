@@ -16,6 +16,8 @@ import Shared
 struct DailyPulseView: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject private var pulseManager = DailyPulseManager.shared
+    @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
 
     @State private var expandedCardIDs: Set<UUID> = []
     @State private var statusMessage: String?
@@ -54,6 +56,24 @@ struct DailyPulseView: View {
                     }
                 }
                 .disabled(pulseManager.isGenerating)
+            }
+
+            Section("主动送达") {
+                Toggle("晨间提醒", isOn: $deliveryCoordinator.reminderEnabled)
+                if deliveryCoordinator.reminderEnabled {
+                    DatePicker(
+                        "提醒时间",
+                        selection: reminderTimeBinding,
+                        displayedComponents: .hourAndMinute
+                    )
+                    if notificationCenter.authorizationStatus == .denied {
+                        Text("通知权限未开启")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } footer: {
+                Text(deliveryCoordinator.reminderStatusText)
             }
 
             Section("当前关注") {
@@ -138,6 +158,11 @@ struct DailyPulseView: View {
         .navigationTitle("每日脉冲")
         .task {
             await pulseManager.generateIfNeeded()
+            pulseManager.markTodayRunViewed()
+            await notificationCenter.refreshAuthorizationStatus()
+        }
+        .onChange(of: pulseManager.todayRun?.dayKey) { _, _ in
+            pulseManager.markTodayRunViewed()
         }
         .alert("每日脉冲", isPresented: alertBinding) {
             Button("好的", role: .cancel) {
@@ -258,6 +283,23 @@ struct DailyPulseView: View {
                 guard !isPresented else { return }
                 statusMessage = nil
                 pulseManager.clearError()
+            }
+        )
+    }
+
+    private var reminderTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var components = DateComponents()
+                components.calendar = Calendar(identifier: .gregorian)
+                components.hour = deliveryCoordinator.reminderHour
+                components.minute = deliveryCoordinator.reminderMinute
+                return components.date ?? Date()
+            },
+            set: { newValue in
+                let components = Calendar(identifier: .gregorian).dateComponents([.hour, .minute], from: newValue)
+                deliveryCoordinator.reminderHour = components.hour ?? deliveryCoordinator.reminderHour
+                deliveryCoordinator.reminderMinute = components.minute ?? deliveryCoordinator.reminderMinute
             }
         )
     }

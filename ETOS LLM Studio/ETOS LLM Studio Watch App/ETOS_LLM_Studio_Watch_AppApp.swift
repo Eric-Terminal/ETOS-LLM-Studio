@@ -19,8 +19,10 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     @StateObject private var syncManager = WatchSyncManager.shared
     @StateObject private var cloudSyncManager = CloudSyncManager.shared
     @StateObject private var mcpManager = MCPManager.shared
+    @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     
     init() {
+        DailyPulseDeliveryCoordinator.shared.activate()
         // 在 App 启动时预先触发本地网络权限
         // 这样用户在第一次使用远程调试前就会看到权限弹窗
         #if !targetEnvironment(simulator)
@@ -46,6 +48,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                     cloudSyncManager.performAutoSyncIfEnabled()
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
+                    dailyPulseDeliveryCoordinator.activate()
                 }
         }
     }

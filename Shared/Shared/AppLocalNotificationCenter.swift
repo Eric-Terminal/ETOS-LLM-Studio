@@ -29,6 +29,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     public static let shared = AppLocalNotificationCenter()
 
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published public private(set) var pendingRoute: AppLocalNotificationRoute?
 
     private static let routeUserInfoKey = "route"
     private static let kindUserInfoKey = "kind"
@@ -117,6 +118,12 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         return route == AppLocalNotificationRoute.dailyPulse.rawValue
     }
 
+    public func consumePendingRoute() -> AppLocalNotificationRoute? {
+        let route = pendingRoute
+        pendingRoute = nil
+        return route
+    }
+
     private func currentNotificationSettings() async -> UNNotificationSettings {
         await withCheckedContinuation { continuation in
             UNUserNotificationCenter.current().getNotificationSettings { settings in
@@ -147,7 +154,10 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if Self.notificationTargetsDailyPulse(userInfo: response.notification.request.content.userInfo) {
-            NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
+            Task { @MainActor in
+                AppLocalNotificationCenter.shared.pendingRoute = .dailyPulse
+                NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
+            }
         }
         completionHandler()
     }
