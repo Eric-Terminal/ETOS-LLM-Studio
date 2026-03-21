@@ -24,6 +24,7 @@ struct DailyPulseView: View {
         List {
             generationSection
             focusSection
+            externalSourcesSection
             latestPulseSection
         }
         .navigationTitle("每日脉冲")
@@ -78,7 +79,7 @@ struct DailyPulseView: View {
             }
             .disabled(pulseManager.isGenerating)
         } footer: {
-            Text("V1 会优先使用最近聊天、长期记忆、请求日志和你的关注焦点来生成 3 张左右的卡片。")
+            Text("当前会优先使用最近聊天、长期记忆、请求日志、反馈历史和你的关注焦点，并可选结合 MCP / 快捷指令能力生成约 3 张卡片。")
         }
     }
 
@@ -96,6 +97,15 @@ struct DailyPulseView: View {
             }
         } footer: {
             Text("这里的内容会参与下一次每日脉冲生成，用来告诉 AI 你最近最想优先看的方向。")
+        }
+    }
+
+    private var externalSourcesSection: some View {
+        Section("外部上下文") {
+            Toggle("纳入 MCP 服务器能力", isOn: $pulseManager.includeMCPContext)
+            Toggle("纳入快捷指令能力", isOn: $pulseManager.includeShortcutContext)
+        } footer: {
+            Text("开启后，每日脉冲会读取已配置的 MCP 元数据和已启用快捷指令描述，把它们当作“可调用能力”而不是已获取到的实时事实。")
         }
     }
 

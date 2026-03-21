@@ -67,6 +67,11 @@ struct DailyPulseView: View {
                 }
             }
 
+            Section("外部上下文") {
+                Toggle("MCP 能力", isOn: $pulseManager.includeMCPContext)
+                Toggle("快捷指令能力", isOn: $pulseManager.includeShortcutContext)
+            }
+
             if let run = pulseManager.latestRun {
                 let visibleCards = run.visibleCards
                 Section(run.dayKey == DailyPulseManager.dayKey(for: Date()) ? "今天的卡片" : "最近卡片") {
