@@ -4,54 +4,78 @@ import Shared
 struct TTSFloatingController: View {
     @ObservedObject private var ttsManager = TTSManager.shared
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
+    @State private var keepVisibleAfterFinished: Bool = false
+    @State private var autoHideTask: Task<Void, Never>?
 
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
+    private let finishLingerDuration: TimeInterval = 6
+
+    private var isPlaybackActive: Bool {
+        ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
+    }
 
     private var shouldShow: Bool {
-        ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
+        isPlaybackActive || keepVisibleAfterFinished
     }
 
     var body: some View {
         if shouldShow {
             VStack(spacing: 6) {
-                HStack(spacing: 6) {
-                    Button {
-                        if ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering {
-                            ttsManager.pause()
-                        } else {
-                            ttsManager.resume()
+                if isPlaybackActive {
+                    HStack(spacing: 6) {
+                        Button {
+                            if ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering {
+                                ttsManager.pause()
+                            } else {
+                                ttsManager.resume()
+                            }
+                        } label: {
+                            Image(systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill")
                         }
-                    } label: {
-                        Image(systemName: (ttsManager.playbackState.status == .playing || ttsManager.playbackState.status == .buffering) ? "pause.fill" : "play.fill")
-                    }
 
-                    Button {
-                        ttsManager.stop()
-                    } label: {
-                        Image(systemName: "stop.fill")
-                    }
+                        Button {
+                            ttsManager.stop()
+                            dismissImmediately()
+                        } label: {
+                            Image(systemName: "stop.fill")
+                        }
 
-                    Button {
-                        ttsManager.seekBy(seconds: 5)
-                    } label: {
-                        Image(systemName: "goforward.5")
-                    }
+                        Button {
+                            ttsManager.seekBy(seconds: 5)
+                        } label: {
+                            Image(systemName: "goforward.5")
+                        }
 
-                    Button {
-                        cycleSpeed()
-                    } label: {
-                        Text(String(format: "x%.1f", settingsStore.playbackSpeed))
-                            .font(.caption2.monospacedDigit())
+                        Button {
+                            cycleSpeed()
+                        } label: {
+                            Text(String(format: "x%.1f", settingsStore.playbackSpeed))
+                                .font(.caption2.monospacedDigit())
+                        }
+                    }
+                    .font(.caption)
+
+                    ProgressView(value: progressValue)
+                        .progressViewStyle(.linear)
+
+                    Text("分段 \(max(1, ttsManager.playbackState.currentChunkIndex))/\(max(1, ttsManager.playbackState.totalChunks))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack(spacing: 6) {
+                        Text(ttsManager.playbackState.status == .error ? "朗读失败，可重试" : "朗读已结束")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 4)
+                        Button {
+                            dismissImmediately()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .font(.caption)
-
-                ProgressView(value: progressValue)
-                    .progressViewStyle(.linear)
-
-                Text("分段 \(max(1, ttsManager.playbackState.currentChunkIndex))/\(max(1, ttsManager.playbackState.totalChunks))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
             .padding(8)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -62,6 +86,12 @@ struct TTSFloatingController: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 58)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onAppear {
+                updateVisibilityState(isActive: isPlaybackActive)
+            }
+            .onChange(of: isPlaybackActive) { _, isActive in
+                updateVisibilityState(isActive: isActive)
+            }
         }
     }
 
@@ -80,5 +110,41 @@ struct TTSFloatingController: View {
         let next = speedSteps[(idx + 1) % speedSteps.count]
         settingsStore.playbackSpeed = next
         ttsManager.setPlaybackSpeed(next)
+    }
+
+    private func dismissImmediately() {
+        autoHideTask?.cancel()
+        autoHideTask = nil
+        keepVisibleAfterFinished = false
+    }
+
+    private func updateVisibilityState(isActive: Bool) {
+        autoHideTask?.cancel()
+        autoHideTask = nil
+
+        guard !isActive else {
+            keepVisibleAfterFinished = true
+            return
+        }
+
+        switch ttsManager.playbackState.status {
+        case .ended, .error:
+            keepVisibleAfterFinished = true
+            autoHideTask = Task { [finishLingerDuration] in
+                try? await Task.sleep(nanoseconds: UInt64(finishLingerDuration * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    if !isPlaybackActive {
+                        keepVisibleAfterFinished = false
+                    }
+                }
+            }
+        case .idle:
+            keepVisibleAfterFinished = false
+        case .paused, .buffering, .playing:
+            keepVisibleAfterFinished = true
+        @unknown default:
+            keepVisibleAfterFinished = false
+        }
     }
 }
