@@ -170,6 +170,11 @@ public class MemoryManager {
     public func waitForInitialization() async {
         await initializationTask.value
     }
+
+    /// 返回当前内存中的记忆快照，按显示时间倒序排列。
+    public func currentMemoriesSnapshot() -> [MemoryItem] {
+        cachedMemories.sorted(by: { $0.displayDate > $1.displayDate })
+    }
     
     private func setup() async {
         MemoryStoragePaths.ensureRootDirectory()

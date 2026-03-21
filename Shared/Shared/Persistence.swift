@@ -29,6 +29,8 @@ public enum Persistence {
     private static let sessionRecordsDirectoryName = "sessions"
     private static let requestLogsDirectoryName = "RequestLogs"
     private static let requestLogsFileName = "index.json"
+    private static let dailyPulseDirectoryName = "DailyPulse"
+    private static let dailyPulseRunsFileName = "runs.json"
     private static let legacyV3DirectoryName = "v3"
     private static let legacyArchiveDirectoryName = "legacy"
 
@@ -352,6 +354,38 @@ public enum Persistence {
             return lhs.requestCount > rhs.requestCount
         }
         return summary
+    }
+
+    /// 保存每日脉冲运行记录。
+    public static func saveDailyPulseRuns(_ runs: [DailyPulseRun]) {
+        let fileURL = dailyPulseRunsFileURL()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(runs)
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        } catch {
+            logger.error("保存每日脉冲记录失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 读取每日脉冲运行记录。
+    public static func loadDailyPulseRuns() -> [DailyPulseRun] {
+        let fileURL = dailyPulseRunsFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try decoder.decode([DailyPulseRun].self, from: data)
+        } catch {
+            logger.error("读取每日脉冲记录失败: \(error.localizedDescription)")
+            return []
+        }
     }
 
     /// 判断会话是否存在可读取的数据文件（V3 或 legacy）。
@@ -898,12 +932,24 @@ public enum Persistence {
         return directory
     }
 
+    private static func dailyPulseDirectoryURL() -> URL {
+        let directory = getChatsDirectory().appendingPathComponent(dailyPulseDirectoryName)
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        return directory
+    }
+
     private static func sessionIndexFileURLV3() -> URL {
         getChatsDirectory().appendingPathComponent(sessionIndexFileName)
     }
 
     private static func requestLogsFileURL() -> URL {
         requestLogsDirectoryURL().appendingPathComponent(requestLogsFileName)
+    }
+
+    private static func dailyPulseRunsFileURL() -> URL {
+        dailyPulseDirectoryURL().appendingPathComponent(dailyPulseRunsFileName)
     }
 
     private static func sessionRecordFileURL(for sessionID: UUID) -> URL {
