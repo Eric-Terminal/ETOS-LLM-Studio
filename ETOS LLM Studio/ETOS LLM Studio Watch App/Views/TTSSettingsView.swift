@@ -17,7 +17,7 @@ struct TTSSettingsView: View {
                     Text("自动").tag(TTSPlaybackMode.auto)
                 }
 
-                Text("watchOS 上系统 TTS 受限时会自动降级云端。")
+                Text("自动模式会优先使用本地系统 TTS，失败时会自动降级到云端。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

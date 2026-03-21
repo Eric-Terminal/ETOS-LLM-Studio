@@ -31,7 +31,7 @@ public final class TTSManager: NSObject, ObservableObject {
     private var progressTimer: Timer?
 #endif
 
-#if os(iOS)
+#if os(iOS) || os(watchOS)
     private lazy var speechSynthesizer: AVSpeechSynthesizer = {
         let synthesizer = AVSpeechSynthesizer()
         synthesizer.delegate = self
@@ -107,7 +107,7 @@ public final class TTSManager: NSObject, ObservableObject {
             audioPlayer?.pause()
             playbackState.status = .paused
         case .system:
-#if os(iOS)
+#if os(iOS) || os(watchOS)
             _ = speechSynthesizer.pauseSpeaking(at: .word)
             playbackState.status = .paused
 #endif
@@ -126,7 +126,7 @@ public final class TTSManager: NSObject, ObservableObject {
             audioPlayer?.play()
             playbackState.status = .playing
         case .system:
-#if os(iOS)
+#if os(iOS) || os(watchOS)
             _ = speechSynthesizer.continueSpeaking()
             playbackState.status = .playing
 #endif
@@ -232,7 +232,7 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     private func resolvePlaybackMode(_ mode: TTSPlaybackMode) -> TTSPlaybackMode {
-#if os(iOS)
+#if os(iOS) || os(watchOS)
         if mode == .auto {
             return .system
         }
@@ -297,7 +297,7 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
     private func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
-#if os(iOS)
+#if os(iOS) || os(watchOS)
         activeBackend = .system
         playbackState.status = .playing
         playbackState.speed = settings.playbackSpeed
@@ -617,7 +617,7 @@ public final class TTSManager: NSObject, ObservableObject {
         stopProgressTimer()
 #endif
 
-#if os(iOS)
+#if os(iOS) || os(watchOS)
         if speechSynthesizer.isSpeaking {
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
@@ -766,7 +766,7 @@ extension TTSManager: AVAudioPlayerDelegate {
 }
 #endif
 
-#if os(iOS)
+#if os(iOS) || os(watchOS)
 extension TTSManager: AVSpeechSynthesizerDelegate {
     nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor [weak self] in
