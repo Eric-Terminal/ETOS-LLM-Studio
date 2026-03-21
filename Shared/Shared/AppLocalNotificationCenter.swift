@@ -24,16 +24,16 @@ public enum AppLocalNotificationRoute: String, Sendable {
     case dailyPulse
 }
 
+private let appLocalNotificationRouteUserInfoKey = "route"
+private let appLocalNotificationKindUserInfoKey = "kind"
+private let appLocalNotificationDayKeyUserInfoKey = "dayKey"
+
 @MainActor
 public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     public static let shared = AppLocalNotificationCenter()
 
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published public private(set) var pendingRoute: AppLocalNotificationRoute?
-
-    private static let routeUserInfoKey = "route"
-    private static let kindUserInfoKey = "kind"
-    private static let dayKeyUserInfoKey = "dayKey"
 
     private var didConfigure = false
 
@@ -102,19 +102,19 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
-    public static func dailyPulseUserInfo(kind: String, dayKey: String? = nil) -> [AnyHashable: Any] {
+    public nonisolated static func dailyPulseUserInfo(kind: String, dayKey: String? = nil) -> [AnyHashable: Any] {
         var info: [AnyHashable: Any] = [
-            routeUserInfoKey: AppLocalNotificationRoute.dailyPulse.rawValue,
-            kindUserInfoKey: kind
+            appLocalNotificationRouteUserInfoKey: AppLocalNotificationRoute.dailyPulse.rawValue,
+            appLocalNotificationKindUserInfoKey: kind
         ]
         if let dayKey, !dayKey.isEmpty {
-            info[dayKeyUserInfoKey] = dayKey
+            info[appLocalNotificationDayKeyUserInfoKey] = dayKey
         }
         return info
     }
 
-    public static func notificationTargetsDailyPulse(userInfo: [AnyHashable: Any]) -> Bool {
-        guard let route = userInfo[routeUserInfoKey] as? String else { return false }
+    public nonisolated static func notificationTargetsDailyPulse(userInfo: [AnyHashable: Any]) -> Bool {
+        guard let route = userInfo[appLocalNotificationRouteUserInfoKey] as? String else { return false }
         return route == AppLocalNotificationRoute.dailyPulse.rawValue
     }
 

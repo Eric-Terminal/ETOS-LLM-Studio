@@ -13,7 +13,7 @@
 import Foundation
 import Combine
 import os.log
-#if canImport(UIKit)
+#if os(iOS)
 import UIKit
 #endif
 
@@ -383,10 +383,10 @@ internal struct DailyPulseModelCard: Codable, Sendable {
 @MainActor
 public final class DailyPulseManager: ObservableObject {
     public static let shared = DailyPulseManager(chatService: .shared, memoryManager: .shared)
-    internal static let persistedRetentionLimit = 14
-    internal static let feedbackHistoryRetentionLimit = 120
-    internal static let externalSignalRetentionLimit = 40
-    internal static let taskRetentionLimit = 80
+    internal nonisolated static let persistedRetentionLimit = 14
+    internal nonisolated static let feedbackHistoryRetentionLimit = 120
+    internal nonisolated static let externalSignalRetentionLimit = 40
+    internal nonisolated static let taskRetentionLimit = 80
 
     @Published public private(set) var runs: [DailyPulseRun]
     @Published public private(set) var feedbackHistory: [DailyPulseFeedbackEvent]
@@ -439,7 +439,7 @@ public final class DailyPulseManager: ObservableObject {
     private let chatService: ChatService
     private let memoryManager: MemoryManager
     private let defaults: UserDefaults
-    private let retentionLimit = Self.persistedRetentionLimit
+    private let retentionLimit: Int
     private let cardsPerRun = 3
     private let candidateCardsPerRun = 6
     private let maxSessionsInPrompt = 4
@@ -455,7 +455,7 @@ public final class DailyPulseManager: ObservableObject {
     private static let includeTrendContextDefaultsKey = "dailyPulse.includeTrendContext"
     private static let lastViewedDayKeyDefaultsKey = "dailyPulse.lastViewedDayKey"
     private static let lastDeliveryAttemptDayKeyDefaultsKey = "dailyPulse.lastDeliveryAttemptDayKey"
-#if canImport(UIKit)
+#if os(iOS)
     private var activeBackgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
 #endif
 
@@ -467,10 +467,12 @@ public final class DailyPulseManager: ObservableObject {
         self.chatService = chatService
         self.memoryManager = memoryManager
         self.defaults = defaults
+        self.retentionLimit = Self.persistedRetentionLimit
         let persistedRuns = Persistence.loadDailyPulseRuns().sorted(by: { $0.generatedAt > $1.generatedAt })
+        let pendingCuration = Persistence.loadDailyPulsePendingCuration()
         self.runs = Self.visibleRuns(from: persistedRuns, referenceDate: Date())
         self.feedbackHistory = Persistence.loadDailyPulseFeedbackHistory().sorted(by: { $0.createdAt > $1.createdAt })
-        self.pendingCuration = Persistence.loadDailyPulsePendingCuration()
+        self.pendingCuration = pendingCuration
         self.externalSignals = Self.trimmedExternalSignals(Persistence.loadDailyPulseExternalSignals(), limit: Self.externalSignalRetentionLimit)
         self.tasks = Self.sortedTasks(Persistence.loadDailyPulseTasks())
         self.focusText = defaults.string(forKey: Self.focusDefaultsKey) ?? ""
@@ -833,23 +835,23 @@ public final class DailyPulseManager: ObservableObject {
         }
     }
 
-    internal static func trimmedRuns(_ runs: [DailyPulseRun], limit: Int) -> [DailyPulseRun] {
+    internal nonisolated static func trimmedRuns(_ runs: [DailyPulseRun], limit: Int) -> [DailyPulseRun] {
         runs.sorted(by: { $0.generatedAt > $1.generatedAt }).prefix(max(1, limit)).map { $0 }
     }
 
-    internal static func visibleRuns(from runs: [DailyPulseRun], referenceDate: Date) -> [DailyPulseRun] {
+    internal nonisolated static func visibleRuns(from runs: [DailyPulseRun], referenceDate: Date) -> [DailyPulseRun] {
         let todayKey = dayKey(for: referenceDate)
         return runs
             .filter { $0.dayKey == todayKey }
             .sorted(by: { $0.generatedAt > $1.generatedAt })
     }
 
-    internal static func hasUnviewedRun(todayRunDayKey: String?, lastViewedDayKey: String?) -> Bool {
+    internal nonisolated static func hasUnviewedRun(todayRunDayKey: String?, lastViewedDayKey: String?) -> Bool {
         guard let todayRunDayKey, !todayRunDayKey.isEmpty else { return false }
         return todayRunDayKey != lastViewedDayKey
     }
 
-    internal static func isPreparingPulse(
+    internal nonisolated static func isPreparingPulse(
         preparingDayKey: String?,
         todayRunDayKey: String?,
         referenceDate: Date
@@ -858,15 +860,15 @@ public final class DailyPulseManager: ObservableObject {
         return preparingDayKey == todayKey && todayRunDayKey == nil
     }
 
-    internal static func removingFeedbackEvent(id: UUID, from history: [DailyPulseFeedbackEvent]) -> [DailyPulseFeedbackEvent] {
+    internal nonisolated static func removingFeedbackEvent(id: UUID, from history: [DailyPulseFeedbackEvent]) -> [DailyPulseFeedbackEvent] {
         history.filter { $0.id != id }
     }
 
-    internal static func removingExternalSignal(id: UUID, from signals: [DailyPulseExternalSignal]) -> [DailyPulseExternalSignal] {
+    internal nonisolated static func removingExternalSignal(id: UUID, from signals: [DailyPulseExternalSignal]) -> [DailyPulseExternalSignal] {
         signals.filter { $0.id != id }
     }
 
-    internal static func sortedTasks(_ tasks: [DailyPulseTask]) -> [DailyPulseTask] {
+    internal nonisolated static func sortedTasks(_ tasks: [DailyPulseTask]) -> [DailyPulseTask] {
         tasks
             .sorted { lhs, rhs in
                 if lhs.isCompleted != rhs.isCompleted {
@@ -881,7 +883,7 @@ public final class DailyPulseManager: ObservableObject {
             .map { $0 }
     }
 
-    internal static func trimmedExternalSignals(_ signals: [DailyPulseExternalSignal], limit: Int) -> [DailyPulseExternalSignal] {
+    internal nonisolated static func trimmedExternalSignals(_ signals: [DailyPulseExternalSignal], limit: Int) -> [DailyPulseExternalSignal] {
         signals
             .sorted(by: { $0.capturedAt > $1.capturedAt })
             .prefix(max(1, limit))
@@ -907,7 +909,7 @@ public final class DailyPulseManager: ObservableObject {
         )
     }
 
-    internal static func mergeRun(local: DailyPulseRun, incoming: DailyPulseRun) -> DailyPulseRun {
+    internal nonisolated static func mergeRun(local: DailyPulseRun, incoming: DailyPulseRun) -> DailyPulseRun {
         let base = incoming.generatedAt >= local.generatedAt ? incoming : local
         let secondary = incoming.generatedAt >= local.generatedAt ? local : incoming
 
@@ -1313,20 +1315,22 @@ public final class DailyPulseManager: ObservableObject {
         profile: DailyPulsePreferenceProfile,
         limit: Int
     ) -> [DailyPulseCard] {
-        let normalizedCandidates = cards.prefix(max(1, limit * 3)).compactMap { card in
+        var normalizedCandidates: [DailyPulseCard] = []
+        normalizedCandidates.reserveCapacity(min(cards.count, max(1, limit * 3)))
+        for card in cards.prefix(max(1, limit * 3)) {
             let title = normalizedText(card.title, fallback: "今日提醒")
             let summary = normalizedText(card.summary, fallback: "暂无摘要")
             let why = normalizedText(card.why, fallback: fallbackFocus.isEmpty ? "这条内容与你最近的聊天和使用轨迹相关。" : "这条内容与你当前关注的“\(fallbackFocus)”有关。")
             let details = normalizedMultilineText(card.detailsMarkdown, fallback: summary)
             let suggestedPrompt = normalizedText(card.suggestedPrompt, fallback: "请结合这条每日脉冲继续展开，并给我更具体的下一步建议。")
-            guard !title.isEmpty, !summary.isEmpty else { return nil }
-            return DailyPulseCard(
+            guard !title.isEmpty, !summary.isEmpty else { continue }
+            normalizedCandidates.append(DailyPulseCard(
                 title: truncated(title, limit: 40),
                 whyRecommended: truncated(why, limit: 120),
                 summary: truncated(summary, limit: 180),
                 detailsMarkdown: truncated(details, limit: 2_000),
                 suggestedPrompt: truncated(suggestedPrompt, limit: 160)
-            )
+            ))
         }
 
         return selectCards(
@@ -1530,18 +1534,18 @@ public final class DailyPulseManager: ObservableObject {
         })
     }
 
-    internal static func topicText(for card: DailyPulseCard) -> String {
+    internal nonisolated static func topicText(for card: DailyPulseCard) -> String {
         "\(card.title) \(card.summary)"
     }
 
-    internal static func normalizedContains(_ lhs: String, _ rhs: String) -> Bool {
+    internal nonisolated static func normalizedContains(_ lhs: String, _ rhs: String) -> Bool {
         let left = topicFingerprint(lhs)
         let right = topicFingerprint(rhs)
         guard !left.isEmpty, !right.isEmpty else { return false }
         return left.contains(right) || right.contains(left)
     }
 
-    internal static func areTopicsSimilar(_ lhs: String, _ rhs: String) -> Bool {
+    internal nonisolated static func areTopicsSimilar(_ lhs: String, _ rhs: String) -> Bool {
         let left = topicFingerprint(lhs)
         let right = topicFingerprint(rhs)
         guard !left.isEmpty, !right.isEmpty else { return false }
@@ -1558,7 +1562,7 @@ public final class DailyPulseManager: ObservableObject {
         return Double(overlap) / Double(union) >= 0.72
     }
 
-    internal static func topicFingerprint(_ text: String) -> String {
+    internal nonisolated static func topicFingerprint(_ text: String) -> String {
         let lowered = text.folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: Locale(identifier: "zh_CN"))
         let filteredScalars = lowered.unicodeScalars.filter { scalar in
             CharacterSet.alphanumerics.contains(scalar) || isCJK(scalar)
@@ -1567,7 +1571,7 @@ public final class DailyPulseManager: ObservableObject {
         return String(filtered.prefix(48))
     }
 
-    private static func isCJK(_ scalar: Unicode.Scalar) -> Bool {
+    private nonisolated static func isCJK(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF:
             return true
@@ -1771,7 +1775,7 @@ public final class DailyPulseManager: ObservableObject {
         }
     }
 
-    internal static func historyAction(for feedback: DailyPulseCardFeedback) -> DailyPulseHistoryAction? {
+    internal nonisolated static func historyAction(for feedback: DailyPulseCardFeedback) -> DailyPulseHistoryAction? {
         switch feedback {
         case .liked:
             return .liked
@@ -1784,7 +1788,7 @@ public final class DailyPulseManager: ObservableObject {
         }
     }
 
-    internal static func appendingFeedbackEvent(
+    internal nonisolated static func appendingFeedbackEvent(
         _ event: DailyPulseFeedbackEvent,
         to history: [DailyPulseFeedbackEvent],
         limit: Int
@@ -1807,7 +1811,7 @@ public final class DailyPulseManager: ObservableObject {
         )
     }
 
-    internal static func appendingExternalSignal(
+    internal nonisolated static func appendingExternalSignal(
         _ signal: DailyPulseExternalSignal,
         to history: [DailyPulseExternalSignal],
         limit: Int
@@ -1827,7 +1831,7 @@ public final class DailyPulseManager: ObservableObject {
         return trimmedExternalSignals(updated, limit: limit)
     }
 
-    internal static func mergeTask(local: DailyPulseTask, incoming: DailyPulseTask) -> DailyPulseTask {
+    internal nonisolated static func mergeTask(local: DailyPulseTask, incoming: DailyPulseTask) -> DailyPulseTask {
         let base = incoming.updatedAt >= local.updatedAt ? incoming : local
         let secondary = incoming.updatedAt >= local.updatedAt ? local : incoming
 
@@ -1844,11 +1848,11 @@ public final class DailyPulseManager: ObservableObject {
         return merged
     }
 
-    internal static func mergeExternalSignal(local: DailyPulseExternalSignal, incoming: DailyPulseExternalSignal) -> DailyPulseExternalSignal {
+    internal nonisolated static func mergeExternalSignal(local: DailyPulseExternalSignal, incoming: DailyPulseExternalSignal) -> DailyPulseExternalSignal {
         incoming.capturedAt >= local.capturedAt ? incoming : local
     }
 
-    internal static func activeCurationText(
+    internal nonisolated static func activeCurationText(
         for dayKey: String,
         pendingCuration: DailyPulseCurationNote?
     ) -> String {
@@ -1859,7 +1863,7 @@ public final class DailyPulseManager: ObservableObject {
         return pendingCuration.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func mergedFeedback(base: DailyPulseCardFeedback, incoming: DailyPulseCardFeedback) -> DailyPulseCardFeedback {
+    private nonisolated static func mergedFeedback(base: DailyPulseCardFeedback, incoming: DailyPulseCardFeedback) -> DailyPulseCardFeedback {
         let priority: [DailyPulseCardFeedback: Int] = [
             .none: 0,
             .liked: 1,
@@ -1869,7 +1873,7 @@ public final class DailyPulseManager: ObservableObject {
         return (priority[incoming] ?? 0) > (priority[base] ?? 0) ? incoming : base
     }
 
-#if canImport(UIKit)
+#if os(iOS)
     private func beginGenerationBackgroundTaskIfNeeded() {
         guard activeBackgroundTaskIdentifier == .invalid else { return }
         activeBackgroundTaskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "dailyPulse.generate.background") { [weak self] in
@@ -1888,19 +1892,19 @@ public final class DailyPulseManager: ObservableObject {
     private func endGenerationBackgroundTaskIfNeeded() {}
 #endif
 
-    internal static func normalizedText(_ text: String?, fallback: String) -> String {
+    internal nonisolated static func normalizedText(_ text: String?, fallback: String) -> String {
         let trimmed = text?
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? fallback : trimmed
     }
 
-    internal static func normalizedMultilineText(_ text: String?, fallback: String) -> String {
+    internal nonisolated static func normalizedMultilineText(_ text: String?, fallback: String) -> String {
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? fallback : trimmed
     }
 
-    internal static func normalizedOptionalText(_ text: String?, fallback: String?) -> String? {
+    internal nonisolated static func normalizedOptionalText(_ text: String?, fallback: String?) -> String? {
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if trimmed.isEmpty {
             return fallback
@@ -1908,17 +1912,17 @@ public final class DailyPulseManager: ObservableObject {
         return trimmed
     }
 
-    internal static func resultPreviewText(_ text: String?, fallback: String) -> String {
+    internal nonisolated static func resultPreviewText(_ text: String?, fallback: String) -> String {
         let normalized = normalizedText(text, fallback: fallback)
         return truncated(normalized, limit: 140)
     }
 
-    internal static func truncated(_ text: String, limit: Int) -> String {
+    internal nonisolated static func truncated(_ text: String, limit: Int) -> String {
         guard limit > 0, text.count > limit else { return text }
         return String(text.prefix(limit - 1)) + "…"
     }
 
-    public static func dayKey(for date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
+    public nonisolated static func dayKey(for date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1927,7 +1931,7 @@ public final class DailyPulseManager: ObservableObject {
         return formatter.string(from: date)
     }
 
-    public static func nextDayKey(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
+    public nonisolated static func nextDayKey(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
         return dayKey(for: nextDate, calendar: calendar)
     }

@@ -54,7 +54,7 @@ struct DailyPulseView: View {
     }
 
     private var generationSection: some View {
-        Section("生成") {
+        Section {
             Toggle("每日首次打开自动补生成", isOn: $pulseManager.autoGenerateEnabled)
 
             if let run = pulseManager.latestRun {
@@ -98,13 +98,15 @@ struct DailyPulseView: View {
                 }
             }
             .disabled(pulseManager.isGenerating)
+        } header: {
+            Text("生成")
         } footer: {
             Text("当前会优先使用最近聊天、长期记忆、请求日志、反馈历史、明日策展和你的关注焦点，并可选结合外部上下文生成约 3 张卡片。为了更接近 Pulse，主界面现在只保留今天这一期。")
         }
     }
 
     private var deliverySection: some View {
-        Section("主动送达") {
+        Section {
             Toggle("晨间提醒", isOn: $deliveryCoordinator.reminderEnabled)
 
             if deliveryCoordinator.reminderEnabled {
@@ -120,13 +122,15 @@ struct DailyPulseView: View {
                     }
                 }
             }
+        } header: {
+            Text("主动送达")
         } footer: {
             Text(deliveryCoordinator.reminderStatusText)
         }
     }
 
     private var focusSection: some View {
-        Section("当前关注焦点") {
+        Section {
             TextField("例如：继续推进某个项目、帮我整理下一步、关注最近反复提到的话题", text: $pulseManager.focusText, axis: .vertical)
                 .lineLimit(2...4)
 
@@ -137,13 +141,15 @@ struct DailyPulseView: View {
                     Label("清空关注焦点", systemImage: "xmark.circle")
                 }
             }
+        } header: {
+            Text("当前关注焦点")
         } footer: {
             Text("这里的内容会参与下一次每日脉冲生成，用来告诉 AI 你最近最想优先看的方向。")
         }
     }
 
     private var tomorrowCurationSection: some View {
-        Section("明日想看什么") {
+        Section {
             TextField("例如：明天优先帮我跟进 PR、安排会议、看某个项目的下一步", text: $pulseManager.tomorrowCurationText, axis: .vertical)
                 .lineLimit(2...4)
 
@@ -160,6 +166,8 @@ struct DailyPulseView: View {
                     Label("清空明日策展", systemImage: "xmark.circle")
                 }
             }
+        } header: {
+            Text("明日想看什么")
         } footer: {
             Text("这里更像 Pulse 的“明天想看什么”。下一次到达目标日期并生成每日脉冲时，会优先纳入这段策展输入。")
         }
@@ -167,7 +175,7 @@ struct DailyPulseView: View {
 
     @ViewBuilder
     private var pulseTasksSection: some View {
-        Section("Pulse 任务") {
+        Section {
             if pulseManager.pendingTasks.isEmpty && pulseManager.completedTasksPreview.isEmpty {
                 Text("还没有 Pulse 任务。你可以把下方卡片转成待跟进任务，后续生成时也会参考这些未完成项。")
                     .font(.footnote)
@@ -215,6 +223,8 @@ struct DailyPulseView: View {
                     }
                 }
             }
+        } header: {
+            Text("Pulse 任务")
         } footer: {
             Text("Pulse 任务会跨天保留，并在下一次每日脉冲生成时作为“还需要推进的事情”参与策展。")
         }
@@ -222,7 +232,7 @@ struct DailyPulseView: View {
 
     @ViewBuilder
     private var feedbackHistorySection: some View {
-        Section("反馈历史") {
+        Section {
             if pulseManager.feedbackHistoryPreview.isEmpty {
                 Text("还没有反馈历史。你对卡片点赞、降权、隐藏或保存后，这些信号会参与后续每日脉冲生成。")
                     .font(.footnote)
@@ -245,13 +255,15 @@ struct DailyPulseView: View {
                     Label("查看完整反馈历史", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                 }
             }
+        } header: {
+            Text("反馈历史")
         } footer: {
             Text("反馈历史会作为长期偏好信号保留；进入完整历史页后，你可以逐条删除或整体清空。")
         }
     }
 
     private var externalSourcesSection: some View {
-        Section("外部上下文") {
+        Section {
             Toggle("纳入 MCP 服务器能力", isOn: $pulseManager.includeMCPContext)
             Toggle("纳入快捷指令能力", isOn: $pulseManager.includeShortcutContext)
             Toggle("纳入最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
@@ -279,6 +291,8 @@ struct DailyPulseView: View {
                     Label("清空外部信号历史", systemImage: "trash")
                 }
             }
+        } header: {
+            Text("外部上下文")
         } footer: {
             Text("前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令 / MCP 的最近结果与历史信号；“公告与趋势信号”则会纳入应用当前公告与已积累的趋势片段。")
         }
@@ -288,7 +302,7 @@ struct DailyPulseView: View {
     private var todayPulseSection: some View {
         if let run = pulseManager.todayRun {
             let visibleCards = run.visibleCards
-            Section("今天的卡片") {
+            Section {
                 if visibleCards.isEmpty {
                     Text("这次生成的卡片都被你隐藏了。你可以重新生成一份新的每日脉冲。")
                         .font(.footnote)
@@ -298,11 +312,13 @@ struct DailyPulseView: View {
                         cardView(card, runID: run.id)
                     }
                 }
+            } header: {
+                Text("今天的卡片")
             } footer: {
                 Text(summaryText(for: run))
             }
         } else if pulseManager.isPreparingTodayPulse {
-            Section("今天的卡片") {
+            Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("正在为你准备今天的每日脉冲", systemImage: "sparkles")
                         .font(.subheadline.weight(.medium))
@@ -312,12 +328,16 @@ struct DailyPulseView: View {
                     ProgressView()
                 }
                 .padding(.vertical, 6)
+            } header: {
+                Text("今天的卡片")
             }
         } else {
-            Section("今天的卡片") {
+            Section {
                 Text("今天还没有生成新的每日脉冲。你可以立即生成，或者先写一点“明日想看什么”再回来。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            } header: {
+                Text("今天的卡片")
             }
         }
     }

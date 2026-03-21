@@ -24,7 +24,7 @@ struct DailyPulseView: View {
 
     var body: some View {
         List {
-            Section("生成") {
+            Section {
                 Toggle("自动补生成", isOn: $pulseManager.autoGenerateEnabled)
 
                 if let run = pulseManager.primaryRun {
@@ -62,9 +62,11 @@ struct DailyPulseView: View {
                     }
                 }
                 .disabled(pulseManager.isGenerating)
+            } header: {
+                Text("生成")
             }
 
-            Section("主动送达") {
+            Section {
                 Toggle("晨间提醒", isOn: $deliveryCoordinator.reminderEnabled)
                 if deliveryCoordinator.reminderEnabled {
                     DatePicker(
@@ -78,11 +80,13 @@ struct DailyPulseView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            } header: {
+                Text("主动送达")
             } footer: {
                 Text(deliveryCoordinator.reminderStatusText)
             }
 
-            Section("当前关注") {
+            Section {
                 TextField("例如：下一步要做什么", text: $pulseManager.focusText)
                 if !pulseManager.focusText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Button(role: .destructive) {
@@ -91,18 +95,22 @@ struct DailyPulseView: View {
                         Label("清空", systemImage: "xmark.circle")
                     }
                 }
+            } header: {
+                Text("当前关注")
             }
 
-            Section("明日策展") {
+            Section {
                 TextField("明天想看什么", text: $pulseManager.tomorrowCurationText)
                 if let pending = pulseManager.pendingCuration {
                     Text("目标日：\(pending.targetDayKey)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+            } header: {
+                Text("明日策展")
             }
 
-            Section("Pulse 任务") {
+            Section {
                 if pulseManager.pendingTasks.isEmpty && pulseManager.completedTasksPreview.isEmpty {
                     Text("还没有 Pulse 任务。")
                         .font(.footnote)
@@ -149,9 +157,11 @@ struct DailyPulseView: View {
                         }
                     }
                 }
+            } header: {
+                Text("Pulse 任务")
             }
 
-            Section("反馈历史") {
+            Section {
                 if pulseManager.feedbackHistoryPreview.isEmpty {
                     Text("还没有反馈历史。")
                         .font(.footnote)
@@ -168,9 +178,11 @@ struct DailyPulseView: View {
                         Label("查看完整历史", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                     }
                 }
+            } header: {
+                Text("反馈历史")
             }
 
-            Section("外部上下文") {
+            Section {
                 Toggle("MCP 能力", isOn: $pulseManager.includeMCPContext)
                 Toggle("快捷指令能力", isOn: $pulseManager.includeShortcutContext)
                 Toggle("最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
@@ -197,11 +209,13 @@ struct DailyPulseView: View {
                         Label("清空信号历史", systemImage: "trash")
                     }
                 }
+            } header: {
+                Text("外部上下文")
             }
 
             if let run = pulseManager.todayRun {
                 let visibleCards = run.visibleCards
-                Section("今天的卡片") {
+                Section {
                     if visibleCards.isEmpty {
                         Text("这次卡片都被隐藏了，可以重新生成。")
                             .font(.footnote)
@@ -211,9 +225,11 @@ struct DailyPulseView: View {
                             cardView(card, runID: run.id)
                         }
                     }
+                } header: {
+                    Text("今天的卡片")
                 }
             } else if pulseManager.isPreparingTodayPulse {
-                Section("今天的卡片") {
+                Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("正在准备今天这一期")
                             .font(.footnote.weight(.semibold))
@@ -222,12 +238,16 @@ struct DailyPulseView: View {
                             .foregroundStyle(.secondary)
                         ProgressView()
                     }
+                } header: {
+                    Text("今天的卡片")
                 }
             } else {
-                Section("今天的卡片") {
+                Section {
                     Text("今天还没有新的每日脉冲。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                } header: {
+                    Text("今天的卡片")
                 }
             }
 
@@ -261,12 +281,20 @@ struct DailyPulseView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-            DisclosureGroup(isExpanded: expansionBinding(for: card.id)) {
+            Button {
+                toggleExpansion(for: card.id)
+            } label: {
+                Label(
+                    expandedCardIDs.contains(card.id) ? "收起详情" : "展开详情",
+                    systemImage: expandedCardIDs.contains(card.id) ? "chevron.up.circle" : "doc.text"
+                )
+            }
+            .buttonStyle(.bordered)
+
+            if expandedCardIDs.contains(card.id) {
                 Markdown(card.detailsMarkdown)
                     .font(.footnote)
                     .padding(.top, 4)
-            } label: {
-                Label("展开详情", systemImage: "doc.text")
             }
 
             if card.savedSessionID != nil {
@@ -342,6 +370,14 @@ struct DailyPulseView: View {
                 }
             }
         )
+    }
+
+    private func toggleExpansion(for cardID: UUID) {
+        if expandedCardIDs.contains(cardID) {
+            expandedCardIDs.remove(cardID)
+        } else {
+            expandedCardIDs.insert(cardID)
+        }
     }
 
     private func summaryText(for run: DailyPulseRun) -> String {
