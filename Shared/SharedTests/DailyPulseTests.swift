@@ -170,11 +170,14 @@ struct DailyPulseTests {
             sessionExcerpts: [],
             memories: [],
             requestLogSummary: "",
+            activeTasks: [],
             preferenceProfile: .empty,
             externalContext: DailyPulseExternalContext(
                 mcpSourceLines: ["- GitHub：已选中用于聊天；工具 2 个（search_code、list_pull_requests）"],
                 shortcutSourceLines: [],
-                recentSnapshotLines: []
+                recentSnapshotLines: [],
+                trendSourceLines: [],
+                signalHistoryLines: []
             )
         )
 
@@ -294,16 +297,121 @@ struct DailyPulseTests {
             sessionExcerpts: [],
             memories: [],
             requestLogSummary: "",
+            activeTasks: [],
             preferenceProfile: .empty,
             externalContext: DailyPulseExternalContext(
                 mcpSourceLines: [],
                 shortcutSourceLines: [],
-                recentSnapshotLines: ["- 最近快捷指令结果（今日摘要，3/22 10:00）：今天有 3 个重要提醒。"]
+                recentSnapshotLines: ["- 最近快捷指令结果（今日摘要，3/22 10:00）：今天有 3 个重要提醒。"],
+                trendSourceLines: [],
+                signalHistoryLines: []
             )
         )
 
         #expect(input.hasUsableContext)
         #expect(input.sourceDigest.contains("最近快捷指令结果"))
+    }
+
+    @Test("仅有未完成 Pulse 任务时也可视为可生成每日脉冲")
+    func generationInputAcceptsPulseTasksOnly() {
+        let input = DailyPulseGenerationInput(
+            focusText: "",
+            curationText: "",
+            sessionExcerpts: [],
+            memories: [],
+            requestLogSummary: "",
+            activeTasks: [
+                DailyPulseTask(
+                    sourceDayKey: "2026-03-22",
+                    sourceCardID: nil,
+                    title: "继续推进 PR 审查",
+                    details: "整理 reviewer 意见并给出回复",
+                    suggestedPrompt: "帮我拆一下 PR 审查回复顺序"
+                )
+            ],
+            preferenceProfile: .empty,
+            externalContext: .empty
+        )
+
+        #expect(input.hasUsableContext)
+        #expect(input.sourceDigest.contains("继续推进 PR 审查"))
+    }
+
+    @Test("外部信号历史会按主题去重并保留最新记录")
+    func appendingExternalSignalDeduplicatesByTopic() {
+        let older = DailyPulseExternalSignal(
+            source: .shortcutResult,
+            title: "今日摘要",
+            preview: "今天有 2 个提醒。",
+            capturedAt: Date(timeIntervalSince1970: 100),
+            isFailure: false
+        )
+        let newer = DailyPulseExternalSignal(
+            source: .shortcutResult,
+            title: "今日摘要",
+            preview: "今天有 3 个提醒。",
+            capturedAt: Date(timeIntervalSince1970: 200),
+            isFailure: false
+        )
+
+        let merged = DailyPulseManager.appendingExternalSignal(newer, to: [older], limit: 10)
+
+        #expect(merged.count == 1)
+        #expect(merged.first?.preview == "今天有 3 个提醒。")
+    }
+
+    @Test("Pulse 任务合并会保留较新的状态与完成标记")
+    func mergeTaskKeepsLatestCompletionState() {
+        let local = DailyPulseTask(
+            id: UUID(uuidString: "12121212-3434-5656-7878-909090909090")!,
+            sourceDayKey: "2026-03-22",
+            sourceCardID: UUID(uuidString: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")!,
+            title: "继续推进项目",
+            details: "先处理阻塞点",
+            suggestedPrompt: "帮我继续拆项目阻塞点",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            completedAt: nil
+        )
+        let incoming = DailyPulseTask(
+            id: local.id,
+            sourceDayKey: "2026-03-22",
+            sourceCardID: local.sourceCardID,
+            title: "继续推进项目",
+            details: "先处理阻塞点并同步 reviewer",
+            suggestedPrompt: "帮我继续拆项目阻塞点",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 300),
+            completedAt: Date(timeIntervalSince1970: 300)
+        )
+
+        let merged = DailyPulseManager.mergeTask(local: local, incoming: incoming)
+
+        #expect(merged.isCompleted)
+        #expect(merged.details.contains("reviewer"))
+        #expect(merged.updatedAt == incoming.updatedAt)
+    }
+
+    @Test("公告与趋势信号会生成趋势上下文摘要")
+    func makeTrendContextEntriesSummarizesAnnouncements() {
+        let announcements = [
+            Announcement(
+                id: 1,
+                type: .warning,
+                minBuild: nil,
+                maxBuild: nil,
+                language: "zh-Hans",
+                platform: "iOS",
+                title: "新版本发布",
+                body: "今天发布了新的构建，重点优化了同步稳定性和工具中心。"
+            )
+        ]
+
+        let entries = DailyPulseManager.makeTrendContextEntries(announcements: announcements, limit: 3)
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.contains("新版本发布") == true)
+        #expect(entries.first?.contains("同步稳定性") == true)
     }
 
     @Test("反馈历史会参与偏好画像构建")

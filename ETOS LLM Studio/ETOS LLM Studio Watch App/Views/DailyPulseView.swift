@@ -102,6 +102,55 @@ struct DailyPulseView: View {
                 }
             }
 
+            Section("Pulse 任务") {
+                if pulseManager.pendingTasks.isEmpty && pulseManager.completedTasksPreview.isEmpty {
+                    Text("还没有 Pulse 任务。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(pulseManager.pendingTasks.prefix(3)) { task in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(task.title)
+                                .font(.footnote.weight(.semibold))
+                            if !task.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(task.details)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Button {
+                                    pulseManager.toggleTaskCompletion(id: task.id)
+                                } label: {
+                                    Image(systemName: "checkmark.circle")
+                                }
+                                .tint(.green)
+
+                                Button(role: .destructive) {
+                                    pulseManager.removeTask(id: task.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+
+                    if !pulseManager.completedTasksPreview.isEmpty {
+                        ForEach(pulseManager.completedTasksPreview) { task in
+                            Label(task.title, systemImage: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Button(role: .destructive) {
+                            pulseManager.clearCompletedTasks()
+                        } label: {
+                            Label("清理已完成", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+
             Section("反馈历史") {
                 if pulseManager.feedbackHistoryPreview.isEmpty {
                     Text("还没有反馈历史。")
@@ -125,6 +174,29 @@ struct DailyPulseView: View {
                 Toggle("MCP 能力", isOn: $pulseManager.includeMCPContext)
                 Toggle("快捷指令能力", isOn: $pulseManager.includeShortcutContext)
                 Toggle("最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
+                Toggle("公告与趋势", isOn: $pulseManager.includeTrendContext)
+
+                if pulseManager.externalSignalPreview.isEmpty {
+                    Text("还没有外部信号历史。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(pulseManager.externalSignalPreview.prefix(3)) { signal in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(externalSignalTitle(for: signal))
+                                .font(.caption2.weight(.semibold))
+                            Text(signal.preview)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        pulseManager.clearExternalSignals()
+                    } label: {
+                        Label("清空信号历史", systemImage: "trash")
+                    }
+                }
             }
 
             if let run = pulseManager.todayRun {
@@ -220,6 +292,19 @@ struct DailyPulseView: View {
             }
             .buttonStyle(.borderedProminent)
 
+            Button {
+                let existing = pulseManager.linkedTask(cardID: card.id, runID: runID)
+                if pulseManager.addTaskFromCard(cardID: card.id, runID: runID) != nil {
+                    statusMessage = existing == nil ? "已加入 Pulse 任务。" : "这张卡片已经在任务列表里。"
+                }
+            } label: {
+                Label(
+                    pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "加入任务" : "已在任务中",
+                    systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
+                )
+            }
+            .buttonStyle(.bordered)
+
             HStack {
                 Button {
                     pulseManager.applyFeedback(.liked, cardID: card.id, runID: runID)
@@ -282,6 +367,19 @@ struct DailyPulseView: View {
             return "已隐藏 · \(event.dayKey)"
         case .saved:
             return "已保存 · \(event.dayKey)"
+        }
+    }
+
+    private func externalSignalTitle(for signal: DailyPulseExternalSignal) -> String {
+        switch signal.source {
+        case .shortcutResult:
+            return signal.isFailure ? "快捷指令失败" : "快捷指令结果"
+        case .mcpOutput:
+            return "MCP 输出"
+        case .mcpError:
+            return "MCP 错误"
+        case .announcement:
+            return "公告/趋势"
         }
     }
 

@@ -28,6 +28,7 @@ struct DailyPulseView: View {
             deliverySection
             focusSection
             tomorrowCurationSection
+            pulseTasksSection
             feedbackHistorySection
             externalSourcesSection
             todayPulseSection
@@ -165,6 +166,61 @@ struct DailyPulseView: View {
     }
 
     @ViewBuilder
+    private var pulseTasksSection: some View {
+        Section("Pulse 任务") {
+            if pulseManager.pendingTasks.isEmpty && pulseManager.completedTasksPreview.isEmpty {
+                Text("还没有 Pulse 任务。你可以把下方卡片转成待跟进任务，后续生成时也会参考这些未完成项。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(pulseManager.pendingTasks.prefix(5)) { task in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(task.title)
+                            .font(.subheadline.weight(.medium))
+                        if !task.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(task.details)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 10) {
+                            Button {
+                                pulseManager.toggleTaskCompletion(id: task.id)
+                            } label: {
+                                Label("标记完成", systemImage: "checkmark.circle")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(role: .destructive) {
+                                pulseManager.removeTask(id: task.id)
+                            } label: {
+                                Label("移除", systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                if !pulseManager.completedTasksPreview.isEmpty {
+                    ForEach(pulseManager.completedTasksPreview) { task in
+                        Label(task.title, systemImage: "checkmark.circle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button(role: .destructive) {
+                        pulseManager.clearCompletedTasks()
+                    } label: {
+                        Label("清理已完成任务", systemImage: "checkmark.circle.trianglebadge.exclamationmark")
+                    }
+                }
+            }
+        } footer: {
+            Text("Pulse 任务会跨天保留，并在下一次每日脉冲生成时作为“还需要推进的事情”参与策展。")
+        }
+    }
+
+    @ViewBuilder
     private var feedbackHistorySection: some View {
         Section("反馈历史") {
             if pulseManager.feedbackHistoryPreview.isEmpty {
@@ -199,8 +255,32 @@ struct DailyPulseView: View {
             Toggle("纳入 MCP 服务器能力", isOn: $pulseManager.includeMCPContext)
             Toggle("纳入快捷指令能力", isOn: $pulseManager.includeShortcutContext)
             Toggle("纳入最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
+            Toggle("纳入公告与趋势信号", isOn: $pulseManager.includeTrendContext)
+
+            if pulseManager.externalSignalPreview.isEmpty {
+                Text("还没有积累到可复用的外部信号历史。快捷指令执行、MCP 输出和公告变化会逐步沉淀到这里。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(pulseManager.externalSignalPreview) { signal in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(externalSignalTitle(for: signal))
+                            .font(.subheadline.weight(.medium))
+                        Text(signal.preview)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                Button(role: .destructive) {
+                    pulseManager.clearExternalSignals()
+                } label: {
+                    Label("清空外部信号历史", systemImage: "trash")
+                }
+            }
         } footer: {
-            Text("前两项会纳入可调用能力描述；“最近外部结果”则会纳入你最近一次 MCP 调试输出或快捷指令执行结果摘要，它们更接近已经获取到的真实外部内容。")
+            Text("前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令 / MCP 的最近结果与历史信号；“公告与趋势信号”则会纳入应用当前公告与已积累的趋势片段。")
         }
     }
 
@@ -300,6 +380,19 @@ struct DailyPulseView: View {
                     .buttonStyle(.borderedProminent)
                 }
 
+                Button {
+                    let existing = pulseManager.linkedTask(cardID: card.id, runID: runID)
+                    if pulseManager.addTaskFromCard(cardID: card.id, runID: runID) != nil {
+                        statusMessage = existing == nil ? "已加入 Pulse 任务。" : "这张卡片已经在 Pulse 任务列表里。"
+                    }
+                } label: {
+                    Label(
+                        pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "加入 Pulse 任务" : "已在 Pulse 任务中",
+                        systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
+                    )
+                }
+                .buttonStyle(.bordered)
+
                 Button(role: .destructive) {
                     pulseManager.applyFeedback(.hidden, cardID: card.id, runID: runID)
                 } label: {
@@ -379,6 +472,21 @@ struct DailyPulseView: View {
         case .saved:
             return "已保存为会话 · \(event.dayKey)"
         }
+    }
+
+    private func externalSignalTitle(for signal: DailyPulseExternalSignal) -> String {
+        let prefix: String
+        switch signal.source {
+        case .shortcutResult:
+            prefix = signal.isFailure ? "快捷指令失败" : "快捷指令结果"
+        case .mcpOutput:
+            prefix = "MCP 输出"
+        case .mcpError:
+            prefix = "MCP 错误"
+        case .announcement:
+            prefix = "公告/趋势"
+        }
+        return "\(prefix) · \(signal.capturedAt.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private var alertBinding: Binding<Bool> {
