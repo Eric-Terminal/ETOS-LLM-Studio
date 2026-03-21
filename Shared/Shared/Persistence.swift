@@ -31,6 +31,8 @@ public enum Persistence {
     private static let requestLogsFileName = "index.json"
     private static let dailyPulseDirectoryName = "DailyPulse"
     private static let dailyPulseRunsFileName = "runs.json"
+    private static let dailyPulseFeedbackHistoryFileName = "feedback-history.json"
+    private static let dailyPulsePendingCurationFileName = "pending-curation.json"
     private static let legacyV3DirectoryName = "v3"
     private static let legacyArchiveDirectoryName = "legacy"
 
@@ -385,6 +387,76 @@ public enum Persistence {
         } catch {
             logger.error("读取每日脉冲记录失败: \(error.localizedDescription)")
             return []
+        }
+    }
+
+    /// 保存每日脉冲反馈历史。
+    public static func saveDailyPulseFeedbackHistory(_ history: [DailyPulseFeedbackEvent]) {
+        let fileURL = dailyPulseFeedbackHistoryFileURL()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(history)
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        } catch {
+            logger.error("保存每日脉冲反馈历史失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 读取每日脉冲反馈历史。
+    public static func loadDailyPulseFeedbackHistory() -> [DailyPulseFeedbackEvent] {
+        let fileURL = dailyPulseFeedbackHistoryFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try decoder.decode([DailyPulseFeedbackEvent].self, from: data)
+        } catch {
+            logger.error("读取每日脉冲反馈历史失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// 保存待消费的每日脉冲策展输入。
+    public static func saveDailyPulsePendingCuration(_ note: DailyPulseCurationNote?) {
+        let fileURL = dailyPulsePendingCurationFileURL()
+
+        guard let note else {
+            try? removeItemIfExists(at: fileURL)
+            return
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(note)
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        } catch {
+            logger.error("保存每日脉冲策展输入失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 读取待消费的每日脉冲策展输入。
+    public static func loadDailyPulsePendingCuration() -> DailyPulseCurationNote? {
+        let fileURL = dailyPulsePendingCurationFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try decoder.decode(DailyPulseCurationNote.self, from: data)
+        } catch {
+            logger.error("读取每日脉冲策展输入失败: \(error.localizedDescription)")
+            return nil
         }
     }
 
@@ -950,6 +1022,14 @@ public enum Persistence {
 
     private static func dailyPulseRunsFileURL() -> URL {
         dailyPulseDirectoryURL().appendingPathComponent(dailyPulseRunsFileName)
+    }
+
+    private static func dailyPulseFeedbackHistoryFileURL() -> URL {
+        dailyPulseDirectoryURL().appendingPathComponent(dailyPulseFeedbackHistoryFileName)
+    }
+
+    private static func dailyPulsePendingCurationFileURL() -> URL {
+        dailyPulseDirectoryURL().appendingPathComponent(dailyPulsePendingCurationFileName)
     }
 
     private static func sessionRecordFileURL(for sessionID: UUID) -> URL {
