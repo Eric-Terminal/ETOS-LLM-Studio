@@ -358,7 +358,8 @@ public final class DailyPulseManager: ObservableObject {
         self.chatService = chatService
         self.memoryManager = memoryManager
         self.defaults = defaults
-        self.runs = Persistence.loadDailyPulseRuns().sorted(by: { $0.generatedAt > $1.generatedAt })
+        let persistedRuns = Persistence.loadDailyPulseRuns().sorted(by: { $0.generatedAt > $1.generatedAt })
+        self.runs = Self.visibleRuns(from: persistedRuns, referenceDate: Date())
         self.feedbackHistory = Persistence.loadDailyPulseFeedbackHistory().sorted(by: { $0.createdAt > $1.createdAt })
         self.pendingCuration = Persistence.loadDailyPulsePendingCuration()
         self.focusText = defaults.string(forKey: Self.focusDefaultsKey) ?? ""
@@ -382,6 +383,9 @@ public final class DailyPulseManager: ObservableObject {
         self.includeShortcutContext = defaults.object(forKey: Self.includeShortcutContextDefaultsKey) as? Bool ?? true
         self.includeRecentExternalResults = defaults.object(forKey: Self.includeRecentExternalResultsDefaultsKey) as? Bool ?? false
         prunePendingCurationIfNeeded(referenceDate: Date())
+        if runs.count != persistedRuns.count {
+            Persistence.saveDailyPulseRuns(runs)
+        }
 
         syncNotificationObserver = NotificationCenter.default.addObserver(
             forName: .syncDailyPulseUpdated,
@@ -409,8 +413,7 @@ public final class DailyPulseManager: ObservableObject {
     }
 
     public var archivedRuns: [DailyPulseRun] {
-        let todayKey = Self.dayKey(for: Date())
-        return runs.filter { $0.dayKey != todayKey }
+        []
     }
 
     public var primaryRun: DailyPulseRun? {
@@ -430,7 +433,12 @@ public final class DailyPulseManager: ObservableObject {
     }
 
     public func reloadPersistedRuns() {
-        runs = Persistence.loadDailyPulseRuns().sorted(by: { $0.generatedAt > $1.generatedAt })
+        let persistedRuns = Persistence.loadDailyPulseRuns().sorted(by: { $0.generatedAt > $1.generatedAt })
+        let visibleRuns = Self.visibleRuns(from: persistedRuns, referenceDate: Date())
+        runs = visibleRuns
+        if visibleRuns.count != persistedRuns.count {
+            Persistence.saveDailyPulseRuns(visibleRuns)
+        }
     }
 
     public func clearError() {
@@ -439,6 +447,11 @@ public final class DailyPulseManager: ObservableObject {
 
     public func clearFeedbackHistory() {
         feedbackHistory = []
+        Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
+    }
+
+    public func removeFeedbackHistoryEvent(id: UUID) {
+        feedbackHistory = Self.removingFeedbackEvent(id: id, from: feedbackHistory)
         Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
     }
 
@@ -578,9 +591,20 @@ public final class DailyPulseManager: ObservableObject {
         runs.sorted(by: { $0.generatedAt > $1.generatedAt }).prefix(max(1, limit)).map { $0 }
     }
 
+    internal static func visibleRuns(from runs: [DailyPulseRun], referenceDate: Date) -> [DailyPulseRun] {
+        let todayKey = dayKey(for: referenceDate)
+        return runs
+            .filter { $0.dayKey == todayKey }
+            .sorted(by: { $0.generatedAt > $1.generatedAt })
+    }
+
     internal static func hasUnviewedRun(todayRunDayKey: String?, lastViewedDayKey: String?) -> Bool {
         guard let todayRunDayKey, !todayRunDayKey.isEmpty else { return false }
         return todayRunDayKey != lastViewedDayKey
+    }
+
+    internal static func removingFeedbackEvent(id: UUID, from history: [DailyPulseFeedbackEvent]) -> [DailyPulseFeedbackEvent] {
+        history.filter { $0.id != id }
     }
 
     internal static func shouldAttemptScheduledDelivery(
