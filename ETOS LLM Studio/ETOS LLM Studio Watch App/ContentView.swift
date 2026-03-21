@@ -98,7 +98,9 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 Task {
                     await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
-                    openDailyPulse()
+                    await MainActor.run {
+                        openDailyPulse()
+                    }
                 }
             }
             .onChange(of: viewModel.activeSheet) {
