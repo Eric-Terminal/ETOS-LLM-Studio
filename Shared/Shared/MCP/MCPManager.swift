@@ -1966,7 +1966,7 @@ private final class MCPFailureNotificationCenter: NSObject, UNUserNotificationCe
         guard !didConfigure else { return }
         didConfigure = true
         let center = UNUserNotificationCenter.current()
-        center.delegate = self
+        AppLocalNotificationCenter.shared.configureIfNeeded()
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
