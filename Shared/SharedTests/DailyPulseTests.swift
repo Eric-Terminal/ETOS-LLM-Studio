@@ -399,6 +399,63 @@ struct DailyPulseTests {
         #expect(components.minute == 0)
     }
 
+    @Test("到达提醒时间后才允许晨间送达尝试")
+    func morningDeliveryRequiresReminderTimeReached() {
+        var calendar = Calendar(identifier: .gregorian)
+        let timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = timeZone
+
+        let beforeReminder = formatter.date(from: "2026-03-22T07:59:00Z")!
+        let afterReminder = formatter.date(from: "2026-03-22T08:01:00Z")!
+
+        #expect(!DailyPulseDeliveryCoordinator.hasReachedReminderTime(
+            referenceDate: beforeReminder,
+            hour: 8,
+            minute: 0,
+            calendar: calendar
+        ))
+        #expect(DailyPulseDeliveryCoordinator.hasReachedReminderTime(
+            referenceDate: afterReminder,
+            hour: 8,
+            minute: 0,
+            calendar: calendar
+        ))
+    }
+
+    @Test("今天已有卡片或已尝试过时不会重复晨间送达")
+    func scheduledDeliverySkipsWhenAlreadyPreparedOrAttempted() {
+        let referenceDate = ISO8601DateFormatter().date(from: "2026-03-22T09:30:00Z")!
+
+        #expect(DailyPulseManager.shouldAttemptScheduledDelivery(
+            reminderEnabled: true,
+            reminderHour: 8,
+            reminderMinute: 0,
+            referenceDate: referenceDate,
+            todayRunDayKey: nil,
+            lastDeliveryAttemptDayKey: nil
+        ))
+
+        #expect(!DailyPulseManager.shouldAttemptScheduledDelivery(
+            reminderEnabled: true,
+            reminderHour: 8,
+            reminderMinute: 0,
+            referenceDate: referenceDate,
+            todayRunDayKey: "2026-03-22",
+            lastDeliveryAttemptDayKey: nil
+        ))
+
+        #expect(!DailyPulseManager.shouldAttemptScheduledDelivery(
+            reminderEnabled: true,
+            reminderHour: 8,
+            reminderMinute: 0,
+            referenceDate: referenceDate,
+            todayRunDayKey: nil,
+            lastDeliveryAttemptDayKey: "2026-03-22"
+        ))
+    }
+
 #if canImport(UserNotifications)
     @Test("Daily Pulse 通知路由能识别目标 userInfo")
     func dailyPulseNotificationRouteDetection() {
