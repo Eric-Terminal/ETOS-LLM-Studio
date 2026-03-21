@@ -204,7 +204,7 @@ public final class TTSManager: NSObject, ObservableObject {
             currentSpeakingMessageID = item.messageID
             isSpeaking = true
 
-            logger.info("TTS 开始朗读分段：剩余分段=\(queue.count, privacy: .public)")
+            logger.info("TTS 开始朗读分段：剩余分段=\(self.queue.count, privacy: .public)")
 
             playbackState.currentChunkIndex += 1
             playbackState.totalChunks = max(playbackState.currentChunkIndex, playbackState.currentChunkIndex + queue.count)
