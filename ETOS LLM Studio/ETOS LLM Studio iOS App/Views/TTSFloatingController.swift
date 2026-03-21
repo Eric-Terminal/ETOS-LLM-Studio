@@ -9,6 +9,7 @@ struct TTSFloatingController: View {
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
     private let panelCornerRadius: CGFloat = 18
     private let panelMaxWidth: CGFloat = 320
+    private let panelBottomPadding: CGFloat = 16
 
     private var isPlaybackActive: Bool {
         ttsManager.isSpeaking || ttsManager.playbackState.status == .paused || ttsManager.playbackState.status == .buffering
@@ -32,17 +33,16 @@ struct TTSFloatingController: View {
             .frame(maxWidth: panelMaxWidth, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.72)
+                    .fill(Color(uiColor: .systemBackground))
             }
             .overlay {
                 RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.14), lineWidth: 0.8)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.8)
             }
             .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 3)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.trailing, 12)
-            .padding(.bottom, 74)
+            .padding(.bottom, panelBottomPadding)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .onAppear {
                 updateVisibilityState()

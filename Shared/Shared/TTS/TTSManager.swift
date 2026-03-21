@@ -24,7 +24,6 @@ public final class TTSManager: NSObject, ObservableObject {
     private let prefetchWindowSize: Int = 1
     private var isPausedByUser = false
     private var activeBackend: ActiveBackend = .none
-    private let systemSpeechTimeoutSeconds: TimeInterval = 20
 
 #if canImport(AVFoundation)
     private var audioPlayer: AVAudioPlayer?
@@ -345,16 +344,6 @@ public final class TTSManager: NSObject, ObservableObject {
 
         logger.info("系统 TTS 开始：文本长度=\(text.count, privacy: .public)")
 
-        let timeoutTask = Task { [weak self, timeoutSeconds = systemSpeechTimeoutSeconds] in
-            try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-            await MainActor.run {
-                self?.handleSystemSpeechTimeout(timeoutSeconds: timeoutSeconds)
-            }
-        }
-        defer {
-            timeoutTask.cancel()
-        }
-
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             speechContinuation = continuation
             let utterance = AVSpeechUtterance(string: text)
@@ -371,26 +360,6 @@ public final class TTSManager: NSObject, ObservableObject {
         throw NSError(domain: "TTS", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前平台不支持系统 TTS。", comment: "")])
 #endif
     }
-
-#if os(iOS) || os(watchOS)
-    private func handleSystemSpeechTimeout(timeoutSeconds: TimeInterval) {
-        guard let continuation = speechContinuation else { return }
-        speechContinuation = nil
-
-        if speechSynthesizer.isSpeaking {
-            speechSynthesizer.stopSpeaking(at: .immediate)
-        }
-
-        let timeoutMessage = String(
-            format: NSLocalizedString("系统朗读超时（%.0f 秒），已自动停止。", comment: ""),
-            timeoutSeconds
-        )
-        logger.error("系统 TTS 超时：\(timeoutMessage, privacy: .public)")
-        playbackState.status = .error
-        playbackState.errorMessage = timeoutMessage
-        continuation.resume(throwing: NSError(domain: "TTS", code: -12, userInfo: [NSLocalizedDescriptionKey: timeoutMessage]))
-    }
-#endif
 
     private func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         switch settings.providerKind {
