@@ -238,7 +238,12 @@ public final class TTSManager: NSObject, ObservableObject {
                         try await speakBySystem(item.text, settings: settings)
                     } catch {
                         if settings.playbackMode == .auto {
+#if os(watchOS)
+                            // watchOS 上系统 TTS 异常时不自动切云端，避免网络不稳定导致长时间卡在加载态。
+                            throw error
+#else
                             try await speakByCloud(item, settings: settings)
+#endif
                         } else {
                             throw error
                         }
@@ -336,6 +341,14 @@ public final class TTSManager: NSObject, ObservableObject {
         return model
     }
 
+    private var cloudRequestTimeoutSeconds: TimeInterval {
+#if os(watchOS)
+        25
+#else
+        120
+#endif
+    }
+
     private func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
 #if os(iOS) || os(watchOS)
         activeBackend = .system
@@ -370,7 +383,7 @@ public final class TTSManager: NSObject, ObservableObject {
     private func startSpeechCompletionMonitor(estimatedDuration: TimeInterval) {
         stopSpeechMonitor(resetDidStart: false)
         let startupGrace: TimeInterval = 5
-        let hardDeadline = max(180, estimatedDuration * 8)
+        let hardDeadline = min(75, max(30, estimatedDuration * 2.2 + 8))
 
         speechMonitorTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -466,7 +479,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -510,7 +523,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -553,7 +566,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("enable", forHTTPHeaderField: "X-DashScope-SSE")
@@ -601,7 +614,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
