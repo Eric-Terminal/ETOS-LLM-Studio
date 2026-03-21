@@ -322,6 +322,9 @@ struct SettingsView: View {
     }
 
     private var dailyPulseEntryStatusText: String? {
+        if pulseManager.isPreparingTodayPulse {
+            return "准备中"
+        }
         if pulseManager.hasUnviewedTodayRun {
             return "今日待查看"
         }

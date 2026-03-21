@@ -65,6 +65,15 @@ struct DailyPulseView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
+            } else if pulseManager.isPreparingTodayPulse {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("今天这一期正在准备中", systemImage: "hourglass")
+                        .font(.headline)
+                    Text(preparationStatusText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
             } else {
                 Text("还没有每日脉冲记录。你可以先手动生成一份今天的主动情报卡片。")
                     .font(.footnote)
@@ -212,6 +221,18 @@ struct DailyPulseView: View {
             } footer: {
                 Text(summaryText(for: run))
             }
+        } else if pulseManager.isPreparingTodayPulse {
+            Section("今天的卡片") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("正在为你准备今天的每日脉冲", systemImage: "sparkles")
+                        .font(.subheadline.weight(.medium))
+                    Text(preparationStatusText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ProgressView()
+                }
+                .padding(.vertical, 6)
+            }
         } else {
             Section("今天的卡片") {
                 Text("今天还没有生成新的每日脉冲。你可以立即生成，或者先写一点“明日想看什么”再回来。")
@@ -337,6 +358,14 @@ struct DailyPulseView: View {
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
         return "生成于 \(dateText) · 可见卡片 \(run.visibleCards.count)/\(run.cards.count) · 仅保留当天"
+    }
+
+    private var preparationStatusText: String {
+        if let startedAt = pulseManager.lastPreparationStartedAt {
+            let timeText = startedAt.formatted(date: .omitted, time: .shortened)
+            return "系统已在 \(timeText) 开始准备今天这一期。你可以稍等片刻，或留在这里等待卡片刷新。"
+        }
+        return "系统正在根据你的聊天、记忆、反馈与外部上下文准备今天这一期。"
     }
 
     private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {

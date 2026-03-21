@@ -33,6 +33,12 @@ struct DailyPulseView: View {
                     Text(summaryText(for: run))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                } else if pulseManager.isPreparingTodayPulse {
+                    Text("今天这一期正在准备中。")
+                        .font(.footnote.weight(.semibold))
+                    Text(preparationStatusText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 } else {
                     Text("还没有每日脉冲记录。")
                         .font(.footnote)
@@ -132,6 +138,17 @@ struct DailyPulseView: View {
                         ForEach(visibleCards) { card in
                             cardView(card, runID: run.id)
                         }
+                    }
+                }
+            } else if pulseManager.isPreparingTodayPulse {
+                Section("今天的卡片") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("正在准备今天这一期")
+                            .font(.footnote.weight(.semibold))
+                        Text(preparationStatusText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        ProgressView()
                     }
                 }
             } else {
@@ -245,6 +262,14 @@ struct DailyPulseView: View {
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
         return "\(dateText) · \(run.visibleCards.count)/\(run.cards.count) 张可见 · 仅保留当天"
+    }
+
+    private var preparationStatusText: String {
+        if let startedAt = pulseManager.lastPreparationStartedAt {
+            let timeText = startedAt.formatted(date: .omitted, time: .shortened)
+            return "\(timeText) 已开始准备。"
+        }
+        return "系统正在整理今天这一期。"
     }
 
     private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {
