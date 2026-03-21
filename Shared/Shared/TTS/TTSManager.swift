@@ -38,6 +38,8 @@ public final class TTSManager: NSObject, ObservableObject {
         return synthesizer
     }()
     private var speechContinuation: CheckedContinuation<Void, Error>?
+    private var speechMonitorTask: Task<Void, Never>?
+    private var speechDidStart = false
 #endif
 
     private struct QueueItem: Identifiable {
@@ -346,6 +348,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             speechContinuation = continuation
+            speechDidStart = false
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = settings.speechRate.ttsClamped(to: 0.1...0.6)
             utterance.pitchMultiplier = settings.pitch.ttsClamped(to: 0.5...2.0)
@@ -355,11 +358,83 @@ public final class TTSManager: NSObject, ObservableObject {
                 }
             }
             speechSynthesizer.speak(utterance)
+            startSpeechCompletionMonitor(estimatedDuration: playbackState.duration)
         }
 #else
         throw NSError(domain: "TTS", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前平台不支持系统 TTS。", comment: "")])
 #endif
     }
+
+#if os(iOS) || os(watchOS)
+    /// 兜底监控系统 TTS 的回调，避免在 watchOS 上出现无回调导致队列永久卡住。
+    private func startSpeechCompletionMonitor(estimatedDuration: TimeInterval) {
+        stopSpeechMonitor(resetDidStart: false)
+        let startupGrace: TimeInterval = 5
+        let hardDeadline = max(180, estimatedDuration * 8)
+
+        speechMonitorTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let startedAt = Date()
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+
+                guard let continuation = self.speechContinuation else { break }
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let isSpeakingNow = self.speechSynthesizer.isSpeaking
+
+                if elapsed >= hardDeadline {
+                    self.logger.error("系统 TTS 长时间无回调，自动恢复播放队列。")
+                    if isSpeakingNow {
+                        self.speechSynthesizer.stopSpeaking(at: .immediate)
+                    }
+                    self.speechContinuation = nil
+                    self.stopSpeechMonitor()
+                    continuation.resume(throwing: NSError(
+                        domain: "TTS",
+                        code: -14,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("系统朗读长时间无响应，已自动恢复。", comment: "")]
+                    ))
+                    break
+                }
+
+                if isSpeakingNow {
+                    self.speechDidStart = true
+                    continue
+                }
+
+                if self.speechDidStart {
+                    self.logger.warning("系统 TTS 未收到 didFinish 回调，已通过状态轮询自动收尾。")
+                    self.playbackState.status = .ended
+                    self.speechContinuation = nil
+                    self.stopSpeechMonitor()
+                    continuation.resume()
+                    break
+                }
+
+                if elapsed >= startupGrace {
+                    self.logger.error("系统 TTS 启动失败，自动恢复播放流程。")
+                    self.speechContinuation = nil
+                    self.stopSpeechMonitor()
+                    continuation.resume(throwing: NSError(
+                        domain: "TTS",
+                        code: -13,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("系统朗读未能启动，请重试或切换云端。", comment: "")]
+                    ))
+                    break
+                }
+            }
+        }
+    }
+
+    private func stopSpeechMonitor(resetDidStart: Bool = true) {
+        speechMonitorTask?.cancel()
+        speechMonitorTask = nil
+        if resetDidStart {
+            speechDidStart = false
+        }
+    }
+#endif
 
     private func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         switch settings.providerKind {
@@ -679,6 +754,7 @@ public final class TTSManager: NSObject, ObservableObject {
 #endif
 
 #if os(iOS) || os(watchOS)
+        stopSpeechMonitor()
         if speechSynthesizer.isSpeaking {
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
@@ -829,6 +905,12 @@ extension TTSManager: AVAudioPlayerDelegate {
 
 #if os(iOS) || os(watchOS)
 extension TTSManager: AVSpeechSynthesizerDelegate {
+    nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        Task { @MainActor [weak self] in
+            self?.speechDidStart = true
+        }
+    }
+
     nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor [weak self] in
             self?.handleSpeechSynthesizerDidFinish()
@@ -843,6 +925,7 @@ extension TTSManager: AVSpeechSynthesizerDelegate {
 
     @MainActor
     private func handleSpeechSynthesizerDidFinish() {
+        stopSpeechMonitor()
         playbackState.status = .ended
         if let continuation = speechContinuation {
             speechContinuation = nil
@@ -852,6 +935,7 @@ extension TTSManager: AVSpeechSynthesizerDelegate {
 
     @MainActor
     private func handleSpeechSynthesizerDidCancel() {
+        stopSpeechMonitor()
         if let continuation = speechContinuation {
             speechContinuation = nil
             continuation.resume(throwing: CancellationError())
