@@ -456,6 +456,56 @@ struct DailyPulseTests {
         ))
     }
 
+    @Test("过期的每日脉冲只保留今天这一期")
+    func visibleRunsOnlyKeepToday() {
+        let formatter = ISO8601DateFormatter()
+        let referenceDate = formatter.date(from: "2026-03-22T09:30:00Z")!
+        let yesterdayRun = DailyPulseRun(
+            dayKey: "2026-03-21",
+            generatedAt: formatter.date(from: "2026-03-21T08:00:00Z")!,
+            headline: "昨天的卡片",
+            cards: [DailyPulseCard(title: "旧卡片", whyRecommended: "旧", summary: "旧", detailsMarkdown: "旧", suggestedPrompt: "旧")],
+            sourceDigest: "old"
+        )
+        let todayRun = DailyPulseRun(
+            dayKey: "2026-03-22",
+            generatedAt: formatter.date(from: "2026-03-22T08:00:00Z")!,
+            headline: "今天的卡片",
+            cards: [DailyPulseCard(title: "今天卡片", whyRecommended: "今", summary: "今", detailsMarkdown: "今", suggestedPrompt: "今")],
+            sourceDigest: "today"
+        )
+
+        let visible = DailyPulseManager.visibleRuns(from: [yesterdayRun, todayRun], referenceDate: referenceDate)
+
+        #expect(visible.count == 1)
+        #expect(visible.first?.dayKey == "2026-03-22")
+    }
+
+    @Test("反馈历史支持逐条删除")
+    func removingFeedbackEventByID() {
+        let first = DailyPulseFeedbackEvent(
+            id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+            createdAt: Date(timeIntervalSince1970: 100),
+            dayKey: "2026-03-22",
+            topicHint: "项目推进",
+            cardTitle: "项目推进",
+            action: .liked
+        )
+        let second = DailyPulseFeedbackEvent(
+            id: UUID(uuidString: "66666666-7777-8888-9999-aaaaaaaaaaaa")!,
+            createdAt: Date(timeIntervalSince1970: 200),
+            dayKey: "2026-03-22",
+            topicHint: "旅行安排",
+            cardTitle: "旅行安排",
+            action: .disliked
+        )
+
+        let remaining = DailyPulseManager.removingFeedbackEvent(id: second.id, from: [first, second])
+
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.id == first.id)
+    }
+
 #if canImport(UserNotifications)
     @Test("Daily Pulse 通知路由能识别目标 userInfo")
     func dailyPulseNotificationRouteDetection() {
