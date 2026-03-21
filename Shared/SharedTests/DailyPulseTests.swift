@@ -382,4 +382,33 @@ struct DailyPulseTests {
         #expect(DailyPulseManager.activeCurationText(for: "2026-03-23", pendingCuration: note) == "明天优先帮我看 PR 审查")
         #expect(DailyPulseManager.activeCurationText(for: "2026-03-22", pendingCuration: note).isEmpty)
     }
+
+    @Test("今日未读状态只在当天运行未查看时成立")
+    func hasUnviewedRunMatchesViewedDayKey() {
+        #expect(DailyPulseManager.hasUnviewedRun(todayRunDayKey: "2026-03-22", lastViewedDayKey: nil))
+        #expect(!DailyPulseManager.hasUnviewedRun(todayRunDayKey: "2026-03-22", lastViewedDayKey: "2026-03-22"))
+        #expect(!DailyPulseManager.hasUnviewedRun(todayRunDayKey: nil, lastViewedDayKey: nil))
+    }
+
+    @Test("晨间提醒时间会输出两位时分并生成合法组件")
+    func reminderTimeHelpersNormalizeValues() {
+        #expect(DailyPulseDeliveryCoordinator.reminderTimeText(hour: 8, minute: 5) == "08:05")
+
+        let components = DailyPulseDeliveryCoordinator.reminderDateComponents(hour: 28, minute: -3)
+        #expect(components.hour == 23)
+        #expect(components.minute == 0)
+    }
+
+#if canImport(UserNotifications)
+    @Test("Daily Pulse 通知路由能识别目标 userInfo")
+    func dailyPulseNotificationRouteDetection() {
+        let userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(
+            kind: "reminder",
+            dayKey: "2026-03-23"
+        )
+
+        #expect(AppLocalNotificationCenter.notificationTargetsDailyPulse(userInfo: userInfo))
+        #expect(!AppLocalNotificationCenter.notificationTargetsDailyPulse(userInfo: ["route": "other"]))
+    }
+#endif
 }
