@@ -83,7 +83,7 @@ public final class TTSManager: NSObject, ObservableObject {
 #endif
 
         let settings = settingsStore.snapshot
-        let boundedText = boundedSpeechInput(text)
+        let boundedText = boundedSpeechInput(text, settings: settings)
         if boundedText.count < text.count {
             logger.info("TTS 文本已截断：截断后长度=\(boundedText.count, privacy: .public)")
 #if DEBUG
@@ -644,8 +644,12 @@ public final class TTSManager: NSObject, ObservableObject {
         let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
         let stripped: String
 #if os(watchOS)
-        // watchOS 端避免复杂正则清洗，降低主线程卡顿风险
-        stripped = normalized
+        if settings.watchUseLightweightPreprocess {
+            // watchOS 端可选轻量预处理，降低主线程卡顿风险
+            stripped = normalized
+        } else {
+            stripped = stripMarkdown(normalized)
+        }
 #else
         stripped = stripMarkdown(normalized)
 #endif
@@ -653,9 +657,9 @@ public final class TTSManager: NSObject, ObservableObject {
         return quoted.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func boundedSpeechInput(_ text: String) -> String {
+    private func boundedSpeechInput(_ text: String, settings: TTSSettingsSnapshot) -> String {
 #if os(watchOS)
-        let maxLength = 2_000
+        let maxLength = min(max(settings.watchSpeechMaxCharacters, 500), 6_000)
 #else
         let maxLength = 12_000
 #endif

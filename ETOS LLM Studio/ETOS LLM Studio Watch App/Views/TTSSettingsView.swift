@@ -121,6 +121,24 @@ struct TTSSettingsView: View {
                 Toggle("仅朗读引号", isOn: $settingsStore.onlyReadQuotedContent)
             }
 
+            Section("watchOS 兼容") {
+                Toggle("轻量预处理（推荐）", isOn: $settingsStore.watchUseLightweightPreprocess)
+
+                Stepper(value: $settingsStore.watchSpeechMaxCharacters, in: 500...6_000, step: 250) {
+                    HStack {
+                        Text("最大字符")
+                        Spacer()
+                        Text("\(settingsStore.watchSpeechMaxCharacters)")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+
+                Text("如果点朗读会卡住，建议保持轻量预处理开启，并下调最大字符。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("播放参数") {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("语速 \(String(format: "%.2f", settingsStore.speechRate))")
