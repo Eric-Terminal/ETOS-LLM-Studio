@@ -11,6 +11,7 @@ import Foundation
 import Shared
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
@@ -55,7 +56,10 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
-            openDailyPulse()
+            Task {
+                await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                openDailyPulse()
+            }
         }
         .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
             Button("确定", role: .cancel) {}
@@ -77,8 +81,16 @@ struct ContentView: View {
         .task {
             await announcementManager.checkAnnouncement()
             await viewModel.prepareDailyPulseIfNeeded()
+            await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
             if notificationCenter.consumePendingRoute() == .dailyPulse {
                 openDailyPulse()
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                await viewModel.prepareDailyPulseIfNeeded()
+                await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
             }
         }
     }

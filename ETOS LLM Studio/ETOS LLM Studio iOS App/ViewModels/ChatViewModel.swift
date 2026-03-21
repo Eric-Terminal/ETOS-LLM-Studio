@@ -880,6 +880,16 @@ final class ChatViewModel: ObservableObject {
         await DailyPulseManager.shared.generateIfNeeded()
     }
 
+    func prepareMorningDailyPulseDeliveryIfNeeded(referenceDate: Date = Date()) async {
+        let coordinator = DailyPulseDeliveryCoordinator.shared
+        await DailyPulseManager.shared.generateForScheduledDeliveryIfNeeded(
+            reminderEnabled: coordinator.reminderEnabled,
+            reminderHour: coordinator.reminderHour,
+            reminderMinute: coordinator.reminderMinute,
+            referenceDate: referenceDate
+        )
+    }
+
     @discardableResult
     func saveDailyPulseCard(_ card: DailyPulseCard, from runID: UUID) -> ChatSession? {
         if let savedSessionID = card.savedSessionID,

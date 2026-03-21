@@ -15,6 +15,7 @@ import MarkdownUI
 import Shared
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     
     // MARK: - 状态对象
     
@@ -95,7 +96,10 @@ struct ContentView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
-                openDailyPulse()
+                Task {
+                    await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                    openDailyPulse()
+                }
             }
             .onChange(of: viewModel.activeSheet) {
                 if viewModel.activeSheet == nil {
@@ -600,8 +604,16 @@ struct ContentView: View {
             .task {
                 await announcementManager.checkAnnouncement()
                 await viewModel.prepareDailyPulseIfNeeded()
+                await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
                 if notificationCenter.consumePendingRoute() == .dailyPulse {
                     openDailyPulse()
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task {
+                    await viewModel.prepareDailyPulseIfNeeded()
+                    await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
                 }
             }
     }
