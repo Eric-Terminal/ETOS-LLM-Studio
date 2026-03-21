@@ -86,4 +86,79 @@ struct DailyPulseTests {
         let saved = DailyPulseManager.markingCardSaved(sessionID: savedSessionID, cardID: cardID, runID: runID, in: disliked)
         #expect(saved.first?.cards.first?.savedSessionID == savedSessionID)
     }
+
+    @Test("候选筛选会避开负反馈并做去重")
+    func selectCardsAvoidsNegativeHintsAndDuplicates() {
+        let profile = DailyPulsePreferenceProfile(
+            positiveHints: ["项目推进 下一步"],
+            negativeHints: ["旅行安排"],
+            recentVisibleHints: ["昨天的项目推进"]
+        )
+        let candidates = [
+            DailyPulseCard(title: "旅行安排提醒", whyRecommended: "你最近在看旅行。", summary: "继续规划旅程。", detailsMarkdown: "旅行", suggestedPrompt: "旅行"),
+            DailyPulseCard(title: "项目推进下一步", whyRecommended: "你最近一直在做项目。", summary: "把阻塞点拆开。", detailsMarkdown: "项目A", suggestedPrompt: "项目A"),
+            DailyPulseCard(title: "项目推进下一步（另一版）", whyRecommended: "你最近一直在做项目。", summary: "把阻塞点拆开并排序。", detailsMarkdown: "项目B", suggestedPrompt: "项目B"),
+            DailyPulseCard(title: "学习新概念", whyRecommended: "最近常提到原理理解。", summary: "补齐关键知识点。", detailsMarkdown: "学习", suggestedPrompt: "学习")
+        ]
+
+        let selected = DailyPulseManager.selectCards(
+            from: candidates,
+            profile: profile,
+            focusText: "继续推进项目",
+            limit: 3
+        )
+
+        #expect(selected.count == 2)
+        #expect(selected.contains(where: { $0.title.contains("项目推进下一步") }))
+        #expect(selected.contains(where: { $0.title == "学习新概念" }))
+        #expect(!selected.contains(where: { $0.title.contains("旅行安排") }))
+    }
+
+    @Test("同日运行记录合并时会保留更强反馈和已保存会话")
+    func mergeRunKeepsMergedCardState() {
+        let cardID = UUID(uuidString: "66666666-6666-6666-6666-666666666666")!
+        let savedSessionID = UUID(uuidString: "77777777-7777-7777-7777-777777777777")!
+        let local = DailyPulseRun(
+            id: UUID(uuidString: "88888888-8888-8888-8888-888888888888")!,
+            dayKey: "2026-03-22",
+            generatedAt: Date(timeIntervalSince1970: 100),
+            headline: "本地",
+            cards: [
+                DailyPulseCard(
+                    id: cardID,
+                    title: "继续推进项目",
+                    whyRecommended: "本地原因",
+                    summary: "本地摘要",
+                    detailsMarkdown: "本地详情",
+                    suggestedPrompt: "本地追问",
+                    feedback: .liked,
+                    savedSessionID: savedSessionID
+                )
+            ],
+            sourceDigest: "local"
+        )
+        let incoming = DailyPulseRun(
+            id: UUID(uuidString: "99999999-9999-9999-9999-999999999999")!,
+            dayKey: "2026-03-22",
+            generatedAt: Date(timeIntervalSince1970: 200),
+            headline: "远端",
+            cards: [
+                DailyPulseCard(
+                    title: "继续推进项目",
+                    whyRecommended: "远端原因",
+                    summary: "远端摘要",
+                    detailsMarkdown: "远端详情",
+                    suggestedPrompt: "远端追问",
+                    feedback: .hidden
+                )
+            ],
+            sourceDigest: "remote"
+        )
+
+        let merged = DailyPulseManager.mergeRun(local: local, incoming: incoming)
+
+        #expect(merged.headline == "远端")
+        #expect(merged.cards.first?.feedback == .hidden)
+        #expect(merged.cards.first?.savedSessionID == savedSessionID)
+    }
 }
