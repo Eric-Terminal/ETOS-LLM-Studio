@@ -24,8 +24,11 @@ struct DailyPulseView: View {
         List {
             generationSection
             focusSection
+            tomorrowCurationSection
+            feedbackHistorySection
             externalSourcesSection
-            latestPulseSection
+            todayPulseSection
+            archivePulseSection
         }
         .navigationTitle("每日脉冲")
         .navigationBarTitleDisplayMode(.inline)
@@ -79,12 +82,12 @@ struct DailyPulseView: View {
             }
             .disabled(pulseManager.isGenerating)
         } footer: {
-            Text("当前会优先使用最近聊天、长期记忆、请求日志、反馈历史和你的关注焦点，并可选结合 MCP / 快捷指令能力生成约 3 张卡片。")
+            Text("当前会优先使用最近聊天、长期记忆、请求日志、反馈历史、明日策展和你的关注焦点，并可选结合外部上下文生成约 3 张卡片。每日脉冲会优先突出今天这一期，往期内容会弱化归档。")
         }
     }
 
     private var focusSection: some View {
-        Section("关注焦点") {
+        Section("当前关注焦点") {
             TextField("例如：继续推进某个项目、帮我整理下一步、关注最近反复提到的话题", text: $pulseManager.focusText, axis: .vertical)
                 .lineLimit(2...4)
 
@@ -100,6 +103,59 @@ struct DailyPulseView: View {
         }
     }
 
+    private var tomorrowCurationSection: some View {
+        Section("明日想看什么") {
+            TextField("例如：明天优先帮我跟进 PR、安排会议、看某个项目的下一步", text: $pulseManager.tomorrowCurationText, axis: .vertical)
+                .lineLimit(2...4)
+
+            if let pending = pulseManager.pendingCuration {
+                Label("将优先用于 \(pending.targetDayKey) 的每日脉冲", systemImage: "calendar.badge.clock")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !pulseManager.tomorrowCurationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button(role: .destructive) {
+                    pulseManager.clearTomorrowCuration()
+                } label: {
+                    Label("清空明日策展", systemImage: "xmark.circle")
+                }
+            }
+        } footer: {
+            Text("这里更像 Pulse 的“明天想看什么”。下一次到达目标日期并生成每日脉冲时，会优先纳入这段策展输入。")
+        }
+    }
+
+    @ViewBuilder
+    private var feedbackHistorySection: some View {
+        Section("反馈历史") {
+            if pulseManager.feedbackHistoryPreview.isEmpty {
+                Text("还没有反馈历史。你对卡片点赞、降权、隐藏或保存后，这些信号会参与后续每日脉冲生成。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(pulseManager.feedbackHistoryPreview) { event in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(historyTitle(for: event))
+                            .font(.subheadline.weight(.medium))
+                        Text(event.cardTitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                Button(role: .destructive) {
+                    pulseManager.clearFeedbackHistory()
+                } label: {
+                    Label("清空反馈历史", systemImage: "trash")
+                }
+            }
+        } footer: {
+            Text("反馈历史会作为长期偏好信号保留；清空后，后续推荐会更多依赖聊天、记忆与当前上下文。")
+        }
+    }
+
     private var externalSourcesSection: some View {
         Section("外部上下文") {
             Toggle("纳入 MCP 服务器能力", isOn: $pulseManager.includeMCPContext)
@@ -111,10 +167,10 @@ struct DailyPulseView: View {
     }
 
     @ViewBuilder
-    private var latestPulseSection: some View {
-        if let run = pulseManager.latestRun {
+    private var todayPulseSection: some View {
+        if let run = pulseManager.todayRun {
             let visibleCards = run.visibleCards
-            Section(run.dayKey == DailyPulseManager.dayKey(for: Date()) ? "今天的卡片" : "最近一次卡片") {
+            Section("今天的卡片") {
                 if visibleCards.isEmpty {
                     Text("这次生成的卡片都被你隐藏了。你可以重新生成一份新的每日脉冲。")
                         .font(.footnote)
@@ -128,10 +184,23 @@ struct DailyPulseView: View {
                 Text(summaryText(for: run))
             }
         } else {
-            Section("卡片") {
-                Text("暂时没有可展示的每日脉冲。先去聊几轮，或者写一点关注焦点，再回来生成会更准。")
+            Section("今天的卡片") {
+                Text("今天还没有生成新的每日脉冲。你可以立即生成，或者先写一点“明日想看什么”再回来。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var archivePulseSection: some View {
+        if !pulseManager.archivedRuns.isEmpty {
+            Section("往期归档") {
+                ForEach(Array(pulseManager.archivedRuns.prefix(3))) { run in
+                    archivedRunRow(run)
+                }
+            } footer: {
+                Text("往期内容默认弱化展示；如果你把某张卡保存为正式会话，它会继续留在聊天记录里。")
             }
         }
     }
@@ -205,6 +274,22 @@ struct DailyPulseView: View {
         .padding(.vertical, 6)
     }
 
+    private func archivedRunRow(_ run: DailyPulseRun) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(run.headline)
+                .font(.subheadline.weight(.medium))
+            Text(summaryText(for: run))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let firstCard = run.visibleCards.first {
+                Text(firstCard.title)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     private func feedbackButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
@@ -252,6 +337,19 @@ struct DailyPulseView: View {
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
         return "生成于 \(dateText) · 可见卡片 \(run.visibleCards.count)/\(run.cards.count)"
+    }
+
+    private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {
+        switch event.action {
+        case .liked:
+            return "已喜欢 · \(event.dayKey)"
+        case .disliked:
+            return "已降权 · \(event.dayKey)"
+        case .hidden:
+            return "已隐藏 · \(event.dayKey)"
+        case .saved:
+            return "已保存为会话 · \(event.dayKey)"
+        }
     }
 
     private var alertBinding: Binding<Bool> {

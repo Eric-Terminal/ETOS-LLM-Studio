@@ -25,7 +25,7 @@ struct DailyPulseView: View {
             Section("生成") {
                 Toggle("自动补生成", isOn: $pulseManager.autoGenerateEnabled)
 
-                if let run = pulseManager.latestRun {
+                if let run = pulseManager.primaryRun {
                     Text(run.headline)
                         .font(.footnote.weight(.semibold))
                     Text(summaryText(for: run))
@@ -56,7 +56,7 @@ struct DailyPulseView: View {
                 .disabled(pulseManager.isGenerating)
             }
 
-            Section("关注焦点") {
+            Section("当前关注") {
                 TextField("例如：下一步要做什么", text: $pulseManager.focusText)
                 if !pulseManager.focusText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Button(role: .destructive) {
@@ -67,15 +67,42 @@ struct DailyPulseView: View {
                 }
             }
 
+            Section("明日策展") {
+                TextField("明天想看什么", text: $pulseManager.tomorrowCurationText)
+                if let pending = pulseManager.pendingCuration {
+                    Text("目标日：\(pending.targetDayKey)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("反馈历史") {
+                if pulseManager.feedbackHistoryPreview.isEmpty {
+                    Text("还没有反馈历史。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(pulseManager.feedbackHistoryPreview.prefix(3)) { event in
+                        Text(historyTitle(for: event))
+                            .font(.caption2)
+                    }
+                    Button(role: .destructive) {
+                        pulseManager.clearFeedbackHistory()
+                    } label: {
+                        Label("清空历史", systemImage: "trash")
+                    }
+                }
+            }
+
             Section("外部上下文") {
                 Toggle("MCP 能力", isOn: $pulseManager.includeMCPContext)
                 Toggle("快捷指令能力", isOn: $pulseManager.includeShortcutContext)
                 Toggle("最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
             }
 
-            if let run = pulseManager.latestRun {
+            if let run = pulseManager.todayRun {
                 let visibleCards = run.visibleCards
-                Section(run.dayKey == DailyPulseManager.dayKey(for: Date()) ? "今天的卡片" : "最近卡片") {
+                Section("今天的卡片") {
                     if visibleCards.isEmpty {
                         Text("这次卡片都被隐藏了，可以重新生成。")
                             .font(.footnote)
@@ -83,6 +110,26 @@ struct DailyPulseView: View {
                     } else {
                         ForEach(visibleCards) { card in
                             cardView(card, runID: run.id)
+                        }
+                    }
+                }
+            } else {
+                Section("今天的卡片") {
+                    Text("今天还没有新的每日脉冲。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !pulseManager.archivedRuns.isEmpty {
+                Section("往期归档") {
+                    ForEach(Array(pulseManager.archivedRuns.prefix(2))) { run in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(run.headline)
+                                .font(.caption)
+                            Text(summaryText(for: run))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -185,6 +232,19 @@ struct DailyPulseView: View {
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
         return "\(dateText) · \(run.visibleCards.count)/\(run.cards.count) 张可见"
+    }
+
+    private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {
+        switch event.action {
+        case .liked:
+            return "已喜欢 · \(event.dayKey)"
+        case .disliked:
+            return "已降权 · \(event.dayKey)"
+        case .hidden:
+            return "已隐藏 · \(event.dayKey)"
+        case .saved:
+            return "已保存 · \(event.dayKey)"
+        }
     }
 
     private var alertBinding: Binding<Bool> {
