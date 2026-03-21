@@ -13,6 +13,9 @@
 import Foundation
 import Combine
 import os.log
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public enum DailyPulseCardFeedback: String, Codable, Hashable, Sendable {
     case none
@@ -75,6 +78,76 @@ public struct DailyPulseCurationNote: Identifiable, Codable, Hashable, Sendable 
         self.targetDayKey = targetDayKey
         self.text = text
         self.createdAt = createdAt
+    }
+}
+
+public enum DailyPulseExternalSignalSource: String, Codable, Hashable, Sendable {
+    case shortcutResult
+    case mcpOutput
+    case mcpError
+    case announcement
+}
+
+public struct DailyPulseExternalSignal: Identifiable, Codable, Hashable, Sendable {
+    public var id: UUID
+    public var source: DailyPulseExternalSignalSource
+    public var title: String
+    public var preview: String
+    public var capturedAt: Date
+    public var isFailure: Bool
+
+    public init(
+        id: UUID = UUID(),
+        source: DailyPulseExternalSignalSource,
+        title: String,
+        preview: String,
+        capturedAt: Date = Date(),
+        isFailure: Bool = false
+    ) {
+        self.id = id
+        self.source = source
+        self.title = title
+        self.preview = preview
+        self.capturedAt = capturedAt
+        self.isFailure = isFailure
+    }
+}
+
+public struct DailyPulseTask: Identifiable, Codable, Hashable, Sendable {
+    public var id: UUID
+    public var sourceDayKey: String
+    public var sourceCardID: UUID?
+    public var title: String
+    public var details: String
+    public var suggestedPrompt: String
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var completedAt: Date?
+
+    public init(
+        id: UUID = UUID(),
+        sourceDayKey: String,
+        sourceCardID: UUID?,
+        title: String,
+        details: String,
+        suggestedPrompt: String,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        completedAt: Date? = nil
+    ) {
+        self.id = id
+        self.sourceDayKey = sourceDayKey
+        self.sourceCardID = sourceCardID
+        self.title = title
+        self.details = details
+        self.suggestedPrompt = suggestedPrompt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.completedAt = completedAt
+    }
+
+    public var isCompleted: Bool {
+        completedAt != nil
     }
 }
 
@@ -165,6 +238,7 @@ internal struct DailyPulseGenerationInput: Sendable {
     let sessionExcerpts: [DailyPulseSessionExcerpt]
     let memories: [String]
     let requestLogSummary: String
+    let activeTasks: [DailyPulseTask]
     let preferenceProfile: DailyPulsePreferenceProfile
     let externalContext: DailyPulseExternalContext
 
@@ -174,6 +248,7 @@ internal struct DailyPulseGenerationInput: Sendable {
             || !sessionExcerpts.isEmpty
             || !memories.isEmpty
             || !requestLogSummary.isEmpty
+            || !activeTasks.isEmpty
             || preferenceProfile.hasSignals
             || externalContext.hasSignals
     }
@@ -189,6 +264,9 @@ internal struct DailyPulseGenerationInput: Sendable {
             sessionDigest,
             memoryDigest,
             requestLogSummary,
+            activeTasks
+                .map { "\($0.title)|\($0.details)|\($0.isCompleted ? "done" : "pending")" }
+                .joined(separator: "|"),
             preferenceProfile.summaryText,
             externalContext.summaryText
         ]
@@ -232,21 +310,31 @@ internal struct DailyPulseExternalContext: Hashable, Sendable {
     let mcpSourceLines: [String]
     let shortcutSourceLines: [String]
     let recentSnapshotLines: [String]
+    let trendSourceLines: [String]
+    let signalHistoryLines: [String]
 
     static let empty = DailyPulseExternalContext(
         mcpSourceLines: [],
         shortcutSourceLines: [],
-        recentSnapshotLines: []
+        recentSnapshotLines: [],
+        trendSourceLines: [],
+        signalHistoryLines: []
     )
 
     var hasSignals: Bool {
-        !mcpSourceLines.isEmpty || !shortcutSourceLines.isEmpty || !recentSnapshotLines.isEmpty
+        !mcpSourceLines.isEmpty
+            || !shortcutSourceLines.isEmpty
+            || !recentSnapshotLines.isEmpty
+            || !trendSourceLines.isEmpty
+            || !signalHistoryLines.isEmpty
     }
 
     var summaryText: String {
         let mcpSummary = mcpSourceLines.isEmpty ? "（无）" : mcpSourceLines.joined(separator: "\n")
         let shortcutSummary = shortcutSourceLines.isEmpty ? "（无）" : shortcutSourceLines.joined(separator: "\n")
         let snapshotSummary = recentSnapshotLines.isEmpty ? "（无）" : recentSnapshotLines.joined(separator: "\n")
+        let trendSummary = trendSourceLines.isEmpty ? "（无）" : trendSourceLines.joined(separator: "\n")
+        let signalHistorySummary = signalHistoryLines.isEmpty ? "（无）" : signalHistoryLines.joined(separator: "\n")
         return """
         可用 MCP 外部能力：
         \(mcpSummary)
@@ -256,6 +344,12 @@ internal struct DailyPulseExternalContext: Hashable, Sendable {
 
         最近已获取到的外部结果快照：
         \(snapshotSummary)
+
+        公告与趋势信号：
+        \(trendSummary)
+
+        最近积累的外部信号历史：
+        \(signalHistorySummary)
         """
     }
 }
@@ -291,10 +385,14 @@ public final class DailyPulseManager: ObservableObject {
     public static let shared = DailyPulseManager(chatService: .shared, memoryManager: .shared)
     internal static let persistedRetentionLimit = 14
     internal static let feedbackHistoryRetentionLimit = 120
+    internal static let externalSignalRetentionLimit = 40
+    internal static let taskRetentionLimit = 80
 
     @Published public private(set) var runs: [DailyPulseRun]
     @Published public private(set) var feedbackHistory: [DailyPulseFeedbackEvent]
     @Published public private(set) var pendingCuration: DailyPulseCurationNote?
+    @Published public private(set) var externalSignals: [DailyPulseExternalSignal]
+    @Published public private(set) var tasks: [DailyPulseTask]
     @Published public private(set) var isGenerating: Bool = false
     @Published public private(set) var lastErrorMessage: String?
     @Published public private(set) var lastViewedDayKey: String?
@@ -331,6 +429,11 @@ public final class DailyPulseManager: ObservableObject {
             defaults.set(includeRecentExternalResults, forKey: Self.includeRecentExternalResultsDefaultsKey)
         }
     }
+    @Published public var includeTrendContext: Bool {
+        didSet {
+            defaults.set(includeTrendContext, forKey: Self.includeTrendContextDefaultsKey)
+        }
+    }
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "DailyPulse")
     private let chatService: ChatService
@@ -349,8 +452,12 @@ public final class DailyPulseManager: ObservableObject {
     private static let includeMCPContextDefaultsKey = "dailyPulse.includeMCPContext"
     private static let includeShortcutContextDefaultsKey = "dailyPulse.includeShortcutContext"
     private static let includeRecentExternalResultsDefaultsKey = "dailyPulse.includeRecentExternalResults"
+    private static let includeTrendContextDefaultsKey = "dailyPulse.includeTrendContext"
     private static let lastViewedDayKeyDefaultsKey = "dailyPulse.lastViewedDayKey"
     private static let lastDeliveryAttemptDayKeyDefaultsKey = "dailyPulse.lastDeliveryAttemptDayKey"
+#if canImport(UIKit)
+    private var activeBackgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
+#endif
 
     public init(
         chatService: ChatService,
@@ -364,6 +471,8 @@ public final class DailyPulseManager: ObservableObject {
         self.runs = Self.visibleRuns(from: persistedRuns, referenceDate: Date())
         self.feedbackHistory = Persistence.loadDailyPulseFeedbackHistory().sorted(by: { $0.createdAt > $1.createdAt })
         self.pendingCuration = Persistence.loadDailyPulsePendingCuration()
+        self.externalSignals = Self.trimmedExternalSignals(Persistence.loadDailyPulseExternalSignals(), limit: Self.externalSignalRetentionLimit)
+        self.tasks = Self.sortedTasks(Persistence.loadDailyPulseTasks())
         self.focusText = defaults.string(forKey: Self.focusDefaultsKey) ?? ""
         self.tomorrowCurationText = pendingCuration?.text ?? ""
         self.lastViewedDayKey = defaults.string(forKey: Self.lastViewedDayKeyDefaultsKey)
@@ -380,13 +489,23 @@ public final class DailyPulseManager: ObservableObject {
         if defaults.object(forKey: Self.includeRecentExternalResultsDefaultsKey) == nil {
             defaults.set(false, forKey: Self.includeRecentExternalResultsDefaultsKey)
         }
+        if defaults.object(forKey: Self.includeTrendContextDefaultsKey) == nil {
+            defaults.set(true, forKey: Self.includeTrendContextDefaultsKey)
+        }
         self.autoGenerateEnabled = defaults.object(forKey: Self.autoGenerateDefaultsKey) as? Bool ?? true
         self.includeMCPContext = defaults.object(forKey: Self.includeMCPContextDefaultsKey) as? Bool ?? true
         self.includeShortcutContext = defaults.object(forKey: Self.includeShortcutContextDefaultsKey) as? Bool ?? true
         self.includeRecentExternalResults = defaults.object(forKey: Self.includeRecentExternalResultsDefaultsKey) as? Bool ?? false
+        self.includeTrendContext = defaults.object(forKey: Self.includeTrendContextDefaultsKey) as? Bool ?? true
         prunePendingCurationIfNeeded(referenceDate: Date())
         if runs.count != persistedRuns.count {
             Persistence.saveDailyPulseRuns(runs)
+        }
+        if externalSignals.count != Persistence.loadDailyPulseExternalSignals().count {
+            Persistence.saveDailyPulseExternalSignals(externalSignals)
+        }
+        if tasks != Self.sortedTasks(Persistence.loadDailyPulseTasks()) {
+            Persistence.saveDailyPulseTasks(tasks)
         }
 
         syncNotificationObserver = NotificationCenter.default.addObserver(
@@ -438,6 +557,18 @@ public final class DailyPulseManager: ObservableObject {
         Array(feedbackHistory.prefix(5))
     }
 
+    public var externalSignalPreview: [DailyPulseExternalSignal] {
+        Array(externalSignals.prefix(5))
+    }
+
+    public var pendingTasks: [DailyPulseTask] {
+        tasks.filter { !$0.isCompleted }
+    }
+
+    public var completedTasksPreview: [DailyPulseTask] {
+        Array(tasks.filter(\.isCompleted).prefix(3))
+    }
+
     public var nextCurationTargetDayKey: String {
         Self.nextDayKey(from: Date())
     }
@@ -446,6 +577,15 @@ public final class DailyPulseManager: ObservableObject {
         let persistedRuns = Persistence.loadDailyPulseRuns().sorted(by: { $0.generatedAt > $1.generatedAt })
         let visibleRuns = Self.visibleRuns(from: persistedRuns, referenceDate: Date())
         runs = visibleRuns
+        feedbackHistory = Persistence.loadDailyPulseFeedbackHistory().sorted(by: { $0.createdAt > $1.createdAt })
+        let latestPending = Persistence.loadDailyPulsePendingCuration()
+        pendingCuration = latestPending
+        tomorrowCurationText = latestPending?.text ?? ""
+        externalSignals = Self.trimmedExternalSignals(
+            Persistence.loadDailyPulseExternalSignals(),
+            limit: Self.externalSignalRetentionLimit
+        )
+        tasks = Self.sortedTasks(Persistence.loadDailyPulseTasks())
         if visibleRuns.count != persistedRuns.count {
             Persistence.saveDailyPulseRuns(visibleRuns)
         }
@@ -460,13 +600,33 @@ public final class DailyPulseManager: ObservableObject {
         Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
     }
 
+    public func clearExternalSignals() {
+        externalSignals = []
+        Persistence.saveDailyPulseExternalSignals(externalSignals)
+    }
+
     public func removeFeedbackHistoryEvent(id: UUID) {
         feedbackHistory = Self.removingFeedbackEvent(id: id, from: feedbackHistory)
         Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
     }
 
+    public func removeExternalSignal(id: UUID) {
+        externalSignals = Self.removingExternalSignal(id: id, from: externalSignals)
+        Persistence.saveDailyPulseExternalSignals(externalSignals)
+    }
+
     public func clearTomorrowCuration() {
         tomorrowCurationText = ""
+    }
+
+    public func clearCompletedTasks() {
+        tasks.removeAll(where: \.isCompleted)
+        persistTasks()
+    }
+
+    public func removeTask(id: UUID) {
+        tasks = tasks.filter { $0.id != id }
+        persistTasks()
     }
 
     public func markTodayRunViewed(referenceDate: Date = Date()) {
@@ -569,6 +729,72 @@ public final class DailyPulseManager: ObservableObject {
         return session
     }
 
+    public func linkedTask(cardID: UUID, runID: UUID) -> DailyPulseTask? {
+        guard let run = runs.first(where: { $0.id == runID }) else { return nil }
+        return tasks.first(where: { $0.sourceCardID == cardID && $0.sourceDayKey == run.dayKey })
+    }
+
+    @discardableResult
+    public func addTaskFromCard(cardID: UUID, runID: UUID) -> DailyPulseTask? {
+        guard let run = runs.first(where: { $0.id == runID }),
+              let card = card(cardID: cardID, runID: runID) else { return nil }
+
+        if let existing = tasks.first(where: { $0.sourceCardID == cardID && $0.sourceDayKey == run.dayKey }) {
+            return existing
+        }
+
+        let now = Date()
+        let task = DailyPulseTask(
+            sourceDayKey: run.dayKey,
+            sourceCardID: card.id,
+            title: card.title,
+            details: card.summary,
+            suggestedPrompt: card.suggestedPrompt,
+            createdAt: now,
+            updatedAt: now
+        )
+        tasks = Self.sortedTasks([task] + tasks)
+        persistTasks()
+        return task
+    }
+
+    public func toggleTaskCompletion(id: UUID) {
+        let now = Date()
+        tasks = tasks.map { task in
+            guard task.id == id else { return task }
+            var updated = task
+            updated.completedAt = task.isCompleted ? nil : now
+            updated.updatedAt = now
+            return updated
+        }
+        tasks = Self.sortedTasks(tasks)
+        persistTasks()
+    }
+
+    public func appendExternalSignal(_ signal: DailyPulseExternalSignal) {
+        externalSignals = Self.appendingExternalSignal(
+            signal,
+            to: externalSignals,
+            limit: Self.externalSignalRetentionLimit
+        )
+        Persistence.saveDailyPulseExternalSignals(externalSignals)
+    }
+
+    public func ingestAnnouncements(_ announcements: [Announcement]) {
+        let signals = Self.makeAnnouncementSignals(from: announcements)
+        guard !signals.isEmpty else { return }
+        var nextHistory = externalSignals
+        for signal in signals {
+            nextHistory = Self.appendingExternalSignal(
+                signal,
+                to: nextHistory,
+                limit: Self.externalSignalRetentionLimit
+            )
+        }
+        externalSignals = nextHistory
+        Persistence.saveDailyPulseExternalSignals(externalSignals)
+    }
+
     internal static func applyingFeedback(
         _ feedback: DailyPulseCardFeedback,
         to cardID: UUID,
@@ -634,6 +860,32 @@ public final class DailyPulseManager: ObservableObject {
 
     internal static func removingFeedbackEvent(id: UUID, from history: [DailyPulseFeedbackEvent]) -> [DailyPulseFeedbackEvent] {
         history.filter { $0.id != id }
+    }
+
+    internal static func removingExternalSignal(id: UUID, from signals: [DailyPulseExternalSignal]) -> [DailyPulseExternalSignal] {
+        signals.filter { $0.id != id }
+    }
+
+    internal static func sortedTasks(_ tasks: [DailyPulseTask]) -> [DailyPulseTask] {
+        tasks
+            .sorted { lhs, rhs in
+                if lhs.isCompleted != rhs.isCompleted {
+                    return !lhs.isCompleted && rhs.isCompleted
+                }
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+            .prefix(Self.taskRetentionLimit)
+            .map { $0 }
+    }
+
+    internal static func trimmedExternalSignals(_ signals: [DailyPulseExternalSignal], limit: Int) -> [DailyPulseExternalSignal] {
+        signals
+            .sorted(by: { $0.capturedAt > $1.capturedAt })
+            .prefix(max(1, limit))
+            .map { $0 }
     }
 
     internal static func shouldAttemptScheduledDelivery(
@@ -741,12 +993,14 @@ public final class DailyPulseManager: ObservableObject {
         guard force || autoGenerateEnabled || trigger == .manual || trigger == .delivery else { return }
         prunePendingCurationIfNeeded(referenceDate: Date())
 
+        beginGenerationBackgroundTaskIfNeeded()
         beginPreparation(referenceDate: Date())
         isGenerating = true
         lastErrorMessage = nil
         defer {
             isGenerating = false
             finishPreparation()
+            endGenerationBackgroundTaskIfNeeded()
         }
 
         do {
@@ -797,6 +1051,9 @@ public final class DailyPulseManager: ObservableObject {
                     Persistence.saveDailyPulsePendingCuration(nil)
                 }
             }
+            if trigger == .delivery {
+                await DailyPulseDeliveryCoordinator.shared.notifyReadyIfNeeded(for: newRun)
+            }
             logger.info("每日脉冲已生成，触发方式: \(trigger.rawValue, privacy: .public)，卡片数: \(cards.count)")
         } catch {
             let description = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -816,6 +1073,11 @@ public final class DailyPulseManager: ObservableObject {
 
     private func persistRuns() {
         Persistence.saveDailyPulseRuns(runs)
+    }
+
+    private func persistTasks() {
+        tasks = Self.sortedTasks(tasks)
+        Persistence.saveDailyPulseTasks(tasks)
     }
 
     private func appendFeedbackEvent(_ event: DailyPulseFeedbackEvent) {
@@ -868,6 +1130,7 @@ public final class DailyPulseManager: ObservableObject {
         let memories = buildMemoryExcerpts()
         let requestLogSummary = buildRequestLogSummary()
         let todayKey = Self.dayKey(for: Date())
+        let activeTasks = pendingTasks
         let preferenceProfile = Self.makePreferenceProfile(history: feedbackHistory, recentRuns: runs)
         let externalContext = buildExternalContext()
         return DailyPulseGenerationInput(
@@ -876,6 +1139,7 @@ public final class DailyPulseManager: ObservableObject {
             sessionExcerpts: sessionExcerpts,
             memories: memories,
             requestLogSummary: requestLogSummary,
+            activeTasks: activeTasks,
             preferenceProfile: preferenceProfile,
             externalContext: externalContext
         )
@@ -911,11 +1175,25 @@ public final class DailyPulseManager: ObservableObject {
                 limit: 3
             )
             : []
+        let trendLines = includeTrendContext
+            ? Self.makeTrendContextEntries(
+                announcements: AnnouncementManager.shared.currentAnnouncements,
+                limit: 3
+            )
+            : []
+        let signalHistoryLines = Self.makeSignalHistoryEntries(
+            signals: externalSignals,
+            includeResultSignals: includeRecentExternalResults,
+            includeTrendSignals: includeTrendContext,
+            limit: 5
+        )
 
         return DailyPulseExternalContext(
             mcpSourceLines: mcpLines,
             shortcutSourceLines: shortcutLines,
-            recentSnapshotLines: recentSnapshotLines
+            recentSnapshotLines: recentSnapshotLines,
+            trendSourceLines: trendLines,
+            signalHistoryLines: signalHistoryLines
         )
     }
 
@@ -1112,12 +1390,14 @@ public final class DailyPulseManager: ObservableObject {
 
     任务：
     - 依据用户最近聊天、长期记忆、近期使用轨迹、最近卡片反馈、外部能力上下文、用户主动填写的关注焦点与“明日想看什么”策展输入，输出一组候选卡片。
+    - 如果给到了未完成的 Pulse 任务，请优先帮助用户推进这些任务，但不要把已经完成的任务原样重复成卡片标题。
     - 卡片要尽量具体、可继续对话、可直接转成一个新会话。
     - 优先推荐近期可行动、可延续、和用户真实上下文强相关的话题。
     - 不要捏造用户经历，不要凭空加入外部事实；如果上下文不足，就保守一点。
     - 如果有 MCP / 快捷指令能力上下文，可以优先推荐“能马上借助这些能力继续推进”的卡片。
     - 工具能力描述只代表“可以调用的能力”，不代表你已经读取到外部实时数据。
     - 如果给到了“最近已获取到的外部结果快照”，那部分才代表用户最近真的拿到过的外部内容。
+    - 如果给到了“公告与趋势信号”，可以把它们当作近期外部变化，但不要夸大成已经完全确认的个人事实。
     - 输出要有明显多样性，避免所有卡片都围绕同一件事。
     - 如果用户已经明确 dislike / hidden 某类主题，就尽量别再推同类主题。
     - 如果用户过去喜欢或保存过某类主题，可以适度延续，但不要机械重复昨天的标题。
@@ -1160,6 +1440,12 @@ public final class DailyPulseManager: ObservableObject {
         let focus = input.focusText.isEmpty ? "（未填写）" : input.focusText
         let curation = input.curationText.isEmpty ? "（无）" : input.curationText
         let logSummary = input.requestLogSummary.isEmpty ? "（无）" : input.requestLogSummary
+        let taskBlock: String = {
+            guard !input.activeTasks.isEmpty else { return "（无）" }
+            return input.activeTasks.prefix(6).map { task in
+                "- \(task.title)：\(task.details)"
+            }.joined(separator: "\n")
+        }()
 
         return """
         当前时间：\(Self.userFacingDateString(from: Date()))
@@ -1180,6 +1466,9 @@ public final class DailyPulseManager: ObservableObject {
 
         最近请求日志摘要：
         \(logSummary)
+
+        当前未完成的 Pulse 任务：
+        \(taskBlock)
 
         最近卡片偏好与历史：
         \(input.preferenceProfile.summaryText)
@@ -1435,6 +1724,53 @@ public final class DailyPulseManager: ObservableObject {
         return Array(entries.prefix(max(1, limit)))
     }
 
+    internal static func makeTrendContextEntries(
+        announcements: [Announcement],
+        limit: Int
+    ) -> [String] {
+        announcements.prefix(max(1, limit)).map { announcement in
+            let preview = resultPreviewText(announcement.body, fallback: announcement.title)
+            return "- \(announcement.title)：\(preview)"
+        }
+    }
+
+    internal static func makeSignalHistoryEntries(
+        signals: [DailyPulseExternalSignal],
+        includeResultSignals: Bool,
+        includeTrendSignals: Bool,
+        limit: Int
+    ) -> [String] {
+        let filtered = signals.filter { signal in
+            switch signal.source {
+            case .announcement:
+                return includeTrendSignals
+            case .shortcutResult, .mcpOutput, .mcpError:
+                return includeResultSignals
+            }
+        }
+
+        return filtered
+            .sorted(by: { $0.capturedAt > $1.capturedAt })
+            .prefix(max(1, limit))
+            .map { signal in
+                let timeText = compactUserFacingDateString(from: signal.capturedAt)
+                let suffix = signal.isFailure ? "（失败）" : ""
+                return "- \(signal.title)\(suffix) · \(timeText)：\(resultPreviewText(signal.preview, fallback: signal.title))"
+            }
+    }
+
+    internal static func makeAnnouncementSignals(from announcements: [Announcement]) -> [DailyPulseExternalSignal] {
+        announcements.map { announcement in
+            DailyPulseExternalSignal(
+                source: .announcement,
+                title: announcement.title,
+                preview: normalizedText(announcement.body, fallback: announcement.title),
+                capturedAt: Date(),
+                isFailure: announcement.type == .blocking
+            )
+        }
+    }
+
     internal static func historyAction(for feedback: DailyPulseCardFeedback) -> DailyPulseHistoryAction? {
         switch feedback {
         case .liked:
@@ -1471,6 +1807,47 @@ public final class DailyPulseManager: ObservableObject {
         )
     }
 
+    internal static func appendingExternalSignal(
+        _ signal: DailyPulseExternalSignal,
+        to history: [DailyPulseExternalSignal],
+        limit: Int
+    ) -> [DailyPulseExternalSignal] {
+        var updated = history
+        if let existingIndex = updated.firstIndex(where: {
+            $0.source == signal.source
+                && areTopicsSimilar($0.title, signal.title)
+        }) {
+            if signal.capturedAt >= updated[existingIndex].capturedAt {
+                updated[existingIndex] = signal
+            }
+        } else {
+            updated.insert(signal, at: 0)
+        }
+
+        return trimmedExternalSignals(updated, limit: limit)
+    }
+
+    internal static func mergeTask(local: DailyPulseTask, incoming: DailyPulseTask) -> DailyPulseTask {
+        let base = incoming.updatedAt >= local.updatedAt ? incoming : local
+        let secondary = incoming.updatedAt >= local.updatedAt ? local : incoming
+
+        var merged = base
+        if merged.completedAt == nil {
+            merged.completedAt = secondary.completedAt
+        }
+        if merged.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.details = secondary.details
+        }
+        if merged.suggestedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.suggestedPrompt = secondary.suggestedPrompt
+        }
+        return merged
+    }
+
+    internal static func mergeExternalSignal(local: DailyPulseExternalSignal, incoming: DailyPulseExternalSignal) -> DailyPulseExternalSignal {
+        incoming.capturedAt >= local.capturedAt ? incoming : local
+    }
+
     internal static func activeCurationText(
         for dayKey: String,
         pendingCuration: DailyPulseCurationNote?
@@ -1491,6 +1868,25 @@ public final class DailyPulseManager: ObservableObject {
         ]
         return (priority[incoming] ?? 0) > (priority[base] ?? 0) ? incoming : base
     }
+
+#if canImport(UIKit)
+    private func beginGenerationBackgroundTaskIfNeeded() {
+        guard activeBackgroundTaskIdentifier == .invalid else { return }
+        activeBackgroundTaskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "dailyPulse.generate.background") { [weak self] in
+            guard let self else { return }
+            self.endGenerationBackgroundTaskIfNeeded()
+        }
+    }
+
+    private func endGenerationBackgroundTaskIfNeeded() {
+        guard activeBackgroundTaskIdentifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(activeBackgroundTaskIdentifier)
+        activeBackgroundTaskIdentifier = .invalid
+    }
+#else
+    private func beginGenerationBackgroundTaskIfNeeded() {}
+    private func endGenerationBackgroundTaskIfNeeded() {}
+#endif
 
     internal static func normalizedText(_ text: String?, fallback: String) -> String {
         let trimmed = text?

@@ -50,9 +50,13 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     private let defaults: UserDefaults
 
     private static let reminderIdentifier = "dailyPulse.reminder.daily"
+    private static let readyIdentifierPrefix = "dailyPulse.ready."
     private static let reminderEnabledDefaultsKey = "dailyPulse.delivery.reminderEnabled"
     private static let reminderHourDefaultsKey = "dailyPulse.delivery.reminderHour"
     private static let reminderMinuteDefaultsKey = "dailyPulse.delivery.reminderMinute"
+    private static let lastReadyDayKeyDefaultsKey = "dailyPulse.delivery.lastReadyDayKey"
+
+    @Published public private(set) var lastReadyDayKey: String?
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -68,6 +72,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         self.reminderEnabled = defaults.object(forKey: Self.reminderEnabledDefaultsKey) as? Bool ?? false
         self.reminderHour = Self.normalizedHour(defaults.object(forKey: Self.reminderHourDefaultsKey) as? Int ?? 8)
         self.reminderMinute = Self.normalizedMinute(defaults.object(forKey: Self.reminderMinuteDefaultsKey) as? Int ?? 30)
+        self.lastReadyDayKey = defaults.string(forKey: Self.lastReadyDayKeyDefaultsKey)
     }
 
     public func activate() {
@@ -86,7 +91,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         switch AppLocalNotificationCenter.shared.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             return reminderEnabled
-                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；到点后，应用在前台恢复时也会自动尝试准备今天这一期。"
+                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；到点后，应用在前台恢复时会自动尝试准备今天这一期，准备好后还会补发一条就绪通知。"
                 : "提醒已关闭；你仍可在应用内手动查看今日卡片。"
         case .denied:
             return "系统通知权限当前未开启，晨间提醒暂时不会送达。"
@@ -133,6 +138,35 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         AppLocalNotificationCenter.shared.removePendingRequests(withIdentifiers: [Self.reminderIdentifier])
         _ = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
         _ = await AppLocalNotificationCenter.shared.refreshAuthorizationStatus()
+#endif
+    }
+
+    public func notifyReadyIfNeeded(for run: DailyPulseRun) async {
+#if canImport(UserNotifications)
+        guard reminderEnabled else { return }
+        guard lastReadyDayKey != run.dayKey else { return }
+        let status = await AppLocalNotificationCenter.shared.refreshAuthorizationStatus()
+        switch status {
+        case .authorized, .provisional, .ephemeral:
+            break
+        default:
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "每日脉冲已准备好"
+        content.body = "今天的每日脉冲已经整理完成，已为你准备 \(run.visibleCards.count) 张主动情报卡片。"
+        content.sound = .default
+        content.threadIdentifier = "dailyPulse.delivery"
+        content.userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(kind: "ready", dayKey: run.dayKey)
+
+        let identifier = Self.readyIdentifierPrefix + run.dayKey
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        let didSchedule = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
+        if didSchedule {
+            lastReadyDayKey = run.dayKey
+            defaults.set(run.dayKey, forKey: Self.lastReadyDayKeyDefaultsKey)
+        }
 #endif
     }
 

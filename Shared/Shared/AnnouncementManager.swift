@@ -120,6 +120,26 @@ public struct Announcement: Codable, Identifiable {
         case title
         case body
     }
+
+    public init(
+        id: Int,
+        type: AnnouncementType,
+        minBuild: String? = nil,
+        maxBuild: String? = nil,
+        language: String? = nil,
+        platform: String? = nil,
+        title: String,
+        body: String
+    ) {
+        self.id = id
+        self.type = type
+        self.minBuild = minBuild
+        self.maxBuild = maxBuild
+        self.language = language
+        self.platform = platform
+        self.title = title
+        self.body = body
+    }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -148,7 +168,11 @@ public class AnnouncementManager: ObservableObject {
     // MARK: - Published 属性
     
     /// 当前公告列表（用于UI显示，可能有多个）
-    @Published public var currentAnnouncements: [Announcement] = []
+    @Published public var currentAnnouncements: [Announcement] = [] {
+        didSet {
+            DailyPulseManager.shared.ingestAnnouncements(currentAnnouncements)
+        }
+    }
     
     /// 是否应该显示弹窗通知
     @Published public var shouldShowAlert: Bool = false
