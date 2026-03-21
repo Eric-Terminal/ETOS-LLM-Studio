@@ -85,11 +85,13 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 #if canImport(UserNotifications)
         switch AppLocalNotificationCenter.shared.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            return reminderEnabled ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲。" : "提醒已关闭；你仍可在应用内手动查看今日卡片。"
+            return reminderEnabled
+                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；到点后，应用在前台恢复时也会自动尝试准备今天这一期。"
+                : "提醒已关闭；你仍可在应用内手动查看今日卡片。"
         case .denied:
             return "系统通知权限当前未开启，晨间提醒暂时不会送达。"
         case .notDetermined:
-            return reminderEnabled ? "首次开启后会请求通知权限，用于晨间提醒。" : "开启后会在设定时间提醒你查看今日脉冲。"
+            return reminderEnabled ? "首次开启后会请求通知权限，用于晨间提醒与晨间送达尝试。" : "开启后会在设定时间提醒你查看今日脉冲。"
         @unknown default:
             return "通知权限状态暂时未知。"
         }
@@ -144,6 +146,26 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     internal static func reminderTimeText(hour: Int, minute: Int) -> String {
         String(format: "%02d:%02d", normalizedHour(hour), normalizedMinute(minute))
+    }
+
+    internal static func hasReachedReminderTime(
+        referenceDate: Date,
+        hour: Int,
+        minute: Int,
+        calendar: Calendar = Calendar(identifier: .gregorian)
+    ) -> Bool {
+        let normalizedHour = normalizedHour(hour)
+        let normalizedMinute = normalizedMinute(minute)
+
+        guard let reminderDate = calendar.date(
+            bySettingHour: normalizedHour,
+            minute: normalizedMinute,
+            second: 0,
+            of: referenceDate
+        ) else {
+            return false
+        }
+        return referenceDate >= reminderDate
     }
 
     internal static func normalizedHour(_ hour: Int) -> Int {
