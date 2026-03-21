@@ -111,24 +111,6 @@ struct SettingsView: View {
                         Label("模型高级设置", systemImage: "brain.head.profile")
                     }
 
-                    NavigationLink(destination: TTSSettingsView().environmentObject(viewModel)) {
-                        Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
-                    }
-
-                    let speechModelBinding = Binding<RunnableModel?>(
-                        get: { viewModel.selectedSpeechModel },
-                        set: { viewModel.setSelectedSpeechModel($0) }
-                    )
-                    NavigationLink(destination: SpeechInputSettingsView(
-                        enableSpeechInput: $viewModel.enableSpeechInput,
-                        selectedSpeechModel: speechModelBinding,
-                        sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
-                        audioRecordingFormat: $viewModel.audioRecordingFormat,
-                        speechModels: viewModel.speechModels
-                    )) {
-                        Label("语音输入", systemImage: "mic")
-                    }
-                    
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
                         Label("拓展功能", systemImage: "puzzlepiece.extension")
                     }
