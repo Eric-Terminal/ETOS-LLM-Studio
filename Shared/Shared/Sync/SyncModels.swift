@@ -113,13 +113,17 @@ public struct SyncPackage: Codable {
     public var worldbooks: [Worldbook]
     public var feedbackTickets: [FeedbackTicket]
     public var dailyPulseRuns: [DailyPulseRun]
+    public var dailyPulseFeedbackHistory: [DailyPulseFeedbackEvent]
+    public var dailyPulsePendingCuration: DailyPulseCurationNote?
+    public var dailyPulseExternalSignals: [DailyPulseExternalSignal]
+    public var dailyPulseTasks: [DailyPulseTask]
     /// 完整 AppStorage 快照（二进制 Plist），用于同步软件设置
     public var appStorageSnapshot: Data?
     /// 兼容旧版本：仅携带 systemPrompt 时回退使用
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, appStorageSnapshot, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
@@ -135,6 +139,10 @@ public struct SyncPackage: Codable {
         worldbooks: [Worldbook] = [],
         feedbackTickets: [FeedbackTicket] = [],
         dailyPulseRuns: [DailyPulseRun] = [],
+        dailyPulseFeedbackHistory: [DailyPulseFeedbackEvent] = [],
+        dailyPulsePendingCuration: DailyPulseCurationNote? = nil,
+        dailyPulseExternalSignals: [DailyPulseExternalSignal] = [],
+        dailyPulseTasks: [DailyPulseTask] = [],
         appStorageSnapshot: Data? = nil,
         globalSystemPrompt: String? = nil
     ) {
@@ -150,6 +158,10 @@ public struct SyncPackage: Codable {
         self.worldbooks = worldbooks
         self.feedbackTickets = feedbackTickets
         self.dailyPulseRuns = dailyPulseRuns
+        self.dailyPulseFeedbackHistory = dailyPulseFeedbackHistory
+        self.dailyPulsePendingCuration = dailyPulsePendingCuration
+        self.dailyPulseExternalSignals = dailyPulseExternalSignals
+        self.dailyPulseTasks = dailyPulseTasks
         self.appStorageSnapshot = appStorageSnapshot
         self.globalSystemPrompt = globalSystemPrompt
     }
@@ -168,6 +180,10 @@ public struct SyncPackage: Codable {
         worldbooks = try container.decodeIfPresent([Worldbook].self, forKey: .worldbooks) ?? []
         feedbackTickets = try container.decodeIfPresent([FeedbackTicket].self, forKey: .feedbackTickets) ?? []
         dailyPulseRuns = try container.decodeIfPresent([DailyPulseRun].self, forKey: .dailyPulseRuns) ?? []
+        dailyPulseFeedbackHistory = try container.decodeIfPresent([DailyPulseFeedbackEvent].self, forKey: .dailyPulseFeedbackHistory) ?? []
+        dailyPulsePendingCuration = try container.decodeIfPresent(DailyPulseCurationNote.self, forKey: .dailyPulsePendingCuration)
+        dailyPulseExternalSignals = try container.decodeIfPresent([DailyPulseExternalSignal].self, forKey: .dailyPulseExternalSignals) ?? []
+        dailyPulseTasks = try container.decodeIfPresent([DailyPulseTask].self, forKey: .dailyPulseTasks) ?? []
         appStorageSnapshot = try container.decodeIfPresent(Data.self, forKey: .appStorageSnapshot)
         globalSystemPrompt = try container.decodeIfPresent(String.self, forKey: .globalSystemPrompt)
     }
