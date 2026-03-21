@@ -172,7 +172,8 @@ struct DailyPulseTests {
             preferenceProfile: .empty,
             externalContext: DailyPulseExternalContext(
                 mcpSourceLines: ["- GitHub：已选中用于聊天；工具 2 个（search_code、list_pull_requests）"],
-                shortcutSourceLines: []
+                shortcutSourceLines: [],
+                recentSnapshotLines: []
             )
         )
 
@@ -257,5 +258,49 @@ struct DailyPulseTests {
         #expect(entries.first?.contains("桥接执行") == true)
         #expect(entries.first?.contains("官方导入") == true)
         #expect(entries.first?.contains("禁用工具") == false)
+    }
+
+    @Test("最近外部结果摘要会优先纳入快捷指令结果与 MCP 输出")
+    func makeRecentExternalSnapshotEntriesIncludesRealResults() {
+        let entries = DailyPulseManager.makeRecentExternalSnapshotEntries(
+            shortcutResult: ShortcutToolExecutionResult(
+                requestID: "req-1",
+                toolName: "今日摘要",
+                success: true,
+                result: "今天有 3 个重要提醒：提交 PR、回复邮件、安排会议。",
+                errorMessage: nil,
+                transport: .bridge,
+                startedAt: Date(timeIntervalSince1970: 100),
+                finishedAt: Date(timeIntervalSince1970: 120)
+            ),
+            mcpOperationOutput: "{ \"headline\": \"最新 issues 共有 5 条\" }",
+            mcpOperationError: nil,
+            limit: 3
+        )
+
+        #expect(entries.count == 2)
+        #expect(entries.first?.contains("最近快捷指令结果") == true)
+        #expect(entries.first?.contains("今日摘要") == true)
+        #expect(entries.last?.contains("最近 MCP 输出") == true)
+        #expect(entries.last?.contains("latest") == false)
+    }
+
+    @Test("仅最近外部结果快照时也可视为可生成每日脉冲")
+    func generationInputAcceptsRecentExternalSnapshotOnly() {
+        let input = DailyPulseGenerationInput(
+            focusText: "",
+            sessionExcerpts: [],
+            memories: [],
+            requestLogSummary: "",
+            preferenceProfile: .empty,
+            externalContext: DailyPulseExternalContext(
+                mcpSourceLines: [],
+                shortcutSourceLines: [],
+                recentSnapshotLines: ["- 最近快捷指令结果（今日摘要，3/22 10:00）：今天有 3 个重要提醒。"]
+            )
+        )
+
+        #expect(input.hasUsableContext)
+        #expect(input.sourceDigest.contains("最近快捷指令结果"))
     }
 }
