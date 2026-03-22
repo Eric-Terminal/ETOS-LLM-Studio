@@ -90,11 +90,21 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 #if canImport(UserNotifications)
         switch AppLocalNotificationCenter.shared.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
+#if os(iOS)
             return reminderEnabled
-                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；到点后，应用在前台恢复时会自动尝试准备今天这一期，准备好后还会补发一条就绪通知。"
+                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；iPhone 会尽量在后台提前准备今天这一期，如果到了提醒时间后才完成，还会补发一条就绪通知。"
                 : "提醒已关闭；你仍可在应用内手动查看今日卡片。"
+#else
+            return reminderEnabled
+                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；手表端仍会在前台恢复时自动尝试准备今天这一期。"
+                : "提醒已关闭；你仍可在应用内手动查看今日卡片。"
+#endif
         case .denied:
+#if os(iOS)
+            return "系统通知权限当前未开启，提醒与就绪通知不会送达；但 iPhone 仍会尽量在后台提前准备今天这一期。"
+#else
             return "系统通知权限当前未开启，晨间提醒暂时不会送达。"
+#endif
         case .notDetermined:
             return reminderEnabled ? "首次开启后会请求通知权限，用于晨间提醒与晨间送达尝试。" : "开启后会在设定时间提醒你查看今日脉冲。"
         @unknown default:
@@ -209,6 +219,49 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
             return false
         }
         return referenceDate >= reminderDate
+    }
+
+    internal nonisolated static func nextBackgroundPreparationDate(
+        referenceDate: Date,
+        hour: Int,
+        minute: Int,
+        forceNextDay: Bool,
+        leadTimeMinutes: Int = 15,
+        calendar: Calendar = Calendar(identifier: .gregorian)
+    ) -> Date? {
+        let normalizedHour = normalizedHour(hour)
+        let normalizedMinute = normalizedMinute(minute)
+
+        guard let todayReminderDate = calendar.date(
+            bySettingHour: normalizedHour,
+            minute: normalizedMinute,
+            second: 0,
+            of: referenceDate
+        ) else {
+            return nil
+        }
+
+        let reminderDate: Date
+        if forceNextDay {
+            reminderDate = calendar.date(byAdding: .day, value: 1, to: todayReminderDate) ?? todayReminderDate
+        } else if referenceDate <= todayReminderDate {
+            reminderDate = todayReminderDate
+        } else {
+            return referenceDate.addingTimeInterval(60)
+        }
+
+        let preparationDate = calendar.date(
+            byAdding: .minute,
+            value: -max(0, leadTimeMinutes),
+            to: reminderDate
+        ) ?? reminderDate
+
+        if reminderDate > referenceDate {
+            let minimumFutureDate = referenceDate.addingTimeInterval(60)
+            return preparationDate > minimumFutureDate ? preparationDate : minimumFutureDate
+        }
+
+        return preparationDate
     }
 
     internal nonisolated static func normalizedHour(_ hour: Int) -> Int {

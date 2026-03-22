@@ -11,6 +11,7 @@
 // ============================================================================
 
 import SwiftUI
+import BackgroundTasks
 import Shared
 
 @main
@@ -19,10 +20,12 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var syncManager = WatchSyncManager.shared
     @StateObject private var cloudSyncManager = CloudSyncManager.shared
     @StateObject private var mcpManager = MCPManager.shared
+    @StateObject private var dailyPulseManager = DailyPulseManager.shared
     @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
 
     init() {
         DailyPulseDeliveryCoordinator.shared.activate()
+        DailyPulseBackgroundDeliveryScheduler.shared.activate()
     }
 
     var body: some Scene {
@@ -43,7 +46,23 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
                     dailyPulseDeliveryCoordinator.activate()
+                    DailyPulseBackgroundDeliveryScheduler.shared.activate()
                 }
+                .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in
+                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                }
+                .onChange(of: dailyPulseDeliveryCoordinator.reminderHour) { _, _ in
+                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                }
+                .onChange(of: dailyPulseDeliveryCoordinator.reminderMinute) { _, _ in
+                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                }
+                .onChange(of: dailyPulseManager.todayRun?.dayKey) { _, _ in
+                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                }
+        }
+        .backgroundTask(.appRefresh(DailyPulseBackgroundDeliveryScheduler.taskIdentifier)) {
+            await DailyPulseBackgroundDeliveryScheduler.shared.handleAppRefresh()
         }
     }
 }

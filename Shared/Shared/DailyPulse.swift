@@ -704,7 +704,31 @@ public final class DailyPulseManager: ObservableObject {
 
         lastDeliveryAttemptDayKey = todayKey
         defaults.set(todayKey, forKey: Self.lastDeliveryAttemptDayKeyDefaultsKey)
-        await generate(force: false, trigger: .delivery)
+        await generate(force: false, trigger: .delivery, notifyReadyWhenFinished: true)
+    }
+
+    @discardableResult
+    public func generateForBackgroundDeliveryIfNeeded(
+        reminderEnabled: Bool,
+        reminderHour: Int,
+        reminderMinute: Int,
+        referenceDate: Date = Date()
+    ) async -> Bool {
+        guard reminderEnabled else { return false }
+        let todayKey = Self.dayKey(for: referenceDate)
+        guard todayRun?.dayKey != todayKey else { return true }
+
+        let shouldNotifyReady = DailyPulseDeliveryCoordinator.hasReachedReminderTime(
+            referenceDate: referenceDate,
+            hour: reminderHour,
+            minute: reminderMinute
+        )
+        await generate(
+            force: false,
+            trigger: .delivery,
+            notifyReadyWhenFinished: shouldNotifyReady
+        )
+        return todayRun?.dayKey == todayKey
     }
 
     public func generateIfNeeded(trigger: DailyPulseTrigger = .automatic) async {
@@ -1081,7 +1105,11 @@ public final class DailyPulseManager: ObservableObject {
         return "请继续展开这条每日脉冲，并结合我的现状给出更具体建议。"
     }
 
-    private func generate(force: Bool, trigger: DailyPulseTrigger) async {
+    private func generate(
+        force: Bool,
+        trigger: DailyPulseTrigger,
+        notifyReadyWhenFinished: Bool = false
+    ) async {
         if isGenerating { return }
         guard force || autoGenerateEnabled || trigger == .manual || trigger == .delivery else { return }
         prunePendingCurationIfNeeded(referenceDate: Date())
@@ -1144,7 +1172,7 @@ public final class DailyPulseManager: ObservableObject {
                     Persistence.saveDailyPulsePendingCuration(nil)
                 }
             }
-            if trigger == .delivery {
+            if notifyReadyWhenFinished {
                 await DailyPulseDeliveryCoordinator.shared.notifyReadyIfNeeded(for: newRun)
             }
             logger.info("每日脉冲已生成，触发方式: \(trigger.rawValue, privacy: .public)，卡片数: \(cards.count)")

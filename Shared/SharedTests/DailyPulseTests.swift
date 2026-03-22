@@ -527,6 +527,69 @@ struct DailyPulseTests {
         #expect(components.minute == 0)
     }
 
+    @Test("后台预准备时间会优先落在提醒前的准备窗口")
+    func nextBackgroundPreparationDatePrefersLeadWindow() {
+        var calendar = Calendar(identifier: .gregorian)
+        let timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = timeZone
+
+        let referenceDate = formatter.date(from: "2026-03-22T01:00:00Z")!
+        let scheduledDate = DailyPulseDeliveryCoordinator.nextBackgroundPreparationDate(
+            referenceDate: referenceDate,
+            hour: 8,
+            minute: 30,
+            forceNextDay: false,
+            leadTimeMinutes: 15,
+            calendar: calendar
+        )
+
+        #expect(formatter.string(from: scheduledDate!) == "2026-03-22T08:15:00Z")
+    }
+
+    @Test("进入准备窗口后，后台预准备会尽快补一个未来时间")
+    func nextBackgroundPreparationDateFallsBackToSoon() {
+        var calendar = Calendar(identifier: .gregorian)
+        let timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = timeZone
+
+        let referenceDate = formatter.date(from: "2026-03-22T08:25:00Z")!
+        let scheduledDate = DailyPulseDeliveryCoordinator.nextBackgroundPreparationDate(
+            referenceDate: referenceDate,
+            hour: 8,
+            minute: 30,
+            forceNextDay: false,
+            leadTimeMinutes: 15,
+            calendar: calendar
+        )
+
+        #expect(formatter.string(from: scheduledDate!) == "2026-03-22T08:26:00Z")
+    }
+
+    @Test("今天已经有卡片时，后台预准备会直接改排明天")
+    func nextBackgroundPreparationDateSkipsToNextDayWhenTodayAlreadyPrepared() {
+        var calendar = Calendar(identifier: .gregorian)
+        let timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = timeZone
+
+        let referenceDate = formatter.date(from: "2026-03-22T07:00:00Z")!
+        let scheduledDate = DailyPulseDeliveryCoordinator.nextBackgroundPreparationDate(
+            referenceDate: referenceDate,
+            hour: 8,
+            minute: 30,
+            forceNextDay: true,
+            leadTimeMinutes: 15,
+            calendar: calendar
+        )
+
+        #expect(formatter.string(from: scheduledDate!) == "2026-03-23T08:15:00Z")
+    }
+
     @Test("到达提醒时间后才允许晨间送达尝试")
     func morningDeliveryRequiresReminderTimeReached() {
         var calendar = Calendar(identifier: .gregorian)
