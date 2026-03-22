@@ -1280,6 +1280,18 @@ public class GeminiAdapter: APIAdapter {
         if normalized["default"] is NSNull {
             normalized.removeValue(forKey: "default")
         }
+        if let enumValues = normalized["enum"] as? [Any] {
+            let filteredEnumValues = enumValues.filter { !($0 is NSNull) }
+            if filteredEnumValues.isEmpty {
+                normalized.removeValue(forKey: "enum")
+            } else {
+                normalized["enum"] = filteredEnumValues
+            }
+        }
+        if let constValue = normalized["const"], normalized["enum"] == nil,
+           let constString = constValue as? String {
+            normalized["enum"] = [constString]
+        }
 
         if let normalizedType = normalizedGeminiSchemaTypeValue(normalized["type"]) {
             normalized["type"] = normalizedType
@@ -1307,7 +1319,7 @@ public class GeminiAdapter: APIAdapter {
             }
         }
 
-        return normalized
+        return sanitizedGeminiSchemaObject(normalized)
     }
 
     private func flattenedGeminiSchemaCombinators(_ object: [String: Any]) -> [String: Any] {
@@ -1538,6 +1550,40 @@ public class GeminiAdapter: APIAdapter {
             "contentEncoding"
         ]
         return !leafHints.isDisjoint(with: Set(object.keys))
+    }
+
+    private func sanitizedGeminiSchemaObject(_ object: [String: Any]) -> [String: Any] {
+        let supportedKeys: Set<String> = [
+            "type",
+            "format",
+            "title",
+            "description",
+            "nullable",
+            "enum",
+            "maxItems",
+            "minItems",
+            "properties",
+            "required",
+            "minProperties",
+            "maxProperties",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "example",
+            "anyOf",
+            "propertyOrdering",
+            "default",
+            "items",
+            "minimum",
+            "maximum"
+        ]
+
+        var sanitized: [String: Any] = [:]
+        sanitized.reserveCapacity(object.count)
+        for (key, value) in object where supportedKeys.contains(key) {
+            sanitized[key] = value
+        }
+        return sanitized
     }
 
     // MARK: - 内部解码模型
