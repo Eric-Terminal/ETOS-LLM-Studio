@@ -5,9 +5,18 @@
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-Passing-44CC11?style=flat-square)
 
-**一个运行在 iOS 和 Apple Watch 上的原生 AI 客户端。支持 OpenAI、Anthropic Claude、Google Gemini 等多个大模型提供商，内置本地 RAG 记忆、MCP 工具调用、世界书、Siri 快捷指令等进阶功能。**
+**一个运行在 iOS 和 Apple Watch 上的原生 AI 客户端。支持 OpenAI、Anthropic Claude、Google Gemini 等多个模型提供商，内置 MCP 工具调用、本地 RAG 记忆、世界书、每日脉冲、Siri 快捷指令与双端同步。**
 
 [English](docs/readme/README_EN.md) | [繁體中文](docs/readme/README_ZH_HANT.md) | [日本語](docs/readme/README_JA.md)
+
+---
+
+## ✨ 最近新增亮点
+
+*   **每日脉冲（Daily Pulse）**：每天主动整理值得关注的情报卡片，综合最近聊天、长期记忆、请求日志、反馈历史、明日策展输入、外部信号与待跟进任务。
+*   **Pulse 任务与反馈闭环**：卡片支持喜欢、降权、隐藏、保存为会话、继续聊和加入任务列表，长期偏好会反哺后续生成。
+*   **晨间提醒与后台预准备**：iOS 支持后台预准备、晨间提醒与通知快捷动作；watchOS 也补齐了入口、查看与继续聊体验。
+*   **语音朗读（TTS）**：支持系统 TTS / 云端 TTS / 自动回退，可单独配置 TTS 模型、提供商参数与播放策略。
 
 ---
 
@@ -21,31 +30,52 @@
 
 ## 👋 写在前面
 
-在学校的日子挺无聊的，平时又有很多问题想问问 AI。
-当时嫌 App Store 上的 AI 应用要么贵得离谱，要么功能太残废（尤其是手表端），索性就自己动手搓了一个。
+在学校的日子挺无聊的，平时又总会冒出很多想问 AI 的问题。当时我嫌 App Store 上的 AI 应用要么贵得离谱，要么功能太残废（尤其是手表端），索性就自己动手搓了一个。
 
-从最初那个只有 1,800 行代码、API Key 还要硬编码的简陋版本，到现在 155 个 Swift 源文件、超过 73,000 行代码（含 Shared/iOS/watchOS 与测试代码）的工程，它确实成长了不少。虽然名字叫 "ETOS LLM Studio" 听着挺唬人，但它本质上就是我探索大模型应用边界的一个试验场。
+从最初那个只有 1,800 行代码、API Key 还要硬编码的简陋版本，到现在 **186 个 Swift 源文件、88,359 行代码**（含 Shared / iOS / watchOS / 测试代码）的工程，它确实已经长大了不少。虽然名字叫 “ETOS LLM Studio” 听着有点唬人，但它本质上还是我拿来探索大模型应用边界的试验场。
 
-现在，它已经不再仅仅是一个手表端的 App，我也顺手把 iOS 端的全功能版本也给做上了，这样在手机上管理配置和聊天也会舒服得多。两端的数据还能通过内置的同步引擎自动互通。
+现在它已经不只是一个手表端 App 了：我把 iOS 端也一点点补成了完整版本，方便在手机上管理模型、工具、记忆、世界书和每日脉冲；两端数据还能通过内置同步引擎自动互通。
 
-不过因为我家人不太允许我使用手机的问题，我一般只用Mac和Watch，导致手机。。。可能体验有点一言难尽，但是我会尽力优化的，我的电脑模拟器跑iPhone真的很吃力。
+因为我平时主要还是用 Mac 和 Watch，iPhone 端偶尔会有一些还在继续打磨的边角，不过我会继续慢慢补齐。
 
 ### 主要功能
 
-*   **双端原生体验**：iOS 和 Apple Watch 原生适配，两端视图高度对称，UI 各自针对屏幕尺寸优化。虽然手表端是核心，但手机端现在也同样好用(吧？)。
-*   **多模型支持**：原生适配 OpenAI、Anthropic (Claude) 和 Google (Gemini) 的 API 格式，支持在 App 内动态管理提供商和模型配置，并支持自定义请求头、参数表达式、原始 JSON 请求体。
-*   **工具中心 + 拓展工具**：统一管理 MCP / Shortcuts / 本地工具三类能力，支持聊天工具开关、审批策略、会话级启用，并新增沙盒文件系统工具（搜索、分块读取、差异查看、局部编辑、移动/复制/删除等）。
-*   **本地 RAG (记忆)**：虽然 Embedding 需要调用云端 API（Apple 本地的端侧小模型太颠了），但**向量数据库是完全运行在本地的 (SQLite)**。支持文本分块、嵌入进度可视化、记忆编辑与记忆主动检索工具。
-*   **MCP 工具调用**：支持远程 [Model Context Protocol](https://modelcontextprotocol.io)，包含完整 MCP 客户端、流式 HTTP/SSE 传输、服务器配置管理与更完整的协议兼容处理（重连、超时、握手治理、能力协商等）。
-*   **世界书 (Worldbook)**：类似 SillyTavern 的 Lorebook 系统，支持角色背景设定管理、编辑和条件触发；支持会话绑定隔离发送、system 注入、URL 导入，兼容 PNG naidata / JSON 顶层数组 / character_book。
+#### 聊天与模型
+
+*   **双端原生体验**：iOS 和 Apple Watch 原生适配，两端界面风格统一，但会针对不同屏幕尺寸分别优化交互。
+*   **多模型支持**：原生适配 OpenAI、Anthropic（Claude）和 Google（Gemini）等接口格式，支持在 App 内动态管理提供商与模型。
+*   **高级请求配置**：支持自定义请求头、参数表达式、原始 JSON 请求体，方便折腾兼容接口和特殊模型。
+*   **多模态与图像生成**：支持发送语音和图片，也支持 AI 图像生成。
+*   **语音朗读（TTS）**：支持系统 TTS、云端 TTS 与自动回退，可单独选择 TTS 模型和朗读参数。
+
+#### 工具与自动化
+
+*   **工具中心 + 拓展工具**：统一管理 MCP / Shortcuts / 本地工具三类能力，支持聊天工具开关、审批策略、会话级启用。
+*   **沙盒文件系统工具**：支持搜索、分块读取、差异查看、局部编辑、移动 / 复制 / 删除等文件操作。
+*   **MCP 工具调用**：支持远程 [Model Context Protocol](https://modelcontextprotocol.io)，包含完整 MCP 客户端、流式 HTTP/SSE 传输、重连、超时、握手治理与能力协商。
+*   **Siri 快捷指令**：集成 Shortcuts 框架，支持通过快捷指令调用 AI 能力、自定义工具并通过 URL Scheme 路由。
+*   **应用内文件管理**：内置可浏览目录的文件管理器，支持直接查看与管理应用沙盒文件。
+
+#### 记忆与知识组织
+
+*   **本地 RAG（记忆）**：Embedding 可调用云端 API，但**向量数据库完全本地运行（SQLite）**；支持文本分块、嵌入进度可视化、记忆编辑与主动检索工具。
+*   **世界书（Worldbook）**：类似 SillyTavern 的 Lorebook 系统，支持角色背景设定管理、条件触发、会话绑定隔离发送、system 注入与 URL 导入。
+*   **广泛格式兼容**：兼容 PNG naidata、JSON 顶层数组与 `character_book` 等常见世界书格式。
 *   **请求日志与测速分析**：内置独立请求日志、细分 Token 汇总，并提供流式响应速度统计与详情图表。
-*   **存储管理升级**：内置可浏览目录的文件管理器，支持在应用内查看与管理沙盒文件。
-*   **Siri 快捷指令**：集成 Shortcuts 框架，支持通过快捷指令调用 AI 能力，可自定义工具并通过 URL Scheme 路由。
-*   **应用内反馈助手**：支持反馈分类、环境信息采集、PoW 提交链路以及双端同步。
-*   **多模态**：支持发送语音和图片，支持 AI 图像生成。
-*   **跨端同步**：内置 iOS ↔ watchOS 同步引擎，提供商配置、会话、世界书、工具配置等数据自动互通。
 *   **高级渲染**：内置 Markdown 渲染器，支持代码高亮、表格和 LaTeX 数学公式。
-*   **局域网调试**：内置 HTTP 客户端，配合专用程序可在电脑浏览器里直接管理应用内文件或查看实时调试日志。
+
+#### Daily Pulse 主动情报
+
+*   **每日脉冲（Daily Pulse）**：每天生成一组主动情报卡片，把“你今天可能值得看什么”先整理出来。
+*   **Pulse 任务机制**：卡片可以直接转成待跟进任务，这些未完成项会跨天保留，并参与下一次 Pulse 生成。
+*   **反馈历史学习**：点赞、降权、隐藏、保存等反馈会沉淀成长期偏好信号，持续影响后续结果。
+*   **晨间提醒与继续聊**：支持定时提醒、通知快捷动作、保存为会话和继续聊天，iOS 与 watchOS 两端都能接上这条链路。
+
+#### 同步、调试与运维
+
+*   **跨端同步**：内置 iOS ↔ watchOS 同步引擎，提供商配置、会话、世界书、工具配置、每日脉冲等数据可自动互通。
+*   **应用内反馈助手**：支持反馈分类、环境信息采集、PoW 提交链路以及双端同步。
+*   **局域网调试**：内置局域网调试客户端，配合专用程序可在电脑浏览器里管理应用内文件或查看实时调试日志。
 *   **本地化**：支持英语、简体中文、繁体中文（香港）、日语和俄语五种语言。
 
 ---
@@ -72,10 +102,10 @@
 *   **语言**: Swift 6
 *   **UI**: SwiftUI
 *   **架构**: MVVM + Protocol Oriented Programming
-*   **数据**: SQLite (本地向量数据库), JSON (配置持久化)
-*   **网络**: URLSession (API 请求), Streamable HTTP (MCP 传输)
+*   **数据**: SQLite（本地向量数据库）, JSON（配置与数据持久化）
+*   **网络与传输**: URLSession（API 请求）, Streamable HTTP / SSE（MCP 传输）, WebSocket / HTTP Polling（局域网调试）
 *   **AI 协议**: Model Context Protocol (MCP)
-*   **集成**: Siri Shortcuts, WatchConnectivity (跨端同步)
+*   **系统能力**: Siri Shortcuts, WatchConnectivity（跨端同步）, UserNotifications, BackgroundTasks（iOS）
 *   **依赖管理**: Swift Package Manager（当前显式依赖 `swift-markdown-ui`，并包含其传递依赖 `networkimage`、`swift-cmark`）
 
 ---
@@ -85,25 +115,28 @@
 项目采用双层结构：平台无关的 Shared 框架 + 各平台独立的视图层。
 
 ```
-Shared/Shared/                  ← 平台无关的业务逻辑（框架，59 个源文件）
-├── ChatService.swift            ← 中央单例，管理会话/消息/模型选择/网络请求
-├── APIAdapter.swift             ← API 适配层（OpenAI / Anthropic / Gemini）
+Shared/Shared/                  ← 平台无关的业务逻辑（69 个 Swift 源文件）
+├── ChatService.swift            ← 中央单例，管理会话/消息/模型选择/请求编排
+├── APIAdapter.swift             ← API 适配层（OpenAI / Anthropic / Gemini 等）
 ├── Models.swift                 ← 核心数据模型
-├── Persistence.swift            ← 数据持久化
-├── MemoryManager.swift          ← RAG 记忆管理
+├── Persistence.swift            ← 配置与数据持久化
+├── DailyPulse.swift             ← 每日脉冲引擎、卡片、反馈与任务数据
+├── DailyPulseDeliveryCoordinator.swift ← 晨间提醒、投递状态与准备窗口协调
 ├── Memory/                      ← 记忆子系统（分块、嵌入、存储）
 ├── SimilaritySearch/            ← 本地向量数据库（SQLite）
 ├── MCP/                         ← Model Context Protocol 客户端与传输层
-├── Feedback/                    ← 应用内反馈助手（采集、存储、上传）
+├── Feedback/                    ← 应用内反馈助手（采集、签名、存储、上传）
 ├── Worldbook/                   ← 世界书引擎、导入导出
 ├── Sync/                        ← iOS ↔ watchOS 同步引擎
-├── Shortcuts/                   ← Siri Shortcuts 集成
-├── ToolCatalogSupport.swift     ← 聊天工具目录与注入支持
-├── StorageBrowserSupport.swift  ← 文件管理器能力支持
-└── LocalDebugServer.swift       ← 局域网 HTTP 调试客户端
+├── TTS/                         ← 语音朗读播放、配置与预设
+├── Shortcuts/                   ← Siri Shortcuts / URL Router 集成
+├── AppToolManager.swift         ← 本地工具与工具目录治理
+├── StorageBrowserSupport.swift  ← 文件浏览与管理能力支持
+└── LocalDebugServer.swift       ← 局域网调试客户端
 
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 视图层（37 个 Swift 源文件）
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（34 个 Swift 源文件）
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（41 个 Swift 源文件）
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 视图层（43 个 Swift 源文件）
+Shared/SharedTests/                         ← Shared 层测试（30 个 Swift 源文件）
 ```
 
 数据流：`View → ChatViewModel → ChatService.shared → APIAdapter → LLM API`，通过 Combine Subjects 驱动 UI 更新。
@@ -140,4 +173,4 @@ ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（34 个 Swift 源
 
 ---
 
-本次 README 修订于 2026 年 3 月 7 日（7907e83 之后），软件更新可能很勤快，README 可能更新不及时
+本次 README 修订于 2026 年 3 月 22 日（3245a90 之后）。项目更新频率比较高，如果你发现 README 跟不上代码，欢迎直接翻提交记录。
