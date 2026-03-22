@@ -85,7 +85,7 @@ public final class CloudSyncManager: ObservableObject {
     private let transport: any CloudSyncTransport
     private let userDefaults: UserDefaults
     private let packageBuilder: @Sendable (SyncOptions) -> SyncPackage
-    private let packageApplier: @Sendable (SyncPackage) async -> SyncMergeSummary
+    private let packageApplier: @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary
     private let now: @Sendable () -> Date
 
     init(
@@ -94,7 +94,7 @@ public final class CloudSyncManager: ObservableObject {
         packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
             SyncEngine.buildPackage(options: options)
         },
-        packageApplier: @escaping @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
+        packageApplier: @escaping @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
             await SyncEngine.apply(package: package)
         },
         now: @escaping @Sendable () -> Date = Date.init

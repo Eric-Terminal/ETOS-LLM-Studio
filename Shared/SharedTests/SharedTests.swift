@@ -3346,7 +3346,7 @@ fileprivate struct VectorSearchTests {
             #expect(FileManager.default.fileExists(atPath: savedURL.path))
             
             let mockEmbeddings = MockEmbeddings(dimension: 4)
-            var newIndex = await SimilarityIndex(name: indexName, model: mockEmbeddings, vectorStore: JsonStore())
+            let newIndex = await SimilarityIndex(name: indexName, model: mockEmbeddings, vectorStore: JsonStore())
             let loadedItems = try newIndex.loadIndex(fromDirectory: testDir)
             
             #expect(loadedItems != nil)

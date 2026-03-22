@@ -797,7 +797,7 @@ public final class DailyPulseManager: ObservableObject {
         Persistence.saveDailyPulseExternalSignals(externalSignals)
     }
 
-    internal static func applyingFeedback(
+    internal nonisolated static func applyingFeedback(
         _ feedback: DailyPulseCardFeedback,
         to cardID: UUID,
         runID: UUID,
@@ -816,7 +816,7 @@ public final class DailyPulseManager: ObservableObject {
         }
     }
 
-    internal static func markingCardSaved(
+    internal nonisolated static func markingCardSaved(
         sessionID: UUID,
         cardID: UUID,
         runID: UUID,
@@ -890,7 +890,7 @@ public final class DailyPulseManager: ObservableObject {
             .map { $0 }
     }
 
-    internal static func shouldAttemptScheduledDelivery(
+    internal nonisolated static func shouldAttemptScheduledDelivery(
         reminderEnabled: Bool,
         reminderHour: Int,
         reminderMinute: Int,
@@ -915,6 +915,7 @@ public final class DailyPulseManager: ObservableObject {
 
         let mergedCards = base.cards.map { baseCard in
             guard let matchingSecondary = secondary.cards.first(where: {
+                areTopicsSimilar($0.title, baseCard.title) ||
                 areTopicsSimilar(topicText(for: $0), topicText(for: baseCard))
             }) else {
                 return baseCard
@@ -938,15 +939,21 @@ public final class DailyPulseManager: ObservableObject {
         )
     }
 
-    internal static func cleanedJSONObjectString(from raw: String) -> String {
+    internal nonisolated static func cleanedJSONObjectString(from raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return raw }
 
         if trimmed.hasPrefix("```") {
             let lines = trimmed.components(separatedBy: .newlines)
-            let cleaned = lines.dropFirst().dropLast().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !cleaned.isEmpty {
-                return cleaned
+            if let firstFenceIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("```") }),
+               let lastFenceIndex = lines.lastIndex(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("```") }),
+               lastFenceIndex > firstFenceIndex {
+                let cleaned = lines[(firstFenceIndex + 1)..<lastFenceIndex]
+                    .joined(separator: "\n")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleaned.isEmpty {
+                    return cleaned
+                }
             }
         }
 
@@ -957,14 +964,63 @@ public final class DailyPulseManager: ObservableObject {
         return String(trimmed[start...end])
     }
 
-    internal static func parseModelResponse(from raw: String) throws -> DailyPulseModelResponse {
+    internal nonisolated static func parseModelResponse(from raw: String) throws -> DailyPulseModelResponse {
         let cleaned = cleanedJSONObjectString(from: raw)
-        let data = Data(cleaned.utf8)
+        let escaped = escapedControlCharactersInJSONString(cleaned)
+        let data = Data(escaped.utf8)
         let decoder = JSONDecoder()
         return try decoder.decode(DailyPulseModelResponse.self, from: data)
     }
 
-    internal static func archivedChatContent(for card: DailyPulseCard) -> String {
+    internal nonisolated static func escapedControlCharactersInJSONString(_ text: String) -> String {
+        var result = ""
+        result.reserveCapacity(text.count)
+
+        var isInsideString = false
+        var isEscaping = false
+
+        for character in text {
+            if isEscaping {
+                result.append(character)
+                isEscaping = false
+                continue
+            }
+
+            if character == "\\" {
+                result.append(character)
+                isEscaping = true
+                continue
+            }
+
+            if character == "\"" {
+                result.append(character)
+                isInsideString.toggle()
+                continue
+            }
+
+            if isInsideString {
+                switch character {
+                case "\n":
+                    result.append("\\n")
+                    continue
+                case "\r":
+                    result.append("\\r")
+                    continue
+                case "\t":
+                    result.append("\\t")
+                    continue
+                default:
+                    break
+                }
+            }
+
+            result.append(character)
+        }
+
+        return result
+    }
+
+    internal nonisolated static func archivedChatContent(for card: DailyPulseCard) -> String {
         let prompt = card.suggestedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return [
             "# \(card.title)",
@@ -1199,7 +1255,7 @@ public final class DailyPulseManager: ObservableObject {
         )
     }
 
-    internal static func makePreferenceProfile(
+    internal nonisolated static func makePreferenceProfile(
         history: [DailyPulseFeedbackEvent],
         recentRuns: [DailyPulseRun]
     ) -> DailyPulsePreferenceProfile {
@@ -1341,7 +1397,7 @@ public final class DailyPulseManager: ObservableObject {
         )
     }
 
-    internal static func selectCards(
+    internal nonisolated static func selectCards(
         from candidates: [DailyPulseCard],
         profile: DailyPulsePreferenceProfile,
         focusText: String,
@@ -1381,6 +1437,7 @@ public final class DailyPulseManager: ObservableObject {
         if selected.count < limit {
             for item in scored {
                 guard selected.count < limit else { break }
+                guard !matchesAnyHint(item.card, hints: profile.negativeHints) else { continue }
                 guard !containsSimilarCard(item.card, in: selected) else { continue }
                 selected.append(item.card)
             }
@@ -1484,7 +1541,7 @@ public final class DailyPulseManager: ObservableObject {
         """
     }
 
-    internal static func score(card: DailyPulseCard, profile: DailyPulsePreferenceProfile, focusText: String) -> Int {
+    internal nonisolated static func score(card: DailyPulseCard, profile: DailyPulsePreferenceProfile, focusText: String) -> Int {
         var score = 0
         let topic = topicText(for: card)
 
@@ -1507,7 +1564,7 @@ public final class DailyPulseManager: ObservableObject {
         return score
     }
 
-    internal static func deduplicatedTopicHints(_ topics: [String], limit: Int) -> [String] {
+    internal nonisolated static func deduplicatedTopicHints(_ topics: [String], limit: Int) -> [String] {
         var result: [String] = []
         for topic in topics {
             let trimmed = topic.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1521,13 +1578,13 @@ public final class DailyPulseManager: ObservableObject {
         return result
     }
 
-    internal static func containsSimilarCard(_ candidate: DailyPulseCard, in cards: [DailyPulseCard]) -> Bool {
+    internal nonisolated static func containsSimilarCard(_ candidate: DailyPulseCard, in cards: [DailyPulseCard]) -> Bool {
         cards.contains { existing in
             areTopicsSimilar(topicText(for: existing), topicText(for: candidate))
         }
     }
 
-    internal static func matchesAnyHint(_ card: DailyPulseCard, hints: [String]) -> Bool {
+    internal nonisolated static func matchesAnyHint(_ card: DailyPulseCard, hints: [String]) -> Bool {
         let topic = topicText(for: card)
         return hints.contains(where: { hint in
             areTopicsSimilar(topic, hint) || normalizedContains(topic, hint) || normalizedContains(hint, topic)
@@ -1580,7 +1637,7 @@ public final class DailyPulseManager: ObservableObject {
         }
     }
 
-    private static func categoryHint(for card: DailyPulseCard) -> String {
+    private nonisolated static func categoryHint(for card: DailyPulseCard) -> String {
         let text = "\(card.title) \(card.summary) \(card.whyRecommended)"
         let normalized = topicFingerprint(text)
         if normalized.contains("项目") || normalized.contains("开发") || normalized.contains("代码") || normalized.contains("实现") {
@@ -1598,7 +1655,7 @@ public final class DailyPulseManager: ObservableObject {
         return "general"
     }
 
-    internal static func makeMCPContextEntries(
+    internal nonisolated static func makeMCPContextEntries(
         servers: [MCPServerConfiguration],
         metadataByServerID: [UUID: MCPServerMetadataCache?],
         limit: Int
@@ -1660,7 +1717,7 @@ public final class DailyPulseManager: ObservableObject {
         return entries
     }
 
-    internal static func makeShortcutContextEntries(
+    internal nonisolated static func makeShortcutContextEntries(
         tools: [ShortcutToolDefinition],
         limit: Int
     ) -> [String] {
@@ -1694,7 +1751,7 @@ public final class DailyPulseManager: ObservableObject {
         return entries
     }
 
-    internal static func makeRecentExternalSnapshotEntries(
+    internal nonisolated static func makeRecentExternalSnapshotEntries(
         shortcutResult: ShortcutToolExecutionResult?,
         mcpOperationOutput: String?,
         mcpOperationError: String?,
@@ -1728,7 +1785,7 @@ public final class DailyPulseManager: ObservableObject {
         return Array(entries.prefix(max(1, limit)))
     }
 
-    internal static func makeTrendContextEntries(
+    internal nonisolated static func makeTrendContextEntries(
         announcements: [Announcement],
         limit: Int
     ) -> [String] {
@@ -1738,7 +1795,7 @@ public final class DailyPulseManager: ObservableObject {
         }
     }
 
-    internal static func makeSignalHistoryEntries(
+    internal nonisolated static func makeSignalHistoryEntries(
         signals: [DailyPulseExternalSignal],
         includeResultSignals: Bool,
         includeTrendSignals: Bool,
@@ -1936,7 +1993,7 @@ public final class DailyPulseManager: ObservableObject {
         return dayKey(for: nextDate, calendar: calendar)
     }
 
-    private static func userFacingDateString(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
+    private nonisolated static func userFacingDateString(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "zh_CN")
@@ -1946,7 +2003,7 @@ public final class DailyPulseManager: ObservableObject {
         return formatter.string(from: date)
     }
 
-    private static func compactUserFacingDateString(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
+    private nonisolated static func compactUserFacingDateString(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "zh_CN")

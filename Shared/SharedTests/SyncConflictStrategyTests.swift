@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import Combine
 @testable import Shared
 
 @Suite("同步冲突策略测试")

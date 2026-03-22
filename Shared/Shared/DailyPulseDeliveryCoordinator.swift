@@ -170,7 +170,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 #endif
     }
 
-    internal static func reminderDateComponents(hour: Int, minute: Int) -> DateComponents {
+    internal nonisolated static func reminderDateComponents(hour: Int, minute: Int) -> DateComponents {
         var components = DateComponents()
         components.calendar = Calendar(identifier: .gregorian)
         components.hour = normalizedHour(hour)
@@ -178,11 +178,11 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         return components
     }
 
-    internal static func reminderTimeText(hour: Int, minute: Int) -> String {
+    internal nonisolated static func reminderTimeText(hour: Int, minute: Int) -> String {
         String(format: "%02d:%02d", normalizedHour(hour), normalizedMinute(minute))
     }
 
-    internal static func hasReachedReminderTime(
+    internal nonisolated static func hasReachedReminderTime(
         referenceDate: Date,
         hour: Int,
         minute: Int,
@@ -202,11 +202,11 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         return referenceDate >= reminderDate
     }
 
-    internal static func normalizedHour(_ hour: Int) -> Int {
+    internal nonisolated static func normalizedHour(_ hour: Int) -> Int {
         min(max(hour, 0), 23)
     }
 
-    internal static func normalizedMinute(_ minute: Int) -> Int {
+    internal nonisolated static func normalizedMinute(_ minute: Int) -> Int {
         min(max(minute, 0), 59)
     }
 }

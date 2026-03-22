@@ -201,9 +201,10 @@ struct MCPStreamableHTTPTransportTests {
         )
 
         let transport = makeTransport()
-        transport.elicitationHandler = ElicitationHandlerStub(
+        let elicitationHandler = ElicitationHandlerStub(
             result: MCPElicitationResult(action: .accept, content: ["email": .string("user@example.com")])
         )
+        transport.elicitationHandler = elicitationHandler
         try await transport.sendNotification(makeNotificationPayload(method: "test/inline-elicitation"))
 
         let hasResponsePost = await waitUntil {
