@@ -1244,7 +1244,8 @@ private enum ChatAttachmentImageCache {
 // MARK: - Watch Audio Player Manager
 
 class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
-    let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则播放状态与进度不会稳定自动刷新。
     @Published var isPlaying = false
     @Published var currentFileName: String?
     @Published var currentTime: TimeInterval = 0

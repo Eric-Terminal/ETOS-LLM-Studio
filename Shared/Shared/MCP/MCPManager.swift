@@ -236,9 +236,8 @@ public struct MCPGovernanceLogEntry: Identifiable, Hashable {
 public final class MCPManager: ObservableObject {
 
     public static let shared = MCPManager()
-    // 注意：MCP 管理器需要依赖 @Published 自动驱动设置页实时刷新。
-    // 这里保留显式 publisher，但不能标记为 nonisolated。
-    public let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则 MCP 连接状态、工具列表与审批相关界面不会稳定自动刷新。
     public nonisolated static var toolNamePrefix: String { "mcp://" }
     public nonisolated static var toolAliasPrefix: String { "mcp_" }
     private nonisolated static var resourceNamePrefix: String { "mcpres://" }

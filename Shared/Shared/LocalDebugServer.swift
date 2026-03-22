@@ -20,9 +20,8 @@ import WatchKit
 /// 反向探针调试客户端
 @MainActor
 public class LocalDebugServer: ObservableObject {
-    // 注意：本地调试页依赖 @Published 及时驱动连接状态、请求队列与日志刷新，
-    // 这里保留显式 publisher，但不能标记为 nonisolated。
-    public let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则本地调试页的连接状态、请求队列与日志不会稳定刷新。
 
     public struct OpenAIRequestSummary: Identifiable, Hashable {
         public let id: UUID

@@ -4,8 +4,8 @@
 // SharedTests
 //
 // 覆盖内容:
-// - 启动阶段关键 ObservableObject 显式持有 objectWillChange
-// - 避免 Release 包重新退回 Combine 的运行时反射路径
+// - 记录显式 objectWillChange 与 @Published 自动派发之间的行为差异
+// - 覆盖关键 ObservableObject 的刷新发布链路
 // ============================================================================
 
 import Testing
@@ -13,32 +13,52 @@ import Foundation
 import Combine
 @testable import Shared
 
+@MainActor
+private final class ExplicitPublisherSample: ObservableObject {
+    let objectWillChange = ObservableObjectPublisher()
+    @Published var value = 0
+}
+
+@MainActor
+private final class SynthesizedPublisherSample: ObservableObject {
+    @Published var value = 0
+}
+
 @Suite("ObservableObjectPublisher Tests")
 struct ObservableObjectPublisherTests {
-    @Test("启动阶段关键 ObservableObject 持有显式 publisher")
+    @Test("显式 objectWillChange 不会自动透传 @Published 变更")
     @MainActor
-    func startupObservableObjectsStoreExplicitPublisher() {
-        let samples: [(String, Any)] = [
-            ("AnnouncementManager", AnnouncementManager.shared),
-            ("CloudSyncManager", CloudSyncManager.shared),
-            ("FeedbackService", FeedbackService.shared),
-            ("MCPManager", MCPManager.shared),
-            ("ToolPermissionCenter", ToolPermissionCenter.shared),
-            ("AppToolManager", AppToolManager.shared),
-            ("AppLogCenter", AppLogCenter.shared),
-            ("ShortcutToolManager", ShortcutToolManager.shared),
-            ("LocalDebugServer", LocalDebugServer())
-        ]
+    func explicitPublisherDoesNotAutomaticallyPublishPublishedChanges() {
+        let sample = ExplicitPublisherSample()
+        var changeCount = 0
 
-        for (name, object) in samples {
-            let hasStoredPublisher = Mirror(reflecting: object).children.contains { child in
-                child.label == "objectWillChange"
-            }
-            #expect(hasStoredPublisher, "\(name) 应显式存储 objectWillChange，避免运行时反射。")
+        let cancellable = sample.objectWillChange.sink { _ in
+            changeCount += 1
         }
+
+        sample.value = 1
+
+        #expect(changeCount == 0, "显式声明 objectWillChange 后，@Published 不会自动转发变更。")
+        withExtendedLifetime(cancellable) {}
     }
 
-    @Test("启动阶段关键 ObservableObject 可直接读取 publisher")
+    @Test("系统合成 objectWillChange 会自动透传 @Published 变更")
+    @MainActor
+    func synthesizedPublisherAutomaticallyPublishesPublishedChanges() {
+        let sample = SynthesizedPublisherSample()
+        var changeCount = 0
+
+        let cancellable = sample.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        sample.value = 1
+
+        #expect(changeCount >= 1, "系统合成的 objectWillChange 应自动转发 @Published 变更。")
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test("关键 ObservableObject 可安全读取 publisher getter")
     @MainActor
     func startupObservableObjectsExposePublisherGetterSafely() {
         let publishers: [(String, () -> ObservableObjectPublisher)] = [

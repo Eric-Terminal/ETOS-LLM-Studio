@@ -35,9 +35,8 @@ public struct ToolPermissionRequest: Identifiable, Equatable {
 @MainActor
 public final class ToolPermissionCenter: ObservableObject {
     public static let shared = ToolPermissionCenter()
-    // 注意：权限中心需要依赖 @Published 及时驱动聊天气泡与审批弹窗刷新，
-    // 这里保留显式 publisher，但不能标记为 nonisolated。
-    public let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则聊天里的工具审批弹窗与倒计时不会稳定自动刷新。
     
     @Published public private(set) var activeRequest: ToolPermissionRequest?
     @Published public private(set) var autoApproveEnabled: Bool
