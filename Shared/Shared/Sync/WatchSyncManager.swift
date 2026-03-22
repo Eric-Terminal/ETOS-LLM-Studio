@@ -27,7 +27,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     }
     
     public static let shared = WatchSyncManager()
-    public nonisolated let objectWillChange = ObservableObjectPublisher()
+    // 注意：WatchConnectivity 同步状态要实时驱动双端设置页刷新，
+    // 这里保留显式 publisher，但不能标记为 nonisolated。
+    public let objectWillChange = ObservableObjectPublisher()
     
     @Published public private(set) var state: SyncState = .idle
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty

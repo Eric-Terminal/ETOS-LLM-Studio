@@ -77,6 +77,69 @@ struct ObservableObjectPublisherTests {
         withExtendedLifetime(cancellable) {}
     }
 
+    @Test("AnnouncementManager 切换公告提示会触发 objectWillChange")
+    @MainActor
+    func announcementManagerPublishesWhenAlertStateChanges() {
+        let manager = AnnouncementManager.shared
+        let original = manager.shouldShowAlert
+
+        var changeCount = 0
+        let cancellable = manager.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        manager.shouldShowAlert = !original
+        manager.shouldShowAlert = original
+
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test("CloudSyncManager 状态变化会触发 objectWillChange")
+    @MainActor
+    func cloudSyncManagerPublishesWhenStateChanges() async {
+        let suiteName = "ObservableObjectPublisherTests.CloudSync.\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suiteName)!
+        userDefaults.removePersistentDomain(forName: suiteName)
+        let manager = CloudSyncManager(userDefaults: userDefaults)
+
+        var changeCount = 0
+        let cancellable = manager.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        await manager.performSync(options: [.providers], silent: false)
+
+        let didEnterFailedState: Bool
+        switch manager.state {
+        case .failed:
+            didEnterFailedState = true
+        default:
+            didEnterFailedState = false
+        }
+        #expect(didEnterFailedState, "CloudSyncManager 在关闭状态下执行同步应进入失败态。")
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    #if canImport(WatchConnectivity)
+    @Test("WatchSyncManager 状态变化会触发 objectWillChange")
+    @MainActor
+    func watchSyncManagerPublishesWhenStateChanges() {
+        let manager = WatchSyncManager.shared
+
+        var changeCount = 0
+        let cancellable = manager.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        manager.performSync(options: [.providers], silent: false)
+
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+    #endif
+
     @Test("ToolPermissionCenter 切换自动批准开关会触发 objectWillChange")
     @MainActor
     func toolPermissionCenterPublishesWhenTogglingAutoApprove() {
@@ -113,6 +176,24 @@ struct ObservableObjectPublisherTests {
         withExtendedLifetime(cancellable) {}
     }
 
+    @Test("AppLogCenter 写入日志会触发 objectWillChange")
+    @MainActor
+    func appLogCenterPublishesWhenAppendingLogs() {
+        let center = AppLogCenter.shared
+        let marker = "observable-log-\(UUID().uuidString)"
+
+        var changeCount = 0
+        let cancellable = center.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        center.logDeveloper(category: "Tests", action: "Append", message: marker)
+
+        #expect(center.developerLogs.contains(where: { $0.message == marker }))
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
     @Test("ShortcutToolManager 切换聊天工具总开关会触发 objectWillChange")
     @MainActor
     func shortcutToolManagerPublishesWhenTogglingChatToolsEnabled() {
@@ -127,6 +208,56 @@ struct ObservableObjectPublisherTests {
         manager.setChatToolsEnabled(!original)
         manager.setChatToolsEnabled(original)
 
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test("FeedbackService 重载工单会触发 objectWillChange")
+    @MainActor
+    func feedbackServicePublishesWhenReloadingTickets() {
+        let issueNumber = Int.random(in: 700_000...799_999)
+        let ticket = FeedbackTicket(
+            issueNumber: issueNumber,
+            ticketToken: "token-\(issueNumber)",
+            category: .bug,
+            title: "测试工单 \(issueNumber)",
+            createdAt: Date(),
+            lastKnownStatus: .triage
+        )
+        let service = FeedbackService()
+
+        FeedbackStore.deleteTicket(issueNumber: issueNumber)
+        defer {
+            FeedbackStore.deleteTicket(issueNumber: issueNumber)
+        }
+
+        var changeCount = 0
+        let cancellable = service.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        FeedbackStore.upsertTicket(ticket)
+        service.reloadTickets()
+
+        #expect(service.tickets.contains(where: { $0.issueNumber == issueNumber }))
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test("LocalDebugServer 写入调试日志会触发 objectWillChange")
+    @MainActor
+    func localDebugServerPublishesWhenAppendingLogs() {
+        let server = LocalDebugServer()
+        let marker = "debug-log-\(UUID().uuidString)"
+
+        var changeCount = 0
+        let cancellable = server.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        server.addLog(marker)
+
+        #expect(server.debugLogs.contains(where: { $0.message == marker }))
         #expect(changeCount >= 1)
         withExtendedLifetime(cancellable) {}
     }

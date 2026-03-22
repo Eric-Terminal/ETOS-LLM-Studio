@@ -71,7 +71,9 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public static let shared = CloudSyncManager()
-    public nonisolated let objectWillChange = ObservableObjectPublisher()
+    // 注意：iCloud 同步状态要实时驱动双端设置页刷新，
+    // 这里保留显式 publisher，但不能标记为 nonisolated。
+    public let objectWillChange = ObservableObjectPublisher()
     public static let enabledKey = "cloudSync.enabled"
     public static let autoSyncEnabledKey = "cloudSync.autoSyncEnabled"
 

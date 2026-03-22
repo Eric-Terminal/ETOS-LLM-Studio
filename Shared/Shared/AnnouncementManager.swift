@@ -163,7 +163,9 @@ public class AnnouncementManager: ObservableObject {
     // MARK: - 单例
     
     public static let shared = AnnouncementManager()
-    public nonisolated let objectWillChange = ObservableObjectPublisher()
+    // 注意：公告管理器依赖 @Published 及时驱动设置页与启动期公告提示刷新，
+    // 这里保留显式 publisher，但不能标记为 nonisolated。
+    public let objectWillChange = ObservableObjectPublisher()
     
     // MARK: - Published 属性
     
