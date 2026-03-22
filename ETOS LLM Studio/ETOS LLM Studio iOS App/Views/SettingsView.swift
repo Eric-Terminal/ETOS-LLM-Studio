@@ -10,10 +10,23 @@ import SwiftUI
 import Foundation
 import Shared
 
+enum SettingsNavigationDestination: String, Hashable, Identifiable {
+    case dailyPulse
+
+    var id: String { rawValue }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var announcementManager = AnnouncementManager.shared
+    @ObservedObject private var pulseManager = DailyPulseManager.shared
+    @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @Binding private var requestedDestination: SettingsNavigationDestination?
+
+    init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
+        self._requestedDestination = requestedDestination
+    }
     
     var body: some View {
         List {
@@ -100,6 +113,21 @@ struct SettingsView: View {
                         .environmentObject(viewModel)
                 } label: {
                     Label(NSLocalizedString("工具中心", comment: "Tool center title"), systemImage: "slider.horizontal.3")
+                }
+
+                NavigationLink {
+                    DailyPulseView()
+                        .environmentObject(viewModel)
+                } label: {
+                    HStack(spacing: 12) {
+                        Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                        Spacer()
+                        if let status = dailyPulseEntryStatusText {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundStyle(pulseManager.hasUnviewedTodayRun ? .blue : .secondary)
+                        }
+                    }
                 }
 
                 NavigationLink {
@@ -196,21 +224,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section {
-                Button(NSLocalizedString("打开系统通知设置", comment: "Open system notification settings button")) {
-                    viewModel.openSystemNotificationSettings()
-                }
-            } header: {
-                Text(NSLocalizedString("后台通知", comment: "Background notification section title"))
-            } footer: {
-                Text(
-                    NSLocalizedString(
-                        "后台回复通知已默认开启，应用会在首次启动时自动请求通知权限；若此前拒绝，请在系统设置中手动开启。",
-                        comment: "Background AI reply notification section footer when forced enabled"
-                    )
-                )
-            }
-            
             // MARK: - 公告通知 Section
             if announcementManager.shouldShowInSettings {
                 Section("系统公告") {
@@ -241,6 +254,13 @@ struct SettingsView: View {
         .onChange(of: viewModel.enableMarkdown) { _, isEnabled in
             if !isEnabled, viewModel.enableAdvancedRenderer {
                 viewModel.enableAdvancedRenderer = false
+            }
+        }
+        .navigationDestination(item: $requestedDestination) { destination in
+            switch destination {
+            case .dailyPulse:
+                DailyPulseView()
+                    .environmentObject(viewModel)
             }
         }
     }
@@ -284,6 +304,22 @@ struct SettingsView: View {
                 ChatService.shared.setSelectedModel(model)
             }
         )
+    }
+
+    private var dailyPulseEntryStatusText: String? {
+        if pulseManager.isPreparingTodayPulse {
+            return "准备中"
+        }
+        if pulseManager.hasUnviewedTodayRun {
+            return "今日待查看"
+        }
+        if pulseManager.todayRun != nil {
+            return "今日已生成"
+        }
+        if deliveryCoordinator.reminderEnabled {
+            return "明早 \(deliveryCoordinator.reminderTimeText)"
+        }
+        return nil
     }
 
     private func selectedModelLabel(in options: [RunnableModel]) -> String {

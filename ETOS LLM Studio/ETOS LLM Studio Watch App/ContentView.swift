@@ -15,17 +15,20 @@ import MarkdownUI
 import Shared
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     
     // MARK: - 状态对象
     
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var announcementManager = AnnouncementManager.shared
+    @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
     @State private var isSettingsPresented = false
+    @State private var settingsDestination: WatchSettingsNavigationDestination?
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     private let inputControlHeight: CGFloat = 38
@@ -80,7 +83,7 @@ struct ContentView: View {
                 }
                 .navigationTitle(viewModel.currentSession?.name ?? "新对话")
                 .sheet(isPresented: $isSettingsPresented) {
-                    SettingsView(viewModel: viewModel)
+                    SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
                 }
                 .sheet(item: $viewModel.activeSheet) { item in
                     sheetView(for: item)
@@ -90,6 +93,19 @@ struct ContentView: View {
                     set: { _ in fullErrorContent = nil }
                 )) { wrapper in
                     FullErrorContentView(content: wrapper.content)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
+                Task {
+                    await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                    await MainActor.run {
+                        openDailyPulse()
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
+                Task { @MainActor in
+                    applyDailyPulseContinuationIfNeeded()
                 }
             }
             .onChange(of: viewModel.activeSheet) {
@@ -594,7 +610,44 @@ struct ContentView: View {
             // 启动时检查公告
             .task {
                 await announcementManager.checkAnnouncement()
+                await viewModel.prepareDailyPulseIfNeeded()
+                await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                if applyDailyPulseContinuationIfNeeded() {
+                    return
+                }
+                if notificationCenter.consumePendingRoute() == .dailyPulse {
+                    openDailyPulse()
+                }
             }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task {
+                    await viewModel.prepareDailyPulseIfNeeded()
+                    await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                }
+            }
+    }
+
+    private func openDailyPulse() {
+        isSettingsPresented = true
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            settingsDestination = .dailyPulse
+        }
+    }
+
+    @discardableResult
+    private func applyDailyPulseContinuationIfNeeded() -> Bool {
+        guard let continuation = notificationCenter.consumePendingDailyPulseContinuation() else {
+            return false
+        }
+        viewModel.applyDailyPulseContinuation(
+            sessionID: continuation.sessionID,
+            prompt: continuation.prompt
+        )
+        isSettingsPresented = false
+        settingsDestination = nil
+        return true
     }
 
     private var inputPlaceholderText: String {

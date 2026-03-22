@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		07B5C2A22F6D3B2100A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */; };
-		07B5C2A32F6D3B2200A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */; };
 		073D1C562E8F55EB00E6D9E1 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; };
 		073D1C572E8F55EB00E6D9E1 /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 077CD2612E962D8D00AD6556 /* MarkdownUI */; };
@@ -16,6 +14,8 @@
 		079679BE2F1279C8006562BC /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 079679BD2F1279C8006562BC /* MarkdownUI */; };
 		079679C02F1279CC006562BC /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 079679BF2F1279CC006562BC /* Shared.framework */; };
 		079679C12F1279CC006562BC /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 079679BF2F1279CC006562BC /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		07B5C2A22F6D3B2100A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */; };
+		07B5C2A32F6D3B2200A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,7 +79,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		073CA6DB2E8CFD65004516A0 /* ETOS LLM Studio App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ETOS LLM Studio App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		073CA70E2E8D0834004516A0 /* Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		076105A42E92305500B6D5FF /* SharedTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SharedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -87,6 +86,7 @@
 		0796795B2F1278F5006562BC /* ETOS LLM Studio Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		079679652F1278F5006562BC /* ETOS LLM Studio Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		079679BF2F1279CC006562BC /* Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		07B5C2A12F6D3B2000A11AA1 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -618,20 +618,22 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
-					ENABLE_PREVIEWS = YES;
-					GENERATE_INFOPLIST_FILE = YES;
-					INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
-					INFOPLIST_KEY_CFBundleDisplayName = ELS;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
-					INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
-					INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
+				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers_0 = com.ericterminal.els.dailyPulse.refresh;
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
+				INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				"INFOPLIST_KEY_NSBonjourServices[sdk=*]" = "_http._tcp _ws._tcp";
 				INFOPLIST_KEY_NSCameraUsageDescription = "需要访问相机以拍照发送给AI模型";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以连接到调试服务器,用于配置管理和文件传输";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以发送图片给AI模型";
+				INFOPLIST_KEY_UIBackgroundModes_0 = fetch;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -667,20 +669,22 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
-					ENABLE_PREVIEWS = YES;
-					GENERATE_INFOPLIST_FILE = YES;
-					INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
-					INFOPLIST_KEY_CFBundleDisplayName = ELS;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
-					INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
-					INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
+				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers_0 = com.ericterminal.els.dailyPulse.refresh;
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
+				INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				"INFOPLIST_KEY_NSBonjourServices[sdk=*]" = "_http._tcp _ws._tcp";
 				INFOPLIST_KEY_NSCameraUsageDescription = "需要访问相机以拍照发送给AI模型";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以连接到调试服务器,用于配置管理和文件传输";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以发送图片给AI模型";
+				INFOPLIST_KEY_UIBackgroundModes_0 = fetch;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -758,16 +762,16 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
-					ENABLE_PREVIEWS = YES;
-					GENERATE_INFOPLIST_FILE = YES;
-					INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
-					INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
-					INFOPLIST_KEY_CFBundleDisplayName = ELS;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
-					INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
-					INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
+				INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
+				INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.ericterminal.els;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
@@ -804,16 +808,16 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
-					ENABLE_PREVIEWS = YES;
-					GENERATE_INFOPLIST_FILE = YES;
-					INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
-					INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
-					INFOPLIST_KEY_CFBundleDisplayName = ELS;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
-					INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
-					INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
-					INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ETOS LLM Studio Watch App/Info.plist";
+				INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
+				INFOPLIST_KEY_CFBundleDisplayName = ELS;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.ericterminal.els.watch.shortcuts;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = etosllmstudio;
+				INFOPLIST_KEY_ETKeychainAccessGroup = "$(AppIdentifierPrefix)com.ericterminal.els.shared";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.ericterminal.els;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;

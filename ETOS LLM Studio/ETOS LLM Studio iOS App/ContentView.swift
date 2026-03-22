@@ -11,9 +11,12 @@ import Foundation
 import Shared
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
+    @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @State private var selection: Tab = .chat
+    @State private var settingsDestination: SettingsNavigationDestination?
     
     enum Tab: Hashable {
         case chat
@@ -40,7 +43,7 @@ struct ContentView: View {
             .tag(Tab.sessions)
             
             NavigationStack {
-                SettingsView()
+                SettingsView(requestedDestination: $settingsDestination)
             }
             .tabItem {
                 Label("设置", systemImage: "gearshape.fill")
@@ -50,6 +53,19 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) {
                 selection = .chat
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
+            Task {
+                await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                await MainActor.run {
+                    openDailyPulse()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
+            Task { @MainActor in
+                openDailyPulseContinuationIfNeeded()
             }
         }
         .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
@@ -71,7 +87,47 @@ struct ContentView: View {
         // 启动时检查公告
         .task {
             await announcementManager.checkAnnouncement()
+            await viewModel.prepareDailyPulseIfNeeded()
+            await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+            if openDailyPulseContinuationIfNeeded() {
+                return
+            }
+            if notificationCenter.consumePendingRoute() == .dailyPulse {
+                openDailyPulse()
+            }
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                await viewModel.prepareDailyPulseIfNeeded()
+                await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+            }
+        }
+    }
+
+    private func openDailyPulse() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selection = .settings
+        }
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            settingsDestination = .dailyPulse
+        }
+    }
+
+    @discardableResult
+    private func openDailyPulseContinuationIfNeeded() -> Bool {
+        guard let continuation = notificationCenter.consumePendingDailyPulseContinuation() else {
+            return false
+        }
+        viewModel.applyDailyPulseContinuation(
+            sessionID: continuation.sessionID,
+            prompt: continuation.prompt
+        )
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selection = .chat
+        }
+        return true
     }
 }
 

@@ -31,7 +31,22 @@ public final class ShortcutToolManager: ObservableObject {
 
     @Published public private(set) var tools: [ShortcutToolDefinition] = []
     @Published public private(set) var lastImportSummary: ShortcutImportSummary?
-    @Published public private(set) var lastExecutionResult: ShortcutToolExecutionResult?
+    @Published public private(set) var lastExecutionResult: ShortcutToolExecutionResult? {
+        didSet {
+            guard let lastExecutionResult else { return }
+            DailyPulseManager.shared.appendExternalSignal(
+                DailyPulseExternalSignal(
+                    source: .shortcutResult,
+                    title: lastExecutionResult.toolName,
+                    preview: lastExecutionResult.success
+                        ? (lastExecutionResult.result ?? "执行成功，但没有返回可展示内容。")
+                        : (lastExecutionResult.errorMessage ?? "执行失败，但没有返回详细错误。"),
+                    capturedAt: lastExecutionResult.finishedAt,
+                    isFailure: !lastExecutionResult.success
+                )
+            )
+        }
+    }
     @Published public private(set) var lastErrorMessage: String?
     @Published public private(set) var lastOfficialTemplateStatusMessage: String?
     @Published public private(set) var lastOfficialTemplateRunSucceeded: Bool?

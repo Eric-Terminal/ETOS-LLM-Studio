@@ -254,6 +254,8 @@ private extension SyncMergeSummary {
             skippedWorldbooks: 0,
             importedFeedbackTickets: 0,
             skippedFeedbackTickets: 0,
+            importedDailyPulseRuns: 0,
+            skippedDailyPulseRuns: 0,
             importedAppStorageValues: 0,
             skippedAppStorageValues: 0
         )

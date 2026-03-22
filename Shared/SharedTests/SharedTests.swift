@@ -1291,6 +1291,66 @@ struct GeminiAdapterTests {
         #expect(!(properties["type"] is String))
     }
 
+    @Test("Gemini 工具 schema 会移除 Gemini 不支持的 JSON Schema 关键字")
+    func testGeminiSchemaDropsUnsupportedJSONSchemaKeywords() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "example_tool",
+                description: "测试 Gemini schema 清洗",
+                parameters: .dictionary([
+                    "$schema": .string("https://json-schema.org/draft/2020-12/schema"),
+                    "type": .string("object"),
+                    "additionalProperties": .bool(false),
+                    "properties": .dictionary([
+                        "mode": .dictionary([
+                            "const": .string("strict"),
+                            "description": .string("固定模式")
+                        ]),
+                        "metadata": .dictionary([
+                            "type": .string("object"),
+                            "additionalProperties": .dictionary([
+                                "type": .string("string")
+                            ])
+                        ])
+                    ]),
+                    "required": .array([.string("mode")])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstToolGroup = toolsPayload.first,
+        let declarations = firstToolGroup["function_declarations"] as? [[String: Any]],
+        let firstDeclaration = declarations.first,
+        let parameters = firstDeclaration["parameters"] as? [String: Any],
+        let properties = parameters["properties"] as? [String: Any],
+        let modeSchema = properties["mode"] as? [String: Any],
+        let metadataSchema = properties["metadata"] as? [String: Any] else {
+            Issue.record("Gemini 请求体中未找到清洗后的 schema。")
+            return
+        }
+
+        #expect(parameters["$schema"] == nil)
+        #expect(parameters["additionalProperties"] == nil)
+        #expect(modeSchema["const"] == nil)
+        #expect(modeSchema["type"] as? String == "string")
+        #expect((modeSchema["enum"] as? [String]) == ["strict"])
+        #expect(metadataSchema["additionalProperties"] == nil)
+        #expect(metadataSchema["type"] as? String == "object")
+    }
+
     @Test("Gemini 响应可解析思考 Token 字段")
     func testGeminiResponseParsesThinkingTokens() throws {
         let payload = """
@@ -3346,7 +3406,7 @@ fileprivate struct VectorSearchTests {
             #expect(FileManager.default.fileExists(atPath: savedURL.path))
             
             let mockEmbeddings = MockEmbeddings(dimension: 4)
-            var newIndex = await SimilarityIndex(name: indexName, model: mockEmbeddings, vectorStore: JsonStore())
+            let newIndex = await SimilarityIndex(name: indexName, model: mockEmbeddings, vectorStore: JsonStore())
             let loadedItems = try newIndex.loadIndex(fromDirectory: testDir)
             
             #expect(loadedItems != nil)

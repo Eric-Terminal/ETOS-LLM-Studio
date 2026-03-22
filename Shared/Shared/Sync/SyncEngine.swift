@@ -30,6 +30,11 @@ public enum SyncEngine {
         var shortcutTools: [ShortcutToolDefinition] = []
         var worldbooks: [Worldbook] = []
         var feedbackTickets: [FeedbackTicket] = []
+        var dailyPulseRuns: [DailyPulseRun] = []
+        var dailyPulseFeedbackHistory: [DailyPulseFeedbackEvent] = []
+        var dailyPulsePendingCuration: DailyPulseCurationNote?
+        var dailyPulseExternalSignals: [DailyPulseExternalSignal] = []
+        var dailyPulseTasks: [DailyPulseTask] = []
         var appStorageSnapshot: Data?
         var legacyGlobalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
@@ -88,6 +93,14 @@ public enum SyncEngine {
             feedbackTickets = FeedbackStore.loadTickets()
         }
 
+        if options.contains(.dailyPulse) {
+            dailyPulseRuns = Persistence.loadDailyPulseRuns()
+            dailyPulseFeedbackHistory = Persistence.loadDailyPulseFeedbackHistory()
+            dailyPulsePendingCuration = Persistence.loadDailyPulsePendingCuration()
+            dailyPulseExternalSignals = Persistence.loadDailyPulseExternalSignals()
+            dailyPulseTasks = Persistence.loadDailyPulseTasks()
+        }
+
         if options.contains(.appStorage) {
             let snapshot = collectAppStorageSnapshot(userDefaults: userDefaults)
             appStorageSnapshot = encodeAppStorageSnapshot(snapshot)
@@ -143,6 +156,11 @@ public enum SyncEngine {
             shortcutTools: shortcutTools,
             worldbooks: worldbooks,
             feedbackTickets: feedbackTickets,
+            dailyPulseRuns: dailyPulseRuns,
+            dailyPulseFeedbackHistory: dailyPulseFeedbackHistory,
+            dailyPulsePendingCuration: dailyPulsePendingCuration,
+            dailyPulseExternalSignals: dailyPulseExternalSignals,
+            dailyPulseTasks: dailyPulseTasks,
             appStorageSnapshot: appStorageSnapshot,
             globalSystemPrompt: legacyGlobalSystemPrompt
         )
@@ -213,6 +231,21 @@ public enum SyncEngine {
             let result = mergeFeedbackTickets(package.feedbackTickets)
             summary.importedFeedbackTickets = result.imported
             summary.skippedFeedbackTickets = result.skipped
+        }
+
+        if package.options.contains(.dailyPulse) {
+            let result = mergeDailyPulseArtifacts(
+                runs: package.dailyPulseRuns,
+                feedbackHistory: package.dailyPulseFeedbackHistory,
+                pendingCuration: package.dailyPulsePendingCuration,
+                externalSignals: package.dailyPulseExternalSignals,
+                tasks: package.dailyPulseTasks
+            )
+            summary.importedDailyPulseRuns = result.imported
+            summary.skippedDailyPulseRuns = result.skipped
+            if result.imported > 0 {
+                NotificationCenter.default.post(name: .syncDailyPulseUpdated, object: nil)
+            }
         }
         
         // 音频文件同步
@@ -433,6 +466,133 @@ public enum SyncEngine {
 
     private static func mergeFeedbackTickets(_ incoming: [FeedbackTicket]) -> (imported: Int, skipped: Int) {
         FeedbackStore.mergeTickets(incoming)
+    }
+
+    // MARK: - Daily Pulse
+
+    private static func mergeDailyPulseArtifacts(
+        runs incomingRuns: [DailyPulseRun],
+        feedbackHistory incomingHistory: [DailyPulseFeedbackEvent],
+        pendingCuration incomingCuration: DailyPulseCurationNote?,
+        externalSignals incomingSignals: [DailyPulseExternalSignal],
+        tasks incomingTasks: [DailyPulseTask]
+    ) -> (imported: Int, skipped: Int) {
+        var imported = 0
+        var skipped = 0
+
+        var localRuns = Persistence.loadDailyPulseRuns()
+        for run in incomingRuns.sorted(by: { $0.generatedAt < $1.generatedAt }) {
+            if let existingIndex = localRuns.firstIndex(where: { $0.dayKey == run.dayKey }) {
+                let merged = DailyPulseManager.mergeRun(local: localRuns[existingIndex], incoming: run)
+                if merged == localRuns[existingIndex] {
+                    skipped += 1
+                    continue
+                }
+                localRuns[existingIndex] = merged
+                imported += 1
+                continue
+            }
+
+            localRuns.append(run)
+            imported += 1
+        }
+
+        if !incomingRuns.isEmpty {
+            let trimmedRuns = DailyPulseManager.trimmedRuns(
+                localRuns,
+                limit: DailyPulseManager.persistedRetentionLimit
+            )
+            Persistence.saveDailyPulseRuns(trimmedRuns)
+        }
+
+        if !incomingHistory.isEmpty {
+            var localHistory = Persistence.loadDailyPulseFeedbackHistory()
+            let original = localHistory
+            for event in incomingHistory.sorted(by: { $0.createdAt < $1.createdAt }) {
+                localHistory = DailyPulseManager.appendingFeedbackEvent(
+                    event,
+                    to: localHistory,
+                    limit: DailyPulseManager.feedbackHistoryRetentionLimit
+                )
+            }
+            Persistence.saveDailyPulseFeedbackHistory(localHistory)
+            if localHistory == original {
+                skipped += incomingHistory.count
+            } else {
+                imported += max(1, localHistory.count - original.count)
+            }
+        }
+
+        let localCuration = Persistence.loadDailyPulsePendingCuration()
+        if localCuration != nil || incomingCuration != nil {
+            if localCuration == incomingCuration {
+                skipped += 1
+            } else if let incomingCuration {
+                let shouldReplace = localCuration == nil
+                    || incomingCuration.createdAt >= (localCuration?.createdAt ?? .distantPast)
+                if shouldReplace {
+                    Persistence.saveDailyPulsePendingCuration(incomingCuration)
+                    imported += 1
+                } else {
+                    skipped += 1
+                }
+            } else {
+                Persistence.saveDailyPulsePendingCuration(nil)
+                imported += 1
+            }
+        }
+
+        if !incomingSignals.isEmpty {
+            var localSignals = Persistence.loadDailyPulseExternalSignals()
+            let original = localSignals
+            for signal in incomingSignals.sorted(by: { $0.capturedAt < $1.capturedAt }) {
+                localSignals = DailyPulseManager.appendingExternalSignal(
+                    signal,
+                    to: localSignals,
+                    limit: DailyPulseManager.externalSignalRetentionLimit
+                )
+            }
+            Persistence.saveDailyPulseExternalSignals(localSignals)
+            if localSignals == original {
+                skipped += incomingSignals.count
+            } else {
+                imported += max(1, localSignals.count - original.count)
+            }
+        }
+
+        if !incomingTasks.isEmpty {
+            var localTasks = Persistence.loadDailyPulseTasks()
+            let original = localTasks
+            for task in incomingTasks {
+                if let existingIndex = localTasks.firstIndex(where: { existing in
+                    if existing.id == task.id {
+                        return true
+                    }
+                    if let localCardID = existing.sourceCardID, let incomingCardID = task.sourceCardID {
+                        return localCardID == incomingCardID && existing.sourceDayKey == task.sourceDayKey
+                    }
+                    return false
+                }) {
+                    let merged = DailyPulseManager.mergeTask(local: localTasks[existingIndex], incoming: task)
+                    if merged == localTasks[existingIndex] {
+                        skipped += 1
+                    } else {
+                        localTasks[existingIndex] = merged
+                        imported += 1
+                    }
+                } else {
+                    localTasks.append(task)
+                    imported += 1
+                }
+            }
+            let sortedTasks = DailyPulseManager.sortedTasks(localTasks)
+            Persistence.saveDailyPulseTasks(sortedTasks)
+            if sortedTasks == original {
+                skipped += incomingTasks.count
+            }
+        }
+
+        return (imported, skipped)
     }
 
     // MARK: - AppStorage

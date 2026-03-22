@@ -85,7 +85,7 @@ public final class CloudSyncManager: ObservableObject {
     private let transport: any CloudSyncTransport
     private let userDefaults: UserDefaults
     private let packageBuilder: @Sendable (SyncOptions) -> SyncPackage
-    private let packageApplier: @Sendable (SyncPackage) async -> SyncMergeSummary
+    private let packageApplier: @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary
     private let now: @Sendable () -> Date
 
     init(
@@ -94,7 +94,7 @@ public final class CloudSyncManager: ObservableObject {
         packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
             SyncEngine.buildPackage(options: options)
         },
-        packageApplier: @escaping @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
+        packageApplier: @escaping @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
             await SyncEngine.apply(package: package)
         },
         now: @escaping @Sendable () -> Date = Date.init
@@ -249,6 +249,7 @@ public final class CloudSyncManager: ObservableObject {
         if isSyncOptionEnabled(key: "sync.options.shortcutTools", defaultValue: true) { options.insert(.shortcutTools) }
         if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
         if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
+        if isSyncOptionEnabled(key: "sync.options.dailyPulse", defaultValue: true) { options.insert(.dailyPulse) }
         let legacyAppStorageDefault = isSyncOptionEnabled(key: "sync.options.globalPrompt", defaultValue: true)
         if isSyncOptionEnabled(key: "sync.options.appStorage", defaultValue: legacyAppStorageDefault) { options.insert(.appStorage) }
         return normalizedCloudOptions(from: options)
@@ -515,6 +516,8 @@ private extension SyncMergeSummary {
         skippedWorldbooks += other.skippedWorldbooks
         importedFeedbackTickets += other.importedFeedbackTickets
         skippedFeedbackTickets += other.skippedFeedbackTickets
+        importedDailyPulseRuns += other.importedDailyPulseRuns
+        skippedDailyPulseRuns += other.skippedDailyPulseRuns
         importedAppStorageValues += other.importedAppStorageValues
         skippedAppStorageValues += other.skippedAppStorageValues
     }

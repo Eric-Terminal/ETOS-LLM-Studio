@@ -876,6 +876,45 @@ final class ChatViewModel: ObservableObject {
         chatService.createNewSession()
     }
 
+    func prepareDailyPulseIfNeeded() async {
+        await DailyPulseManager.shared.generateIfNeeded()
+    }
+
+    func prepareMorningDailyPulseDeliveryIfNeeded(referenceDate: Date = Date()) async {
+        let coordinator = DailyPulseDeliveryCoordinator.shared
+        await DailyPulseManager.shared.generateForScheduledDeliveryIfNeeded(
+            reminderEnabled: coordinator.reminderEnabled,
+            reminderHour: coordinator.reminderHour,
+            reminderMinute: coordinator.reminderMinute,
+            referenceDate: referenceDate
+        )
+    }
+
+    @discardableResult
+    func saveDailyPulseCard(_ card: DailyPulseCard, from runID: UUID) -> ChatSession? {
+        if let savedSessionID = card.savedSessionID,
+           let existing = chatSessions.first(where: { $0.id == savedSessionID }) {
+            chatService.setCurrentSession(existing)
+            return existing
+        }
+        return DailyPulseManager.shared.saveCardAsSession(cardID: card.id, runID: runID)
+    }
+
+    func continueDailyPulseCard(_ card: DailyPulseCard, from runID: UUID) {
+        guard let session = saveDailyPulseCard(card, from: runID) else { return }
+        chatService.setCurrentSession(session)
+        userInput = DailyPulseManager.defaultContinuationPrompt(for: card)
+        NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
+    }
+
+    func applyDailyPulseContinuation(sessionID: UUID, prompt: String) {
+        if let session = chatSessions.first(where: { $0.id == sessionID })
+            ?? chatService.chatSessionsSubject.value.first(where: { $0.id == sessionID }) {
+            chatService.setCurrentSession(session)
+        }
+        userInput = prompt
+    }
+
     func setSelectedModel(_ model: RunnableModel) {
         chatService.setSelectedModel(model)
     }

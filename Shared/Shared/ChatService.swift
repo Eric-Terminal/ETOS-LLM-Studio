@@ -89,6 +89,23 @@ public class ChatService {
         case cancelled(sessionID: UUID?, loadingMessageID: UUID?, prompt: String, finishedAt: Date)
     }
 
+    public enum DetachedCompletionError: LocalizedError {
+        case noAvailableModel
+        case unsupportedAdapter
+        case buildRequestFailed
+
+        public var errorDescription: String? {
+            switch self {
+            case .noAvailableModel:
+                return NSLocalizedString("当前没有可用于 Detached Completion 的聊天模型。", comment: "Detached completion no model error")
+            case .unsupportedAdapter:
+                return NSLocalizedString("当前模型对应的适配器不可用，无法执行 Detached Completion。", comment: "Detached completion adapter unavailable error")
+            case .buildRequestFailed:
+                return NSLocalizedString("Detached Completion 请求构建失败。", comment: "Detached completion build request error")
+            }
+        }
+    }
+
     public enum WorldbookExportRequestError: LocalizedError {
         case bookNotFound
 
@@ -770,6 +787,47 @@ public class ChatService {
             action: "创建新会话",
             payload: ["sessionID": newSession.id.uuidString]
         )
+    }
+
+    /// 创建一个带初始消息的正式会话，并切换到该会话。
+    @discardableResult
+    public func createSavedSession(
+        name: String,
+        initialMessages: [ChatMessage] = [],
+        topicPrompt: String? = nil,
+        enhancedPrompt: String? = nil,
+        lorebookIDs: [UUID] = [],
+        worldbookContextIsolationEnabled: Bool = false
+    ) -> ChatSession {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionName = trimmedName.isEmpty ? "新的对话" : trimmedName
+        let newSession = ChatSession(
+            id: UUID(),
+            name: sessionName,
+            topicPrompt: topicPrompt,
+            enhancedPrompt: enhancedPrompt,
+            lorebookIDs: lorebookIDs,
+            worldbookContextIsolationEnabled: worldbookContextIsolationEnabled,
+            isTemporary: false
+        )
+
+        var updatedSessions = chatSessionsSubject.value
+        updatedSessions.insert(newSession, at: 0)
+        chatSessionsSubject.send(updatedSessions)
+        currentSessionSubject.send(newSession)
+        publishMessages(initialMessages)
+        persistMessages(initialMessages, for: newSession.id)
+        Persistence.saveChatSessions(updatedSessions)
+        logger.info("创建了正式会话并写入初始消息: \(newSession.name)")
+        AppLog.userOperation(
+            category: "会话",
+            action: "创建正式会话",
+            payload: [
+                "sessionID": newSession.id.uuidString,
+                "messageCount": "\(initialMessages.count)"
+            ]
+        )
+        return newSession
     }
     
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
@@ -4819,6 +4877,53 @@ public class ChatService {
             logger.warning("生成快捷指令描述失败: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// 执行一次不落入聊天历史的独立推理请求，适合标题生成、每日摘要等辅助功能。
+    public func generateDetachedChatCompletion(
+        systemPrompt: String? = nil,
+        userPrompt: String,
+        temperature: Double = 0.4,
+        runnableModel: RunnableModel? = nil
+    ) async throws -> String {
+        let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedUserPrompt.isEmpty else { return "" }
+
+        guard let targetModel = runnableModel ?? selectedModelSubject.value ?? activatedRunnableModels.first else {
+            throw DetachedCompletionError.noAvailableModel
+        }
+        guard let adapter = adapters[targetModel.provider.apiFormat] else {
+            throw DetachedCompletionError.unsupportedAdapter
+        }
+
+        var requestMessages: [ChatMessage] = []
+        if let systemPrompt {
+            let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedSystemPrompt.isEmpty {
+                requestMessages.append(ChatMessage(role: .system, content: trimmedSystemPrompt))
+            }
+        }
+        requestMessages.append(ChatMessage(role: .user, content: trimmedUserPrompt))
+
+        let payload: [String: Any] = [
+            "temperature": temperature,
+            "stream": false
+        ]
+        guard let request = adapter.buildChatRequest(
+            for: targetModel,
+            commonPayload: payload,
+            messages: requestMessages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ) else {
+            throw DetachedCompletionError.buildRequestFailed
+        }
+
+        let data = try await fetchData(for: request)
+        let responseMessage = try adapter.parseResponse(data: data)
+        return responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
     private func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage) async {

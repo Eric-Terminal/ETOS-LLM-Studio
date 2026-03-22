@@ -78,7 +78,7 @@ struct WorldbookSyncTests {
         let session = ChatSession(
             id: UUID(),
             name: "同步会话",
-            worldbookIDs: [incomingBookID]
+            lorebookIDs: [incomingBookID]
         )
         let package = SyncPackage(
             options: [.sessions, .worldbooks],
@@ -97,7 +97,7 @@ struct WorldbookSyncTests {
         let importedBook = mergedBooks.first(where: { $0.name == "同名世界书（同步）" })
         #expect(syncedSession != nil)
         #expect(importedBook != nil)
-        #expect(syncedSession?.worldbookIDs.contains(importedBook?.id ?? UUID()) == true)
-        #expect(syncedSession?.worldbookIDs.contains(incomingBookID) == false)
+        #expect(syncedSession?.lorebookIDs.contains(importedBook?.id ?? UUID()) == true)
+        #expect(syncedSession?.lorebookIDs.contains(incomingBookID) == false)
     }
 }

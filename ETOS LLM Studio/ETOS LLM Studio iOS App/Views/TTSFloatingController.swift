@@ -183,8 +183,17 @@ struct TTSFloatingController: View {
     }
 
     private var timeText: String {
-        let current = Int(max(0, ttsManager.playbackState.position))
-        let total = Int(max(0, ttsManager.playbackState.duration))
+        let totalChunks = max(1, ttsManager.playbackState.totalChunks)
+        let estimatedTotalSeconds: TimeInterval
+        if ttsManager.playbackState.duration > 0 {
+            estimatedTotalSeconds = max(1, ttsManager.playbackState.duration * Double(totalChunks))
+        } else {
+            estimatedTotalSeconds = max(1, Double(totalChunks))
+        }
+
+        let estimatedCurrentSeconds = min(estimatedTotalSeconds, estimatedTotalSeconds * progressValue)
+        let current = max(0, Int(estimatedCurrentSeconds.rounded()))
+        let total = max(1, Int(estimatedTotalSeconds.rounded(.up)))
         return String(format: "%d:%02d / %d:%02d", current / 60, current % 60, total / 60, total % 60)
     }
 

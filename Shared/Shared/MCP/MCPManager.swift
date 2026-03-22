@@ -265,8 +265,36 @@ public final class MCPManager: ObservableObject {
     @Published public private(set) var governanceLogEntries: [MCPGovernanceLogEntry] = []
     @Published public private(set) var progressByToken: [String: MCPProgressParams] = [:]
     @Published public private(set) var activeToolCalls: [UUID: MCPActiveToolCall] = [:]
-    @Published public private(set) var lastOperationOutput: String?
-    @Published public private(set) var lastOperationError: String?
+    @Published public private(set) var lastOperationOutput: String? {
+        didSet {
+            guard let lastOperationOutput,
+                  !lastOperationOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            DailyPulseManager.shared.appendExternalSignal(
+                DailyPulseExternalSignal(
+                    source: .mcpOutput,
+                    title: "MCP 输出",
+                    preview: lastOperationOutput,
+                    capturedAt: Date(),
+                    isFailure: false
+                )
+            )
+        }
+    }
+    @Published public private(set) var lastOperationError: String? {
+        didSet {
+            guard let lastOperationError,
+                  !lastOperationError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            DailyPulseManager.shared.appendExternalSignal(
+                DailyPulseExternalSignal(
+                    source: .mcpError,
+                    title: "MCP 错误",
+                    preview: lastOperationError,
+                    capturedAt: Date(),
+                    isFailure: true
+                )
+            )
+        }
+    }
     @Published public private(set) var isBusy: Bool = false
     @Published public private(set) var chatToolsEnabled: Bool
 
@@ -1966,7 +1994,7 @@ private final class MCPFailureNotificationCenter: NSObject, UNUserNotificationCe
         guard !didConfigure else { return }
         didConfigure = true
         let center = UNUserNotificationCenter.current()
-        center.delegate = self
+        AppLocalNotificationCenter.shared.configureIfNeeded()
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
