@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import Shared
 
 struct TTSSettingsView: View {
@@ -7,6 +8,13 @@ struct TTSSettingsView: View {
     @State private var showCustomCloudParameters: Bool = false
 
     private static let customPickerTag = "__custom__"
+
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
 
     var body: some View {
         List {
@@ -124,14 +132,12 @@ struct TTSSettingsView: View {
             Section("watchOS 兼容") {
                 Toggle("轻量预处理（推荐）", isOn: $settingsStore.watchUseLightweightPreprocess)
 
-                Stepper(value: $settingsStore.watchSpeechMaxCharacters, in: 500...6_000, step: 250) {
-                    HStack {
-                        Text("最大字符")
-                        Spacer()
-                        Text("\(settingsStore.watchSpeechMaxCharacters)")
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
+                HStack {
+                    Text("最大字符")
+                    Spacer()
+                    TextField("数量", value: $settingsStore.watchSpeechMaxCharacters, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 64)
                 }
 
                 Text("如果点朗读会卡住，建议保持轻量预处理开启，并下调最大字符。")
