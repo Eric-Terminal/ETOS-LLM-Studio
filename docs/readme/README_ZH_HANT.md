@@ -5,9 +5,18 @@
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-Passing-44CC11?style=flat-square)
 
-**一個運行在 iOS 和 Apple Watch 上的原生 AI 客戶端。支持 OpenAI、Anthropic Claude、Google Gemini 等多個大模型提供商，內置本地 RAG 記憶、MCP 工具調用、世界書、Siri 捷徑等進階功能。**
+**一個運行於 iOS 和 Apple Watch 的原生 AI 客戶端。支援 OpenAI、Anthropic Claude、Google Gemini 等多個模型提供商，內建 MCP 工具調用、本地 RAG 記憶、世界書、每日脈衝、Siri 捷徑與雙端同步。**
 
 [簡體中文](../../README.md) | [English](README_EN.md) | [Japanese](README_JA.md)
+
+---
+
+## ✨ 最近新增亮點
+
+*   **每日脈衝（Daily Pulse）**：結合最近聊天、長期記憶、請求日誌、反饋歷史、明日策展輸入、外部訊號與待跟進任務，主動生成值得關注的情報卡片。
+*   **Pulse 任務與反饋閉環**：卡片可點讚、降權、隱藏、保存為會話、繼續聊，或直接轉成任務；長期偏好也會回饋到後續生成。
+*   **晨間提醒與後台預準備**：iOS 現在支援後台預準備、晨間提醒與通知快捷操作，watchOS 也補齊了入口、查看與繼續聊流程。
+*   **語音朗讀（TTS）**：支援系統 TTS、雲端 TTS 與自動回退，也能獨立配置 TTS 模型與提供商參數。
 
 ---
 
@@ -21,48 +30,70 @@
 
 ## 👋 寫在前面
 
-在學校的日子挺無聊的，平時又有很多問題想問問 AI。
-當時嫌 App Store 上的 AI 應用要麼貴得離譜，要麼功能太殘廢（尤其是手錶端），索性就自己動手搓了一個。
+在學校的日子其實挺無聊的，平時又總有很多問題想問 AI。當時我覺得 App Store 上的 AI 應用不是貴得離譜，就是功能殘缺到不太想用，尤其是手錶端，所以乾脆自己動手做了一個。
 
-從最初那個只有 1,800 行代碼、API Key 還要硬編碼的簡陋版本，到現在 155 個 Swift 源文件、超過 73,000 行代碼（含 Shared/iOS/watchOS 與測試代碼）的工程，它確實成長了不少。雖然名字叫 "ETOS LLM Studio" 聽著挺唬人，但它本質上就是我探索大模型應用邊界的一個試驗場。
+從最初那個只有 1,800 行程式碼、API Key 還要硬編碼的粗糙版本，到現在擁有 **186 個 Swift 原始碼檔案、88,359 行程式碼**（含 Shared / iOS / watchOS / 測試）的工程，它確實已經長大了不少。雖然「ETOS LLM Studio」這個名字聽起來有點唬人，但本質上它還是我拿來探索大模型應用邊界的試驗場。
 
-現在，它已經不再僅僅是一個手錶端的 App，我也順手把 iOS 端的全功能版本也給做上了，這樣在手機上管理配置和聊天也會舒服得多。
+現在它也早就不只是手錶 App 了：我把 iOS 端慢慢補成了更完整的版本，方便在手機上管理模型、工具、記憶、世界書與每日脈衝；兩端資料還能透過內建同步引擎自動互通。
 
-不過因為我家人不太允許我使用手機的問題，我一般只用 Mac 和 Watch，導致手機。。。可能體驗有點一言難盡，但我會盡力優化的，我的電腦模擬器跑 iPhone 真的很吃力。
+因為我平常主要還是用 Mac 和 Watch，所以 iPhone 端偶爾還會有一些我想繼續打磨的細節，但我會慢慢補齊。
 
 ### 主要功能
-*   **雙端原生體驗**：iOS 和 Apple Watch 原生適配，並針對各自屏幕尺寸做了 UI 優化。
-*   **多模型支持**：原生適配 OpenAI、Anthropic (Claude) 和 Google (Gemini) 的 API 格式，支持在 App 內動態管理提供商與模型配置，並支持自定義請求頭、參數表達式、原始 JSON 請求體。
-*   **工具中心 + 拓展工具**：統一管理 MCP / Shortcuts / 本地工具三類能力，支持聊天工具開關、審批策略、會話級啟用，並新增沙盒文件系統工具（搜尋、分塊讀取、差異查看、局部編輯、移動/複製/刪除等）。
-*   **本地 RAG (記憶)**：雖然 Embedding 需要調用雲端 API（Apple 本地端側小模型太不穩定），但**向量數據庫完全運行在本地 (SQLite)**。支持文本分塊、嵌入進度可視化、記憶編輯與主動記憶檢索工具。
-*   **MCP 工具調用**：支持遠程 [Model Context Protocol](https://modelcontextprotocol.io)，包含完整 MCP 客戶端、流式 HTTP/SSE 傳輸、服務器配置管理與更完整的協議兼容處理（重連、超時、握手治理、能力協商等）。
-*   **世界書 (Worldbook)**：類似 SillyTavern 的 Lorebook 系統，支持背景設定管理、編輯與條件觸發；支持會話綁定隔離發送、system 注入、URL 導入，兼容 PNG naidata / JSON 頂層陣列 / character_book。
-*   **請求日誌與測速分析**：內置獨立請求日誌、細分 Token 匯總，並提供流式響應速度統計與詳情圖表。
-*   **存儲管理升級**：內置可瀏覽目錄的文件管理器，支持在 App 內查看與管理沙盒文件。
-*   **Siri 捷徑**：集成 Shortcuts 框架，支持通過捷徑調用 AI 能力，可自定義工具並通過 URL Scheme 路由。
-*   **應用內反饋助手**：支持反饋分類、環境信息採集、PoW 提交鏈路與雙端同步。
-*   **多模態**：支持發送語音和圖片，支持 AI 圖像生成。
-*   **跨端同步**：內置 iOS ↔ watchOS 同步引擎，提供商配置、會話、世界書、工具配置等數據自動互通。
-*   **高級渲染**：內置 Markdown 渲染器，支持代碼高亮、表格與 LaTeX 數學公式。
-*   **局域網調試**：內置 HTTP 客戶端，配合專用程序可在電腦瀏覽器中直接管理應用內文件或查看實時調試日誌。
-*   **本地化**：支持英語、簡體中文、繁體中文（香港）、日語與俄語五種語言。
+
+#### 聊天與模型
+
+*   **雙平台原生體驗**：原生適配 iOS 和 Apple Watch，整體風格一致，但會依照不同螢幕尺寸調整操作體驗。
+*   **多模型支援**：原生適配 OpenAI、Anthropic（Claude）、Google（Gemini）等 API 格式，支援在 App 內管理提供商與模型。
+*   **進階請求配置**：支援自訂請求頭、參數表達式、原始 JSON 請求體，方便折騰相容 API 或特殊模型。
+*   **多模態與圖像生成**：支援語音輸入、圖片輸入，以及 AI 圖像生成。
+*   **語音朗讀（TTS）**：支援系統 TTS、雲端 TTS 與自動回退，可獨立選擇 TTS 模型與朗讀參數。
+
+#### 工具與自動化
+
+*   **工具中心 + 擴展工具**：統一管理 MCP、Shortcuts、本地工具三類能力，支援工具開關、審批策略與會話級啟用。
+*   **沙盒檔案系統工具**：支援搜尋、分塊讀取、差異查看、局部編輯、移動 / 複製 / 刪除等檔案操作。
+*   **MCP 工具調用**：支援遠端 [Model Context Protocol](https://modelcontextprotocol.io)，包含完整 MCP 客戶端、Streamable HTTP/SSE 傳輸、重連、超時、握手治理與能力協商。
+*   **Siri 捷徑**：整合 Shortcuts 框架，可透過捷徑呼叫 AI，也支援自訂工具與 URL Scheme 路由。
+*   **App 內檔案管理**：內建檔案管理器，可直接在 App 內瀏覽與管理沙盒檔案。
+
+#### 記憶與知識整理
+
+*   **本地 RAG 記憶**：Embedding 可調用雲端 API，但**向量資料庫本身完全在本地 SQLite 上運行**；同時支援文本分塊、嵌入進度視覺化、記憶編輯與主動檢索工具。
+*   **世界書（Worldbook）**：類似 SillyTavern 的 Lorebook 機制，支援背景設定管理、條件觸發、會話綁定隔離發送、system 注入與 URL 匯入。
+*   **廣泛格式相容**：相容 PNG naidata、JSON 頂層陣列與 `character_book` 世界書格式。
+*   **請求日誌與測速分析**：內建獨立請求日誌、細分 Token 匯總，並提供流式回應速度統計與圖表。
+*   **高級渲染**：內建 Markdown 渲染器，支援程式碼高亮、表格與 LaTeX 數學公式。
+
+#### Daily Pulse 主動情報
+
+*   **每日脈衝（Daily Pulse）**：每天先幫你整理一組主動情報卡片，把「今天可能值得看什麼」提前浮出來。
+*   **Pulse 任務機制**：卡片可以直接轉成待跟進任務，未完成項目會跨天保留，並參與下一次 Pulse 生成。
+*   **反饋歷史學習**：點讚、降權、隱藏、保存等操作會沉澱成長期偏好訊號，持續影響後續結果。
+*   **晨間提醒與繼續聊**：支援定時提醒、通知快捷操作、保存為會話與繼續聊天，iOS 與 watchOS 兩端都能接上這條流程。
+
+#### 同步、調試與運維
+
+*   **跨端同步**：內建 iOS ↔ watchOS 同步引擎，可自動同步提供商配置、會話、世界書、工具設定、每日脈衝資料等內容。
+*   **App 內反饋助手**：支援反饋分類、環境資訊收集、PoW 提交流程與雙端同步。
+*   **局域網調試**：內建局域網調試客戶端，可搭配桌面端工具，在瀏覽器中管理 App 內檔案或查看即時調試日誌。
+*   **本地化**：支援英文、簡體中文、繁體中文（香港）、日文與俄文五種語言。
 
 ---
 
 ## 💸 關於收費與開源
 
-說實話，我最開始是想做免費軟件的。
-但 Apple Developer Program 每年 $99 的費用，對我一個學生來說確實有點吃力。
+說實話，我最開始是想把它做成免費軟體的。
+但 Apple Developer Program 每年 99 美元的費用，對一個學生來說確實不算輕鬆。
 
-後來有位投資員幫我墊付了這筆錢，代價是我需要通過軟件收費來償還這筆投資（而且還要分成給他）。所以 App Store 版本象徵性地收了一點費用，這就當是大家眾籌幫我還債，順便買個「不用每七天重簽一次」的便利服務。
+後來有位投資人幫我先墊了這筆錢，條件是我要透過軟體收入慢慢還回去（而且還要分成）。所以 App Store 版本象徵性地收了一點費用。你可以把它理解成一種幫我續命開發、同時順便買到「不用每七天重簽一次」便利性的方式。
 
-**但是，開源是我的底線。**
+**但開源依然是我的底線。**
 
-所以現在的規則很簡單：
-1.  **想省事/支持我**：App Store 見，感謝你的「可樂錢」。
-2.  **想折騰/白嫖**：代碼就在這兒，GPLv3 協議。如果你有 Mac 和 Xcode，**完全可以自己編譯安裝，功能上沒有任何區別**。
+所以規則很簡單：
+1.  **想省事 / 想支持我**：App Store 見，謝謝你的「可樂錢」。
+2.  **想自己折騰 / 想免費用**：程式碼就在這裡，採用 GPLv3。如果你有 Mac 和 Xcode，**完全可以自己編譯安裝，而且功能沒有任何差異**。
 
-技術本該共享，我不希望因為幾十塊錢的門檻，擋住了同樣對代碼感興趣的你。
+技術應該被共享。我不希望只是因為一點點價格門檻，就把同樣對程式碼有興趣的人擋在外面。
 
 ---
 
@@ -71,36 +102,70 @@
 *   **語言**: Swift 6
 *   **UI**: SwiftUI
 *   **架構**: MVVM + Protocol Oriented Programming
-*   **數據**: SQLite (本地向量庫), JSON (配置持久化)
-*   **網絡**: URLSession (API 請求), Streamable HTTP/SSE (MCP 傳輸)
+*   **資料**: SQLite（本地向量庫）, JSON（配置與資料持久化）
+*   **網路與傳輸**: URLSession（API 請求）, Streamable HTTP / SSE（MCP 傳輸）, WebSocket / HTTP Polling（局域網調試）
 *   **AI 協議**: Model Context Protocol (MCP)
-*   **集成**: Siri Shortcuts, WatchConnectivity (跨端同步)
-*   **依賴管理**: Swift Package Manager（當前顯式依賴 `swift-markdown-ui`，並包含其傳遞依賴 `networkimage`、`swift-cmark`）
+*   **系統能力**: Siri Shortcuts, WatchConnectivity, UserNotifications, BackgroundTasks（iOS）
+*   **依賴管理**: Swift Package Manager（當前顯式依賴 `swift-markdown-ui`，並包含其傳遞依賴 `networkimage` 與 `swift-cmark`）
+
+---
+
+## 🏗️ 專案架構
+
+專案採用雙層結構：平台無關的 Shared 框架 + 各平台獨立的視圖層。
+
+```
+Shared/Shared/                  ← 平台無關的業務邏輯（69 個 Swift 原始碼檔案）
+├── ChatService.swift            ← 管理會話、訊息、模型選擇與請求編排的核心單例
+├── APIAdapter.swift             ← OpenAI / Anthropic / Gemini 等 API 適配層
+├── Models.swift                 ← 核心資料模型
+├── Persistence.swift            ← 配置與資料持久化
+├── DailyPulse.swift             ← 每日脈衝引擎、卡片、反饋與任務資料
+├── DailyPulseDeliveryCoordinator.swift ← 晨間提醒、投遞狀態與準備窗口協調
+├── Memory/                      ← 記憶子系統（分塊、嵌入、存儲）
+├── SimilaritySearch/            ← 本地向量資料庫（SQLite）
+├── MCP/                         ← Model Context Protocol 客戶端與傳輸層
+├── Feedback/                    ← App 內反饋助手（收集、簽名、存儲、上傳）
+├── Worldbook/                   ← 世界書引擎、匯入與匯出
+├── Sync/                        ← iOS ↔ watchOS 同步引擎
+├── TTS/                         ← 語音朗讀播放、設定與預設
+├── Shortcuts/                   ← Siri 捷徑與 URL 路由整合
+├── AppToolManager.swift         ← 本地工具與工具目錄治理
+├── StorageBrowserSupport.swift  ← 檔案瀏覽與管理能力支援
+└── LocalDebugServer.swift       ← 局域網調試客戶端
+
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 視圖層（41 個 Swift 原始碼檔案）
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 視圖層（43 個 Swift 原始碼檔案）
+Shared/SharedTests/                         ← Shared 層測試（30 個 Swift 原始碼檔案）
+```
+
+資料流為 `View → ChatViewModel → ChatService.shared → APIAdapter → LLM API`，並透過 Combine Subjects 驅動 UI 更新。
 
 ---
 
 ## 🚀 編譯指南
 
-如果你決定自己動手：
+如果你想自己動手：
 
-1.  **Clone 項目**:
+1.  **Clone 專案**:
     ```bash
     git clone https://github.com/Eric-Terminal/ETOS-LLM-Studio.git
     ```
-2.  **環境要求**:
+2.  **環境需求**:
     *   Xcode 26.0+
     *   watchOS 26.0+ SDK
-3.  **打開項目**:
-    打開 `ETOS LLM Studio.xcworkspace`（注意是 **workspace** 不是 xcodeproj）。
-    首次打開會自動解析並拉取 Swift Package 依賴。
+    *   （如果環境對不上，你可以自行調整相容性）
+3.  **打開專案**:
+    打開 `ETOS LLM Studio.xcworkspace`（注意是 **workspace**，不是 xcodeproj）。
+    首次打開時，Xcode 會自動解析並拉取 Swift Package 依賴。
 4.  **運行**:
-    選擇 `ETOS LLM Studio Watch App` 或 `ETOS LLM Studio iOS App` Target，連上設備（或模擬器），Command + R 即可。
+    選擇 `ETOS LLM Studio Watch App` 或 `ETOS LLM Studio iOS App` Target，連上裝置（或模擬器），然後按 Command + R。
 5.  **配置**:
-    啟動後，去設置裡添加你的 API Key。推薦使用「局域網調試」功能，直接把做好的 JSON 配置文件推送到 `Documents/Providers/` 目錄下 (真的有人會想在 Apple Watch 上面戳 API key 進去嗎)。
+    啟動後，請先在設定中加入你的 API Key。我很建議直接使用「局域網調試」功能，把準備好的 JSON 配置檔直接推到 `Documents/Providers/` 目錄（畢竟，真的沒什麼人會想在 Apple Watch 上慢慢敲 API Key）。
 
 ---
 
-## 📬 聯繫方式
+## 📬 聯絡方式
 
 *   **開發者**: Eric Terminal
 *   **Email**: ericterminal@gmail.com
@@ -108,4 +173,4 @@
 
 ---
 
-本次 README 修訂於 2026 年 3 月 7 日（7907e83 之後），軟件更新可能很勤快，README 可能更新不及時
+本次 README 修訂於 2026 年 3 月 22 日（3245a90 之後）。專案更新速度很快，如果 README 一時跟不上程式碼，最準的還是提交記錄。
