@@ -543,6 +543,41 @@ public final class DailyPulseManager: ObservableObject {
         todayRun ?? latestRun
     }
 
+    internal func notificationTarget(
+        runID: UUID?,
+        cardID: UUID?,
+        dayKey: String?
+    ) -> (runID: UUID, card: DailyPulseCard)? {
+        if let runID,
+           let run = runs.first(where: { $0.id == runID }) {
+            if let cardID,
+               let card = run.cards.first(where: { $0.id == cardID }) {
+                return (runID, card)
+            }
+            if let fallbackCard = run.visibleCards.first ?? run.cards.first {
+                return (runID, fallbackCard)
+            }
+        }
+
+        let candidateRuns: [DailyPulseRun]
+        if let dayKey, !dayKey.isEmpty {
+            candidateRuns = runs
+                .filter { $0.dayKey == dayKey }
+                .sorted(by: { $0.generatedAt > $1.generatedAt })
+        } else if let primaryRun {
+            candidateRuns = [primaryRun]
+        } else {
+            candidateRuns = runs.sorted(by: { $0.generatedAt > $1.generatedAt })
+        }
+
+        for run in candidateRuns {
+            if let fallbackCard = run.visibleCards.first ?? run.cards.first {
+                return (run.id, fallbackCard)
+            }
+        }
+        return nil
+    }
+
     public var hasUnviewedTodayRun: Bool {
         Self.hasUnviewedRun(todayRunDayKey: todayRun?.dayKey, lastViewedDayKey: lastViewedDayKey)
     }

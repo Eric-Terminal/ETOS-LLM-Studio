@@ -41,6 +41,26 @@ struct DailyPulseTests {
         #expect(parsed.cards.first?.detailsMarkdown?.contains("下一步") == true)
     }
 
+    @Test("通知 userInfo 会携带动作定位所需标识")
+    func dailyPulseNotificationUserInfoCarriesRunAndCardIdentifiers() {
+        let runID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let cardID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(
+            kind: "ready",
+            dayKey: "2026-03-22",
+            runID: runID,
+            cardID: cardID
+        )
+
+        #expect(userInfo["route"] as? String == AppLocalNotificationRoute.dailyPulse.rawValue)
+        #expect(userInfo["kind"] as? String == "ready")
+        #expect(userInfo["dayKey"] as? String == "2026-03-22")
+        #expect(userInfo["runID"] as? String == runID.uuidString)
+        #expect(userInfo["cardID"] as? String == cardID.uuidString)
+        #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "ready") == "dailyPulse.ready")
+        #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder") == "dailyPulse.reminder")
+    }
+
     @Test("运行历史会按时间倒序裁剪")
     func trimmedRunsKeepsNewestRecords() {
         let older = DailyPulseRun(

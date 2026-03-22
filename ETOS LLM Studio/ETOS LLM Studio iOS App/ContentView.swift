@@ -63,6 +63,11 @@ struct ContentView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
+            Task { @MainActor in
+                openDailyPulseContinuationIfNeeded()
+            }
+        }
         .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
             Button("确定", role: .cancel) {}
         } message: {
@@ -84,6 +89,9 @@ struct ContentView: View {
             await announcementManager.checkAnnouncement()
             await viewModel.prepareDailyPulseIfNeeded()
             await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+            if openDailyPulseContinuationIfNeeded() {
+                return
+            }
             if notificationCenter.consumePendingRoute() == .dailyPulse {
                 openDailyPulse()
             }
@@ -105,6 +113,21 @@ struct ContentView: View {
         DispatchQueue.main.async {
             settingsDestination = .dailyPulse
         }
+    }
+
+    @discardableResult
+    private func openDailyPulseContinuationIfNeeded() -> Bool {
+        guard let continuation = notificationCenter.consumePendingDailyPulseContinuation() else {
+            return false
+        }
+        viewModel.applyDailyPulseContinuation(
+            sessionID: continuation.sessionID,
+            prompt: continuation.prompt
+        )
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selection = .chat
+        }
+        return true
     }
 }
 

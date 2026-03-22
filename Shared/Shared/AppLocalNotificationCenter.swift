@@ -18,15 +18,36 @@ import UserNotifications
 public extension Notification.Name {
     /// 请求当前设备直接打开 Daily Pulse 页面。
     static let requestOpenDailyPulse = Notification.Name("com.ETOS.dailyPulse.requestOpen")
+    /// 请求当前设备直接进入 Daily Pulse 对应会话并填入继续聊提示词。
+    static let requestContinueDailyPulseChat = Notification.Name("com.ETOS.dailyPulse.requestContinueChat")
 }
 
 public enum AppLocalNotificationRoute: String, Sendable {
     case dailyPulse
 }
 
+public struct AppLocalNotificationDailyPulseContinuation: Sendable, Equatable {
+    public let sessionID: UUID
+    public let prompt: String
+
+    public init(sessionID: UUID, prompt: String) {
+        self.sessionID = sessionID
+        self.prompt = prompt
+    }
+}
+
 private let appLocalNotificationRouteUserInfoKey = "route"
 private let appLocalNotificationKindUserInfoKey = "kind"
 private let appLocalNotificationDayKeyUserInfoKey = "dayKey"
+private let appLocalNotificationRunIDUserInfoKey = "runID"
+private let appLocalNotificationCardIDUserInfoKey = "cardID"
+private let appLocalNotificationDailyPulseReminderCategoryIdentifier = "dailyPulse.reminder"
+private let appLocalNotificationDailyPulseReadyCategoryIdentifier = "dailyPulse.ready"
+private let appLocalNotificationDailyPulseOpenActionIdentifier = "dailyPulse.action.open"
+private let appLocalNotificationDailyPulseLikeActionIdentifier = "dailyPulse.action.like"
+private let appLocalNotificationDailyPulseSaveActionIdentifier = "dailyPulse.action.save"
+private let appLocalNotificationDailyPulseContinueActionIdentifier = "dailyPulse.action.continue"
+private let appLocalNotificationDailyPulseTaskActionIdentifier = "dailyPulse.action.task"
 
 @MainActor
 public final class AppLocalNotificationCenter: NSObject, ObservableObject {
@@ -34,6 +55,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
 
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published public private(set) var pendingRoute: AppLocalNotificationRoute?
+    @Published public private(set) var pendingDailyPulseContinuation: AppLocalNotificationDailyPulseContinuation?
 
     private var didConfigure = false
 
@@ -45,6 +67,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         guard !didConfigure else { return }
         didConfigure = true
         UNUserNotificationCenter.current().delegate = self
+        registerNotificationCategories()
         Task {
             await refreshAuthorizationStatus()
         }
@@ -102,13 +125,24 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
-    public nonisolated static func dailyPulseUserInfo(kind: String, dayKey: String? = nil) -> [AnyHashable: Any] {
+    public nonisolated static func dailyPulseUserInfo(
+        kind: String,
+        dayKey: String? = nil,
+        runID: UUID? = nil,
+        cardID: UUID? = nil
+    ) -> [AnyHashable: Any] {
         var info: [AnyHashable: Any] = [
             appLocalNotificationRouteUserInfoKey: AppLocalNotificationRoute.dailyPulse.rawValue,
             appLocalNotificationKindUserInfoKey: kind
         ]
         if let dayKey, !dayKey.isEmpty {
             info[appLocalNotificationDayKeyUserInfoKey] = dayKey
+        }
+        if let runID {
+            info[appLocalNotificationRunIDUserInfoKey] = runID.uuidString
+        }
+        if let cardID {
+            info[appLocalNotificationCardIDUserInfoKey] = cardID.uuidString
         }
         return info
     }
@@ -118,10 +152,124 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         return route == AppLocalNotificationRoute.dailyPulse.rawValue
     }
 
+    public nonisolated static func dailyPulseCategoryIdentifier(kind: String) -> String {
+        kind == "ready"
+            ? appLocalNotificationDailyPulseReadyCategoryIdentifier
+            : appLocalNotificationDailyPulseReminderCategoryIdentifier
+    }
+
     public func consumePendingRoute() -> AppLocalNotificationRoute? {
         let route = pendingRoute
         pendingRoute = nil
         return route
+    }
+
+    public func consumePendingDailyPulseContinuation() -> AppLocalNotificationDailyPulseContinuation? {
+        let continuation = pendingDailyPulseContinuation
+        pendingDailyPulseContinuation = nil
+        return continuation
+    }
+
+    private func registerNotificationCategories() {
+        let openAction = UNNotificationAction(
+            identifier: appLocalNotificationDailyPulseOpenActionIdentifier,
+            title: "查看",
+            options: [.foreground]
+        )
+        let likeAction = UNNotificationAction(
+            identifier: appLocalNotificationDailyPulseLikeActionIdentifier,
+            title: "喜欢",
+            options: []
+        )
+        let saveAction = UNNotificationAction(
+            identifier: appLocalNotificationDailyPulseSaveActionIdentifier,
+            title: "保存为会话",
+            options: []
+        )
+        let continueAction = UNNotificationAction(
+            identifier: appLocalNotificationDailyPulseContinueActionIdentifier,
+            title: "继续聊",
+            options: [.foreground]
+        )
+        let taskAction = UNNotificationAction(
+            identifier: appLocalNotificationDailyPulseTaskActionIdentifier,
+            title: "加入任务",
+            options: []
+        )
+
+        let reminderCategory = UNNotificationCategory(
+            identifier: appLocalNotificationDailyPulseReminderCategoryIdentifier,
+            actions: [openAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        let readyCategory = UNNotificationCategory(
+            identifier: appLocalNotificationDailyPulseReadyCategoryIdentifier,
+            actions: [likeAction, saveAction, continueAction, taskAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([reminderCategory, readyCategory])
+    }
+
+    private func dailyPulseIdentifiers(from userInfo: [AnyHashable: Any]) -> (dayKey: String?, runID: UUID?, cardID: UUID?) {
+        let dayKey = userInfo[appLocalNotificationDayKeyUserInfoKey] as? String
+        let runID = (userInfo[appLocalNotificationRunIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
+        let cardID = (userInfo[appLocalNotificationCardIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
+        return (dayKey, runID, cardID)
+    }
+
+    private func dailyPulseTarget(from userInfo: [AnyHashable: Any]) -> (runID: UUID, card: DailyPulseCard)? {
+        let identifiers = dailyPulseIdentifiers(from: userInfo)
+        return DailyPulseManager.shared.notificationTarget(
+            runID: identifiers.runID,
+            cardID: identifiers.cardID,
+            dayKey: identifiers.dayKey
+        )
+    }
+
+    private func openDailyPulseFromNotification() {
+        pendingRoute = .dailyPulse
+        NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
+    }
+
+    private func continueDailyPulseFromNotification(userInfo: [AnyHashable: Any]) {
+        guard let target = dailyPulseTarget(from: userInfo),
+              let session = DailyPulseManager.shared.saveCardAsSession(cardID: target.card.id, runID: target.runID) else {
+            openDailyPulseFromNotification()
+            return
+        }
+
+        ChatService.shared.setCurrentSession(session)
+        pendingDailyPulseContinuation = AppLocalNotificationDailyPulseContinuation(
+            sessionID: session.id,
+            prompt: DailyPulseManager.defaultContinuationPrompt(for: target.card)
+        )
+        NotificationCenter.default.post(name: .requestContinueDailyPulseChat, object: nil)
+    }
+
+    private func handleDailyPulseAction(
+        actionIdentifier: String,
+        userInfo: [AnyHashable: Any]
+    ) {
+        switch actionIdentifier {
+        case UNNotificationDefaultActionIdentifier, appLocalNotificationDailyPulseOpenActionIdentifier:
+            openDailyPulseFromNotification()
+        case appLocalNotificationDailyPulseLikeActionIdentifier:
+            guard let target = dailyPulseTarget(from: userInfo) else { return }
+            DailyPulseManager.shared.applyFeedback(.liked, cardID: target.card.id, runID: target.runID)
+        case appLocalNotificationDailyPulseSaveActionIdentifier:
+            guard let target = dailyPulseTarget(from: userInfo) else { return }
+            _ = DailyPulseManager.shared.saveCardAsSession(cardID: target.card.id, runID: target.runID)
+        case appLocalNotificationDailyPulseContinueActionIdentifier:
+            continueDailyPulseFromNotification(userInfo: userInfo)
+        case appLocalNotificationDailyPulseTaskActionIdentifier:
+            guard let target = dailyPulseTarget(from: userInfo) else { return }
+            _ = DailyPulseManager.shared.addTaskFromCard(cardID: target.card.id, runID: target.runID)
+        default:
+            break
+        }
     }
 
     private func currentNotificationSettings() async -> UNNotificationSettings {
@@ -155,8 +303,10 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
     ) {
         if Self.notificationTargetsDailyPulse(userInfo: response.notification.request.content.userInfo) {
             Task { @MainActor in
-                AppLocalNotificationCenter.shared.pendingRoute = .dailyPulse
-                NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
+                AppLocalNotificationCenter.shared.handleDailyPulseAction(
+                    actionIdentifier: response.actionIdentifier,
+                    userInfo: response.notification.request.content.userInfo
+                )
             }
         }
         completionHandler()

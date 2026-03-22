@@ -103,6 +103,11 @@ struct ContentView: View {
                     }
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
+                Task { @MainActor in
+                    applyDailyPulseContinuationIfNeeded()
+                }
+            }
             .onChange(of: viewModel.activeSheet) {
                 if viewModel.activeSheet == nil {
                     viewModel.saveCurrentSessionDetails()
@@ -607,6 +612,9 @@ struct ContentView: View {
                 await announcementManager.checkAnnouncement()
                 await viewModel.prepareDailyPulseIfNeeded()
                 await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                if applyDailyPulseContinuationIfNeeded() {
+                    return
+                }
                 if notificationCenter.consumePendingRoute() == .dailyPulse {
                     openDailyPulse()
                 }
@@ -626,6 +634,20 @@ struct ContentView: View {
         DispatchQueue.main.async {
             settingsDestination = .dailyPulse
         }
+    }
+
+    @discardableResult
+    private func applyDailyPulseContinuationIfNeeded() -> Bool {
+        guard let continuation = notificationCenter.consumePendingDailyPulseContinuation() else {
+            return false
+        }
+        viewModel.applyDailyPulseContinuation(
+            sessionID: continuation.sessionID,
+            prompt: continuation.prompt
+        )
+        isSettingsPresented = false
+        settingsDestination = nil
+        return true
     }
 
     private var inputPlaceholderText: String {

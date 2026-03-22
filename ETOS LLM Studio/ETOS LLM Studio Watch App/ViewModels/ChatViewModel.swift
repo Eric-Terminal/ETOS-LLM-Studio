@@ -1043,6 +1043,14 @@ class ChatViewModel: ObservableObject {
         chatService.setCurrentSession(session)
         userInput = DailyPulseManager.defaultContinuationPrompt(for: card)
     }
+
+    func applyDailyPulseContinuation(sessionID: UUID, prompt: String) {
+        if let session = chatSessions.first(where: { $0.id == sessionID })
+            ?? chatService.chatSessionsSubject.value.first(where: { $0.id == sessionID }) {
+            chatService.setCurrentSession(session)
+        }
+        userInput = prompt
+    }
     
     // MARK: 记忆管理
     

@@ -123,6 +123,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         content.body = "到了查看今天每日脉冲的时间。打开 ETOS LLM Studio，看看新的主动情报卡片。"
         content.sound = .default
         content.threadIdentifier = "dailyPulse.delivery"
+        content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder")
         content.userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(kind: "reminder")
 
         let trigger = UNCalendarNotificationTrigger(
@@ -155,10 +156,18 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
         let content = UNMutableNotificationContent()
         content.title = "每日脉冲已准备好"
-        content.body = "今天的每日脉冲已经整理完成，已为你准备 \(run.visibleCards.count) 张主动情报卡片。"
+        let primaryCard = run.visibleCards.first ?? run.cards.first
+        let primaryCardSuffix = primaryCard.map { "主卡「\($0.title)」。" } ?? ""
+        content.body = "今天的每日脉冲已经整理完成，已为你准备 \(run.visibleCards.count) 张主动情报卡片。\(primaryCardSuffix)"
         content.sound = .default
         content.threadIdentifier = "dailyPulse.delivery"
-        content.userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(kind: "ready", dayKey: run.dayKey)
+        content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "ready")
+        content.userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(
+            kind: "ready",
+            dayKey: run.dayKey,
+            runID: run.id,
+            cardID: primaryCard?.id
+        )
 
         let identifier = Self.readyIdentifierPrefix + run.dayKey
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)

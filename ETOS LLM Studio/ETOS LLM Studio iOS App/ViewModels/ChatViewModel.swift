@@ -907,6 +907,14 @@ final class ChatViewModel: ObservableObject {
         NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
     }
 
+    func applyDailyPulseContinuation(sessionID: UUID, prompt: String) {
+        if let session = chatSessions.first(where: { $0.id == sessionID })
+            ?? chatService.chatSessionsSubject.value.first(where: { $0.id == sessionID }) {
+            chatService.setCurrentSession(session)
+        }
+        userInput = prompt
+    }
+
     func setSelectedModel(_ model: RunnableModel) {
         chatService.setSelectedModel(model)
     }
