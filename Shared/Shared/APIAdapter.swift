@@ -217,6 +217,53 @@ public class OpenAIAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    private static let responsesModeSignalKeys: Set<String> = [
+        "background",
+        "context_management",
+        "conversation",
+        "include",
+        "max_output_tokens",
+        "previous_response_id",
+        "reasoning",
+        "store",
+        "text",
+        "truncation"
+    ]
+    private static let openAIControlOverrideKeys: Set<String> = [
+        "openai_api",
+        "openai_api_mode",
+        "use_responses_api"
+    ]
+    private static let chatCompletionsOnlyKeys: Set<String> = [
+        "functions",
+        "function_call",
+        "messages",
+        "stream_options"
+    ]
+
+    private enum OpenAIConversationAPI {
+        case chatCompletions
+        case responses
+    }
+
+    private enum OpenAIResponsesToolChoice {
+        case auto
+        case required
+        case none
+
+        init?(_ rawValue: String) {
+            switch rawValue.lowercased() {
+            case "auto":
+                self = .auto
+            case "required", "any":
+                self = .required
+            case "none":
+                self = .none
+            default:
+                return nil
+            }
+        }
+    }
 
     private func sanitizedToolName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -541,7 +588,439 @@ public class OpenAIAdapter: APIAdapter {
             "stream",
             "stream_options"
         ]
-        return overrides.filter { !blockedKeys.contains($0.key) }
+        return sanitizedOpenAIControlOverrides(overrides).filter { !blockedKeys.contains($0.key) }
+    }
+
+    private func sanitizedOpenAIControlOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        overrides.filter { !Self.openAIControlOverrideKeys.contains($0.key) }
+    }
+
+    private func normalizedOpenAIConversationAPIValue(_ rawValue: String) -> OpenAIConversationAPI? {
+        let normalized = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        switch normalized {
+        case "responses", "response":
+            return .responses
+        case "chat", "chat_completion", "chat_completions":
+            return .chatCompletions
+        default:
+            return nil
+        }
+    }
+
+    private func boolValue(from rawValue: Any?) -> Bool? {
+        switch rawValue {
+        case let bool as Bool:
+            return bool
+        case let number as NSNumber:
+            return number.boolValue
+        case let string as String:
+            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            switch normalized {
+            case "true", "1", "yes", "on":
+                return true
+            case "false", "0", "no", "off":
+                return false
+            default:
+                return nil
+            }
+        default:
+            return nil
+        }
+    }
+
+    private func resolvedConversationAPI(for overrides: [String: Any]) -> OpenAIConversationAPI {
+        if let rawValue = overrides["openai_api"] as? String,
+           let mode = normalizedOpenAIConversationAPIValue(rawValue) {
+            return mode
+        }
+        if let rawValue = overrides["openai_api_mode"] as? String,
+           let mode = normalizedOpenAIConversationAPIValue(rawValue) {
+            return mode
+        }
+        if let useResponses = boolValue(from: overrides["use_responses_api"]) {
+            return useResponses ? .responses : .chatCompletions
+        }
+        if overrides.keys.contains(where: { Self.responsesModeSignalKeys.contains($0) }) {
+            return .responses
+        }
+        return .chatCompletions
+    }
+
+    private func sanitizedChatCompletionsOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        sanitizedOpenAIControlOverrides(overrides).filter { !Self.responsesModeSignalKeys.contains($0.key) }
+    }
+
+    private func sanitizedResponsesOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        let stripped = sanitizedOpenAIControlOverrides(overrides).filter { !Self.chatCompletionsOnlyKeys.contains($0.key) }
+        var sanitized = stripped
+        if sanitized["max_output_tokens"] == nil, let legacyMaxTokens = stripped["max_tokens"] {
+            sanitized["max_output_tokens"] = legacyMaxTokens
+        }
+        sanitized.removeValue(forKey: "max_tokens")
+        sanitized.removeValue(forKey: "input")
+        return sanitized
+    }
+
+    private func sanitizedPayloadForDebug(_ value: Any) -> Any {
+        if let dictionary = value as? [String: Any] {
+            var sanitized: [String: Any] = [:]
+            sanitized.reserveCapacity(dictionary.count)
+            for (key, rawValue) in dictionary {
+                let loweredKey = key.lowercased()
+                if loweredKey == "data" || loweredKey == "file_data" {
+                    if let text = rawValue as? String {
+                        sanitized[key] = "[base64 omitted: \(text.count) chars]"
+                    } else {
+                        sanitized[key] = "[binary omitted]"
+                    }
+                    continue
+                }
+                if (loweredKey == "url" || loweredKey == "image_url"),
+                   let text = rawValue as? String,
+                   text.hasPrefix("data:") {
+                    sanitized[key] = "[base64 image omitted: \(text.count) chars]"
+                    continue
+                }
+                sanitized[key] = sanitizedPayloadForDebug(rawValue)
+            }
+            return sanitized
+        }
+        if let array = value as? [Any] {
+            return array.map { sanitizedPayloadForDebug($0) }
+        }
+        return value
+    }
+
+    private func buildResponsesMessageInput(
+        for message: ChatMessage,
+        audioAttachments: [UUID: AudioAttachment],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> [String: Any]? {
+        guard message.role == .system || message.role == .user || message.role == .assistant else {
+            return nil
+        }
+
+        let audioAttachment = audioAttachments[message.id]
+        let messageImageAttachments = imageAttachments[message.id] ?? []
+        let messageFileAttachments = fileAttachments[message.id] ?? []
+        let needsMultipart = !messageImageAttachments.isEmpty || audioAttachment != nil || !messageFileAttachments.isEmpty
+
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !needsMultipart {
+            guard !message.content.isEmpty else { return nil }
+            return [
+                "type": "message",
+                "role": message.role.rawValue,
+                "content": message.content
+            ]
+        }
+
+        var content: [[String: Any]] = []
+        if shouldSendText(trimmedContent) {
+            content.append([
+                "type": "input_text",
+                "text": trimmedContent
+            ])
+        }
+
+        for imageAttachment in messageImageAttachments {
+            content.append([
+                "type": "input_image",
+                "image_url": imageAttachment.dataURL
+            ])
+        }
+
+        if let audioAttachment {
+            content.append([
+                "type": "input_file",
+                "file_data": audioAttachment.data.base64EncodedString(),
+                "filename": audioAttachment.fileName
+            ])
+        }
+
+        for fileAttachment in messageFileAttachments {
+            content.append([
+                "type": "input_file",
+                "file_data": fileAttachment.data.base64EncodedString(),
+                "filename": fileAttachment.fileName
+            ])
+        }
+
+        guard !content.isEmpty else { return nil }
+        return [
+            "type": "message",
+            "role": message.role.rawValue,
+            "content": content
+        ]
+    }
+
+    private func buildResponsesFunctionCallItem(from toolCall: InternalToolCall) -> [String: Any] {
+        [
+            "type": "function_call",
+            "call_id": toolCall.id,
+            "name": sanitizedToolName(toolCall.toolName),
+            "arguments": toolCall.arguments,
+            "status": "completed"
+        ]
+    }
+
+    private func buildResponsesFunctionCallOutputItem(from message: ChatMessage) -> [String: Any]? {
+        guard message.role == .tool, let callID = message.toolCalls?.first?.id else { return nil }
+        return [
+            "type": "function_call_output",
+            "call_id": callID,
+            "output": message.content
+        ]
+    }
+
+    private func buildResponsesInputItems(
+        from messages: [ChatMessage],
+        audioAttachments: [UUID: AudioAttachment],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> [[String: Any]] {
+        var items: [[String: Any]] = []
+        items.reserveCapacity(messages.count)
+
+        for message in messages {
+            if let messageItem = buildResponsesMessageInput(
+                for: message,
+                audioAttachments: audioAttachments,
+                imageAttachments: imageAttachments,
+                fileAttachments: fileAttachments
+            ) {
+                items.append(messageItem)
+            }
+
+            if message.role == .assistant, let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+                items.append(contentsOf: toolCalls.map { buildResponsesFunctionCallItem(from: $0) })
+            } else if message.role == .tool, let outputItem = buildResponsesFunctionCallOutputItem(from: message) {
+                items.append(outputItem)
+            }
+        }
+
+        return items
+    }
+
+    private func makeResponsesToolChoicePayload(_ rawValue: Any?) -> Any? {
+        if let toolChoice = rawValue as? [String: Any] {
+            return toolChoice
+        }
+        if let rawString = rawValue as? String,
+           let normalized = OpenAIResponsesToolChoice(rawString) {
+            switch normalized {
+            case .auto:
+                return "auto"
+            case .required:
+                return "required"
+            case .none:
+                return "none"
+            }
+        }
+        return nil
+    }
+
+    private func parseResponsesTextContent(from content: [Any]) -> String {
+        var segments: [String] = []
+        for rawPart in content {
+            guard let part = rawPart as? [String: Any],
+                  let type = part["type"] as? String else { continue }
+            switch type {
+            case "output_text":
+                if let text = part["text"] as? String, !text.isEmpty {
+                    segments.append(text)
+                }
+            case "refusal":
+                if let refusal = part["refusal"] as? String, !refusal.isEmpty {
+                    segments.append(refusal)
+                }
+            default:
+                continue
+            }
+        }
+        return segments.joined()
+    }
+
+    private func parseResponsesReasoningContent(from item: [String: Any]) -> String? {
+        var reasoning: String? = nil
+
+        if let content = item["content"] as? [Any] {
+            for rawPart in content {
+                guard let part = rawPart as? [String: Any],
+                      let type = part["type"] as? String else { continue }
+                switch type {
+                case "reasoning_text", "summary_text":
+                    if let text = part["text"] as? String {
+                        appendSegment(text, to: &reasoning)
+                    }
+                default:
+                    continue
+                }
+            }
+        }
+
+        if let summary = item["summary"] as? [Any] {
+            for rawPart in summary {
+                guard let part = rawPart as? [String: Any],
+                      let type = part["type"] as? String,
+                      type == "summary_text",
+                      let text = part["text"] as? String else { continue }
+                appendSegment(text, to: &reasoning)
+            }
+        }
+
+        return reasoning
+    }
+
+    private func parseResponsesMessage(from payload: [String: Any]) throws -> ChatMessage {
+        if let errorObject = payload["error"] as? [String: Any],
+           let message = errorObject["message"] as? String,
+           !message.isEmpty {
+            throw NSError(domain: "OpenAIResponsesError", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+
+        guard let outputItems = payload["output"] as? [Any] else {
+            throw NSError(domain: "OpenAIResponsesError", code: 1, userInfo: [NSLocalizedDescriptionKey: "响应中缺少 output 数组"])
+        }
+
+        var textContent = ""
+        var reasoningContent: String? = nil
+        var internalToolCalls: [InternalToolCall] = []
+
+        for rawItem in outputItems {
+            guard let item = rawItem as? [String: Any],
+                  let type = item["type"] as? String else { continue }
+            switch type {
+            case "message":
+                if let content = item["content"] as? [Any] {
+                    textContent += parseResponsesTextContent(from: content)
+                }
+            case "function_call":
+                let callID = (item["call_id"] as? String)
+                    ?? (item["id"] as? String)
+                    ?? "tool-\(UUID().uuidString)"
+                guard let name = item["name"] as? String else { continue }
+                let arguments = item["arguments"] as? String ?? ""
+                internalToolCalls.append(
+                    InternalToolCall(
+                        id: callID,
+                        toolName: name,
+                        arguments: arguments
+                    )
+                )
+            case "reasoning":
+                if let reasoning = parseResponsesReasoningContent(from: item) {
+                    appendSegment(reasoning, to: &reasoningContent)
+                }
+            default:
+                continue
+            }
+        }
+
+        return ChatMessage(
+            id: UUID(),
+            role: .assistant,
+            content: textContent,
+            reasoningContent: reasoningContent,
+            toolCalls: internalToolCalls.isEmpty ? nil : internalToolCalls,
+            tokenUsage: makeResponsesTokenUsage(from: payload["usage"])
+        )
+    }
+
+    private func parseResponsesStreamingEvent(_ payload: [String: Any]) -> ChatMessagePart? {
+        guard let eventType = payload["type"] as? String else { return nil }
+        switch eventType {
+        case "response.output_text.delta":
+            if let delta = payload["delta"] as? String {
+                return ChatMessagePart(content: delta)
+            }
+            return nil
+
+        case "response.refusal.delta":
+            if let delta = payload["delta"] as? String {
+                return ChatMessagePart(content: delta)
+            }
+            return nil
+
+        case "response.function_call_arguments.delta":
+            guard let delta = payload["delta"] as? String else { return nil }
+            let callID = (payload["call_id"] as? String) ?? (payload["item_id"] as? String)
+            return ChatMessagePart(
+                toolCallDeltas: [
+                    ChatMessagePart.ToolCallDelta(
+                        id: callID,
+                        index: payload["output_index"] as? Int,
+                        nameFragment: nil,
+                        argumentsFragment: delta
+                    )
+                ]
+            )
+
+        case "response.output_item.added":
+            guard let item = payload["item"] as? [String: Any],
+                  let itemType = item["type"] as? String,
+                  itemType == "function_call" else {
+                return nil
+            }
+            let callID = (item["call_id"] as? String) ?? (item["id"] as? String)
+            let arguments = item["arguments"] as? String
+            return ChatMessagePart(
+                toolCallDeltas: [
+                    ChatMessagePart.ToolCallDelta(
+                        id: callID,
+                        index: payload["output_index"] as? Int,
+                        nameFragment: item["name"] as? String,
+                        argumentsFragment: arguments
+                    )
+                ]
+            )
+
+        case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
+            if let delta = payload["delta"] as? String {
+                return ChatMessagePart(reasoningContent: delta)
+            }
+            return nil
+
+        case "response.completed", "response.incomplete":
+            guard let response = payload["response"] as? [String: Any],
+                  let usage = makeResponsesTokenUsage(from: response["usage"]) else {
+                return nil
+            }
+            return ChatMessagePart(tokenUsage: usage)
+
+        default:
+            return nil
+        }
+    }
+
+    private func makeResponsesTokenUsage(from rawUsage: Any?) -> MessageTokenUsage? {
+        guard let usage = rawUsage as? [String: Any] else { return nil }
+        let promptTokens = usage["input_tokens"] as? Int
+        let completionTokens = usage["output_tokens"] as? Int
+        let totalTokens = usage["total_tokens"] as? Int
+        let reasoningTokens: Int?
+        if let details = usage["output_tokens_details"] as? [String: Any] {
+            reasoningTokens = details["reasoning_tokens"] as? Int
+        } else {
+            reasoningTokens = nil
+        }
+
+        if promptTokens == nil && completionTokens == nil && totalTokens == nil && reasoningTokens == nil {
+            return nil
+        }
+
+        return MessageTokenUsage(
+            promptTokens: promptTokens,
+            completionTokens: completionTokens,
+            totalTokens: totalTokens,
+            thinkingTokens: reasoningTokens
+        )
     }
 
     // MARK: - 内部解码模型 (实现细节)
@@ -622,46 +1101,82 @@ public class OpenAIAdapter: APIAdapter {
     // MARK: - 协议方法实现
 
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
+        let rawOverrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let conversationAPI = resolvedConversationAPI(for: rawOverrides)
+
+        switch conversationAPI {
+        case .chatCompletions:
+            return buildChatCompletionsRequest(
+                for: model,
+                commonPayload: commonPayload,
+                overrides: sanitizedChatCompletionsOverrides(rawOverrides),
+                messages: messages,
+                tools: tools,
+                audioAttachments: audioAttachments,
+                imageAttachments: imageAttachments,
+                fileAttachments: fileAttachments
+            )
+        case .responses:
+            return buildResponsesRequest(
+                for: model,
+                commonPayload: commonPayload,
+                overrides: sanitizedResponsesOverrides(rawOverrides),
+                messages: messages,
+                tools: tools,
+                audioAttachments: audioAttachments,
+                imageAttachments: imageAttachments,
+                fileAttachments: fileAttachments
+            )
+        }
+    }
+
+    private func buildChatCompletionsRequest(
+        for model: RunnableModel,
+        commonPayload: [String: Any],
+        overrides: [String: Any],
+        messages: [ChatMessage],
+        tools: [InternalToolDefinition]?,
+        audioAttachments: [UUID: AudioAttachment],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> URLRequest? {
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
         }
         let chatURL = baseURL.appendingPathComponent("chat/completions")
-        
+
         var request = URLRequest(url: chatURL)
-        request.timeoutInterval = 600  // 10分钟，支持大模型长时间推理和流式响应
+        request.timeoutInterval = 600
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
+
         guard let randomApiKey = model.provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
             logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
         }
         request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: randomApiKey, to: &request)
-        
+
         let apiMessages: [[String: Any]] = messages.map { msg in
             var dict: [String: Any] = ["role": msg.role.rawValue]
-            
-            // 检查该消息是否有关联的音频、图片或文件附件
+
             let audioAttachment = audioAttachments[msg.id]
             let msgImageAttachments = imageAttachments[msg.id] ?? []
             let msgFileAttachments = fileAttachments[msg.id] ?? []
             let hasMultiContent = (audioAttachment != nil || !msgImageAttachments.isEmpty || !msgFileAttachments.isEmpty) && msg.role == .user
-            
+
             if hasMultiContent {
                 var contentParts: [[String: Any]] = []
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                // 添加文本内容
+
                 if shouldSendText(trimmed) {
                     contentParts.append([
                         "type": "text",
                         "text": trimmed
                     ])
                 }
-                
-                // 添加图片内容 (OpenAI Vision 格式)
+
                 for imageAttachment in msgImageAttachments {
                     contentParts.append([
                         "type": "image_url",
@@ -670,9 +1185,8 @@ public class OpenAIAdapter: APIAdapter {
                         ]
                     ])
                 }
-                
-                // 添加音频内容
-                if let audioAttachment = audioAttachment {
+
+                if let audioAttachment {
                     let base64Audio = audioAttachment.data.base64EncodedString()
                     contentParts.append([
                         "type": "input_audio",
@@ -683,7 +1197,6 @@ public class OpenAIAdapter: APIAdapter {
                     ])
                 }
 
-                // 添加文件内容
                 for fileAttachment in msgFileAttachments {
                     let base64File = fileAttachment.data.base64EncodedString()
                     contentParts.append([
@@ -695,8 +1208,7 @@ public class OpenAIAdapter: APIAdapter {
                         ]
                     ])
                 }
-                
-                // 如果有内容部分，使用数组格式；否则使用简单文本
+
                 if !contentParts.isEmpty {
                     dict["content"] = contentParts
                 } else {
@@ -705,7 +1217,7 @@ public class OpenAIAdapter: APIAdapter {
             } else {
                 dict["content"] = msg.content
             }
-            
+
             if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 let apiToolCalls: [[String: Any]] = toolCalls.map { call in
                     var apiToolCall: [String: Any] = [
@@ -727,12 +1239,12 @@ public class OpenAIAdapter: APIAdapter {
             }
             return dict
         }
-        
-        var finalPayload = model.model.overrideParameters.mapValues { $0.toAny() }
-        finalPayload.merge(commonPayload) { (_, new) in new }
+
+        var finalPayload = overrides
+        finalPayload.merge(commonPayload) { _, new in new }
         finalPayload["model"] = model.model.modelName
         finalPayload["messages"] = apiMessages
-        
+
         if let shouldStream = finalPayload["stream"] as? Bool, shouldStream {
             var streamOptions = finalPayload["stream_options"] as? [String: Any] ?? [:]
             if streamOptions["include_usage"] == nil {
@@ -740,9 +1252,8 @@ public class OpenAIAdapter: APIAdapter {
             }
             finalPayload["stream_options"] = streamOptions
         }
-        
-        // **翻译官的核心工作 (工具翻译)**:
-        if let tools = tools, !tools.isEmpty {
+
+        if let tools, !tools.isEmpty {
             let apiTools = tools.map { tool -> [String: Any] in
                 let rawParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
                 let functionParams = normalizedOpenAIToolParameters(rawParams)
@@ -752,12 +1263,9 @@ public class OpenAIAdapter: APIAdapter {
             finalPayload["tools"] = apiTools
             finalPayload["tool_choice"] = "auto"
         }
-        
-        let containsAudioAttachment = !audioAttachments.isEmpty
-        let containsImageAttachment = !imageAttachments.isEmpty
-        let containsFileAttachment = !fileAttachments.isEmpty
-        let containsMediaAttachment = containsAudioAttachment || containsImageAttachment || containsFileAttachment
-        
+
+        let containsMediaAttachment = !audioAttachments.isEmpty || !imageAttachments.isEmpty || !fileAttachments.isEmpty
+
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
             if let httpBody = request.httpBody {
@@ -769,8 +1277,7 @@ public class OpenAIAdapter: APIAdapter {
                             for contentIndex in contentArray.indices {
                                 var contentItem = contentArray[contentIndex]
                                 guard let type = contentItem["type"] as? String else { continue }
-                                
-                                // 隐藏音频 base64
+
                                 if type == "input_audio" {
                                     if var audioInfo = contentItem["input_audio"] as? [String: Any],
                                        let rawData = audioInfo["data"] as? String {
@@ -778,8 +1285,7 @@ public class OpenAIAdapter: APIAdapter {
                                         contentItem["input_audio"] = audioInfo
                                     }
                                 }
-                                
-                                // 隐藏文件 base64
+
                                 if type == "input_file" {
                                     if var fileInfo = contentItem["input_file"] as? [String: Any],
                                        let rawData = fileInfo["data"] as? String {
@@ -787,8 +1293,7 @@ public class OpenAIAdapter: APIAdapter {
                                         contentItem["input_file"] = fileInfo
                                     }
                                 }
-                                
-                                // 隐藏图片 base64
+
                                 if type == "image_url" {
                                     if var imageInfo = contentItem["image_url"] as? [String: Any],
                                        let url = imageInfo["url"] as? String,
@@ -797,14 +1302,14 @@ public class OpenAIAdapter: APIAdapter {
                                         contentItem["image_url"] = imageInfo
                                     }
                                 }
-                                
+
                                 contentArray[contentIndex] = contentItem
                             }
                             messages[index]["content"] = contentArray
                         }
                         sanitizedPayload["messages"] = messages
                     }
-                    
+
                     if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
                        let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
                         logger.debug("构建的聊天请求体 (已隐藏媒体 Base64):\n---\n\(sanitizedString)\n---")
@@ -820,7 +1325,89 @@ public class OpenAIAdapter: APIAdapter {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
         }
-        
+
+        return request
+    }
+
+    private func buildResponsesRequest(
+        for model: RunnableModel,
+        commonPayload: [String: Any],
+        overrides: [String: Any],
+        messages: [ChatMessage],
+        tools: [InternalToolDefinition]?,
+        audioAttachments: [UUID: AudioAttachment],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建 Responses 请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        let responsesURL = baseURL.appendingPathComponent("responses")
+
+        var request = URLRequest(url: responsesURL)
+        request.timeoutInterval = 600
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        guard let randomApiKey = model.provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
+            logger.error("构建 Responses 请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
+            return nil
+        }
+        request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: randomApiKey, to: &request)
+
+        let inputItems = buildResponsesInputItems(
+            from: messages,
+            audioAttachments: audioAttachments,
+            imageAttachments: imageAttachments,
+            fileAttachments: fileAttachments
+        )
+
+        var finalPayload = overrides
+        finalPayload.merge(commonPayload) { _, new in new }
+        finalPayload["model"] = model.model.modelName
+        finalPayload["input"] = inputItems
+
+        if let tools, !tools.isEmpty {
+            let apiTools = tools.map { tool -> [String: Any] in
+                let rawParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
+                let functionParams = normalizedOpenAIToolParameters(rawParams)
+                return [
+                    "type": "function",
+                    "name": sanitizedToolName(tool.name),
+                    "description": tool.description,
+                    "parameters": functionParams,
+                    "strict": false
+                ]
+            }
+            finalPayload["tools"] = apiTools
+            if finalPayload["tool_choice"] == nil {
+                finalPayload["tool_choice"] = "auto"
+            } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
+                finalPayload["tool_choice"] = normalizedChoice
+            }
+        } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
+            finalPayload["tool_choice"] = normalizedChoice
+        }
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
+            if let httpBody = request.httpBody {
+                let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
+                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
+                   let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
+                    logger.debug("构建的 Responses 请求体:\n---\n\(sanitizedString)\n---")
+                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
+                    logger.debug("构建的 Responses 请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
+                }
+            }
+            logChatRequestSnapshot(adapterName: "OpenAI兼容 (Responses)", request: request, payload: finalPayload)
+        } catch {
+            logger.error("构建 Responses 请求失败: JSON 序列化错误 - \(error.localizedDescription)")
+            return nil
+        }
+
         return request
     }
     
@@ -856,6 +1443,12 @@ public class OpenAIAdapter: APIAdapter {
     }
     
     public func parseResponse(data: Data) throws -> ChatMessage {
+        if let object = try? JSONSerialization.jsonObject(with: data, options: []),
+           let payload = object as? [String: Any],
+           payload["output"] != nil || (payload["object"] as? String) == "response" {
+            return try parseResponsesMessage(from: payload)
+        }
+
         let apiResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
         
         guard let message = apiResponse.choices.first?.message else {
@@ -908,6 +1501,13 @@ public class OpenAIAdapter: APIAdapter {
         
         guard !dataString.isEmpty, let data = dataString.data(using: .utf8) else {
             return nil
+        }
+
+        if let object = try? JSONSerialization.jsonObject(with: data, options: []),
+           let payload = object as? [String: Any],
+           let eventType = payload["type"] as? String,
+           eventType.hasPrefix("response.") {
+            return parseResponsesStreamingEvent(payload)
         }
         
         do {
@@ -1018,7 +1618,7 @@ public class OpenAIAdapter: APIAdapter {
             "model": model.model.modelName,
             "input": texts
         ]
-        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let overrides = sanitizedOpenAIControlOverrides(model.model.overrideParameters.mapValues { $0.toAny() })
         payload.merge(overrides) { _, new in new }
         
         do {

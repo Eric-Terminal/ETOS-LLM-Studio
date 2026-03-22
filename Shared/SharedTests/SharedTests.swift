@@ -1042,6 +1042,182 @@ struct OpenAIAdapterTests {
         #expect(part.content == nil)
         #expect(part.reasoningContent == nil)
     }
+
+    @Test("OpenAI 可切换为 Responses API 请求体")
+    func testBuildResponsesAPIRequestPayload() throws {
+        let responseModel = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "openai_api": .string("responses"),
+                    "max_tokens": .int(256),
+                    "reasoning": .dictionary([
+                        "effort": .string("medium")
+                    ])
+                ]
+            )
+        )
+        let toolResultMessage = ChatMessage(
+            role: .tool,
+            content: "{\"saved\":true}",
+            toolCalls: [
+                InternalToolCall(
+                    id: "call_save_1",
+                    toolName: "save_memory",
+                    arguments: "{}"
+                )
+            ]
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "你好"),
+            ChatMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [
+                    InternalToolCall(
+                        id: "call_save_1",
+                        toolName: "save_memory",
+                        arguments: "{\"content\":\"你好\"}"
+                    )
+                ]
+            ),
+            toolResultMessage
+        ]
+        let tools = [saveMemoryTool]
+
+        guard let request = adapter.buildChatRequest(
+            for: responseModel,
+            commonPayload: ["stream": true],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let inputItems = jsonPayload["input"] as? [[String: Any]],
+        let toolPayloads = jsonPayload["tools"] as? [[String: Any]],
+        let firstInput = inputItems.first,
+        let functionCallInput = inputItems.dropFirst().first(where: { ($0["type"] as? String) == "function_call" }),
+        let functionOutputInput = inputItems.first(where: { ($0["type"] as? String) == "function_call_output" }),
+        let firstTool = toolPayloads.first else {
+            Issue.record("Responses API 请求体未正确生成。")
+            return
+        }
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/responses")
+        #expect(jsonPayload["messages"] == nil)
+        #expect(jsonPayload["max_tokens"] == nil)
+        #expect(jsonPayload["max_output_tokens"] as? Int == 256)
+        #expect(jsonPayload["stream"] as? Bool == true)
+        #expect((jsonPayload["reasoning"] as? [String: Any])?["effort"] as? String == "medium")
+
+        #expect(firstInput["role"] as? String == "user")
+        #expect(((firstInput["content"] as? [[String: Any]])?.first)?["type"] as? String == "input_text")
+        #expect(functionCallInput?["call_id"] as? String == "call_save_1")
+        #expect(functionCallInput?["name"] as? String == "save_memory")
+        #expect(functionOutputInput?["call_id"] as? String == "call_save_1")
+        #expect(functionOutputInput?["output"] as? String == "{\"saved\":true}")
+
+        #expect(firstTool["type"] as? String == "function")
+        #expect(firstTool["name"] as? String == "save_memory")
+        #expect(firstTool["strict"] as? Bool == false)
+    }
+
+    @Test("OpenAI Responses 响应可解析正文、推理与工具调用")
+    func testParseResponsesAPIResponse() throws {
+        let json = """
+        {
+          "id": "resp_123",
+          "object": "response",
+          "output": [
+            {
+              "type": "reasoning",
+              "summary": [
+                {
+                  "type": "summary_text",
+                  "text": "先检查记忆是否已有相同信息。"
+                }
+              ]
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_resp_1",
+              "name": "save_memory",
+              "arguments": "{\\"content\\":\\"你好\\"}"
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "已经帮你记住啦。"
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 18,
+            "output_tokens_details": {
+              "reasoning_tokens": 5
+            },
+            "total_tokens": 30
+          }
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let message = try adapter.parseResponse(data: data)
+        let toolCall = try #require(message.toolCalls?.first)
+        let usage = try #require(message.tokenUsage)
+
+        #expect(message.content == "已经帮你记住啦。")
+        #expect(message.reasoningContent == "先检查记忆是否已有相同信息。")
+        #expect(toolCall.id == "call_resp_1")
+        #expect(toolCall.toolName == "save_memory")
+        #expect(toolCall.arguments == "{\"content\":\"你好\"}")
+        #expect(usage.promptTokens == 12)
+        #expect(usage.completionTokens == 18)
+        #expect(usage.thinkingTokens == 5)
+        #expect(usage.totalTokens == 30)
+    }
+
+    @Test("OpenAI Responses 流式事件可解析文本、工具参数与用量")
+    func testParseResponsesStreamingEvents() throws {
+        let toolStart = """
+        data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_stream_1","name":"save_memory","arguments":""}}
+        """
+        let toolDelta = """
+        data: {"type":"response.function_call_arguments.delta","output_index":1,"item_id":"fc_1","call_id":"call_stream_1","delta":"{\\"content\\":\\"你好\\"}"}
+        """
+        let textDelta = """
+        data: {"type":"response.output_text.delta","output_index":2,"item_id":"msg_1","content_index":0,"delta":"已经完成"}
+        """
+        let completed = """
+        data: {"type":"response.completed","response":{"usage":{"input_tokens":9,"output_tokens":7,"output_tokens_details":{"reasoning_tokens":2},"total_tokens":16}}}
+        """
+
+        let toolStartPart = try #require(adapter.parseStreamingResponse(line: toolStart))
+        let toolDeltaPart = try #require(adapter.parseStreamingResponse(line: toolDelta))
+        let textPart = try #require(adapter.parseStreamingResponse(line: textDelta))
+        let completedPart = try #require(adapter.parseStreamingResponse(line: completed))
+
+        let startedTool = try #require(toolStartPart.toolCallDeltas?.first)
+        let toolArguments = try #require(toolDeltaPart.toolCallDeltas?.first)
+        let usage = try #require(completedPart.tokenUsage)
+
+        #expect(startedTool.id == "call_stream_1")
+        #expect(startedTool.nameFragment == "save_memory")
+        #expect(toolArguments.argumentsFragment == "{\"content\":\"你好\"}")
+        #expect(textPart.content == "已经完成")
+        #expect(usage.promptTokens == 9)
+        #expect(usage.completionTokens == 7)
+        #expect(usage.thinkingTokens == 2)
+        #expect(usage.totalTokens == 16)
+    }
 }
 
 @Suite("GeminiAdapter Tests")

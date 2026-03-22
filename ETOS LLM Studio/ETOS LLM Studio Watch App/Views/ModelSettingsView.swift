@@ -361,24 +361,153 @@ extension ModelSettingsView {
             return payload
 
         default:
-            var payload = overridesAny
-            payload["model"] = model.modelName
-            payload["messages"] = [
-                [
-                    "role": "user",
-                    "content": "<message>"
+            if resolvedOpenAIPreviewMode(from: overridesAny) == .responses {
+                var payload = sanitizedResponsesPreviewOverrides(overridesAny)
+                payload["model"] = model.modelName
+                payload["input"] = [
+                    [
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            [
+                                "type": "input_text",
+                                "text": "<message>"
+                            ]
+                        ]
+                    ]
                 ]
-            ]
+                return payload
+            } else {
+                var payload = sanitizedChatCompletionsPreviewOverrides(overridesAny)
+                payload["model"] = model.modelName
+                payload["messages"] = [
+                    [
+                        "role": "user",
+                        "content": "<message>"
+                    ]
+                ]
 
-            if let stream = payload["stream"] as? Bool, stream {
-                var streamOptions = payload["stream_options"] as? [String: Any] ?? [:]
-                if streamOptions["include_usage"] == nil {
-                    streamOptions["include_usage"] = true
+                if let stream = payload["stream"] as? Bool, stream {
+                    var streamOptions = payload["stream_options"] as? [String: Any] ?? [:]
+                    if streamOptions["include_usage"] == nil {
+                        streamOptions["include_usage"] = true
+                    }
+                    payload["stream_options"] = streamOptions
                 }
-                payload["stream_options"] = streamOptions
+                return payload
             }
-            return payload
         }
+    }
+
+    private enum OpenAIPreviewMode {
+        case chatCompletions
+        case responses
+    }
+
+    private var openAIResponsesSignalKeys: Set<String> {
+        [
+            "background",
+            "context_management",
+            "conversation",
+            "include",
+            "max_output_tokens",
+            "previous_response_id",
+            "reasoning",
+            "store",
+            "text",
+            "truncation"
+        ]
+    }
+
+    private var openAIControlOverrideKeys: Set<String> {
+        [
+            "openai_api",
+            "openai_api_mode",
+            "use_responses_api"
+        ]
+    }
+
+    private var openAIChatCompletionsOnlyKeys: Set<String> {
+        [
+            "functions",
+            "function_call",
+            "messages",
+            "stream_options"
+        ]
+    }
+
+    private func normalizedOpenAIAPIValue(_ rawValue: String) -> OpenAIPreviewMode? {
+        let normalized = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        switch normalized {
+        case "responses", "response":
+            return .responses
+        case "chat", "chat_completion", "chat_completions":
+            return .chatCompletions
+        default:
+            return nil
+        }
+    }
+
+    private func boolValue(from rawValue: Any?) -> Bool? {
+        switch rawValue {
+        case let value as Bool:
+            return value
+        case let value as NSNumber:
+            return value.boolValue
+        case let value as String:
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            switch normalized {
+            case "true", "1", "yes", "on":
+                return true
+            case "false", "0", "no", "off":
+                return false
+            default:
+                return nil
+            }
+        default:
+            return nil
+        }
+    }
+
+    private func resolvedOpenAIPreviewMode(from overrides: [String: Any]) -> OpenAIPreviewMode {
+        if let rawValue = overrides["openai_api"] as? String,
+           let mode = normalizedOpenAIAPIValue(rawValue) {
+            return mode
+        }
+        if let rawValue = overrides["openai_api_mode"] as? String,
+           let mode = normalizedOpenAIAPIValue(rawValue) {
+            return mode
+        }
+        if let useResponses = boolValue(from: overrides["use_responses_api"]) {
+            return useResponses ? .responses : .chatCompletions
+        }
+        if overrides.keys.contains(where: { openAIResponsesSignalKeys.contains($0) }) {
+            return .responses
+        }
+        return .chatCompletions
+    }
+
+    private func sanitizedChatCompletionsPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        overrides.filter {
+            !openAIControlOverrideKeys.contains($0.key) && !openAIResponsesSignalKeys.contains($0.key)
+        }
+    }
+
+    private func sanitizedResponsesPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        var sanitized = overrides.filter {
+            !openAIControlOverrideKeys.contains($0.key) && !openAIChatCompletionsOnlyKeys.contains($0.key)
+        }
+        if sanitized["max_output_tokens"] == nil, let legacyMaxTokens = sanitized["max_tokens"] {
+            sanitized["max_output_tokens"] = legacyMaxTokens
+        }
+        sanitized.removeValue(forKey: "max_tokens")
+        sanitized.removeValue(forKey: "input")
+        return sanitized
     }
 
     private func sanitizePreviewPayload(_ value: Any) -> Any {
