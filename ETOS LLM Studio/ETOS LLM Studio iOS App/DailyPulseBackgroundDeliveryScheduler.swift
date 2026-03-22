@@ -15,7 +15,7 @@ import Shared
 import os.log
 
 @MainActor
-final class DailyPulseBackgroundDeliveryScheduler: ObservableObject {
+final class DailyPulseBackgroundDeliveryScheduler {
     static let shared = DailyPulseBackgroundDeliveryScheduler()
     static let taskIdentifier = "com.ericterminal.els.dailyPulse.refresh"
 
@@ -52,7 +52,12 @@ final class DailyPulseBackgroundDeliveryScheduler: ObservableObject {
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.taskIdentifier)
         do {
             try BGTaskScheduler.shared.submit(request)
-            logger.info("每日脉冲后台预准备已调度：\(scheduledDate.formatted(date: .abbreviated, time: .shortened), privacy: .public)")
+            let scheduledText = DateFormatter.localizedString(
+                from: scheduledDate,
+                dateStyle: .short,
+                timeStyle: .short
+            )
+            logger.info("每日脉冲后台预准备已调度：\(scheduledText, privacy: .public)")
         } catch {
             logger.error("每日脉冲后台预准备调度失败：\(error.localizedDescription, privacy: .public)")
         }

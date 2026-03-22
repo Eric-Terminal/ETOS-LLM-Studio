@@ -221,7 +221,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         return referenceDate >= reminderDate
     }
 
-    internal nonisolated static func nextBackgroundPreparationDate(
+    public nonisolated static func nextBackgroundPreparationDate(
         referenceDate: Date,
         hour: Int,
         minute: Int,
