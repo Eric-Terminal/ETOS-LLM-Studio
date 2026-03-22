@@ -224,21 +224,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section {
-                Button(NSLocalizedString("打开系统通知设置", comment: "Open system notification settings button")) {
-                    viewModel.openSystemNotificationSettings()
-                }
-            } header: {
-                Text(NSLocalizedString("后台通知", comment: "Background notification section title"))
-            } footer: {
-                Text(
-                    NSLocalizedString(
-                        "后台回复通知已默认开启，应用会在首次启动时自动请求通知权限；若此前拒绝，请在系统设置中手动开启。",
-                        comment: "Background AI reply notification section footer when forced enabled"
-                    )
-                )
-            }
-            
             // MARK: - 公告通知 Section
             if announcementManager.shouldShowInSettings {
                 Section("系统公告") {
