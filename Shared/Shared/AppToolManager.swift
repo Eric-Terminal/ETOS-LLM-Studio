@@ -631,7 +631,9 @@ public enum AppToolExecutionError: LocalizedError {
 @MainActor
 public final class AppToolManager: ObservableObject {
     public static let shared = AppToolManager()
-    public nonisolated let objectWillChange = ObservableObjectPublisher()
+    // 注意：拓展工具管理页依赖 @Published 实时刷新总开关、启用态与审批策略，
+    // 这里保留显式 publisher，但不能标记为 nonisolated。
+    public let objectWillChange = ObservableObjectPublisher()
 
     private nonisolated static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AppToolManager")
     private nonisolated static let chatToolsEnabledUserDefaultsKey = "appTools.chatToolsEnabled"

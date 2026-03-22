@@ -77,6 +77,60 @@ struct ObservableObjectPublisherTests {
         withExtendedLifetime(cancellable) {}
     }
 
+    @Test("ToolPermissionCenter 切换自动批准开关会触发 objectWillChange")
+    @MainActor
+    func toolPermissionCenterPublishesWhenTogglingAutoApprove() {
+        let center = ToolPermissionCenter.shared
+        let original = center.autoApproveEnabled
+
+        var changeCount = 0
+        let cancellable = center.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        center.setAutoApproveEnabled(!original)
+        center.setAutoApproveEnabled(original)
+
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test("AppToolManager 切换聊天工具总开关会触发 objectWillChange")
+    @MainActor
+    func appToolManagerPublishesWhenTogglingChatToolsEnabled() {
+        let manager = AppToolManager.shared
+        let original = manager.chatToolsEnabled
+
+        var changeCount = 0
+        let cancellable = manager.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        manager.setChatToolsEnabled(!original)
+        manager.setChatToolsEnabled(original)
+
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test("ShortcutToolManager 切换聊天工具总开关会触发 objectWillChange")
+    @MainActor
+    func shortcutToolManagerPublishesWhenTogglingChatToolsEnabled() {
+        let manager = ShortcutToolManager.shared
+        let original = manager.chatToolsEnabled
+
+        var changeCount = 0
+        let cancellable = manager.objectWillChange.sink { _ in
+            changeCount += 1
+        }
+
+        manager.setChatToolsEnabled(!original)
+        manager.setChatToolsEnabled(original)
+
+        #expect(changeCount >= 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
     @Test("ChatMessageRenderState 更新会触发 objectWillChange")
     @MainActor
     func chatMessageRenderStatePublishesOnUpdate() {

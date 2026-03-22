@@ -16,7 +16,9 @@ import WatchKit
 @MainActor
 public final class ShortcutToolManager: ObservableObject {
     public static let shared = ShortcutToolManager()
-    public nonisolated let objectWillChange = ObservableObjectPublisher()
+    // 注意：快捷指令工具页需要依赖 @Published 实时刷新导入进度与启用状态，
+    // 这里保留显式 publisher，但不能标记为 nonisolated。
+    public let objectWillChange = ObservableObjectPublisher()
 
     public nonisolated static var toolNamePrefix: String { "shortcut://" }
     public nonisolated static var toolAliasPrefix: String { ShortcutToolNaming.toolAliasPrefix }
