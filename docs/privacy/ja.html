@@ -19,17 +19,18 @@
             }
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Helvetica Neue", Helvetica, Arial, sans-serif;
-            line-height: 1.6;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.7;
             color: var(--text-color);
             background-color: var(--bg-color);
-            max-width: 800px;
+            max-width: 860px;
             margin: 0 auto;
             padding: 40px 20px;
             -webkit-font-smoothing: antialiased;
         }
         h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
-        h2 { font-size: 1.4rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        h3 { font-size: 1rem; margin: 1rem 0 0.35rem; }
         .last-updated { color: var(--secondary-text); margin-bottom: 2rem; font-size: 0.9rem; }
         section { margin-bottom: 2rem; }
         ul { padding-left: 1.2rem; }
@@ -42,56 +43,100 @@
         footer { margin-top: 4rem; font-size: 0.8rem; color: var(--secondary-text); text-align: center; }
         a { color: var(--primary-color); text-decoration: none; }
         .lang-switch { text-align: right; margin-bottom: 20px; font-size: 0.9rem; }
+        p, li { word-break: break-word; }
     </style>
 </head>
 <body>
     <div class="lang-switch">
-        <a href="zh_hans.html">简体中文</a> | 
-        <a href="zh_hant.html">繁體中文</a> | 
-        <a href="en.html">English</a>
+        <a href="en.html">English</a> | <a href="zh_hans.html">简体中文</a> | <a href="zh_hant.html">繁體中文</a>
     </div>
 
     <h1>プライバシーポリシー</h1>
-    <p class="last-updated">発効日：2026年1月23日</p>
+    <p class="last-updated">施行日：2026年3月22日</p>
 
     <section>
         <h2>1. はじめに</h2>
-        <p>ETOS LLM Studio は、お客様のプライバシーを非常に重視しています。本アプリは<strong>「ローカルファースト (Local-first)」</strong>の設計理念を採用しています。チャットログ、音声録音、個人識別情報を保存することは決してありません。</p>
-        <p><strong>基本原則：機密データは完全にあなたのコントロール下にあります。</strong></p>
-    </section>
 
-    <section>
-        <h2>2. データ処理について</h2>
-        <ul>
-            <li><strong>ローカルストレージ：</strong> すべてのチャットセッション、設定パラメータ、記憶の断片は、デバイス内の App Sandbox に安全に保存されます。</li>
-            <li><strong>AI 処理：</strong> 送信したデータ（テキスト、音声、画像）は、お客様自身が設定した<strong>サードパーティ AI サービスプロバイダー</strong>（例：OpenAI, Anthropic, Cloudflare または自作モデル）へ<strong>直接</strong>送信されます。私たちはこれらのトラフィックを傍受、処理、保存することはありません。</li>
-            <li><strong>音声とオーディオ：</strong> マイクへのアクセス権限は、お客様が能動的に録音を開始したときのみ有効になります。録音ファイルは、書き起こしや分析のために設定された API へ送信する目的でのみ使用されます。</li>
-            <li><strong>マルチデバイス同期：</strong> iPhone と Apple Watch 間のデータ同期は、<strong>WatchConnectivity</strong> フレームワークを通じて行われます。これは直接的な暗号化されたピアツーピア通信であり、同期プロセス中にデータが個人のデバイスエコシステムの外に出ることはありません。</li>
-            <li><strong>ローカルネットワーク：</strong> 任意の「リモートファイルアクセス」機能でのみ使用され、ローカルネットワーク内の専用ツール経由でアプリ内のファイルや設定を管理するために使用されます。</li>
-        </ul>
-    </section>
+<p>ETOS LLM Studio は <strong>「Local-first」</strong> の設計方針を採用しています。ほとんどのコアデータはあなた自身の端末に保存され、主導権はあなたにあります。</p>
+<p>私たちは<strong>開発者が管理するサーバー上に</strong>、あなたのチャット内容、音声録音、画像添付、API Key を既定で保存しません。ただし、アプリ自体は同期、統計、Daily Pulse、年間サマリーなどの機能を成立させるために、チャット履歴、設定、記憶、リクエストログなどを端末内に保存します。</p>
 
-    <section>
-        <h2>3. 透明性へのコミットメント</h2>
-        <p>ETOS LLM Studio は、<strong>具体的な行動パスを追跡しない</strong>ことを約束し、チャット内容を決して読み取りません。プロジェクトの健全性を評価するために、最小限の匿名アクティビティステータスデータ（例：デイリーアクティブユーザー、バージョン分布）のみを収集します。</p>
     </section>
-
     <section>
-        <h2>4. 免責事項</h2>
-        <ul>
-            <li><strong>中立的なツール属性：</strong> 本アプリは汎用的な LLM クライアントツールとしてのみ機能します。アプリは利便性のために一部の商用 API サービスのエンドポイントをプリセットすることがありますが、デフォルトでは有効な API キーやアクセス資格情報は**含まれていません**。</li>
-            <li><strong>コンテンツの責任：</strong> すべての AI 生成コンテンツ（テキスト、画像、音声を含む）は、お客様自身が設定したサードパーティのサービスプロバイダーによって生成されます。私たちはそのコンテンツを管理、介入、または審査することはできないため、生成されたコンテンツの正確性、合法性、またはコンプライアンスについて一切の責任を負いません。</li>
-            <li><strong>サービスの選択：</strong> お客様が使用することを選択したすべての API サービス（ドキュメントで推奨しているものを含む）は、お客様個人の選択によるものです。これらのサービスの利用に伴う費用およびリスクは、お客様自身の負担となります。</li>
-        </ul>
+        <h2>2. 端末内保存とローカル処理</h2>
+
+<ul>
+    <li><strong>チャットとセッション情報：</strong>チャット履歴、セッション設定、添付ファイル参照、Worldbook、記憶データ、Daily Pulse データ、フィードバック履歴、アプリ設定は端末内のアプリサンドボックスに保存されます。</li>
+    <li><strong>API Key：</strong>API Key は通常の JSON ファイルではなく、システムの <strong>Keychain</strong> に保存されます。Apple の関連同期機能を有効にしている場合、<strong>iCloud キーチェーン</strong>を通じて自分の端末間で同期されることがあります。</li>
+    <li><strong>ローカルリクエストログ：</strong>アプリはプロバイダ名、モデル識別子、開始時刻、終了時刻、状態、ストリーミング有無、Token 使用量などのメタデータを端末内に記録します。<strong>これらのログにチャット本文は含まれません</strong>。主にトラフィック分析、応答速度計測、Daily Pulse 集計、年間サマリーなどのローカル機能のために使われます。</li>
+    <li><strong>フィードバックチケットのキャッシュ：</strong>フィードバックアシスタントを使う場合、チケット番号、トークン、状態、更新日時、公開 URL を端末内に保存し、後から進捗を確認できるようにします。</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>3. AI リクエスト、音声、画像</h2>
+
+<ul>
+    <li><strong>テキストチャット：</strong>あなたのメッセージは、あなた自身が設定した第三者 AI プロバイダ（OpenAI、Anthropic、Google、OpenAI 互換サービス、自前モデルなど）へ直接送信されます。私たちはその内容を開発者サーバーで中継・保存しません。</li>
+    <li><strong>音声とオーディオ：</strong>マイク権限は、あなたが明示的に録音や音声入力を行った時だけ使用されます。音声は現在のモデルプロバイダ、またはあなたが選んだ音声 / 文字起こしサービスにのみ送られます。</li>
+    <li><strong>画像とファイル：</strong>アプリが画像やファイルにアクセスするのは、あなたが明示的に選んだ時だけです。関連する添付は現在のモデルプロバイダ、またはあなたが手動で接続したローカルデバッグ端へ送られます。</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>4. 同期、ローカルネットワーク、Apple のサービス</h2>
+
+<ul>
+    <li><strong>iPhone / Apple Watch 同期：</strong>リアルタイム同期は <strong>WatchConnectivity</strong> を通じて行われ、開発者が管理するサーバーは経由しません。</li>
+    <li><strong>iCloud 同期：</strong>あなたが明示的に iCloud 同期を有効にした場合、選択されたデータは Apple の iCloud / CloudKit を通じて自分の端末間で同期されます。API Key は通常の同期パッケージには入らず、対応環境では iCloud キーチェーンに依存します。</li>
+    <li><strong>ローカルネットワークとデバッグ：</strong>ローカルネットワーク権限は、任意機能である LAN デバッグ / リモートファイルアクセスのためだけに使われます。あなたが自分のデスクトップデバッグツールを接続した場合、関連するアプリファイルやリクエスト通信が、<strong>あなた自身が管理するローカルエンドポイント</strong>に送られることがあります。</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>5. フィードバックアシスタント</h2>
+
+<p>フィードバックサービスへデータが送信されるのは、<strong>あなたが明示的にフィードバックを送信した時だけ</strong>です。</p>
+<ul>
+    <li><strong>入力内容：</strong>フィードバック種別、タイトル、詳細、再現手順、期待される動作、実際の動作、追加コンテキスト。</li>
+    <li><strong>環境スナップショット：</strong>プラットフォーム、App バージョン、Build 番号、OS バージョン、デバイスモデル識別子、ロケール、タイムゾーン。</li>
+    <li><strong>最小限の診断情報：</strong>タイムスタンプ、プロバイダ数、非一時セッション数、プラットフォーム情報、App バージョン情報。</li>
+    <li><strong>スパム対策：</strong>challenge、タイムスタンプ、署名、PoW 関連フィールドが含まれます。</li>
+    <li><strong>状態更新：</strong>後からフィードバックセンターでチケット状態を更新する時は、端末内に保存されたチケット番号とトークンを使ってフィードバックサービスへ照会します。</li>
+</ul>
+<p>送信前に、フィードバック文面には Bearer Token、API Key 文字列、いくつかの一般的な秘密情報形式を隠すための基本的なサニタイズが行われます。ただし、これは完全な情報漏えい防止機構ではありません。<strong>秘密鍵、身分証番号、住所、健康情報などの機微情報はフィードバック欄に記入しないでください。</strong></p>
+
+    </section>
+    <section>
+        <h2>6. 第三者サービス、分析、開発者サーバーとの境界</h2>
+
+<ul>
+    <li><strong>第三者 AI プロバイダ：</strong>あなたが明示的に送信したチャット、画像、音声リクエストを処理します。</li>
+    <li><strong>Apple のシステムサービス：</strong>WatchConnectivity、iCloud / CloudKit、iCloud キーチェーンなどは Apple 自身のポリシーに従います。</li>
+    <li><strong>開発者運営のフィードバックサービス：</strong>あなたがフィードバックを送信または更新した時だけ使われます。</li>
+    <li><strong>既定でアップロードされないもの：</strong>チャット内容、ローカル記憶、ローカルリクエストログ、年間サマリー用データ、API Key は、自動的に開発者サーバーへアップロードされません。</li>
+    <li><strong>広告と汎用分析 SDK：</strong>現行コードベースには第三者広告 SDK は含まれておらず、汎用的な開発者側行動分析 SDK も確認されていません。将来これが変わる場合は、先に本ポリシーを更新します。</li>
+    <li><strong>Apple の分析共有：</strong>システム設定で開発者との分析共有を有効にした場合、Apple のルールに従って匿名クラッシュログや診断情報が収集されることがあります。</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. 免責事項</h2>
+
+<ul>
+    <li><strong>中立的なツール：</strong>本アプリは汎用 LLM クライアントです。一部のエンドポイントやフィードバックサービスのアドレスを初期表示することはありますが、商用モデルの認証情報を同梱してはいません。</li>
+    <li><strong>生成内容の責任：</strong>AI が生成した内容は、あなた自身が設定した第三者サービスによって返されます。私たちはその正確性、合法性、適合性を保証できません。</li>
+    <li><strong>サービス選択：</strong>利用する API サービス、同期機能、フィードバックサービスは、それぞれのプライバシーポリシー、利用規約、費用、リスクを踏まえてご自身で判断してください。</li>
+</ul>
+
     </section>
 
     <section>
         <div class="contact-info">
-            <h2>5. お問い合わせ</h2>
-            <p>本プライバシーポリシーに関するご質問は、以下までご連絡ください：</p>
+            <h2>8. お問い合わせ</h2>
+            <p>本プライバシーポリシーに関するご質問は、以下までご連絡ください。</p>
             <p><strong>Eric Terminal</strong><br>
             Email: <a href="mailto:contact@ericterminal.com">contact@ericterminal.com</a><br>
-            Project Homepage: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio">https://github.com/Eric-Terminal/ETOS-LLM-Studio</a></p>
+            GitHub: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio">https://github.com/Eric-Terminal/ETOS-LLM-Studio</a></p>
         </div>
     </section>
 

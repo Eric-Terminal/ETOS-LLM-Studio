@@ -19,17 +19,18 @@
             }
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
-            line-height: 1.6;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.7;
             color: var(--text-color);
             background-color: var(--bg-color);
-            max-width: 800px;
+            max-width: 860px;
             margin: 0 auto;
             padding: 40px 20px;
             -webkit-font-smoothing: antialiased;
         }
         h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
-        h2 { font-size: 1.4rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        h3 { font-size: 1rem; margin: 1rem 0 0.35rem; }
         .last-updated { color: var(--secondary-text); margin-bottom: 2rem; font-size: 0.9rem; }
         section { margin-bottom: 2rem; }
         ul { padding-left: 1.2rem; }
@@ -42,56 +43,100 @@
         footer { margin-top: 4rem; font-size: 0.8rem; color: var(--secondary-text); text-align: center; }
         a { color: var(--primary-color); text-decoration: none; }
         .lang-switch { text-align: right; margin-bottom: 20px; font-size: 0.9rem; }
+        p, li { word-break: break-word; }
     </style>
 </head>
 <body>
     <div class="lang-switch">
-        <a href="zh_hans.html">简体中文</a> | 
-        <a href="zh_hant.html">繁體中文</a> | 
-        <a href="ja.html">日本語</a>
+        <a href="zh_hans.html">简体中文</a> | <a href="zh_hant.html">繁體中文</a> | <a href="ja.html">日本語</a>
     </div>
 
     <h1>Privacy Policy</h1>
-    <p class="last-updated">Effective Date: January 23, 2026</p>
+    <p class="last-updated">Effective Date: March 22, 2026</p>
 
     <section>
         <h2>1. Introduction</h2>
-        <p>ETOS LLM Studio takes your privacy very seriously. This application adopts a <strong>"Local-first"</strong> design philosophy. We never store your chat logs, voice recordings, or any personal identity information.</p>
-        <p><strong>Core Principle: Your sensitive data is completely under your control.</strong></p>
-    </section>
 
-    <section>
-        <h2>2. Data Processing</h2>
-        <ul>
-            <li><strong>Local Storage:</strong> All chat sessions, configuration parameters, and memory fragments are securely stored within the App Sandbox on your device.</li>
-            <li><strong>AI Processing:</strong> The data you send (text, audio, images) is sent <strong>directly</strong> to the <strong>third-party AI service providers</strong> you configure yourself (e.g., OpenAI, Anthropic, Cloudflare, or self-hosted models). We do not intercept, process, or store this traffic.</li>
-            <li><strong>Voice & Audio:</strong> Microphone permission is only enabled when you actively trigger recording. Audio files are only used to be sent to your configured API for transcription or analysis.</li>
-            <li><strong>Multi-device Sync:</strong> Data synchronization between iPhone and Apple Watch is done via the <strong>WatchConnectivity</strong> framework. This is a direct, encrypted peer-to-peer transmission, ensuring that data never leaves your personal device ecosystem during sync.</li>
-            <li><strong>Local Network:</strong> Used only for the optional "Remote File Access" feature, allowing you to manage App files and configurations via specialized tools on your local network.</li>
-        </ul>
-    </section>
+<p>ETOS LLM Studio follows a <strong>“Local-first”</strong> design philosophy. Most core data stays on your own device and remains under your control.</p>
+<p>We do <strong>not</strong> automatically store your chat content, voice recordings, image attachments, or API keys on developer-controlled servers. That said, the app does store chats, configuration, memory data, and request logs locally on-device so it can provide sync, statistics, Daily Pulse, annual recap, and similar features.</p>
 
-    <section>
-        <h2>3. Transparency Commitment</h2>
-        <p>ETOS LLM Studio promises <strong>not to track your specific behavioral paths</strong> and never reads your chat content. We only collect minimal, anonymous activity status data (e.g., daily active users, version distribution) to evaluate project health.</p>
     </section>
-
     <section>
-        <h2>4. Disclaimer</h2>
-        <ul>
-            <li><strong>Neutral Tool Attribute:</strong> This application serves only as a generic LLM client tool. The application may pre-configure some commercial API service endpoints for convenience, but by default, it **does not include** any valid API keys or access credentials.</li>
-            <li><strong>Content Liability:</strong> All AI-generated content (including text, images, and audio) is generated by the third-party service providers you configure yourself. We cannot control, intervene in, or review their content, and therefore assume no responsibility for the accuracy, legality, or compliance of the generated content.</li>
-            <li><strong>Service Selection:</strong> Any API service you choose to use (including those we may recommend in documentation) is your personal choice. You assume all costs and risks associated with using these services.</li>
-        </ul>
+        <h2>2. On-Device Storage and Local Processing</h2>
+
+<ul>
+    <li><strong>Chats and session data:</strong> chat history, session settings, attachment references, worldbooks, memory data, Daily Pulse data, feedback history, and app settings are stored inside the app sandbox on your device.</li>
+    <li><strong>API keys:</strong> API keys are stored in the system <strong>Keychain</strong> instead of plain JSON files. If you enable Apple’s related sync capabilities, they may also sync across your own devices via <strong>iCloud Keychain</strong>.</li>
+    <li><strong>Local request logs:</strong> the app records metadata such as provider name, model identifier, start time, finish time, status, streaming flag, and token usage. <strong>These logs do not include message bodies</strong>. They are used for local traffic analysis, response speed metrics, Daily Pulse summaries, annual recap, and other on-device statistics.</li>
+    <li><strong>Feedback ticket cache:</strong> if you use the feedback assistant, the app stores ticket numbers, ticket tokens, status, update timestamps, and public URLs locally so you can track progress later.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>3. AI Requests, Audio, and Images</h2>
+
+<ul>
+    <li><strong>Text chat:</strong> your messages are sent directly to the third-party AI providers you configure yourself (such as OpenAI, Anthropic, Google, OpenAI-compatible services, or self-hosted models). We do not proxy or store that content on developer-controlled servers.</li>
+    <li><strong>Voice and audio:</strong> microphone access is only used when you actively record or trigger voice input. Audio is sent only to your current model provider or the speech/transcription service you choose.</li>
+    <li><strong>Images and files:</strong> the app only accesses images or files when you choose them. Those attachments are sent to your current model provider, or to a local debugging endpoint that you intentionally connect.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>4. Sync, Local Network, and Apple Services</h2>
+
+<ul>
+    <li><strong>iPhone / Apple Watch sync:</strong> live sync between your iPhone and Apple Watch uses <strong>WatchConnectivity</strong> and does not pass through developer-operated servers.</li>
+    <li><strong>iCloud sync:</strong> if you explicitly enable iCloud sync, selected data may sync between your own devices through Apple’s iCloud / CloudKit stack. API keys are not placed into ordinary sync payloads and instead rely on iCloud Keychain when supported.</li>
+    <li><strong>Local network and debugging:</strong> local network permission is only used for optional LAN debugging / remote file access features. If you connect your own desktop debugging tool, related app files or request traffic may be sent to a <strong>local endpoint that you control</strong>.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>5. Feedback Assistant</h2>
+
+<p>Data is sent to the feedback service <strong>only when you actively choose to submit feedback</strong>.</p>
+<ul>
+    <li><strong>User-entered content:</strong> feedback type, title, description, reproduction steps, expected behavior, actual behavior, and extra context.</li>
+    <li><strong>Environment snapshot:</strong> platform, app version, build number, OS version, device model identifier, locale, and time zone.</li>
+    <li><strong>Minimal diagnostics:</strong> timestamp, provider count, non-temporary session count, platform, and app version.</li>
+    <li><strong>Anti-abuse verification:</strong> feedback requests also include challenge, timestamp, signature, and proof-of-work related fields to limit spam submissions.</li>
+    <li><strong>Status refresh:</strong> when you later refresh a ticket in the feedback center, the app uses the locally saved issue number and ticket token to query the feedback service for updates.</li>
+</ul>
+<p>Before upload, feedback text goes through a basic sanitizer that tries to mask common Bearer tokens, API key labels, and a few common secret formats. However, this is <strong>not</strong> a full data loss prevention system. <strong>Please do not put secrets, government IDs, addresses, health data, or similar sensitive information into feedback submissions.</strong></p>
+
+    </section>
+    <section>
+        <h2>6. Third-Party Services, Analytics, and Server Boundaries</h2>
+
+<ul>
+    <li><strong>Third-party AI providers:</strong> process the chat, image, and audio requests that you intentionally send.</li>
+    <li><strong>Apple system services:</strong> such as WatchConnectivity, iCloud / CloudKit, and iCloud Keychain are governed by Apple’s own policies.</li>
+    <li><strong>Developer-operated feedback service:</strong> used only when you intentionally submit or refresh feedback tickets.</li>
+    <li><strong>Not uploaded by default:</strong> chat content, local memory, local request logs, annual recap data, and API keys are not automatically uploaded to developer-controlled servers.</li>
+    <li><strong>Ads and general analytics SDKs:</strong> the current codebase does not include third-party ad SDKs, and we did not find a general-purpose developer-side behavioral analytics SDK. If that changes in the future, we will update this policy first.</li>
+    <li><strong>Apple analytics sharing:</strong> if you choose to share analytics with developers at the system level, Apple may collect anonymous crash logs or diagnostic information under Apple’s own rules.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. Disclaimer</h2>
+
+<ul>
+    <li><strong>Neutral tool:</strong> this app is a general LLM client. It may prefill some service endpoints or feedback service addresses, but it does not ship with ready-to-use commercial model credentials.</li>
+    <li><strong>Content responsibility:</strong> all AI-generated output comes from third-party providers you configure yourself. We cannot guarantee the accuracy, legality, or suitability of that output.</li>
+    <li><strong>Service choice:</strong> any API service, sync capability, or feedback service you use should be evaluated by you based on its own privacy policy, terms, cost, and risks.</li>
+</ul>
+
     </section>
 
     <section>
         <div class="contact-info">
-            <h2>5. Contact Us</h2>
+            <h2>8. Contact Us</h2>
             <p>If you have any questions about this Privacy Policy, please contact:</p>
             <p><strong>Eric Terminal</strong><br>
             Email: <a href="mailto:contact@ericterminal.com">contact@ericterminal.com</a><br>
-            Project Homepage: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio">https://github.com/Eric-Terminal/ETOS-LLM-Studio</a></p>
+            GitHub: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio">https://github.com/Eric-Terminal/ETOS-LLM-Studio</a></p>
         </div>
     </section>
 
