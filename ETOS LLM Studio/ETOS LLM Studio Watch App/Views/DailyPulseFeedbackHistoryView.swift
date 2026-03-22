@@ -18,9 +18,13 @@ struct DailyPulseFeedbackHistoryView: View {
     var body: some View {
         List {
             if pulseManager.feedbackHistory.isEmpty {
-                Text("还没有反馈历史。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("还没有反馈历史")
+                        .font(.footnote.weight(.semibold))
+                    Text("你对每日脉冲点过喜欢、降权、隐藏或保存之后，历史会显示在这里。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 ForEach(pulseManager.feedbackHistory) { event in
                     VStack(alignment: .leading, spacing: 4) {
@@ -33,14 +37,15 @@ struct DailyPulseFeedbackHistoryView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                    .padding(.vertical, 4)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
                             pulseManager.removeFeedbackHistoryEvent(id: event.id)
                         } label: {
-                            Label("删除这条", systemImage: "trash")
+                            Label("删除", systemImage: "trash")
                         }
-                        .buttonStyle(.bordered)
                     }
-                    .padding(.vertical, 4)
                 }
 
                 Button(role: .destructive) {
@@ -62,7 +67,7 @@ struct DailyPulseFeedbackHistoryView: View {
         case .hidden:
             return "已隐藏 · \(event.dayKey)"
         case .saved:
-            return "已保存 · \(event.dayKey)"
+            return "已保存为会话 · \(event.dayKey)"
         }
     }
 }
