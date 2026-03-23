@@ -201,6 +201,53 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         String(format: "%02d:%02d", normalizedHour(hour), normalizedMinute(minute))
     }
 
+    public nonisolated static func reminderTimeComponents(from input: String) -> (hour: Int, minute: Int)? {
+        let trimmed = input
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "：", with: ":")
+        guard !trimmed.isEmpty else { return nil }
+
+        if trimmed.contains(":") {
+            let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count == 2,
+                  let hour = Int(parts[0]),
+                  let minute = Int(parts[1]),
+                  (0...23).contains(hour),
+                  (0...59).contains(minute) else {
+                return nil
+            }
+            return (hour, minute)
+        }
+
+        let digits = trimmed.filter(\.isNumber)
+        let hour: Int
+        let minute: Int
+
+        switch digits.count {
+        case 3:
+            guard let parsedHour = Int(digits.prefix(1)),
+                  let parsedMinute = Int(digits.suffix(2)) else {
+                return nil
+            }
+            hour = parsedHour
+            minute = parsedMinute
+        case 4:
+            guard let parsedHour = Int(digits.prefix(2)),
+                  let parsedMinute = Int(digits.suffix(2)) else {
+                return nil
+            }
+            hour = parsedHour
+            minute = parsedMinute
+        default:
+            return nil
+        }
+
+        guard (0...23).contains(hour), (0...59).contains(minute) else {
+            return nil
+        }
+        return (hour, minute)
+    }
+
     internal nonisolated static func hasReachedReminderTime(
         referenceDate: Date,
         hour: Int,

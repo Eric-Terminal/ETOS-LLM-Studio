@@ -691,12 +691,11 @@ public final class DailyPulseManager: ObservableObject {
         referenceDate: Date = Date()
     ) async {
         let todayKey = Self.dayKey(for: referenceDate)
-        guard Self.shouldAttemptScheduledDelivery(
+        guard Self.shouldProcessScheduledDelivery(
             reminderEnabled: reminderEnabled,
             reminderHour: reminderHour,
             reminderMinute: reminderMinute,
             referenceDate: referenceDate,
-            todayRunDayKey: todayRun?.dayKey,
             lastDeliveryAttemptDayKey: lastDeliveryAttemptDayKey
         ) else {
             return
@@ -704,6 +703,15 @@ public final class DailyPulseManager: ObservableObject {
 
         lastDeliveryAttemptDayKey = todayKey
         defaults.set(todayKey, forKey: Self.lastDeliveryAttemptDayKeyDefaultsKey)
+
+        if Self.shouldUseExistingRunForScheduledDelivery(
+            todayRunDayKey: todayRun?.dayKey,
+            referenceDate: referenceDate
+        ), let run = todayRun {
+            await DailyPulseDeliveryCoordinator.shared.notifyReadyIfNeeded(for: run)
+            return
+        }
+
         await generate(force: false, trigger: .delivery, notifyReadyWhenFinished: true)
     }
 
@@ -949,23 +957,28 @@ public final class DailyPulseManager: ObservableObject {
             .map { $0 }
     }
 
-    internal nonisolated static func shouldAttemptScheduledDelivery(
+    internal nonisolated static func shouldProcessScheduledDelivery(
         reminderEnabled: Bool,
         reminderHour: Int,
         reminderMinute: Int,
         referenceDate: Date,
-        todayRunDayKey: String?,
         lastDeliveryAttemptDayKey: String?
     ) -> Bool {
         guard reminderEnabled else { return false }
         let todayKey = dayKey(for: referenceDate)
-        guard todayRunDayKey != todayKey else { return false }
         guard lastDeliveryAttemptDayKey != todayKey else { return false }
         return DailyPulseDeliveryCoordinator.hasReachedReminderTime(
             referenceDate: referenceDate,
             hour: reminderHour,
             minute: reminderMinute
         )
+    }
+
+    internal nonisolated static func shouldUseExistingRunForScheduledDelivery(
+        todayRunDayKey: String?,
+        referenceDate: Date
+    ) -> Bool {
+        todayRunDayKey == dayKey(for: referenceDate)
     }
 
     internal nonisolated static func mergeRun(local: DailyPulseRun, incoming: DailyPulseRun) -> DailyPulseRun {

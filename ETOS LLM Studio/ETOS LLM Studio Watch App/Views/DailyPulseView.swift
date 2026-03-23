@@ -6,7 +6,7 @@
 // 功能特性:
 // - 展示每日脉冲卡片与核心状态
 // - 支持手动生成、自动补生成、关注焦点输入
-// - 支持卡片反馈、保存为会话与继续聊天
+// - 支持卡片反馈、加入任务与继续聊天
 // ============================================================================
 
 import SwiftUI
@@ -20,10 +20,14 @@ struct DailyPulseView: View {
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
 
     @State private var expandedCardIDs: Set<UUID> = []
+    @State private var reminderTimeDraft = ""
     @State private var statusMessage: String?
 
     var body: some View {
         List {
+            if pulseManager.todayRun != nil || pulseManager.isPreparingTodayPulse {
+                todayPulseSection
+            }
             generationSection
             deliverySection
             focusSection
@@ -31,16 +35,22 @@ struct DailyPulseView: View {
             pulseTasksSection
             feedbackHistorySection
             externalSourcesSection
-            todayPulseSection
+            if pulseManager.todayRun == nil && !pulseManager.isPreparingTodayPulse {
+                todayPulseSection
+            }
         }
         .navigationTitle("每日脉冲")
         .task {
+            syncReminderTimeDraft()
             await pulseManager.generateIfNeeded()
             pulseManager.markTodayRunViewed()
             await notificationCenter.refreshAuthorizationStatus()
         }
         .onChange(of: pulseManager.todayRun?.dayKey) { _, _ in
             pulseManager.markTodayRunViewed()
+        }
+        .onChange(of: deliveryCoordinator.reminderTimeText) { _, _ in
+            syncReminderTimeDraft()
         }
         .alert("每日脉冲", isPresented: alertBinding) {
             Button("好的", role: .cancel) {
@@ -107,11 +117,20 @@ struct DailyPulseView: View {
             Toggle("晨间提醒", isOn: $deliveryCoordinator.reminderEnabled)
 
             if deliveryCoordinator.reminderEnabled {
-                DatePicker(
-                    "提醒时间",
-                    selection: reminderTimeBinding,
-                    displayedComponents: .hourAndMinute
-                )
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("提醒时间")
+                        .font(.footnote.weight(.semibold))
+                    TextField("08:30", text: $reminderTimeDraft.watchKeyboardNewlineBinding())
+                        .onChange(of: reminderTimeDraft) { _, newValue in
+                            applyReminderTimeDraftIfPossible(newValue, showErrorWhenInvalid: false)
+                        }
+                        .onSubmit {
+                            applyReminderTimeDraftIfPossible(reminderTimeDraft, showErrorWhenInvalid: true)
+                        }
+                    Text("请用 24 小时制输入，例如 08:30。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
 
                 if notificationCenter.authorizationStatus == .denied {
                     Text("通知权限未开启，请在 iPhone 的 Watch 通知设置里允许 ETOS LLM Studio 发送提醒。")
@@ -371,17 +390,11 @@ struct DailyPulseView: View {
             }
 
             Button {
-                if viewModel.saveDailyPulseCard(card, from: runID) != nil {
-                    statusMessage = card.savedSessionID == nil ? "已将这张卡片保存为正式会话。" : "已跳转到之前保存的会话。"
-                }
-            } label: {
-                Label(card.savedSessionID == nil ? "保存为会话" : "打开会话", systemImage: card.savedSessionID == nil ? "square.and.arrow.down" : "bubble.left.and.bubble.right")
-            }
-            .buttonStyle(.bordered)
-
-            Button {
+                let hadSavedSession = card.savedSessionID != nil
                 viewModel.continueDailyPulseCard(card, from: runID)
-                statusMessage = "已把这张卡片放进聊天上下文，并切到对应会话。返回上一层即可继续。"
+                statusMessage = hadSavedSession
+                    ? "已打开这张卡片对应的会话，并填好继续追问。返回上一层即可继续。"
+                    : "已为这张卡片创建正式会话，并填好继续追问。返回上一层即可继续。"
             } label: {
                 Label("继续聊", systemImage: "arrow.up.right.circle")
             }
@@ -514,20 +527,30 @@ struct DailyPulseView: View {
         )
     }
 
-    private var reminderTimeBinding: Binding<Date> {
-        Binding(
-            get: {
-                var components = DateComponents()
-                components.calendar = Calendar(identifier: .gregorian)
-                components.hour = deliveryCoordinator.reminderHour
-                components.minute = deliveryCoordinator.reminderMinute
-                return components.date ?? Date()
-            },
-            set: { newValue in
-                let components = Calendar(identifier: .gregorian).dateComponents([.hour, .minute], from: newValue)
-                deliveryCoordinator.reminderHour = components.hour ?? deliveryCoordinator.reminderHour
-                deliveryCoordinator.reminderMinute = components.minute ?? deliveryCoordinator.reminderMinute
+    private func syncReminderTimeDraft() {
+        reminderTimeDraft = deliveryCoordinator.reminderTimeText
+    }
+
+    private func applyReminderTimeDraftIfPossible(_ input: String, showErrorWhenInvalid: Bool) {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            syncReminderTimeDraft()
+            return
+        }
+        guard let components = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: trimmed) else {
+            if showErrorWhenInvalid {
+                statusMessage = "提醒时间请输入 24 小时制，例如 08:30。"
+                syncReminderTimeDraft()
             }
-        )
+            return
+        }
+
+        deliveryCoordinator.reminderHour = components.hour
+        deliveryCoordinator.reminderMinute = components.minute
+
+        let normalized = deliveryCoordinator.reminderTimeText
+        if reminderTimeDraft != normalized {
+            reminderTimeDraft = normalized
+        }
     }
 }

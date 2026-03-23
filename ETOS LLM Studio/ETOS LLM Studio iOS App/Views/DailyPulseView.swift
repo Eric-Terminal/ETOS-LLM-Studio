@@ -6,7 +6,7 @@
 // 功能特性:
 // - 展示每日脉冲卡片列表与详情
 // - 提供手动生成、自动补生成开关与关注焦点输入
-// - 支持卡片反馈、保存为会话与继续聊天
+// - 支持卡片反馈、加入任务与继续聊天
 // ============================================================================
 
 import SwiftUI
@@ -24,6 +24,9 @@ struct DailyPulseView: View {
 
     var body: some View {
         List {
+            if pulseManager.todayRun != nil || pulseManager.isPreparingTodayPulse {
+                todayPulseSection
+            }
             generationSection
             deliverySection
             focusSection
@@ -31,7 +34,9 @@ struct DailyPulseView: View {
             pulseTasksSection
             feedbackHistorySection
             externalSourcesSection
-            todayPulseSection
+            if pulseManager.todayRun == nil && !pulseManager.isPreparingTodayPulse {
+                todayPulseSection
+            }
         }
         .navigationTitle("每日脉冲")
         .navigationBarTitleDisplayMode(.inline)
@@ -383,17 +388,11 @@ struct DailyPulseView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        if viewModel.saveDailyPulseCard(card, from: runID) != nil {
-                            statusMessage = card.savedSessionID == nil ? "已将这张卡片保存为正式会话。" : "已跳转到之前保存的会话。"
-                        }
-                    } label: {
-                        Label(card.savedSessionID == nil ? "保存为会话" : "打开会话", systemImage: card.savedSessionID == nil ? "square.and.arrow.down" : "bubble.left.and.bubble.right")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
+                        let hadSavedSession = card.savedSessionID != nil
                         viewModel.continueDailyPulseCard(card, from: runID)
-                        statusMessage = "已把这张卡片放进聊天上下文，并为你填好继续追问。"
+                        statusMessage = hadSavedSession
+                            ? "已打开这张卡片对应的会话，并为你填好继续追问。"
+                            : "已为这张卡片创建正式会话，并为你填好继续追问。"
                     } label: {
                         Label("继续聊", systemImage: "arrow.up.right.circle")
                     }
