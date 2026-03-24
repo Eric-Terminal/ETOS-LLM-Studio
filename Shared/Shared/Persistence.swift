@@ -18,11 +18,12 @@ public enum Persistence {
     private static let sessionStoreSchemaVersion = 3
     private static let messagesFileSchemaVersion = 2
     private static let requestLogSchemaVersion = 1
-    private static let requestLogRetentionLimit = 10_000
+    private static let defaultRequestLogRetentionLimit = 10_000
     private static let migrationLogPrefix = "[(迁移)]"
     private static let compatibilityReminderPrefix = "[(迁移)][兼容提醒]"
     private static let compatibilityReminderLock = NSLock()
     private static let requestLogLock = NSLock()
+    static var requestLogRetentionLimitOverride: Int?
     private static var hasLoggedCompatibilityReminder = false
 
     private static let sessionIndexFileName = "index.json"
@@ -232,8 +233,9 @@ public enum Persistence {
         do {
             var logs = (try loadRequestLogEnvelope()?.logs) ?? []
             logs.append(entry)
-            if logs.count > requestLogRetentionLimit {
-                logs.removeFirst(logs.count - requestLogRetentionLimit)
+            let retentionLimit = effectiveRequestLogRetentionLimit()
+            if logs.count > retentionLimit {
+                logs.removeFirst(logs.count - retentionLimit)
             }
             try writeRequestLogEnvelope(
                 .init(
@@ -1084,6 +1086,10 @@ public enum Persistence {
 
     private static func requestLogsFileURL() -> URL {
         requestLogsDirectoryURL().appendingPathComponent(requestLogsFileName)
+    }
+
+    private static func effectiveRequestLogRetentionLimit() -> Int {
+        max(requestLogRetentionLimitOverride ?? defaultRequestLogRetentionLimit, 1)
     }
 
     private static func dailyPulseRunsFileURL() -> URL {

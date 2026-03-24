@@ -1872,7 +1872,15 @@ public class GeminiAdapter: APIAdapter {
     }
 
     private func normalizedGeminiSchemaObject(_ object: [String: Any]) -> [String: Any] {
-        var normalized = object.mapValues { normalizedGeminiSchemaValue($0) }
+        var normalized: [String: Any] = [:]
+        normalized.reserveCapacity(object.count)
+        for (key, value) in object {
+            if key == "properties", let properties = value as? [String: Any] {
+                normalized[key] = properties
+            } else {
+                normalized[key] = normalizedGeminiSchemaValue(value)
+            }
+        }
         normalized = flattenedGeminiSchemaCombinators(normalized)
         if let properties = normalized["properties"] as? [String: Any] {
             normalized["properties"] = normalizedGeminiSchemaPropertiesMap(properties)

@@ -45,6 +45,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private var pendingTransfers: [ObjectIdentifier: SyncOptions] = [:]
     /// 标记是否为静默同步（启动时自动同步）
     private var isSilentSync = false
+    private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
     
     private override init() {
         super.init()
@@ -146,10 +149,12 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     // MARK: - Notifications
     
     private func requestNotificationPermission() {
+        guard !Self.shouldSkipUserNotificationsForCurrentProcess else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
     
     private func sendSyncSuccessNotification(summary: SyncMergeSummary) {
+        guard !Self.shouldSkipUserNotificationsForCurrentProcess else { return }
         guard isSilentSync else { return }
         guard summary != .empty else { return } // 没有变化不通知
         

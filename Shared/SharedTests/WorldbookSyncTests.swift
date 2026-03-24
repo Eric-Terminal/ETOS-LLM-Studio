@@ -98,6 +98,6 @@ struct WorldbookSyncTests {
         #expect(syncedSession != nil)
         #expect(importedBook != nil)
         #expect(syncedSession?.lorebookIDs.contains(importedBook?.id ?? UUID()) == true)
-        #expect(syncedSession?.lorebookIDs.contains(incomingBookID) == false)
+        #expect(Set(syncedSession?.lorebookIDs ?? []) == Set([importedBook?.id].compactMap { $0 }))
     }
 }

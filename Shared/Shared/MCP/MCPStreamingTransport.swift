@@ -317,38 +317,40 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
 
     private func processSSEPayload(_ data: String) async {
         guard let jsonData = data.data(using: .utf8) else { return }
-        
-        // 尝试解析为通知
-        if let notification = try? decoder.decode(MCPNotification.self, from: jsonData) {
-            await handleNotification(notification)
+
+        guard let envelope = try? decoder.decode(JSONRPCDispatchEnvelope.self, from: jsonData) else {
             return
         }
 
-        // 尝试解析为服务端请求
-        if let requestEnvelope = try? decoder.decode(JSONRPCRequestMethodEnvelope.self, from: jsonData) {
-            switch requestEnvelope.method {
-            case "sampling/createMessage":
-                if let samplingRequest = try? decoder.decode(MCPServerSamplingRequest.self, from: jsonData) {
-                    await handleSamplingRequest(samplingRequest)
-                } else if let requestID = requestEnvelope.id {
-                    await sendErrorResponse(requestId: requestID, code: -32602, message: "Sampling 请求参数无效")
+        if let method = envelope.method {
+            if let requestID = envelope.id {
+                switch method {
+                case "sampling/createMessage":
+                    if let samplingRequest = try? decoder.decode(MCPServerSamplingRequest.self, from: jsonData) {
+                        await handleSamplingRequest(samplingRequest)
+                    } else {
+                        await sendErrorResponse(requestId: requestID, code: -32602, message: "Sampling 请求参数无效")
+                    }
+                case "elicitation/create":
+                    if let elicitationRequest = try? decoder.decode(MCPServerElicitationRequest.self, from: jsonData) {
+                        await handleElicitationRequest(elicitationRequest)
+                    } else {
+                        await sendErrorResponse(requestId: requestID, code: -32602, message: "Elicitation 请求参数无效")
+                    }
+                default:
+                    return
                 }
                 return
-            case "elicitation/create":
-                if let elicitationRequest = try? decoder.decode(MCPServerElicitationRequest.self, from: jsonData) {
-                    await handleElicitationRequest(elicitationRequest)
-                } else if let requestID = requestEnvelope.id {
-                    await sendErrorResponse(requestId: requestID, code: -32602, message: "Elicitation 请求参数无效")
-                }
-                return
-            default:
-                break
             }
+
+            if let notification = try? decoder.decode(MCPNotification.self, from: jsonData) {
+                await handleNotification(notification)
+            }
+            return
         }
-        
-        // 尝试解析为 JSON-RPC 响应
-        if let response = try? decoder.decode(JSONRPCResponseWrapper.self, from: jsonData),
-           let id = response.id {
+
+        if let id = envelope.id,
+           envelope.result != nil || envelope.error != nil {
             let continuation = await pendingRequestsActor.remove(id: id)
             continuation?.resume(returning: jsonData)
         }
@@ -590,6 +592,13 @@ private struct JSONRPCRequestEnvelope: Decodable {
 private struct JSONRPCRequestMethodEnvelope: Decodable {
     let id: JSONRPCID?
     let method: String
+}
+
+private struct JSONRPCDispatchEnvelope: Decodable {
+    let id: JSONRPCID?
+    let method: String?
+    let result: JSONValue?
+    let error: JSONValue?
 }
 
 private struct MCPServerSamplingRequest: Codable {

@@ -83,14 +83,14 @@ public final class CloudSyncManager: ObservableObject {
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
     @Published public private(set) var lastUpdatedAt: Date?
 
-    private let transport: any CloudSyncTransport
+    private let transportFactory: @Sendable () -> any CloudSyncTransport
     private let userDefaults: UserDefaults
     private let packageBuilder: @Sendable (SyncOptions) -> SyncPackage
     private let packageApplier: @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary
     private let now: @Sendable () -> Date
+    private lazy var transport: any CloudSyncTransport = transportFactory()
 
-    init(
-        transport: some CloudSyncTransport = CloudKitCloudSyncTransport(),
+    convenience init(
         userDefaults: UserDefaults = .standard,
         packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
             SyncEngine.buildPackage(options: options)
@@ -100,7 +100,47 @@ public final class CloudSyncManager: ObservableObject {
         },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
-        self.transport = transport
+        self.init(
+            transportFactory: { CloudKitCloudSyncTransport() },
+            userDefaults: userDefaults,
+            packageBuilder: packageBuilder,
+            packageApplier: packageApplier,
+            now: now
+        )
+    }
+
+    convenience init(
+        transport: any CloudSyncTransport,
+        userDefaults: UserDefaults = .standard,
+        packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
+            SyncEngine.buildPackage(options: options)
+        },
+        packageApplier: @escaping @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
+            await SyncEngine.apply(package: package)
+        },
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.init(
+            transportFactory: { transport },
+            userDefaults: userDefaults,
+            packageBuilder: packageBuilder,
+            packageApplier: packageApplier,
+            now: now
+        )
+    }
+
+    private init(
+        transportFactory: @escaping @Sendable () -> any CloudSyncTransport,
+        userDefaults: UserDefaults = .standard,
+        packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
+            SyncEngine.buildPackage(options: options)
+        },
+        packageApplier: @escaping @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
+            await SyncEngine.apply(package: package)
+        },
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.transportFactory = transportFactory
         self.userDefaults = userDefaults
         self.packageBuilder = packageBuilder
         self.packageApplier = packageApplier

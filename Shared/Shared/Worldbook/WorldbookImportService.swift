@@ -533,7 +533,7 @@ public struct WorldbookImportService {
             guard let separator = data.firstIndex(of: 0) else { return nil }
             let key = String(data: data[..<separator], encoding: .isoLatin1) ?? ""
             let valueData = data[data.index(after: separator)...]
-            let value = String(data: valueData, encoding: .isoLatin1) ?? ""
+            let value = String(data: valueData, encoding: .utf8) ?? String(data: valueData, encoding: .isoLatin1) ?? ""
             return [key: value]
         case "zTXt":
             guard let separator = data.firstIndex(of: 0) else { return nil }

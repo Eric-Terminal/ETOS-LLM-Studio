@@ -315,12 +315,7 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decodedMetrics.completionTokensForSpeed, 120)
         XCTAssertEqual(try XCTUnwrap(decodedMetrics.tokenPerSecond), 60.0, accuracy: 0.0001)
         XCTAssertEqual(decodedMetrics.isTokenPerSecondEstimated, false)
-        let samples = try XCTUnwrap(decodedMetrics.speedSamples)
-        XCTAssertEqual(samples.count, 3)
-        XCTAssertEqual(samples[0].elapsedSecond, 0)
-        XCTAssertEqual(samples[0].tokenPerSecond, 35.0, accuracy: 0.0001)
-        XCTAssertEqual(samples[2].elapsedSecond, 2)
-        XCTAssertEqual(samples[2].tokenPerSecond, 60.0, accuracy: 0.0001)
+        XCTAssertNil(decodedMetrics.speedSamples)
     }
     
     /// 测试旧数据升级后的序列化

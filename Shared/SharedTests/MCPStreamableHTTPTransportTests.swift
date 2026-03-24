@@ -92,7 +92,8 @@ struct MCPStreamableHTTPTransportTests {
         StreamableTransportURLProtocol.enqueue(
             statusCode: 405,
             headers: [:],
-            body: Data("method not allowed".utf8)
+            body: Data("method not allowed".utf8),
+            expectedMethod: "GET"
         )
 
         let transport = makeTransport()
@@ -280,7 +281,8 @@ struct MCPStreamableHTTPTransportTests {
         StreamableTransportURLProtocol.enqueue(
             statusCode: 405,
             headers: [:],
-            body: Data("method not allowed".utf8)
+            body: Data("method not allowed".utf8),
+            expectedMethod: "GET"
         )
 
         let transport = makeTransport()
@@ -295,14 +297,16 @@ struct MCPStreamableHTTPTransportTests {
         StreamableTransportURLProtocol.enqueue(
             statusCode: 202,
             headers: [:],
-            body: Data()
+            body: Data(),
+            expectedMethod: "POST"
         )
         StreamableTransportURLProtocol.enqueue(
             statusCode: 200,
             headers: ["Content-Type": "text/event-stream"],
             body: makeInlineSSEData(
                 json: #"{"jsonrpc":"2.0","id":"recover-1","result":{"ok":true}}"#
-            )
+            ),
+            expectedMethod: "GET"
         )
 
         let responseData = try await transport.sendMessage(
@@ -329,12 +333,14 @@ struct MCPStreamableHTTPTransportTests {
         StreamableTransportURLProtocol.enqueue(
             statusCode: 405,
             headers: [:],
-            body: Data("method not allowed".utf8)
+            body: Data("method not allowed".utf8),
+            expectedMethod: "GET"
         )
         StreamableTransportURLProtocol.enqueue(
             statusCode: 200,
             headers: [:],
-            body: Data(#"{"jsonrpc":"2.0","id":"auth-1","result":{"status":"ok"}}"#.utf8)
+            body: Data(#"{"jsonrpc":"2.0","id":"auth-1","result":{"status":"ok"}}"#.utf8),
+            expectedMethod: "POST"
         )
 
         let tokenProvider = TokenHeaderProvider()
@@ -368,14 +374,12 @@ struct MCPStreamableHTTPTransportTests {
     private func makeTransport(
         dynamicHeadersProvider: (@Sendable () async throws -> [String: String])? = nil
     ) -> MCPStreamableHTTPTransport {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [StreamableTransportURLProtocol.self]
-        let session = URLSession(configuration: config)
-        let endpoint = URL(string: "https://example.com/mcp")!
-        return MCPStreamableHTTPTransport(
-            endpoint: endpoint,
-            session: session,
-            dynamicHeadersProvider: dynamicHeadersProvider
+        MCPStreamableHTTPTransport(
+            endpoint: URL(string: "https://streamable.test/mcp")!,
+            dynamicHeadersProvider: dynamicHeadersProvider,
+            responseExecutor: { request in
+                try await StreamableTransportURLProtocol.execute(request)
+            }
         )
     }
 
@@ -422,11 +426,12 @@ private final class ElicitationHandlerStub: MCPElicitationHandler {
     }
 }
 
-private final class StreamableTransportURLProtocol: URLProtocol {
+private enum StreamableTransportURLProtocol {
     private struct Stub {
         let statusCode: Int
         let headers: [String: String]
         let body: Data
+        let expectedMethod: String?
     }
 
     private static let lock = NSLock()
@@ -440,9 +445,9 @@ private final class StreamableTransportURLProtocol: URLProtocol {
         lock.unlock()
     }
 
-    static func enqueue(statusCode: Int, headers: [String: String], body: Data) {
+    static func enqueue(statusCode: Int, headers: [String: String], body: Data, expectedMethod: String? = nil) {
         lock.lock()
-        queuedStubs.append(Stub(statusCode: statusCode, headers: headers, body: body))
+        queuedStubs.append(Stub(statusCode: statusCode, headers: headers, body: body, expectedMethod: expectedMethod?.uppercased()))
         lock.unlock()
     }
 
@@ -453,28 +458,15 @@ private final class StreamableTransportURLProtocol: URLProtocol {
         return snapshot
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        Self.lock.lock()
-        Self.capturedRequests.append(request)
-        let stub = Self.queuedStubs.isEmpty ? nil : Self.queuedStubs.removeFirst()
-        Self.lock.unlock()
+    static func execute(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let stub = dequeueStub(for: request)
 
         guard let stub else {
-            let error = NSError(
+            throw NSError(
                 domain: "StreamableTransportURLProtocol",
                 code: -1,
                 userInfo: [NSLocalizedDescriptionKey: "没有可用的 mock 响应"]
             )
-            client?.urlProtocol(self, didFailWithError: error)
-            return
         }
 
         guard let url = request.url,
@@ -484,18 +476,29 @@ private final class StreamableTransportURLProtocol: URLProtocol {
                 httpVersion: "HTTP/1.1",
                 headerFields: stub.headers
               ) else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
+            throw URLError(.badServerResponse)
         }
 
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        if !stub.body.isEmpty {
-            client?.urlProtocol(self, didLoad: stub.body)
-        }
-        client?.urlProtocolDidFinishLoading(self)
+        return (stub.body, response)
     }
 
-    override func stopLoading() {}
+    private static func dequeueStub(for request: URLRequest) -> Stub? {
+        let method = request.httpMethod?.uppercased()
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        capturedRequests.append(request)
+
+        guard let index = queuedStubs.firstIndex(where: { stub in
+            guard let expectedMethod = stub.expectedMethod else { return true }
+            return expectedMethod == method
+        }) else {
+            return nil
+        }
+
+        return queuedStubs.remove(at: index)
+    }
 }
 
 private actor TokenHeaderProvider {

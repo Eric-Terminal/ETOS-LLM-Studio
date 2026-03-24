@@ -19,9 +19,8 @@ enum MemoryStoragePaths {
     private static let vectorStoreNameValue = "memory_vectors"
     
     @discardableResult
-    static func ensureRootDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let rootDirectory = paths[0].appendingPathComponent(directoryName, isDirectory: true)
+    static func ensureRootDirectory(rootDirectory overrideRootDirectory: URL? = nil) -> URL {
+        let rootDirectory = resolvedRootDirectory(rootDirectory: overrideRootDirectory)
         if !FileManager.default.fileExists(atPath: rootDirectory.path) {
             do {
                 try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
@@ -33,19 +32,27 @@ enum MemoryStoragePaths {
         return rootDirectory
     }
     
-    static func rootDirectory() -> URL {
-        return ensureRootDirectory()
+    static func rootDirectory(rootDirectory overrideRootDirectory: URL? = nil) -> URL {
+        ensureRootDirectory(rootDirectory: overrideRootDirectory)
     }
     
-    static func rawMemoriesFileURL() -> URL {
-        rootDirectory().appendingPathComponent(rawFileName, isDirectory: false)
+    static func rawMemoriesFileURL(rootDirectory overrideRootDirectory: URL? = nil) -> URL {
+        rootDirectory(rootDirectory: overrideRootDirectory).appendingPathComponent(rawFileName, isDirectory: false)
     }
     
-    static func vectorStoreDirectory() -> URL {
-        rootDirectory()
+    static func vectorStoreDirectory(rootDirectory overrideRootDirectory: URL? = nil) -> URL {
+        rootDirectory(rootDirectory: overrideRootDirectory)
     }
     
     static var vectorStoreName: String {
         vectorStoreNameValue
+    }
+
+    private static func resolvedRootDirectory(rootDirectory overrideRootDirectory: URL?) -> URL {
+        if let overrideRootDirectory {
+            return overrideRootDirectory
+        }
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        return paths[0].appendingPathComponent(directoryName, isDirectory: true)
     }
 }

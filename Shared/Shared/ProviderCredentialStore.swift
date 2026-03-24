@@ -33,7 +33,18 @@ public final class ProviderCredentialStore {
 
     private let backingStore: any ProviderCredentialBackingStore
 
-    init(backingStore: some ProviderCredentialBackingStore = KeychainProviderCredentialBackingStore()) {
+    private static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    private static func makeDefaultBackingStore() -> any ProviderCredentialBackingStore {
+        if isRunningUnitTests {
+            return UserDefaultsProviderCredentialBackingStore()
+        }
+        return KeychainProviderCredentialBackingStore()
+    }
+
+    init(backingStore: any ProviderCredentialBackingStore = ProviderCredentialStore.makeDefaultBackingStore()) {
         self.backingStore = backingStore
     }
 
@@ -76,6 +87,34 @@ public final class ProviderCredentialStore {
         }
 
         return normalized
+    }
+}
+
+private struct UserDefaultsProviderCredentialBackingStore: ProviderCredentialBackingStore {
+    private static let keyPrefix = "providerCredentials."
+    private let userDefaults: UserDefaults
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
+    func loadAPIKeys(for providerID: UUID) -> [String] {
+        let raw = userDefaults.array(forKey: storageKey(for: providerID)) as? [String] ?? []
+        return ProviderCredentialStore.normalizeAPIKeys(raw)
+    }
+
+    func saveAPIKeys(_ apiKeys: [String], for providerID: UUID) -> Bool {
+        userDefaults.set(ProviderCredentialStore.normalizeAPIKeys(apiKeys), forKey: storageKey(for: providerID))
+        return true
+    }
+
+    func deleteAPIKeys(for providerID: UUID) -> Bool {
+        userDefaults.removeObject(forKey: storageKey(for: providerID))
+        return true
+    }
+
+    private func storageKey(for providerID: UUID) -> String {
+        Self.keyPrefix + providerID.uuidString
     }
 }
 

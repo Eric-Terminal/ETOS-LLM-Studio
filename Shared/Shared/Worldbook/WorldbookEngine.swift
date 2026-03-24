@@ -521,10 +521,17 @@ public struct WorldbookEngine {
             }
             if !overrideItems.isEmpty {
                 selected.append(contentsOf: overrideItems)
-                continue
             }
 
-            let scored = sorted.map { candidate -> (WorldbookInjection, Double) in
+            let scored = sorted
+                .filter { candidate in
+                    guard let book = booksByID[candidate.worldbookID],
+                          let entry = book.entries.first(where: { $0.id == candidate.entryID }) else {
+                        return false
+                    }
+                    return !entry.groupOverride
+                }
+                .map { candidate -> (WorldbookInjection, Double) in
                 guard let book = booksByID[candidate.worldbookID],
                       let entry = book.entries.first(where: { $0.id == candidate.entryID }) else {
                     return (candidate, 0)

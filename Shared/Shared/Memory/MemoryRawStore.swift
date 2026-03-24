@@ -14,8 +14,10 @@ struct MemoryRawStore {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MemoryRawStore")
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private let rootDirectory: URL?
     
-    init() {
+    init(rootDirectory: URL? = nil) {
+        self.rootDirectory = rootDirectory
         encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -25,7 +27,7 @@ struct MemoryRawStore {
     }
     
     func loadMemories() -> [MemoryItem] {
-        let fileURL = MemoryStoragePaths.rawMemoriesFileURL()
+        let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return []
         }
@@ -41,8 +43,8 @@ struct MemoryRawStore {
     }
     
     func saveMemories(_ memories: [MemoryItem]) throws {
-        MemoryStoragePaths.ensureRootDirectory()
-        let fileURL = MemoryStoragePaths.rawMemoriesFileURL()
+        MemoryStoragePaths.ensureRootDirectory(rootDirectory: rootDirectory)
+        let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
         let data = try encoder.encode(memories)
         try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
     }

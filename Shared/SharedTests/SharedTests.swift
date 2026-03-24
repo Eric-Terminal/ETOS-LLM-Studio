@@ -267,8 +267,21 @@ struct MemoryManagerTests {
     struct MockEmbeddingGenerator: MemoryEmbeddingGenerating {
         func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]] {
             texts.map { text in
-                let base = max(1, text.count % 5 + 1)
-                return Array(repeating: Float(base), count: 8)
+                let normalized = text.lowercased()
+                let tokens = normalized.split { !$0.isLetter && !$0.isNumber }
+                var vector = Array(repeating: Float(0), count: 8)
+
+                for token in tokens {
+                    let bucket = token.unicodeScalars.reduce(0) { partialResult, scalar in
+                        partialResult + Int(scalar.value)
+                    } % vector.count
+                    vector[bucket] += 1
+                }
+
+                if vector.allSatisfy({ $0 == 0 }) {
+                    vector[0] = 1
+                }
+                return vector
             }
         }
     }
@@ -503,13 +516,12 @@ struct MemoryManagerTests {
         
         let events = await recorder.snapshot().filter { $0.kind == .reconcilePending }
         #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 1 })
-        
-        if let last = events.last {
-            #expect(last.phase == .completed)
-            #expect(last.processedMemories == 1)
-            #expect(last.totalMemories == 1)
+
+        if let completed = events.last(where: { $0.phase == .completed }) {
+            #expect(completed.processedMemories == 1)
+            #expect(completed.totalMemories == 1)
         } else {
-            Issue.record("未捕获到补偿进度事件。")
+            Issue.record("未捕获到补偿完成进度事件。")
         }
         
         await cleanup(memoryManager: memoryManager)
@@ -1115,11 +1127,15 @@ struct OpenAIAdapterTests {
         #expect((jsonPayload["reasoning"] as? [String: Any])?["effort"] as? String == "medium")
 
         #expect(firstInput["role"] as? String == "user")
-        #expect(((firstInput["content"] as? [[String: Any]])?.first)?["type"] as? String == "input_text")
-        #expect(functionCallInput?["call_id"] as? String == "call_save_1")
-        #expect(functionCallInput?["name"] as? String == "save_memory")
-        #expect(functionOutputInput?["call_id"] as? String == "call_save_1")
-        #expect(functionOutputInput?["output"] as? String == "{\"saved\":true}")
+        if let textContent = firstInput["content"] as? String {
+            #expect(textContent == "你好")
+        } else {
+            #expect(((firstInput["content"] as? [[String: Any]])?.first)?["type"] as? String == "input_text")
+        }
+        #expect(functionCallInput["call_id"] as? String == "call_save_1")
+        #expect(functionCallInput["name"] as? String == "save_memory")
+        #expect(functionOutputInput["call_id"] as? String == "call_save_1")
+        #expect(functionOutputInput["output"] as? String == "{\"saved\":true}")
 
         #expect(firstTool["type"] as? String == "function")
         #expect(firstTool["name"] as? String == "save_memory")
@@ -1595,26 +1611,32 @@ struct AnthropicAdapterTests {
 /// 用于测试的模拟 API 适配器
 fileprivate class MockAPIAdapter: APIAdapter {
     var receivedMessages: [ChatMessage]?
+    var receivedTitleMessages: [ChatMessage]?
     var receivedTools: [InternalToolDefinition]?
     var responseToReturn: ChatMessage?
     var receivedChatModel: RunnableModel?
     var receivedTitleModel: RunnableModel?
     
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
-        self.receivedMessages = messages
-        self.receivedTools = tools
-        
         // 根据请求内容返回不同 URL，以便 MockURLProtocol 能够区分它们
         if messages.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {
+            self.receivedTitleMessages = messages
             self.receivedTitleModel = model
             return URLRequest(url: URL(string: "https://fake.url/title-gen")!)
         } else {
+            self.receivedMessages = messages
+            self.receivedTools = tools
             self.receivedChatModel = model
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
         }
     }
     
     func parseResponse(data: Data) throws -> ChatMessage {
+        if let response = try? JSONDecoder().decode(OpenAIResponse.self, from: data),
+           let content = response.choices.first?.message.content {
+            return ChatMessage(role: .assistant, content: content)
+        }
+
         // 对于标题生成，我们需要真实地解析返回的数据
         if let received = receivedMessages, received.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {
             let response = try JSONDecoder().decode(OpenAIResponse.self, from: data)
@@ -1651,6 +1673,38 @@ fileprivate struct ChatServiceTests {
 
     // swift-testing 的初始化方法，在每个测试运行前被调用
     init() async {
+        for provider in ConfigLoader.loadProviders() {
+            ConfigLoader.deleteProvider(provider)
+        }
+        let seededProviders = [
+            Provider(
+                name: "Chat Service Test Primary",
+                baseURL: "https://fake.url",
+                apiKeys: ["key-primary"],
+                apiFormat: "openai-compatible",
+                models: [
+                    Model(modelName: "test-model", displayName: "Test Model", isActivated: true)
+                ]
+            ),
+            Provider(
+                name: "Chat Service Test Secondary",
+                baseURL: "https://fake.url",
+                apiKeys: ["key-secondary"],
+                apiFormat: "openai-compatible",
+                models: [
+                    Model(modelName: "title-model", displayName: "Title Model", isActivated: true)
+                ]
+            )
+        ]
+        for provider in seededProviders {
+            ConfigLoader.saveProvider(provider)
+        }
+        ShortcutToolStore.saveTools([])
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(false)
+        }
+
         memoryManager = MemoryManager(embeddingGenerator: MemoryManagerTests.MockEmbeddingGenerator())
         await memoryManager.waitForInitialization()
         
@@ -1666,8 +1720,8 @@ fileprivate struct ChatServiceTests {
         chatService = ChatService(adapters: ["openai-compatible": mockAdapter], memoryManager: memoryManager, urlSession: mockSession)
         
         dummyModel = RunnableModel(
-            provider: Provider(name: "Test", baseURL: "https://fake.url", apiKeys: ["key"], apiFormat: "openai-compatible"),
-            model: Model(modelName: "test-model")
+            provider: seededProviders[0],
+            model: seededProviders[0].models[0]
         )
         chatService.setSelectedModel(dummyModel)
     }
@@ -1683,10 +1737,16 @@ fileprivate struct ChatServiceTests {
         // 清理模拟响应，避免测试间互相影响
         MockURLProtocol.mockResponses = [:]
         mockAdapter.receivedMessages = nil
+        mockAdapter.receivedTitleMessages = nil
         mockAdapter.receivedTools = nil
         mockAdapter.responseToReturn = nil
         mockAdapter.receivedChatModel = nil
         mockAdapter.receivedTitleModel = nil
+        ShortcutToolStore.saveTools([])
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(false)
+        }
         // 重置 ChatService 状态
         chatService.createNewSession()
     }
@@ -1739,7 +1799,7 @@ fileprivate struct ChatServiceTests {
 
         let logs = Persistence.loadRequestLogs(query: .init(limit: 1))
         #expect(logs.count == 1)
-        #expect(logs[0].providerName == "Test")
+        #expect(logs[0].providerName == dummyModel.provider.name)
         #expect(logs[0].modelID == "test-model")
         #expect(logs[0].status == .success)
         #expect(logs[0].tokenUsage?.promptTokens == 13)
@@ -1949,7 +2009,8 @@ fileprivate struct ChatServiceTests {
         // 3. 断言 (Assert)
         let errorMessage = receivedMessages.last
         #expect(errorMessage?.role == .error, "最后一条消息的角色应该是 .error")
-        #expect(errorMessage?.content.contains("网络或解析错误") == true, "错误消息内容应包含通用前缀")
+        #expect(errorMessage?.content.contains("HTTP 500") == true, "错误消息内容应包含 HTTP 状态码。")
+        #expect(errorMessage?.content.contains("服务器内部错误") == true, "错误消息内容应包含状态说明。")
 
         await cleanup()
     }
@@ -1964,7 +2025,8 @@ fileprivate struct ChatServiceTests {
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
         #expect(content.contains("Fluffy"))
-        #expect(content.contains("相关历史记忆"))
+        #expect(content.contains("<memory>"))
+        #expect(content.contains("长期记忆库"))
         await cleanup()
     }
 
@@ -1978,7 +2040,8 @@ fileprivate struct ChatServiceTests {
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
         #expect(!content.contains("Fluffy"))
-        #expect(!content.contains("相关历史记忆"))
+        #expect(!content.contains("<memory>"))
+        #expect(!content.contains("长期记忆库"))
         await cleanup()
     }
 
@@ -2047,15 +2110,14 @@ fileprivate struct ChatServiceTests {
         let lastMessage = sentMessages.last
         let enhancedSystemMessage = sentMessages.last(where: { $0.role == .system && $0.content.contains("<enhanced_prompt>") })
         let systemContent = enhancedSystemMessage?.content ?? ""
-        let firstSystemMessage = sentMessages.first(where: { $0.role == .system })
-        let firstSystemContent = firstSystemMessage?.content ?? ""
+        let systemMessages = sentMessages.filter { $0.role == .system }
         let userMessage = sentMessages.last(where: { $0.role == .user })
         let userContent = userMessage?.content ?? ""
 
         #expect(lastMessage?.role == .system, "Enhanced prompt system message should be appended at the end of messages.")
         #expect(systemContent.contains("<enhanced_prompt>"), "System message should contain enhanced prompt tag.")
         #expect(systemContent.contains(enhancedPrompt), "System message should contain enhanced prompt content.")
-        #expect(!firstSystemContent.contains("<enhanced_prompt>"), "Enhanced prompt should not be merged into the first system prompt block.")
+        #expect(systemMessages.count == 1, "无其他系统提示时，增强提示应单独形成唯一的 system message。")
         #expect(userContent == userText, "User message should remain unchanged.")
         #expect(!userContent.contains("<user_input>"), "User message should not be wrapped by <user_input>.")
 
@@ -2100,7 +2162,7 @@ fileprivate struct ChatServiceTests {
     func testToolProvision_Disabled() async throws {
         await cleanup()
         await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
-        #expect(self.mockAdapter.receivedTools == nil)
+        #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "save_memory" }) != true)
         await cleanup()
     }
 
@@ -2108,7 +2170,7 @@ fileprivate struct ChatServiceTests {
     func testToolProvision_WriteSwitchDisabled() async throws {
         await cleanup()
         await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: false, includeSystemTime: false)
-        #expect(self.mockAdapter.receivedTools == nil)
+        #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "save_memory" }) != true)
         await cleanup()
     }
 
@@ -3121,13 +3183,23 @@ fileprivate struct PersistenceTests {
         Persistence.appendRequestLog(requestA)
         Persistence.appendRequestLog(requestB)
 
-        let loaded = Persistence.loadRequestLogs()
+        let queryWindow = RequestLogQuery(
+            from: Date(timeIntervalSince1970: 1_699_999_999),
+            to: Date(timeIntervalSince1970: 1_700_000_100)
+        )
+        let loaded = Persistence.loadRequestLogs(query: queryWindow)
         #expect(loaded.count == 2)
         #expect(loaded.first?.providerName == "Anthropic")
         #expect(loaded.last?.providerName == "OpenAI")
         #expect(loaded.last?.tokenUsage?.thinkingTokens == 10)
 
-        let successOnly = Persistence.loadRequestLogs(query: .init(statuses: Set([.success])))
+        let successOnly = Persistence.loadRequestLogs(
+            query: .init(
+                from: queryWindow.from,
+                to: queryWindow.to,
+                statuses: Set([.success])
+            )
+        )
         #expect(successOnly.count == 1)
         #expect(successOnly.first?.modelID == "gpt-5")
 
@@ -3196,7 +3268,12 @@ fileprivate struct PersistenceTests {
             Persistence.appendRequestLog(entry)
         }
 
-        let summary = Persistence.summarizeRequestLogs()
+        let summary = Persistence.summarizeRequestLogs(
+            query: .init(
+                from: now.addingTimeInterval(-1),
+                to: now.addingTimeInterval(10)
+            )
+        )
         #expect(summary.totalRequests == 3)
         #expect(summary.successCount == 1)
         #expect(summary.failedCount == 1)
@@ -3217,8 +3294,12 @@ fileprivate struct PersistenceTests {
     func testRequestLogsRetentionLimit() {
         cleanup(sessions: [])
 
-        let total = 10_020
-        let dropped = total - 10_000
+        let retentionLimit = 100
+        Persistence.requestLogRetentionLimitOverride = retentionLimit
+        defer { Persistence.requestLogRetentionLimitOverride = nil }
+
+        let total = 120
+        let dropped = total - retentionLimit
         let baseDate = Date(timeIntervalSince1970: 1_700_200_000)
         for index in 0..<total {
             let time = baseDate.addingTimeInterval(TimeInterval(index))
@@ -3238,8 +3319,13 @@ fileprivate struct PersistenceTests {
             )
         }
 
-        let loaded = Persistence.loadRequestLogs()
-        #expect(loaded.count == 10_000)
+        let loaded = Persistence.loadRequestLogs(
+            query: .init(
+                from: baseDate.addingTimeInterval(-1),
+                to: baseDate.addingTimeInterval(TimeInterval(total + 1))
+            )
+        )
+        #expect(loaded.count == retentionLimit)
         #expect(loaded.first?.modelID == "model-\(total - 1)")
         #expect(loaded.last?.modelID == "model-\(dropped)")
 

@@ -1164,7 +1164,28 @@ public class ChatService {
     }
     
     public func setCurrentSession(_ session: ChatSession?) {
-        if session?.id == currentSessionSubject.value?.id { return }
+        let currentSession = currentSessionSubject.value
+        if currentSession == session { return }
+
+        if let session, session.id == currentSession?.id {
+            currentSessionSubject.send(session)
+
+            var sessions = chatSessionsSubject.value
+            if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+                sessions[index] = session
+                chatSessionsSubject.send(sessions)
+                Persistence.saveChatSessions(sessions)
+            }
+
+            logger.info("已更新当前会话元数据: \(session.name)")
+            AppLog.userOperation(
+                category: "会话",
+                action: "更新当前会话",
+                payload: ["sessionID": session.id.uuidString]
+            )
+            return
+        }
+
         currentSessionSubject.send(session)
         let messages = session != nil ? Persistence.loadMessages(for: session!.id) : []
         publishMessages(messages)
