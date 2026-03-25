@@ -89,6 +89,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		07D9F13130D1738600F5276B /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS LLM Studio App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 073CA6DA2E8CFD65004516A0 /* ETOS LLM Studio App */;
+		};
 		0733CA502F23B450007931E8 /* Exceptions for "ETOS LLM Studio Watch App" folder in "ETOS LLM Studio Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -101,6 +108,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		073CA6DD2E8CFD65004516A0 /* ETOS LLM Studio iOS App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				07D9F13130D1738600F5276B /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS LLM Studio App" target */,
+			);
 			path = "ETOS LLM Studio iOS App";
 			sourceTree = "<group>";
 		};
