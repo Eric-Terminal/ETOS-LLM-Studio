@@ -27,9 +27,8 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     }
     
     public static let shared = WatchSyncManager()
-    // 注意：WatchConnectivity 同步状态要实时驱动双端设置页刷新，
-    // 这里保留显式 publisher，但不能标记为 nonisolated。
-    public let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则 WatchConnectivity 同步状态不会稳定自动刷新到双端设置页。
     
     @Published public private(set) var state: SyncState = .idle
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
@@ -46,6 +45,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private var pendingTransfers: [ObjectIdentifier: SyncOptions] = [:]
     /// 标记是否为静默同步（启动时自动同步）
     private var isSilentSync = false
+    private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
     
     private override init() {
         super.init()
@@ -147,10 +149,12 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     // MARK: - Notifications
     
     private func requestNotificationPermission() {
+        guard !Self.shouldSkipUserNotificationsForCurrentProcess else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
     
     private func sendSyncSuccessNotification(summary: SyncMergeSummary) {
+        guard !Self.shouldSkipUserNotificationsForCurrentProcess else { return }
         guard isSilentSync else { return }
         guard summary != .empty else { return } // 没有变化不通知
         

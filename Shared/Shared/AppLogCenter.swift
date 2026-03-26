@@ -203,9 +203,8 @@ public enum AppLog {
 @MainActor
 public final class AppLogCenter: ObservableObject {
     public static let shared = AppLogCenter()
-    // 注意：日志中心依赖 @Published 及时驱动日志列表追加刷新，
-    // 这里保留显式 publisher，但不能标记为 nonisolated。
-    public let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则日志列表追加后不会稳定触发 SwiftUI 刷新。
 
     @Published public private(set) var developerLogs: [AppLogEvent] = []
     @Published public private(set) var userLogs: [AppLogEvent] = []

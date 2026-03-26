@@ -1014,7 +1014,8 @@ private struct AttachmentImageView: View {
 // MARK: - Audio Player Manager
 
 class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
-    let objectWillChange = ObservableObjectPublisher()
+    // 注意：这里必须使用系统合成的 objectWillChange，
+    // 否则播放状态与进度不会稳定自动刷新。
     @Published var isPlaying = false
     @Published var progress: Double = 0
     @Published var currentFileName: String?

@@ -244,20 +244,14 @@ public extension SimilarityIndex {
             useEmbeddings = nil
         }
 
-        await withTaskGroup(of: Void.self) { taskGroup in
-            for i in 0..<ids.count {
-                let id = ids[i]
-                let text = texts[i]
-                let embedding = useEmbeddings?[i]
-                let meta = metadata[i]
+        for i in 0..<ids.count {
+            let id = ids[i]
+            let text = texts[i]
+            let embedding = useEmbeddings?[i]
+            let meta = metadata[i]
 
-                taskGroup.addTask(priority: .userInitiated) {
-                    // 使用 addItem 方法添加项
-                    await self.addItem(id: id, text: text, metadata: meta, embedding: embedding)
-                    onProgress?(id)
-                }
-            }
-            await taskGroup.next()
+            await addItem(id: id, text: text, metadata: meta, embedding: embedding)
+            onProgress?(id)
         }
     }
 

@@ -106,7 +106,7 @@ public class MemoryManager {
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MemoryManager")
     private var similarityIndex: SimilarityIndex!
-    private let rawStore = MemoryRawStore()
+    private let rawStore: MemoryRawStore
     private let internalMemoriesPublisher = CurrentValueSubject<[MemoryItem], Never>([])
     private let internalEmbeddingErrorPublisher = PassthroughSubject<MemoryEmbeddingError, Never>()
     private let internalDimensionMismatchPublisher = PassthroughSubject<(query: Int, index: Int), Never>()
@@ -120,6 +120,18 @@ public class MemoryManager {
     private let preferredEmbeddingModelKey = "memoryEmbeddingModelIdentifier"
     private let embeddingRetryPolicy: MemoryEmbeddingRetryPolicy
     private let consistencyCheckDefaultDelay: TimeInterval = 2.0
+    private let storageRootDirectory: URL?
+
+    private static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    private static func defaultStorageRootDirectory(forTests: Bool) -> URL? {
+        guard forTests else { return nil }
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("MemoryTests", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    }
 
     // MARK: - 初始化
 
@@ -127,11 +139,14 @@ public class MemoryManager {
     public init(
         embeddingGenerator: MemoryEmbeddingGenerating? = nil,
         chunkSize: Int = 200,
-        retryPolicy: MemoryEmbeddingRetryPolicy = .default
+        retryPolicy: MemoryEmbeddingRetryPolicy = .default,
+        storageRootDirectory: URL? = nil
     ) {
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
         self.embeddingRetryPolicy = retryPolicy
+        self.storageRootDirectory = storageRootDirectory ?? Self.defaultStorageRootDirectory(forTests: Self.isRunningUnitTests)
+        self.rawStore = MemoryRawStore(rootDirectory: self.storageRootDirectory)
         logger.info("MemoryManager 正在初始化...")
         self.initializationTask = Task {
             await self.setup()
@@ -143,12 +158,15 @@ public class MemoryManager {
         testIndex: SimilarityIndex,
         embeddingGenerator: MemoryEmbeddingGenerating? = nil,
         chunkSize: Int = 200,
-        retryPolicy: MemoryEmbeddingRetryPolicy = .default
+        retryPolicy: MemoryEmbeddingRetryPolicy = .default,
+        storageRootDirectory: URL? = nil
     ) {
         logger.info("MemoryManager 正在使用测试索引进行初始化...")
         self.embeddingGenerator = embeddingGenerator ?? CloudEmbeddingService()
         self.chunker = MemoryChunker(chunkSize: chunkSize)
         self.embeddingRetryPolicy = retryPolicy
+        self.storageRootDirectory = storageRootDirectory ?? Self.defaultStorageRootDirectory(forTests: Self.isRunningUnitTests)
+        self.rawStore = MemoryRawStore(rootDirectory: self.storageRootDirectory)
         self.similarityIndex = testIndex
         self.initializationTask = Task {
             do {
@@ -177,7 +195,7 @@ public class MemoryManager {
     }
     
     private func setup() async {
-        MemoryStoragePaths.ensureRootDirectory()
+        MemoryStoragePaths.ensureRootDirectory(rootDirectory: storageRootDirectory)
         let nativeEmbeddings = NativeEmbeddings(language: NLLanguage.simplifiedChinese)
         let vectorStore = SQLiteVectorStore()
         self.similarityIndex = await SimilarityIndex(
@@ -187,7 +205,7 @@ public class MemoryManager {
         )
         
         do {
-            let vectorDirectory = MemoryStoragePaths.vectorStoreDirectory()
+            let vectorDirectory = MemoryStoragePaths.vectorStoreDirectory(rootDirectory: storageRootDirectory)
             _ = try self.similarityIndex.loadIndex(
                 fromDirectory: vectorDirectory,
                 name: MemoryStoragePaths.vectorStoreName
@@ -689,7 +707,7 @@ public class MemoryManager {
     }
 
     private func saveIndex() {
-        let directory = MemoryStoragePaths.vectorStoreDirectory()
+        let directory = MemoryStoragePaths.vectorStoreDirectory(rootDirectory: storageRootDirectory)
         persistenceQueue.async { [weak self] in
             guard let self = self else { return }
             do {
@@ -990,7 +1008,7 @@ public class MemoryManager {
     }
     
     private func purgePersistedVectorStores() {
-        let directory = MemoryStoragePaths.vectorStoreDirectory()
+        let directory = MemoryStoragePaths.vectorStoreDirectory(rootDirectory: storageRootDirectory)
         let fileManager = FileManager.default
         do {
             let files = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)

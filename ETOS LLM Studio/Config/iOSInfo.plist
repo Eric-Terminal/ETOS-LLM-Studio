@@ -8,7 +8,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.ericterminal.els.watch.shortcuts</string>
+			<string>com.ericterminal.els.shortcuts</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>etosllmstudio</string>

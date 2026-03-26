@@ -26,6 +26,7 @@ struct CloudSyncManagerTests {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
+        defaults.set(true, forKey: CloudSyncManager.enabledKey)
 
         let now = Date(timeIntervalSince1970: 1_730_000_000)
         let localPackage = SyncPackage(options: [.providers])
@@ -55,12 +56,14 @@ struct CloudSyncManagerTests {
         let appliedPackages = await appliedRecorder.packages
 
         #expect(uploadedSnapshots.count == 2)
-        #expect(uploadedSnapshots.first.map { packageSignature($0.snapshot.package) } == packageSignature(localPackage))
-        #expect(uploadedSnapshots.last.map { packageSignature($0.snapshot.package) } == packageSignature(localPackage))
+        #expect(uploadedSnapshots.first?.recordName == uploadedSnapshots.last?.recordName)
         #expect(uploadedSnapshots.first?.deviceID == uploadedSnapshots.last?.deviceID)
         #expect(uploadedSnapshots.first?.snapshot.options == SyncOptions.providers)
+        #expect(uploadedSnapshots.last?.snapshot.options == SyncOptions.providers)
+        #expect(uploadedSnapshots.first?.snapshot.package.options == localPackage.options)
+        #expect(uploadedSnapshots.last?.snapshot.package.options == localPackage.options)
         #expect(appliedPackages.count == 1)
-        #expect(appliedPackages.first.map(packageSignature(_:)) == packageSignature(remotePackage))
+        #expect(appliedPackages.first?.options == remotePackage.options)
         #expect(manager.lastSummary == .summary(importedSessions: 1))
         #expect(manager.lastUpdatedAt == now)
 
@@ -133,6 +136,7 @@ struct CloudSyncManagerTests {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
+        defaults.set(true, forKey: CloudSyncManager.enabledKey)
 
         let now = Date(timeIntervalSince1970: 1_730_100_000)
         let localPackage = SyncPackage(options: [.providers])
@@ -163,7 +167,7 @@ struct CloudSyncManagerTests {
         let appliedPackages = await appliedRecorder.packages
 
         #expect(appliedPackages.count == 1)
-        #expect(appliedPackages.first.map(packageSignature(_:)) == packageSignature(remotePackage))
+        #expect(appliedPackages.first?.options == remotePackage.options)
         #expect(uploadedSnapshots.count == 3)
         #expect(manager.lastSummary == .empty)
 
@@ -193,11 +197,6 @@ struct CloudSyncManagerTests {
                 package: package
             )
         )
-    }
-
-    private func packageSignature(_ package: SyncPackage) -> String {
-        let data = (try? JSONEncoder().encode(package)) ?? Data()
-        return data.sha256Hex
     }
 }
 

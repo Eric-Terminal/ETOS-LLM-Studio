@@ -527,6 +527,25 @@ struct DailyPulseTests {
         #expect(components.minute == 0)
     }
 
+    @Test("文本提醒时间支持常见 24 小时制输入格式")
+    func reminderTimeComponentsParseCommonInputs() {
+        let colonInput = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "08:30")
+        #expect(colonInput?.hour == 8)
+        #expect(colonInput?.minute == 30)
+
+        let fullWidthColonInput = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "8：05")
+        #expect(fullWidthColonInput?.hour == 8)
+        #expect(fullWidthColonInput?.minute == 5)
+
+        let compactInput = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "1830")
+        #expect(compactInput?.hour == 18)
+        #expect(compactInput?.minute == 30)
+
+        #expect(DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "24:00") == nil)
+        #expect(DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "8:99") == nil)
+        #expect(DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "83000") == nil)
+    }
+
     @Test("后台预准备时间会优先落在提醒前的准备窗口")
     func nextBackgroundPreparationDatePrefersLeadWindow() {
         var calendar = Calendar(identifier: .gregorian)
@@ -615,35 +634,44 @@ struct DailyPulseTests {
         ))
     }
 
-    @Test("今天已有卡片或已尝试过时不会重复晨间送达")
-    func scheduledDeliverySkipsWhenAlreadyPreparedOrAttempted() {
+    @Test("晨间送达只会在提醒时间后且当天尚未尝试时触发")
+    func scheduledDeliveryRunsOncePerDayAfterReminderTime() {
         let referenceDate = ISO8601DateFormatter().date(from: "2026-03-22T09:30:00Z")!
 
-        #expect(DailyPulseManager.shouldAttemptScheduledDelivery(
+        #expect(DailyPulseManager.shouldProcessScheduledDelivery(
             reminderEnabled: true,
             reminderHour: 8,
             reminderMinute: 0,
             referenceDate: referenceDate,
-            todayRunDayKey: nil,
             lastDeliveryAttemptDayKey: nil
         ))
 
-        #expect(!DailyPulseManager.shouldAttemptScheduledDelivery(
+        #expect(!DailyPulseManager.shouldProcessScheduledDelivery(
             reminderEnabled: true,
             reminderHour: 8,
             reminderMinute: 0,
             referenceDate: referenceDate,
-            todayRunDayKey: "2026-03-22",
-            lastDeliveryAttemptDayKey: nil
-        ))
-
-        #expect(!DailyPulseManager.shouldAttemptScheduledDelivery(
-            reminderEnabled: true,
-            reminderHour: 8,
-            reminderMinute: 0,
-            referenceDate: referenceDate,
-            todayRunDayKey: nil,
             lastDeliveryAttemptDayKey: "2026-03-22"
+        ))
+    }
+
+    @Test("提醒时间后若今天已有卡片，晨间送达会复用现有卡片补发就绪通知")
+    func scheduledDeliveryCanReuseExistingTodayRun() {
+        let referenceDate = ISO8601DateFormatter().date(from: "2026-03-22T09:30:00Z")!
+
+        #expect(DailyPulseManager.shouldUseExistingRunForScheduledDelivery(
+            todayRunDayKey: "2026-03-22",
+            referenceDate: referenceDate
+        ))
+
+        #expect(!DailyPulseManager.shouldUseExistingRunForScheduledDelivery(
+            todayRunDayKey: "2026-03-21",
+            referenceDate: referenceDate
+        ))
+
+        #expect(!DailyPulseManager.shouldUseExistingRunForScheduledDelivery(
+            todayRunDayKey: nil,
+            referenceDate: referenceDate
         ))
     }
 

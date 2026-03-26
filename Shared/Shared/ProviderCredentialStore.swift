@@ -1,11 +1,11 @@
 // ============================================================================
 // ProviderCredentialStore.swift
 // ============================================================================
-// 使用共享 Keychain 保存 Provider API Key
+// Provider API Key 凭据存储（兼容旧版本迁移）
 //
 // 功能特性:
-// - 将敏感凭据与普通 JSON 配置分离
-// - 默认使用可同步的 Keychain 项，供 iCloud 钥匙串跨设备同步
+// - 保留旧凭据读取能力，支持迁移到 Provider JSON 明文存储
+// - 统一提供 API Key 归一化逻辑
 // - 提供测试替身注入点，便于验证迁移与清理逻辑
 // ============================================================================
 
@@ -33,7 +33,18 @@ public final class ProviderCredentialStore {
 
     private let backingStore: any ProviderCredentialBackingStore
 
-    init(backingStore: some ProviderCredentialBackingStore = KeychainProviderCredentialBackingStore()) {
+    private static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    private static func makeDefaultBackingStore() -> any ProviderCredentialBackingStore {
+        if isRunningUnitTests {
+            return UserDefaultsProviderCredentialBackingStore()
+        }
+        return KeychainProviderCredentialBackingStore()
+    }
+
+    init(backingStore: any ProviderCredentialBackingStore = ProviderCredentialStore.makeDefaultBackingStore()) {
         self.backingStore = backingStore
     }
 
@@ -76,6 +87,34 @@ public final class ProviderCredentialStore {
         }
 
         return normalized
+    }
+}
+
+private struct UserDefaultsProviderCredentialBackingStore: ProviderCredentialBackingStore {
+    private static let keyPrefix = "providerCredentials."
+    private let userDefaults: UserDefaults
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
+    func loadAPIKeys(for providerID: UUID) -> [String] {
+        let raw = userDefaults.array(forKey: storageKey(for: providerID)) as? [String] ?? []
+        return ProviderCredentialStore.normalizeAPIKeys(raw)
+    }
+
+    func saveAPIKeys(_ apiKeys: [String], for providerID: UUID) -> Bool {
+        userDefaults.set(ProviderCredentialStore.normalizeAPIKeys(apiKeys), forKey: storageKey(for: providerID))
+        return true
+    }
+
+    func deleteAPIKeys(for providerID: UUID) -> Bool {
+        userDefaults.removeObject(forKey: storageKey(for: providerID))
+        return true
+    }
+
+    private func storageKey(for providerID: UUID) -> String {
+        Self.keyPrefix + providerID.uuidString
     }
 }
 

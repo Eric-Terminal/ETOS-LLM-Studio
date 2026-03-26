@@ -110,7 +110,7 @@ public struct ConfigLoader {
                 do {
                     let data = try Data(contentsOf: url)
                     var provider = try JSONDecoder().decode(Provider.self, from: data)
-                    let legacyAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+                    let fileAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
                     var didRepair = false
 
                     // 修复同一个 Provider 内部重复的模型 ID，避免 SwiftUI 列表 diff 异常。
@@ -130,18 +130,11 @@ public struct ConfigLoader {
                         if providersShareSamePersistentConfiguration(existingProvider, provider) {
                             let mergedAPIKeys = mergeAPIKeysPreservingOrder(
                                 existingProvider.apiKeys,
-                                legacyAPIKeys
+                                fileAPIKeys
                             )
-                            let didStoreMergedAPIKeys = mergedAPIKeys == existingProvider.apiKeys
-                                || ProviderCredentialStore.shared.saveAPIKeys(
-                                    mergedAPIKeys,
-                                    for: provider.id
-                                )
-
-                            if didStoreMergedAPIKeys {
+                            let didMergeAPIKeys = mergedAPIKeys != existingProvider.apiKeys
+                            if didMergeAPIKeys {
                                 providers[existingIndex].apiKeys = mergedAPIKeys
-                            } else {
-                                logger.error("  - 合并重复提供商的 API Key 失败: \(provider.id.uuidString)")
                             }
 
                             if !currentIsCanonical {
@@ -153,7 +146,7 @@ public struct ConfigLoader {
                                 logger.warning("  - 发现重复配置，已保留规范文件并清理旧文件。")
                             }
 
-                            if currentIsCanonical && !legacyAPIKeys.isEmpty && didStoreMergedAPIKeys {
+                            if didMergeAPIKeys {
                                 var normalizedProvider = providers[existingIndex]
                                 normalizedProvider.apiKeys = mergedAPIKeys
                                 saveProvider(normalizedProvider)
@@ -244,12 +237,6 @@ public struct ConfigLoader {
         
         do {
             let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
-            if normalizedAPIKeys.isEmpty {
-                _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
-            } else if !ProviderCredentialStore.shared.saveAPIKeys(normalizedAPIKeys, for: provider.id) {
-                logger.error("  - 保存失败: 无法写入共享 Keychain。")
-                return
-            }
 
             // 使用“先删再写”模式，确保能覆盖文件
             try? FileManager.default.removeItem(at: fileURL)
@@ -376,36 +363,33 @@ public struct ConfigLoader {
     }
 
     private static func hydrateProviderCredentials(for provider: Provider) -> CredentialHydrationResult {
-        let normalizedLegacyAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+        let normalizedFileAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
         let storedAPIKeys = ProviderCredentialStore.shared.loadAPIKeys(for: provider.id)
-        let mergedAPIKeys = mergeAPIKeysPreservingOrder(storedAPIKeys, normalizedLegacyAPIKeys)
+        let didNormalizeFile = normalizedFileAPIKeys != provider.apiKeys
 
-        guard !normalizedLegacyAPIKeys.isEmpty else {
+        if !normalizedFileAPIKeys.isEmpty {
+            if !storedAPIKeys.isEmpty {
+                _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
+            }
             return CredentialHydrationResult(
-                apiKeys: storedAPIKeys,
-                shouldRewriteProviderFile: false
+                apiKeys: normalizedFileAPIKeys,
+                shouldRewriteProviderFile: didNormalizeFile
             )
         }
 
-        if mergedAPIKeys == storedAPIKeys {
-            return CredentialHydrationResult(
-                apiKeys: mergedAPIKeys,
-                shouldRewriteProviderFile: true
-            )
+        let migratedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(storedAPIKeys)
+        let didMigrateFromCredentialStore = !migratedAPIKeys.isEmpty
+
+        if didMigrateFromCredentialStore {
+            logger.info("  - 已将提供商 \(provider.name) 的 API Key 从旧凭据存储迁移到 JSON。")
+        }
+        if !storedAPIKeys.isEmpty {
+            _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
         }
 
-        guard ProviderCredentialStore.shared.saveAPIKeys(mergedAPIKeys, for: provider.id) else {
-            logger.error("  - 迁移提供商 \(provider.name) 的 API Key 到共享 Keychain 失败。")
-            return CredentialHydrationResult(
-                apiKeys: mergedAPIKeys.isEmpty ? normalizedLegacyAPIKeys : mergedAPIKeys,
-                shouldRewriteProviderFile: false
-            )
-        }
-
-        logger.info("  - 已迁移提供商 \(provider.name) 的 API Key 到共享 Keychain。")
         return CredentialHydrationResult(
-            apiKeys: mergedAPIKeys,
-            shouldRewriteProviderFile: true
+            apiKeys: migratedAPIKeys,
+            shouldRewriteProviderFile: didNormalizeFile || didMigrateFromCredentialStore
         )
     }
 

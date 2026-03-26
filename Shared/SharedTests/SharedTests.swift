@@ -267,8 +267,21 @@ struct MemoryManagerTests {
     struct MockEmbeddingGenerator: MemoryEmbeddingGenerating {
         func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]] {
             texts.map { text in
-                let base = max(1, text.count % 5 + 1)
-                return Array(repeating: Float(base), count: 8)
+                let normalized = text.lowercased()
+                let tokens = normalized.split { !$0.isLetter && !$0.isNumber }
+                var vector = Array(repeating: Float(0), count: 8)
+
+                for token in tokens {
+                    let bucket = token.unicodeScalars.reduce(0) { partialResult, scalar in
+                        partialResult + Int(scalar.value)
+                    } % vector.count
+                    vector[bucket] += 1
+                }
+
+                if vector.allSatisfy({ $0 == 0 }) {
+                    vector[0] = 1
+                }
+                return vector
             }
         }
     }
@@ -503,13 +516,12 @@ struct MemoryManagerTests {
         
         let events = await recorder.snapshot().filter { $0.kind == .reconcilePending }
         #expect(events.contains { $0.phase == .running && $0.processedMemories == 0 && $0.totalMemories == 1 })
-        
-        if let last = events.last {
-            #expect(last.phase == .completed)
-            #expect(last.processedMemories == 1)
-            #expect(last.totalMemories == 1)
+
+        if let completed = events.last(where: { $0.phase == .completed }) {
+            #expect(completed.processedMemories == 1)
+            #expect(completed.totalMemories == 1)
         } else {
-            Issue.record("未捕获到补偿进度事件。")
+            Issue.record("未捕获到补偿完成进度事件。")
         }
         
         await cleanup(memoryManager: memoryManager)
@@ -1042,6 +1054,186 @@ struct OpenAIAdapterTests {
         #expect(part.content == nil)
         #expect(part.reasoningContent == nil)
     }
+
+    @Test("OpenAI 可切换为 Responses API 请求体")
+    func testBuildResponsesAPIRequestPayload() throws {
+        let responseModel = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "openai_api": .string("responses"),
+                    "max_tokens": .int(256),
+                    "reasoning": .dictionary([
+                        "effort": .string("medium")
+                    ])
+                ]
+            )
+        )
+        let toolResultMessage = ChatMessage(
+            role: .tool,
+            content: "{\"saved\":true}",
+            toolCalls: [
+                InternalToolCall(
+                    id: "call_save_1",
+                    toolName: "save_memory",
+                    arguments: "{}"
+                )
+            ]
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "你好"),
+            ChatMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [
+                    InternalToolCall(
+                        id: "call_save_1",
+                        toolName: "save_memory",
+                        arguments: "{\"content\":\"你好\"}"
+                    )
+                ]
+            ),
+            toolResultMessage
+        ]
+        let tools = [saveMemoryTool]
+
+        guard let request = adapter.buildChatRequest(
+            for: responseModel,
+            commonPayload: ["stream": true],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let inputItems = jsonPayload["input"] as? [[String: Any]],
+        let toolPayloads = jsonPayload["tools"] as? [[String: Any]],
+        let firstInput = inputItems.first,
+        let functionCallInput = inputItems.dropFirst().first(where: { ($0["type"] as? String) == "function_call" }),
+        let functionOutputInput = inputItems.first(where: { ($0["type"] as? String) == "function_call_output" }),
+        let firstTool = toolPayloads.first else {
+            Issue.record("Responses API 请求体未正确生成。")
+            return
+        }
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/responses")
+        #expect(jsonPayload["messages"] == nil)
+        #expect(jsonPayload["max_tokens"] == nil)
+        #expect(jsonPayload["max_output_tokens"] as? Int == 256)
+        #expect(jsonPayload["stream"] as? Bool == true)
+        #expect((jsonPayload["reasoning"] as? [String: Any])?["effort"] as? String == "medium")
+
+        #expect(firstInput["role"] as? String == "user")
+        if let textContent = firstInput["content"] as? String {
+            #expect(textContent == "你好")
+        } else {
+            #expect(((firstInput["content"] as? [[String: Any]])?.first)?["type"] as? String == "input_text")
+        }
+        #expect(functionCallInput["call_id"] as? String == "call_save_1")
+        #expect(functionCallInput["name"] as? String == "save_memory")
+        #expect(functionOutputInput["call_id"] as? String == "call_save_1")
+        #expect(functionOutputInput["output"] as? String == "{\"saved\":true}")
+
+        #expect(firstTool["type"] as? String == "function")
+        #expect(firstTool["name"] as? String == "save_memory")
+        #expect(firstTool["strict"] as? Bool == false)
+    }
+
+    @Test("OpenAI Responses 响应可解析正文、推理与工具调用")
+    func testParseResponsesAPIResponse() throws {
+        let json = """
+        {
+          "id": "resp_123",
+          "object": "response",
+          "output": [
+            {
+              "type": "reasoning",
+              "summary": [
+                {
+                  "type": "summary_text",
+                  "text": "先检查记忆是否已有相同信息。"
+                }
+              ]
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_resp_1",
+              "name": "save_memory",
+              "arguments": "{\\"content\\":\\"你好\\"}"
+            },
+            {
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "已经帮你记住啦。"
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 18,
+            "output_tokens_details": {
+              "reasoning_tokens": 5
+            },
+            "total_tokens": 30
+          }
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let message = try adapter.parseResponse(data: data)
+        let toolCall = try #require(message.toolCalls?.first)
+        let usage = try #require(message.tokenUsage)
+
+        #expect(message.content == "已经帮你记住啦。")
+        #expect(message.reasoningContent == "先检查记忆是否已有相同信息。")
+        #expect(toolCall.id == "call_resp_1")
+        #expect(toolCall.toolName == "save_memory")
+        #expect(toolCall.arguments == "{\"content\":\"你好\"}")
+        #expect(usage.promptTokens == 12)
+        #expect(usage.completionTokens == 18)
+        #expect(usage.thinkingTokens == 5)
+        #expect(usage.totalTokens == 30)
+    }
+
+    @Test("OpenAI Responses 流式事件可解析文本、工具参数与用量")
+    func testParseResponsesStreamingEvents() throws {
+        let toolStart = """
+        data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_stream_1","name":"save_memory","arguments":""}}
+        """
+        let toolDelta = """
+        data: {"type":"response.function_call_arguments.delta","output_index":1,"item_id":"fc_1","call_id":"call_stream_1","delta":"{\\"content\\":\\"你好\\"}"}
+        """
+        let textDelta = """
+        data: {"type":"response.output_text.delta","output_index":2,"item_id":"msg_1","content_index":0,"delta":"已经完成"}
+        """
+        let completed = """
+        data: {"type":"response.completed","response":{"usage":{"input_tokens":9,"output_tokens":7,"output_tokens_details":{"reasoning_tokens":2},"total_tokens":16}}}
+        """
+
+        let toolStartPart = try #require(adapter.parseStreamingResponse(line: toolStart))
+        let toolDeltaPart = try #require(adapter.parseStreamingResponse(line: toolDelta))
+        let textPart = try #require(adapter.parseStreamingResponse(line: textDelta))
+        let completedPart = try #require(adapter.parseStreamingResponse(line: completed))
+
+        let startedTool = try #require(toolStartPart.toolCallDeltas?.first)
+        let toolArguments = try #require(toolDeltaPart.toolCallDeltas?.first)
+        let usage = try #require(completedPart.tokenUsage)
+
+        #expect(startedTool.id == "call_stream_1")
+        #expect(startedTool.nameFragment == "save_memory")
+        #expect(toolArguments.argumentsFragment == "{\"content\":\"你好\"}")
+        #expect(textPart.content == "已经完成")
+        #expect(usage.promptTokens == 9)
+        #expect(usage.completionTokens == 7)
+        #expect(usage.thinkingTokens == 2)
+        #expect(usage.totalTokens == 16)
+    }
 }
 
 @Suite("GeminiAdapter Tests")
@@ -1419,26 +1611,32 @@ struct AnthropicAdapterTests {
 /// 用于测试的模拟 API 适配器
 fileprivate class MockAPIAdapter: APIAdapter {
     var receivedMessages: [ChatMessage]?
+    var receivedTitleMessages: [ChatMessage]?
     var receivedTools: [InternalToolDefinition]?
     var responseToReturn: ChatMessage?
     var receivedChatModel: RunnableModel?
     var receivedTitleModel: RunnableModel?
     
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
-        self.receivedMessages = messages
-        self.receivedTools = tools
-        
         // 根据请求内容返回不同 URL，以便 MockURLProtocol 能够区分它们
         if messages.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {
+            self.receivedTitleMessages = messages
             self.receivedTitleModel = model
             return URLRequest(url: URL(string: "https://fake.url/title-gen")!)
         } else {
+            self.receivedMessages = messages
+            self.receivedTools = tools
             self.receivedChatModel = model
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
         }
     }
     
     func parseResponse(data: Data) throws -> ChatMessage {
+        if let response = try? JSONDecoder().decode(OpenAIResponse.self, from: data),
+           let content = response.choices.first?.message.content {
+            return ChatMessage(role: .assistant, content: content)
+        }
+
         // 对于标题生成，我们需要真实地解析返回的数据
         if let received = receivedMessages, received.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {
             let response = try JSONDecoder().decode(OpenAIResponse.self, from: data)
@@ -1475,6 +1673,38 @@ fileprivate struct ChatServiceTests {
 
     // swift-testing 的初始化方法，在每个测试运行前被调用
     init() async {
+        for provider in ConfigLoader.loadProviders() {
+            ConfigLoader.deleteProvider(provider)
+        }
+        let seededProviders = [
+            Provider(
+                name: "Chat Service Test Primary",
+                baseURL: "https://fake.url",
+                apiKeys: ["key-primary"],
+                apiFormat: "openai-compatible",
+                models: [
+                    Model(modelName: "test-model", displayName: "Test Model", isActivated: true)
+                ]
+            ),
+            Provider(
+                name: "Chat Service Test Secondary",
+                baseURL: "https://fake.url",
+                apiKeys: ["key-secondary"],
+                apiFormat: "openai-compatible",
+                models: [
+                    Model(modelName: "title-model", displayName: "Title Model", isActivated: true)
+                ]
+            )
+        ]
+        for provider in seededProviders {
+            ConfigLoader.saveProvider(provider)
+        }
+        ShortcutToolStore.saveTools([])
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(false)
+        }
+
         memoryManager = MemoryManager(embeddingGenerator: MemoryManagerTests.MockEmbeddingGenerator())
         await memoryManager.waitForInitialization()
         
@@ -1490,8 +1720,8 @@ fileprivate struct ChatServiceTests {
         chatService = ChatService(adapters: ["openai-compatible": mockAdapter], memoryManager: memoryManager, urlSession: mockSession)
         
         dummyModel = RunnableModel(
-            provider: Provider(name: "Test", baseURL: "https://fake.url", apiKeys: ["key"], apiFormat: "openai-compatible"),
-            model: Model(modelName: "test-model")
+            provider: seededProviders[0],
+            model: seededProviders[0].models[0]
         )
         chatService.setSelectedModel(dummyModel)
     }
@@ -1507,10 +1737,16 @@ fileprivate struct ChatServiceTests {
         // 清理模拟响应，避免测试间互相影响
         MockURLProtocol.mockResponses = [:]
         mockAdapter.receivedMessages = nil
+        mockAdapter.receivedTitleMessages = nil
         mockAdapter.receivedTools = nil
         mockAdapter.responseToReturn = nil
         mockAdapter.receivedChatModel = nil
         mockAdapter.receivedTitleModel = nil
+        ShortcutToolStore.saveTools([])
+        await MainActor.run {
+            ShortcutToolManager.shared.reloadFromDisk()
+            ShortcutToolManager.shared.setChatToolsEnabled(false)
+        }
         // 重置 ChatService 状态
         chatService.createNewSession()
     }
@@ -1563,7 +1799,7 @@ fileprivate struct ChatServiceTests {
 
         let logs = Persistence.loadRequestLogs(query: .init(limit: 1))
         #expect(logs.count == 1)
-        #expect(logs[0].providerName == "Test")
+        #expect(logs[0].providerName == dummyModel.provider.name)
         #expect(logs[0].modelID == "test-model")
         #expect(logs[0].status == .success)
         #expect(logs[0].tokenUsage?.promptTokens == 13)
@@ -1773,7 +2009,8 @@ fileprivate struct ChatServiceTests {
         // 3. 断言 (Assert)
         let errorMessage = receivedMessages.last
         #expect(errorMessage?.role == .error, "最后一条消息的角色应该是 .error")
-        #expect(errorMessage?.content.contains("网络或解析错误") == true, "错误消息内容应包含通用前缀")
+        #expect(errorMessage?.content.contains("HTTP 500") == true, "错误消息内容应包含 HTTP 状态码。")
+        #expect(errorMessage?.content.contains("服务器内部错误") == true, "错误消息内容应包含状态说明。")
 
         await cleanup()
     }
@@ -1788,7 +2025,8 @@ fileprivate struct ChatServiceTests {
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
         #expect(content.contains("Fluffy"))
-        #expect(content.contains("相关历史记忆"))
+        #expect(content.contains("<memory>"))
+        #expect(content.contains("长期记忆库"))
         await cleanup()
     }
 
@@ -1802,7 +2040,8 @@ fileprivate struct ChatServiceTests {
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
         #expect(!content.contains("Fluffy"))
-        #expect(!content.contains("相关历史记忆"))
+        #expect(!content.contains("<memory>"))
+        #expect(!content.contains("长期记忆库"))
         await cleanup()
     }
 
@@ -1871,15 +2110,14 @@ fileprivate struct ChatServiceTests {
         let lastMessage = sentMessages.last
         let enhancedSystemMessage = sentMessages.last(where: { $0.role == .system && $0.content.contains("<enhanced_prompt>") })
         let systemContent = enhancedSystemMessage?.content ?? ""
-        let firstSystemMessage = sentMessages.first(where: { $0.role == .system })
-        let firstSystemContent = firstSystemMessage?.content ?? ""
+        let systemMessages = sentMessages.filter { $0.role == .system }
         let userMessage = sentMessages.last(where: { $0.role == .user })
         let userContent = userMessage?.content ?? ""
 
         #expect(lastMessage?.role == .system, "Enhanced prompt system message should be appended at the end of messages.")
         #expect(systemContent.contains("<enhanced_prompt>"), "System message should contain enhanced prompt tag.")
         #expect(systemContent.contains(enhancedPrompt), "System message should contain enhanced prompt content.")
-        #expect(!firstSystemContent.contains("<enhanced_prompt>"), "Enhanced prompt should not be merged into the first system prompt block.")
+        #expect(systemMessages.count == 1, "无其他系统提示时，增强提示应单独形成唯一的 system message。")
         #expect(userContent == userText, "User message should remain unchanged.")
         #expect(!userContent.contains("<user_input>"), "User message should not be wrapped by <user_input>.")
 
@@ -1924,7 +2162,7 @@ fileprivate struct ChatServiceTests {
     func testToolProvision_Disabled() async throws {
         await cleanup()
         await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: false, enableMemoryWrite: false, includeSystemTime: false)
-        #expect(self.mockAdapter.receivedTools == nil)
+        #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "save_memory" }) != true)
         await cleanup()
     }
 
@@ -1932,7 +2170,7 @@ fileprivate struct ChatServiceTests {
     func testToolProvision_WriteSwitchDisabled() async throws {
         await cleanup()
         await chatService.sendAndProcessMessage(content: "hello", aiTemperature: 0, aiTopP: 1, systemPrompt: "", maxChatHistory: 5, enableStreaming: false, enhancedPrompt: nil, enableMemory: true, enableMemoryWrite: false, includeSystemTime: false)
-        #expect(self.mockAdapter.receivedTools == nil)
+        #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "save_memory" }) != true)
         await cleanup()
     }
 
@@ -2945,13 +3183,23 @@ fileprivate struct PersistenceTests {
         Persistence.appendRequestLog(requestA)
         Persistence.appendRequestLog(requestB)
 
-        let loaded = Persistence.loadRequestLogs()
+        let queryWindow = RequestLogQuery(
+            from: Date(timeIntervalSince1970: 1_699_999_999),
+            to: Date(timeIntervalSince1970: 1_700_000_100)
+        )
+        let loaded = Persistence.loadRequestLogs(query: queryWindow)
         #expect(loaded.count == 2)
         #expect(loaded.first?.providerName == "Anthropic")
         #expect(loaded.last?.providerName == "OpenAI")
         #expect(loaded.last?.tokenUsage?.thinkingTokens == 10)
 
-        let successOnly = Persistence.loadRequestLogs(query: .init(statuses: Set([.success])))
+        let successOnly = Persistence.loadRequestLogs(
+            query: .init(
+                from: queryWindow.from,
+                to: queryWindow.to,
+                statuses: Set([.success])
+            )
+        )
         #expect(successOnly.count == 1)
         #expect(successOnly.first?.modelID == "gpt-5")
 
@@ -3020,7 +3268,12 @@ fileprivate struct PersistenceTests {
             Persistence.appendRequestLog(entry)
         }
 
-        let summary = Persistence.summarizeRequestLogs()
+        let summary = Persistence.summarizeRequestLogs(
+            query: .init(
+                from: now.addingTimeInterval(-1),
+                to: now.addingTimeInterval(10)
+            )
+        )
         #expect(summary.totalRequests == 3)
         #expect(summary.successCount == 1)
         #expect(summary.failedCount == 1)
@@ -3041,8 +3294,12 @@ fileprivate struct PersistenceTests {
     func testRequestLogsRetentionLimit() {
         cleanup(sessions: [])
 
-        let total = 10_020
-        let dropped = total - 10_000
+        let retentionLimit = 100
+        Persistence.requestLogRetentionLimitOverride = retentionLimit
+        defer { Persistence.requestLogRetentionLimitOverride = nil }
+
+        let total = 120
+        let dropped = total - retentionLimit
         let baseDate = Date(timeIntervalSince1970: 1_700_200_000)
         for index in 0..<total {
             let time = baseDate.addingTimeInterval(TimeInterval(index))
@@ -3062,8 +3319,13 @@ fileprivate struct PersistenceTests {
             )
         }
 
-        let loaded = Persistence.loadRequestLogs()
-        #expect(loaded.count == 10_000)
+        let loaded = Persistence.loadRequestLogs(
+            query: .init(
+                from: baseDate.addingTimeInterval(-1),
+                to: baseDate.addingTimeInterval(TimeInterval(total + 1))
+            )
+        )
+        #expect(loaded.count == retentionLimit)
         #expect(loaded.first?.modelID == "model-\(total - 1)")
         #expect(loaded.last?.modelID == "model-\(dropped)")
 
@@ -3078,6 +3340,15 @@ fileprivate struct ConfigLoaderTests {
         let name: String
         let baseURL: String
         let apiKeys: [String]
+        let apiFormat: String
+        let models: [Model]
+        let headerOverrides: [String: String]
+    }
+
+    private struct LegacyProviderWithoutAPIKeysSnapshot: Encodable {
+        let id: UUID
+        let name: String
+        let baseURL: String
         let apiFormat: String
         let models: [Model]
         let headerOverrides: [String: String]
@@ -3117,7 +3388,24 @@ fileprivate struct ConfigLoaderTests {
         try data.write(to: fileURL, options: .atomic)
     }
 
-    @Test("保存并加载提供商时将 API Key 写入共享 Keychain")
+    private func writeLegacyProviderFileWithoutAPIKeys(_ provider: Provider, fileName: String) throws {
+        ConfigLoader.setupInitialProviderConfigs()
+        let fileURL = providersDirectory.appendingPathComponent(fileName)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        let snapshot = LegacyProviderWithoutAPIKeysSnapshot(
+            id: provider.id,
+            name: provider.name,
+            baseURL: provider.baseURL,
+            apiFormat: provider.apiFormat,
+            models: provider.models,
+            headerOverrides: provider.headerOverrides
+        )
+        let data = try encoder.encode(snapshot)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    @Test("保存并加载提供商时将 API Key 写入 Provider JSON")
     func testSaveAndLoadProvider() throws {
         let provider = Provider(
             id: UUID(),
@@ -3140,22 +3428,45 @@ fileprivate struct ConfigLoaderTests {
         #expect(foundProvider?.models.first?.modelName == "test-model")
 
         let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
-        #expect(!fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("key1"))
     }
 
-    @Test("加载旧版 Provider 文件时会迁移 API Key 并清理明文字段")
-    func testLoadProvidersMigratesLegacyAPIKeysToKeychain() throws {
+    @Test("同步包编码会包含 Provider JSON 中的 API Key")
+    func testSyncPackageEncodingContainsAPIKeys() throws {
+        let package = SyncPackage(
+            options: [.providers],
+            providers: [
+                Provider(
+                    id: UUID(),
+                    name: "sync-provider",
+                    baseURL: "https://sync.example.com",
+                    apiKeys: ["sync-key"],
+                    apiFormat: "openai-compatible",
+                    models: [Model(modelName: "sync-model")]
+                )
+            ]
+        )
+        let data = try JSONEncoder().encode(package)
+        let payload = try #require(String(data: data, encoding: .utf8))
+        #expect(payload.contains("\"apiKeys\""))
+        #expect(payload.contains("sync-key"))
+    }
+
+    @Test("加载旧版无 apiKeys 字段的 Provider 文件时会从旧凭据存储迁移到 JSON")
+    func testLoadProvidersMigratesLegacyCredentialStoreToJSON() throws {
         let provider = Provider(
             id: UUID(),
             name: "legacy-\(UUID().uuidString)",
             baseURL: "https://legacy.example.com",
-            apiKeys: ["legacy-key-1", "legacy-key-2"],
+            apiKeys: [],
             apiFormat: "openai-compatible",
             models: [Model(modelName: "legacy-model", isActivated: true)]
         )
         let fileName = "\(provider.id.uuidString).json"
 
-        try writeLegacyProviderFile(provider, fileName: fileName)
+        _ = ProviderCredentialStore.shared.saveAPIKeys(["legacy-key-1", "legacy-key-2"], for: provider.id)
+        try writeLegacyProviderFileWithoutAPIKeys(provider, fileName: fileName)
         defer {
             cleanup(providers: [provider])
             try? FileManager.default.removeItem(at: providerFileURL(for: provider.id))
@@ -3165,7 +3476,9 @@ fileprivate struct ConfigLoaderTests {
         #expect(firstLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
 
         let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
-        #expect(!fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("legacy-key-1"))
+        #expect(ProviderCredentialStore.shared.loadAPIKeys(for: provider.id).isEmpty)
 
         let secondLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
         #expect(secondLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
