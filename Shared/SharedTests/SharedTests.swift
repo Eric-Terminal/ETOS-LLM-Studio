@@ -3344,6 +3344,15 @@ fileprivate struct ConfigLoaderTests {
         let models: [Model]
         let headerOverrides: [String: String]
     }
+
+    private struct LegacyProviderWithoutAPIKeysSnapshot: Encodable {
+        let id: UUID
+        let name: String
+        let baseURL: String
+        let apiFormat: String
+        let models: [Model]
+        let headerOverrides: [String: String]
+    }
     
     // Clean up provider files
     private func cleanup(providers: [Provider]) {
@@ -3379,7 +3388,24 @@ fileprivate struct ConfigLoaderTests {
         try data.write(to: fileURL, options: .atomic)
     }
 
-    @Test("保存并加载提供商时将 API Key 写入共享 Keychain")
+    private func writeLegacyProviderFileWithoutAPIKeys(_ provider: Provider, fileName: String) throws {
+        ConfigLoader.setupInitialProviderConfigs()
+        let fileURL = providersDirectory.appendingPathComponent(fileName)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        let snapshot = LegacyProviderWithoutAPIKeysSnapshot(
+            id: provider.id,
+            name: provider.name,
+            baseURL: provider.baseURL,
+            apiFormat: provider.apiFormat,
+            models: provider.models,
+            headerOverrides: provider.headerOverrides
+        )
+        let data = try encoder.encode(snapshot)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    @Test("保存并加载提供商时将 API Key 写入 Provider JSON")
     func testSaveAndLoadProvider() throws {
         let provider = Provider(
             id: UUID(),
@@ -3402,22 +3428,45 @@ fileprivate struct ConfigLoaderTests {
         #expect(foundProvider?.models.first?.modelName == "test-model")
 
         let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
-        #expect(!fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("key1"))
     }
 
-    @Test("加载旧版 Provider 文件时会迁移 API Key 并清理明文字段")
-    func testLoadProvidersMigratesLegacyAPIKeysToKeychain() throws {
+    @Test("同步包编码会包含 Provider JSON 中的 API Key")
+    func testSyncPackageEncodingContainsAPIKeys() throws {
+        let package = SyncPackage(
+            options: [.providers],
+            providers: [
+                Provider(
+                    id: UUID(),
+                    name: "sync-provider",
+                    baseURL: "https://sync.example.com",
+                    apiKeys: ["sync-key"],
+                    apiFormat: "openai-compatible",
+                    models: [Model(modelName: "sync-model")]
+                )
+            ]
+        )
+        let data = try JSONEncoder().encode(package)
+        let payload = try #require(String(data: data, encoding: .utf8))
+        #expect(payload.contains("\"apiKeys\""))
+        #expect(payload.contains("sync-key"))
+    }
+
+    @Test("加载旧版无 apiKeys 字段的 Provider 文件时会从旧凭据存储迁移到 JSON")
+    func testLoadProvidersMigratesLegacyCredentialStoreToJSON() throws {
         let provider = Provider(
             id: UUID(),
             name: "legacy-\(UUID().uuidString)",
             baseURL: "https://legacy.example.com",
-            apiKeys: ["legacy-key-1", "legacy-key-2"],
+            apiKeys: [],
             apiFormat: "openai-compatible",
             models: [Model(modelName: "legacy-model", isActivated: true)]
         )
         let fileName = "\(provider.id.uuidString).json"
 
-        try writeLegacyProviderFile(provider, fileName: fileName)
+        _ = ProviderCredentialStore.shared.saveAPIKeys(["legacy-key-1", "legacy-key-2"], for: provider.id)
+        try writeLegacyProviderFileWithoutAPIKeys(provider, fileName: fileName)
         defer {
             cleanup(providers: [provider])
             try? FileManager.default.removeItem(at: providerFileURL(for: provider.id))
@@ -3427,7 +3476,9 @@ fileprivate struct ConfigLoaderTests {
         #expect(firstLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
 
         let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
-        #expect(!fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("\"apiKeys\""))
+        #expect(fileContents.contains("legacy-key-1"))
+        #expect(ProviderCredentialStore.shared.loadAPIKeys(for: provider.id).isEmpty)
 
         let secondLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
         #expect(secondLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
