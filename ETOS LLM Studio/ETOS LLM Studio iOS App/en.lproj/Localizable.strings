@@ -1242,3 +1242,12 @@
 "你收到了新的语音回复。" = "You received a new audio reply.";
 "你收到了新的文件回复。" = "You received a new file reply.";
 "你收到了新的回复。" = "You received a new reply.";
+
+"搜索生图" = "Search Generated Images";
+"搜索标题或内容" = "Search titles or content";
+"输入关键词后可搜索标题和内容。" = "Enter keywords to search titles and content.";
+"未找到匹配的历史绘画。" = "No matching history found.";
+"共 %d 条匹配（总计 %d 条）。" = "%d matches (total %d).";
+"第 %d 条 / 共 %d 条" = "Item %d of %d";
+"新建生图" = "New generation";
+"搜索结果" = "Search Results";

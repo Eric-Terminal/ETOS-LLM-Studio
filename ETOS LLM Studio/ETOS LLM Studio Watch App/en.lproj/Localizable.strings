@@ -1146,3 +1146,12 @@
 "旧文本在文件中出现了 %d 次，请改用 replace_all 或提供更精确的片段。" = "The old text appears %d times in the file. Use replace_all or provide a more specific snippet.";
 "不允许删除 Documents 根目录。" = "Deleting the Documents root directory is not allowed.";
 "内容没有变化。" = "There are no content changes.";
+
+"搜索生图" = "Search Generated Images";
+"搜索标题或内容" = "Search titles or content";
+"输入关键词后可搜索标题和内容。" = "Enter keywords to search titles and content.";
+"未找到匹配的历史绘画。" = "No matching history found.";
+"共 %d 条匹配（总计 %d 条）。" = "%d matches (total %d).";
+"第 %d 条 / 共 %d 条" = "Item %d of %d";
+"新建生图" = "New generation";
+"搜索结果" = "Search Results";
