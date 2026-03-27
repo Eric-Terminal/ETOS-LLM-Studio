@@ -74,6 +74,7 @@ struct ChatView: View {
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatScrollViewportHeight: CGFloat = 0
     @State private var chatBottomAnchorMaxY: CGFloat = .greatestFiniteMagnitude
+    @State private var pendingJumpRequest: MessageJumpRequest?
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
@@ -229,6 +230,12 @@ struct ChatView: View {
                         guard newValue != nil, !showScrollToBottom else { return }
                         scrollToBottom(proxy: proxy)
                     }
+                    .onChange(of: pendingJumpRequest) { _, request in
+                        guard let request else { return }
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(request.messageID, anchor: .center)
+                        }
+                    }
                     .onPreferenceChange(ChatScrollViewportHeightPreferenceKey.self) { newHeight in
                         chatScrollViewportHeight = newHeight
                         updateScrollToBottomVisibility()
@@ -312,7 +319,12 @@ struct ChatView: View {
                 .presentationDetents([.medium, .large])
             }
             .sheet(item: $messageInfo) { info in
-                MessageInfoSheet(payload: info)
+                MessageInfoSheet(
+                    payload: info,
+                    onJumpToMessage: { displayIndex in
+                        jumpToMessage(displayIndex: displayIndex)
+                    }
+                )
             }
             .sheet(item: $fullErrorContent) { payload in
                 FullErrorContentSheet(payload: payload)
@@ -1483,6 +1495,24 @@ private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
 // MARK: - Helpers
 
 private extension ChatView {
+    func jumpToMessage(displayIndex: Int) -> Bool {
+        let targetZeroBasedIndex = displayIndex - 1
+        guard targetZeroBasedIndex >= 0, targetZeroBasedIndex < viewModel.allMessagesForSession.count else {
+            return false
+        }
+
+        let targetMessageID = viewModel.allMessagesForSession[targetZeroBasedIndex].id
+        let isVisible = viewModel.displayMessages.contains(where: { $0.id == targetMessageID })
+        if !isVisible {
+            viewModel.loadEntireHistory()
+        }
+
+        DispatchQueue.main.async {
+            pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
+        }
+        return true
+    }
+
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
@@ -1526,6 +1556,11 @@ private extension ChatView {
         }
     }
 
+}
+
+private struct MessageJumpRequest: Equatable {
+    let token = UUID()
+    let messageID: UUID
 }
 
 // MARK: - Telegram Default Background
@@ -3048,7 +3083,10 @@ private struct FullErrorContentSheet: View {
 /// 消息详情弹窗，展示消息的唯一标识与位置索引。
 private struct MessageInfoSheet: View {
     let payload: MessageInfoPayload
+    let onJumpToMessage: (Int) -> Bool
     @Environment(\.dismiss) private var dismiss
+    @State private var jumpInput: String = ""
+    @State private var jumpError: String?
     
     var body: some View {
         NavigationStack {
@@ -3065,6 +3103,34 @@ private struct MessageInfoSheet: View {
                                 payload.totalCount
                             )
                         )
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        TextField(
+                            String(
+                                format: NSLocalizedString("输入消息序号（1-%d）", comment: "Message index input placeholder"),
+                                payload.totalCount
+                            ),
+                            text: $jumpInput
+                        )
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                        Button(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title")) {
+                            submitJump()
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        if let jumpError, !jumpError.isEmpty {
+                            Text(jumpError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
                     }
                 }
                 
@@ -3175,6 +3241,33 @@ private struct MessageInfoSheet: View {
             return "\(base) (\(NSLocalizedString("估算", comment: "Estimated")))"
         }
         return base
+    }
+
+    private func submitJump() {
+        let trimmed = jumpInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let displayIndex = Int(trimmed) else {
+            jumpError = NSLocalizedString("请输入有效的序号。", comment: "Invalid message index hint")
+            return
+        }
+
+        guard displayIndex >= 1 && displayIndex <= payload.totalCount else {
+            jumpError = String(
+                format: NSLocalizedString("序号超出范围，请输入 1 到 %d。", comment: "Out of range message index hint"),
+                payload.totalCount
+            )
+            return
+        }
+
+        guard onJumpToMessage(displayIndex) else {
+            jumpError = String(
+                format: NSLocalizedString("序号超出范围，请输入 1 到 %d。", comment: "Out of range message index hint"),
+                payload.totalCount
+            )
+            return
+        }
+
+        jumpError = nil
+        dismiss()
     }
 }
 

@@ -31,6 +31,7 @@ struct ContentView: View {
     @State private var settingsDestination: WatchSettingsNavigationDestination?
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
+    @State private var pendingJumpRequest: MessageJumpRequest?
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
@@ -213,6 +214,12 @@ struct ContentView: View {
             guard newValue != nil, isAtBottom else { return }
             scrollToBottom(proxy: proxy, animated: false)
         }
+        .onChange(of: pendingJumpRequest) { _, request in
+            guard let request else { return }
+            withAnimation {
+                proxy.scrollTo(request.messageID, anchor: .center)
+            }
+        }
     }
     
     /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
@@ -311,6 +318,9 @@ struct ContentView: View {
                 onToggleMathRendering: {
                     viewModel.toggleMathRendering(for: message.id)
                 },
+                onJumpToMessageIndex: { displayIndex in
+                    jumpToMessage(displayIndex: displayIndex)
+                },
                 messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                 totalMessages: viewModel.allMessagesForSession.count
             )
@@ -380,6 +390,24 @@ struct ContentView: View {
         } else {
             action()
         }
+    }
+
+    private func jumpToMessage(displayIndex: Int) -> Bool {
+        let targetZeroBasedIndex = displayIndex - 1
+        guard targetZeroBasedIndex >= 0, targetZeroBasedIndex < viewModel.allMessagesForSession.count else {
+            return false
+        }
+
+        let targetMessageID = viewModel.allMessagesForSession[targetZeroBasedIndex].id
+        let isVisible = viewModel.displayMessages.contains(where: { $0.id == targetMessageID })
+        if !isVisible {
+            viewModel.loadEntireHistory()
+        }
+
+        DispatchQueue.main.async {
+            pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
+        }
+        return true
     }
 
     private func sendMessage() {
@@ -662,6 +690,11 @@ struct ContentView: View {
 private struct FullErrorContentWrapper: Identifiable {
     let id = UUID()
     let content: String
+}
+
+private struct MessageJumpRequest: Equatable {
+    let token = UUID()
+    let messageID: UUID
 }
 
 /// 完整错误响应内容视图

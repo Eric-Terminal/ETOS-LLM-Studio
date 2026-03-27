@@ -1242,3 +1242,9 @@
 "你收到了新的语音回复。" = "You received a new audio reply.";
 "你收到了新的文件回复。" = "You received a new file reply.";
 "你收到了新的回复。" = "You received a new reply.";
+
+"快速定位" = "Quick jump";
+"输入消息序号（1-%d）" = "Enter message index (1-%d)";
+"跳转到该条消息" = "Jump to this message";
+"请输入有效的序号。" = "Enter a valid index.";
+"序号超出范围，请输入 1 到 %d。" = "Index out of range. Enter 1 to %d.";

@@ -29,6 +29,7 @@ struct MessageActionsView: View {
     let supportsMathRenderToggle: Bool
     let isMathRenderingEnabled: Bool
     let onToggleMathRendering: () -> Void
+    let onJumpToMessageIndex: (Int) -> Bool
     
     let messageIndex: Int?
     let totalMessages: Int
@@ -48,6 +49,7 @@ struct MessageActionsView: View {
         supportsMathRenderToggle: Bool = false,
         isMathRenderingEnabled: Bool = false,
         onToggleMathRendering: @escaping () -> Void = {},
+        onJumpToMessageIndex: @escaping (Int) -> Bool,
         messageIndex: Int?,
         totalMessages: Int
     ) {
@@ -65,6 +67,7 @@ struct MessageActionsView: View {
         self.supportsMathRenderToggle = supportsMathRenderToggle
         self.isMathRenderingEnabled = isMathRenderingEnabled
         self.onToggleMathRendering = onToggleMathRendering
+        self.onJumpToMessageIndex = onJumpToMessageIndex
         self.messageIndex = messageIndex
         self.totalMessages = totalMessages
     }
@@ -75,6 +78,8 @@ struct MessageActionsView: View {
     @State private var showDeleteConfirm = false
     @State private var showDeleteVersionConfirm = false
     @State private var showBranchOptions = false
+    @State private var jumpInput: String = ""
+    @State private var jumpError: String?
     @ObservedObject private var ttsManager = TTSManager.shared
 
     // MARK: - 视图主体
@@ -217,6 +222,34 @@ struct MessageActionsView: View {
                     Text(message.id.uuidString)
                         .font(.caption2)
                 }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    TextField(
+                        String(
+                            format: NSLocalizedString("输入消息序号（1-%d）", comment: "Message index input placeholder"),
+                            totalMessages
+                        ),
+                        text: $jumpInput
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                    Button {
+                        submitJump()
+                    } label: {
+                        Label(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title"), systemImage: "location")
+                    }
+
+                    if let jumpError, !jumpError.isEmpty {
+                        Text(jumpError)
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                }
             }
             
             if let usage = message.tokenUsage, usage.hasData {
@@ -308,6 +341,33 @@ struct MessageActionsView: View {
             return "\(base) (\(NSLocalizedString("估算", comment: "Estimated")))"
         }
         return base
+    }
+
+    private func submitJump() {
+        let trimmed = jumpInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let displayIndex = Int(trimmed) else {
+            jumpError = NSLocalizedString("请输入有效的序号。", comment: "Invalid message index hint")
+            return
+        }
+
+        guard displayIndex >= 1 && displayIndex <= totalMessages else {
+            jumpError = String(
+                format: NSLocalizedString("序号超出范围，请输入 1 到 %d。", comment: "Out of range message index hint"),
+                totalMessages
+            )
+            return
+        }
+
+        guard onJumpToMessageIndex(displayIndex) else {
+            jumpError = String(
+                format: NSLocalizedString("序号超出范围，请输入 1 到 %d。", comment: "Out of range message index hint"),
+                totalMessages
+            )
+            return
+        }
+
+        jumpError = nil
+        dismiss()
     }
 }
 
