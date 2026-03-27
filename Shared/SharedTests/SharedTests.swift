@@ -3761,3 +3761,70 @@ fileprivate struct VectorSearchTests {
         
     }
 }
+
+@Suite("历史会话检索支持 Tests")
+fileprivate struct SessionHistorySearchSupportTests {
+    @Test("按会话标题与主题提示检索")
+    func testSearchHitsBySessionMetadata() {
+        let target = ChatSession(
+            id: UUID(),
+            name: "周报讨论",
+            topicPrompt: "产品复盘与改进点"
+        )
+        let other = ChatSession(
+            id: UUID(),
+            name: "随手记录",
+            topicPrompt: "午饭吃什么"
+        )
+
+        let byTitle = SessionHistorySearchSupport.searchHits(
+            sessions: [target, other],
+            query: "周报",
+            messageLoader: { _ in [] }
+        )
+        #expect(byTitle[target.id]?.source == .sessionName)
+        #expect(byTitle[other.id] == nil)
+
+        let byTopic = SessionHistorySearchSupport.searchHits(
+            sessions: [target, other],
+            query: "改进点",
+            messageLoader: { _ in [] }
+        )
+        #expect(byTopic[target.id]?.source == .topicPrompt)
+        #expect(byTopic[other.id] == nil)
+    }
+
+    @Test("按消息正文检索并返回命中来源")
+    func testSearchHitsByMessageContent() {
+        let session = ChatSession(id: UUID(), name: "旅行计划")
+        let userMessage = ChatMessage(role: .user, content: "请帮我整理大阪旅行清单")
+        let assistantMessage = ChatMessage(role: .assistant, content: "好的，我先给你一个 5 天行程草案。")
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "旅行清单",
+            messageLoader: { _ in [userMessage, assistantMessage] }
+        )
+
+        #expect(hits[session.id]?.source == .userMessage)
+        #expect(hits[session.id]?.preview.contains("大阪旅行清单") == true)
+    }
+
+    @Test("当前会话优先使用内存消息检索")
+    func testSearchHitsPrefersCurrentSessionMessages() {
+        let session = ChatSession(id: UUID(), name: "开发讨论")
+        let persistedMessages = [ChatMessage(role: .assistant, content: "这是磁盘里的旧消息")]
+        let inMemoryMessages = [ChatMessage(role: .assistant, content: "这是内存里的最新回复")]
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "最新回复",
+            currentSessionID: session.id,
+            currentSessionMessages: inMemoryMessages,
+            messageLoader: { _ in persistedMessages }
+        )
+
+        #expect(hits[session.id]?.source == .assistantMessage)
+        #expect(hits[session.id]?.preview.contains("内存里的最新回复") == true)
+    }
+}

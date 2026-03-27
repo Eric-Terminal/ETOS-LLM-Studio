@@ -1024,6 +1024,153 @@ public struct ChatSession: Identifiable, Codable, Hashable {
     }
 }
 
+// MARK: - 历史会话检索
+
+/// 历史会话检索命中来源
+public enum SessionHistorySearchHitSource: Hashable, Sendable {
+    case sessionName
+    case topicPrompt
+    case enhancedPrompt
+    case userMessage
+    case assistantMessage
+    case systemMessage
+    case toolMessage
+    case errorMessage
+}
+
+/// 历史会话检索命中结果
+public struct SessionHistorySearchHit: Hashable, Sendable {
+    public let sessionID: UUID
+    public let source: SessionHistorySearchHitSource
+    public let preview: String
+
+    public init(sessionID: UUID, source: SessionHistorySearchHitSource, preview: String) {
+        self.sessionID = sessionID
+        self.source = source
+        self.preview = preview
+    }
+}
+
+/// 历史会话检索工具
+public enum SessionHistorySearchSupport {
+    /// 归一化检索词，供 UI 层判断当前是否处于检索状态。
+    public static func normalizedQuery(_ query: String) -> String {
+        normalized(query)
+    }
+
+    /// 在会话名称、主题提示、增强提示词和消息正文中执行检索。
+    public static func searchHits(
+        sessions: [ChatSession],
+        query: String,
+        currentSessionID: UUID? = nil,
+        currentSessionMessages: [ChatMessage] = [],
+        messageLoader: (UUID) -> [ChatMessage]
+    ) -> [UUID: SessionHistorySearchHit] {
+        let normalizedQuery = normalized(query)
+        guard !normalizedQuery.isEmpty else { return [:] }
+
+        var hits: [UUID: SessionHistorySearchHit] = [:]
+        for session in sessions {
+            guard let hit = firstHit(
+                in: session,
+                normalizedQuery: normalizedQuery,
+                currentSessionID: currentSessionID,
+                currentSessionMessages: currentSessionMessages,
+                messageLoader: messageLoader
+            ) else {
+                continue
+            }
+            hits[session.id] = hit
+        }
+        return hits
+    }
+
+    private static func firstHit(
+        in session: ChatSession,
+        normalizedQuery: String,
+        currentSessionID: UUID?,
+        currentSessionMessages: [ChatMessage],
+        messageLoader: (UUID) -> [ChatMessage]
+    ) -> SessionHistorySearchHit? {
+        if normalized(session.name).contains(normalizedQuery) {
+            return SessionHistorySearchHit(
+                sessionID: session.id,
+                source: .sessionName,
+                preview: previewText(session.name)
+            )
+        }
+
+        if let topicPrompt = nonEmptyTrimmed(session.topicPrompt),
+           normalized(topicPrompt).contains(normalizedQuery) {
+            return SessionHistorySearchHit(
+                sessionID: session.id,
+                source: .topicPrompt,
+                preview: previewText(topicPrompt)
+            )
+        }
+
+        if let enhancedPrompt = nonEmptyTrimmed(session.enhancedPrompt),
+           normalized(enhancedPrompt).contains(normalizedQuery) {
+            return SessionHistorySearchHit(
+                sessionID: session.id,
+                source: .enhancedPrompt,
+                preview: previewText(enhancedPrompt)
+            )
+        }
+
+        let messages = session.id == currentSessionID ? currentSessionMessages : messageLoader(session.id)
+        for message in messages {
+            for versionContent in message.getAllVersions() {
+                guard let content = nonEmptyTrimmed(versionContent) else { continue }
+                guard normalized(content).contains(normalizedQuery) else { continue }
+                return SessionHistorySearchHit(
+                    sessionID: session.id,
+                    source: source(for: message.role),
+                    preview: previewText(content)
+                )
+            }
+        }
+        return nil
+    }
+
+    private static func source(for role: MessageRole) -> SessionHistorySearchHitSource {
+        switch role {
+        case .user:
+            return .userMessage
+        case .assistant:
+            return .assistantMessage
+        case .system:
+            return .systemMessage
+        case .tool:
+            return .toolMessage
+        case .error:
+            return .errorMessage
+        }
+    }
+
+    private static func nonEmptyTrimmed(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .lowercased()
+    }
+
+    private static func previewText(_ text: String, maxLength: Int = 90) -> String {
+        let collapsed = text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard collapsed.count > maxLength else { return collapsed }
+        return String(collapsed.prefix(maxLength)) + "…"
+    }
+}
+
 // MARK: - 音频录制格式
 
 /// 音频录制格式枚举

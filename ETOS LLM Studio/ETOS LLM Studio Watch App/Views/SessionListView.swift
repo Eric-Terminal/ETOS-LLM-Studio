@@ -35,25 +35,69 @@ struct SessionListView: View {
     @State private var sessionToEdit: ChatSession?
     @State private var showBranchOptions: Bool = false
     @State private var sessionToBranch: ChatSession?
+    @State private var searchText: String = ""
     
     // MARK: - 视图主体
     
     var body: some View {
+        let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(searchText)
+        let searchHits = normalizedQuery.isEmpty
+            ? [:]
+            : SessionHistorySearchSupport.searchHits(
+                sessions: sessions,
+                query: searchText,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+        let displayedSessions = normalizedQuery.isEmpty
+            ? sessions
+            : sessions.filter { searchHits[$0.id] != nil }
+
         List {
-            ForEach(sessions) {
-                session in 
-                SessionRowView(
-                    session: session,
-                    currentSession: $currentSession,
-                    sessions: $sessions,
-                    sessionToEdit: $sessionToEdit,
-                    sessionToBranch: $sessionToBranch,
-                    showBranchOptions: $showBranchOptions,
-                    sessionIndexToDelete: $sessionIndexToDelete,
-                    showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                    onSessionSelected: onSessionSelected,
-                    deleteLastMessageAction: deleteLastMessageAction
-                )
+            Section {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("搜索会话标题或消息", text: $searchText.watchKeyboardNewlineBinding())
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if !normalizedQuery.isEmpty {
+                    Text("匹配 \(displayedSessions.count) / \(sessions.count) 个会话")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if displayedSessions.isEmpty {
+                Text(normalizedQuery.isEmpty ? "暂无历史会话。" : "未找到匹配的历史会话。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(displayedSessions) { session in
+                    SessionRowView(
+                        session: session,
+                        currentSession: $currentSession,
+                        sessions: $sessions,
+                        sessionToEdit: $sessionToEdit,
+                        sessionToBranch: $sessionToBranch,
+                        showBranchOptions: $showBranchOptions,
+                        sessionIndexToDelete: $sessionIndexToDelete,
+                        showDeleteSessionConfirm: $showDeleteSessionConfirm,
+                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: !normalizedQuery.isEmpty),
+                        onSessionSelected: onSessionSelected,
+                        deleteLastMessageAction: deleteLastMessageAction
+                    )
+                }
             }
         }
         .navigationTitle("历史会话")
@@ -105,6 +149,36 @@ struct SessionListView: View {
             }
         }
     }
+
+    private func searchSummary(
+        for session: ChatSession,
+        in hits: [UUID: SessionHistorySearchHit],
+        queryActive: Bool
+    ) -> String? {
+        guard queryActive, let hit = hits[session.id] else { return nil }
+        return "\(sourceLabel(for: hit.source))：\(hit.preview)"
+    }
+
+    private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
+        switch source {
+        case .sessionName:
+            return "标题"
+        case .topicPrompt:
+            return "主题提示"
+        case .enhancedPrompt:
+            return "增强提示词"
+        case .userMessage:
+            return "用户消息"
+        case .assistantMessage:
+            return "助手消息"
+        case .systemMessage:
+            return "系统消息"
+        case .toolMessage:
+            return "工具消息"
+        case .errorMessage:
+            return "错误消息"
+        }
+    }
 }
 
 // MARK: - 私有子视图
@@ -123,6 +197,7 @@ private struct SessionRowView: View {
     @Binding var showBranchOptions: Bool
     @Binding var sessionIndexToDelete: IndexSet?
     @Binding var showDeleteSessionConfirm: Bool
+    let searchSummary: String?
     
     // MARK: 操作
     
@@ -133,14 +208,23 @@ private struct SessionRowView: View {
     
     var body: some View {
         Button(action: { onSessionSelected(session) }) {
-            HStack {
-                MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
-                    .foregroundColor(.primary)
-                    .allowsHitTesting(false) // 修复 Bug #1：让点击可以“穿透”滚动文本
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
+                        .foregroundColor(.primary)
+                        .allowsHitTesting(false) // 修复 Bug #1：让点击可以“穿透”滚动文本
 
-                if currentSession?.id == session.id {
-                    Spacer()
-                    Image(systemName: "checkmark")
+                    if currentSession?.id == session.id {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                    }
+                }
+
+                if let searchSummary, !searchSummary.isEmpty {
+                    Text(searchSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading) // 修复 Bug #2：让整行都能被点击

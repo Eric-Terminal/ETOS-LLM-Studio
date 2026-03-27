@@ -20,8 +20,25 @@ struct SessionListView: View {
     @State private var sessionInfo: SessionInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
+    @State private var searchText: String = ""
     
     var body: some View {
+        let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(searchText)
+        let searchHits = normalizedQuery.isEmpty
+            ? [:]
+            : SessionHistorySearchSupport.searchHits(
+                sessions: viewModel.chatSessions,
+                query: searchText,
+                currentSessionID: viewModel.currentSession?.id,
+                currentSessionMessages: viewModel.allMessagesForSession,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+        let displayedSessions = normalizedQuery.isEmpty
+            ? viewModel.chatSessions
+            : viewModel.chatSessions.filter { searchHits[$0.id] != nil }
+
         List {
             Section {
                 Button {
@@ -35,12 +52,24 @@ struct SessionListView: View {
             }
             
             Section("会话") {
-                ForEach(viewModel.chatSessions) { session in
+                if !normalizedQuery.isEmpty {
+                    Text("匹配 \(displayedSessions.count) / \(viewModel.chatSessions.count) 个会话")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if displayedSessions.isEmpty {
+                    Text(normalizedQuery.isEmpty ? "暂无会话。" : "未找到匹配的历史会话。")
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(displayedSessions) { session in
                     SessionRow(
                         session: session,
                         isCurrent: session.id == viewModel.currentSession?.id,
                         isEditing: editingSessionID == session.id,
                         draftName: editingSessionID == session.id ? $draftName : .constant(session.name),
+                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: !normalizedQuery.isEmpty),
                         onCommit: { newName in
                             viewModel.updateSessionName(session, newName: newName)
                             editingSessionID = nil
@@ -78,12 +107,17 @@ struct SessionListView: View {
                 }
                 .onDelete { indexSet in
                     if let index = indexSet.first {
-                        sessionToDelete = viewModel.chatSessions[index]
+                        sessionToDelete = displayedSessions[index]
                     }
                 }
             }
         }
         .navigationTitle("会话管理")
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text("搜索会话标题或消息")
+        )
         .alert("确认删除会话", isPresented: Binding(
             get: { sessionToDelete != nil },
             set: { isPresented in
@@ -147,6 +181,36 @@ struct SessionListView: View {
             draftName = viewModel.currentSession?.name ?? ""
         }
     }
+
+    private func searchSummary(
+        for session: ChatSession,
+        in hits: [UUID: SessionHistorySearchHit],
+        queryActive: Bool
+    ) -> String? {
+        guard queryActive, let hit = hits[session.id] else { return nil }
+        return "\(sourceLabel(for: hit.source))：\(hit.preview)"
+    }
+
+    private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
+        switch source {
+        case .sessionName:
+            return "标题"
+        case .topicPrompt:
+            return "主题提示"
+        case .enhancedPrompt:
+            return "增强提示词"
+        case .userMessage:
+            return "用户消息"
+        case .assistantMessage:
+            return "助手消息"
+        case .systemMessage:
+            return "系统消息"
+        case .toolMessage:
+            return "工具消息"
+        case .errorMessage:
+            return "错误消息"
+        }
+    }
 }
 
 // MARK: - Row
@@ -156,6 +220,7 @@ private struct SessionRow: View {
     let isCurrent: Bool
     let isEditing: Bool
     @Binding var draftName: String
+    let searchSummary: String?
     
     let onCommit: (String) -> Void
     let onSelect: () -> Void
@@ -196,7 +261,12 @@ private struct SessionRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(session.name)
                             .font(.headline)
-                        if let topic = session.topicPrompt, !topic.isEmpty {
+                        if let searchSummary, !searchSummary.isEmpty {
+                            Text(searchSummary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        } else if let topic = session.topicPrompt, !topic.isEmpty {
                             Text(topic)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
