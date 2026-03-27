@@ -29,6 +29,7 @@ struct ContentView: View {
     @State private var fullErrorContent: String?
     @State private var isSettingsPresented = false
     @State private var settingsDestination: WatchSettingsNavigationDestination?
+    @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     @State private var pendingJumpRequest: MessageJumpRequest?
@@ -97,12 +98,7 @@ struct ContentView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
-                Task {
-                    await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
-                    await MainActor.run {
-                        openDailyPulse()
-                    }
-                }
+                openDailyPulse()
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
                 Task { @MainActor in
@@ -638,8 +634,7 @@ struct ContentView: View {
             // 启动时检查公告
             .task {
                 await announcementManager.checkAnnouncement()
-                await viewModel.prepareDailyPulseIfNeeded()
-                await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                scheduleDailyPulsePreparation(after: 1_500_000_000)
                 if applyDailyPulseContinuationIfNeeded() {
                     return
                 }
@@ -648,10 +643,11 @@ struct ContentView: View {
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                guard newPhase == .active else { return }
-                Task {
-                    await viewModel.prepareDailyPulseIfNeeded()
-                    await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+                switch newPhase {
+                case .active:
+                    scheduleDailyPulsePreparation(after: 1_500_000_000)
+                default:
+                    cancelDailyPulsePreparation()
                 }
             }
     }
@@ -680,6 +676,30 @@ struct ContentView: View {
 
     private var inputPlaceholderText: String {
         return NSLocalizedString("输入...", comment: "Default input placeholder on watch")
+    }
+
+    private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {
+        dailyPulsePreparationTask?.cancel()
+        dailyPulsePreparationTask = Task(priority: .utility) {
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            let isSceneActive = await MainActor.run { scenePhase == .active }
+            guard isSceneActive else { return }
+            await viewModel.prepareDailyPulseIfNeeded()
+            guard !Task.isCancelled else { return }
+            await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                dailyPulsePreparationTask = nil
+            }
+        }
+    }
+
+    private func cancelDailyPulsePreparation() {
+        dailyPulsePreparationTask?.cancel()
+        dailyPulsePreparationTask = nil
     }
 
 }

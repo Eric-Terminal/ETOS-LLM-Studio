@@ -45,10 +45,9 @@ struct SettingsView: View {
                     } label: {
                         HStack {
                             Text("模型")
-                            MarqueeText(
-                                content: selectedModelLabel(in: options),
-                                uiFont: .preferredFont(forTextStyle: .body)
-                            )
+                            Text(selectedModelLabel(in: options))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             .foregroundStyle(.secondary)
                             .allowsHitTesting(false)
                             .frame(maxWidth: .infinity, alignment: .trailing)
