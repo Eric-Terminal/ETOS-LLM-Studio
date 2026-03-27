@@ -35,55 +35,18 @@ struct SessionListView: View {
     @State private var sessionToEdit: ChatSession?
     @State private var showBranchOptions: Bool = false
     @State private var sessionToBranch: ChatSession?
-    @State private var searchText: String = ""
+    @State private var showSessionSearch: Bool = false
     
     // MARK: - 视图主体
     
     var body: some View {
-        let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(searchText)
-        let searchHits = normalizedQuery.isEmpty
-            ? [:]
-            : SessionHistorySearchSupport.searchHits(
-                sessions: sessions,
-                query: searchText,
-                messageLoader: { sessionID in
-                    Persistence.loadMessages(for: sessionID)
-                }
-            )
-        let displayedSessions = normalizedQuery.isEmpty
-            ? sessions
-            : sessions.filter { searchHits[$0.id] != nil }
-
         List {
-            Section {
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    TextField("搜索会话标题或消息", text: $searchText.watchKeyboardNewlineBinding())
-                    if !searchText.isEmpty {
-                        Button {
-                            searchText = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                if !normalizedQuery.isEmpty {
-                    Text("匹配 \(displayedSessions.count) / \(sessions.count) 个会话")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if displayedSessions.isEmpty {
-                Text(normalizedQuery.isEmpty ? "暂无历史会话。" : "未找到匹配的历史会话。")
+            if sessions.isEmpty {
+                Text("暂无历史会话。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(displayedSessions) { session in
+                ForEach(sessions) { session in
                     SessionRowView(
                         session: session,
                         currentSession: $currentSession,
@@ -93,7 +56,7 @@ struct SessionListView: View {
                         showBranchOptions: $showBranchOptions,
                         sessionIndexToDelete: $sessionIndexToDelete,
                         showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: !normalizedQuery.isEmpty),
+                        searchSummary: nil,
                         onSessionSelected: onSessionSelected,
                         deleteLastMessageAction: deleteLastMessageAction
                     )
@@ -101,6 +64,25 @@ struct SessionListView: View {
             }
         }
         .navigationTitle("历史会话")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSessionSearch = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("搜索会话")
+            }
+        }
+        .navigationDestination(isPresented: $showSessionSearch) {
+            WatchSessionSearchView(
+                sessions: sessions,
+                currentSessionID: currentSession?.id,
+                onSelect: { session in
+                    onSessionSelected(session)
+                }
+            )
+        }
         .sheet(item: $sessionToEdit) {
             sessionToEdit in 
             if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionToEdit.id }) {
@@ -149,13 +131,125 @@ struct SessionListView: View {
             }
         }
     }
+}
 
-    private func searchSummary(
-        for session: ChatSession,
-        in hits: [UUID: SessionHistorySearchHit],
-        queryActive: Bool
-    ) -> String? {
-        guard queryActive, let hit = hits[session.id] else { return nil }
+private struct WatchSessionSearchView: View {
+    let sessions: [ChatSession]
+    let currentSessionID: UUID?
+    let onSelect: (ChatSession) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText: String = ""
+
+    private var normalizedQuery: String {
+        SessionHistorySearchSupport.normalizedQuery(searchText)
+    }
+
+    private var searchHits: [UUID: SessionHistorySearchHit] {
+        guard !normalizedQuery.isEmpty else { return [:] }
+        return SessionHistorySearchSupport.searchHits(
+            sessions: sessions,
+            query: searchText,
+            messageLoader: { sessionID in
+                Persistence.loadMessages(for: sessionID)
+            }
+        )
+    }
+
+    private var displayedSessions: [ChatSession] {
+        guard !normalizedQuery.isEmpty else { return [] }
+        return sessions.filter { searchHits[$0.id] != nil }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("搜索会话标题或消息", text: $searchText.watchKeyboardNewlineBinding())
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Section {
+                if normalizedQuery.isEmpty {
+                    Text("输入关键词后显示匹配结果。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("匹配 \(displayedSessions.count) / \(sessions.count) 个会话")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                if normalizedQuery.isEmpty {
+                    EmptyView()
+                } else if displayedSessions.isEmpty {
+                    Text("未找到匹配的历史会话。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(displayedSessions) { session in
+                        resultRow(session)
+                    }
+                }
+            }
+        }
+        .navigationTitle("搜索会话")
+    }
+
+    @ViewBuilder
+    private func resultRow(_ session: ChatSession) -> some View {
+        let summary = searchSummary(for: session)
+
+        Button {
+            onSelect(session)
+            dismiss()
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.name)
+                        .font(.footnote)
+                        .lineLimit(1)
+
+                    if let summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    } else if let topic = session.topicPrompt, !topic.isEmpty {
+                        Text(topic)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                if session.id == currentSessionID {
+                    Image(systemName: "checkmark")
+                        .font(.caption.bold())
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func searchSummary(for session: ChatSession) -> String? {
+        guard let hit = searchHits[session.id] else { return nil }
         return "\(sourceLabel(for: hit.source))：\(hit.preview)"
     }
 
