@@ -47,6 +47,18 @@ struct ExtendedFeaturesView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                NavigationLink {
+                    ThirdPartyImportView()
+                } label: {
+                    Label("第三方导入", systemImage: "square.and.arrow.down.on.square")
+                }
+            } footer: {
+                Text("从 Cherry Studio 等第三方应用导入提供商与会话。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .navigationTitle("拓展功能")
         .listStyle(.insetGrouped)

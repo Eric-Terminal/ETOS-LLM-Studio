@@ -25,6 +25,7 @@ struct SessionListView: View {
     let deleteAction: (IndexSet) -> Void
     let branchAction: (ChatSession, Bool) -> ChatSession?
     let deleteLastMessageAction: (ChatSession) -> Void
+    let sendSessionToCompanionAction: (ChatSession) -> Void
     let onSessionSelected: (ChatSession) -> Void
     let updateSessionAction: (ChatSession) -> Void
     
@@ -35,28 +36,55 @@ struct SessionListView: View {
     @State private var sessionToEdit: ChatSession?
     @State private var showBranchOptions: Bool = false
     @State private var sessionToBranch: ChatSession?
+    @State private var showSessionSearch: Bool = false
     
     // MARK: - 视图主体
     
     var body: some View {
         List {
-            ForEach(sessions) {
-                session in 
-                SessionRowView(
-                    session: session,
-                    currentSession: $currentSession,
-                    sessions: $sessions,
-                    sessionToEdit: $sessionToEdit,
-                    sessionToBranch: $sessionToBranch,
-                    showBranchOptions: $showBranchOptions,
-                    sessionIndexToDelete: $sessionIndexToDelete,
-                    showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                    onSessionSelected: onSessionSelected,
-                    deleteLastMessageAction: deleteLastMessageAction
-                )
+            if sessions.isEmpty {
+                Text("暂无历史会话。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(sessions) { session in
+                    SessionRowView(
+                        session: session,
+                        currentSession: $currentSession,
+                        sessions: $sessions,
+                        sessionToEdit: $sessionToEdit,
+                        sessionToBranch: $sessionToBranch,
+                        showBranchOptions: $showBranchOptions,
+                        sessionIndexToDelete: $sessionIndexToDelete,
+                        showDeleteSessionConfirm: $showDeleteSessionConfirm,
+                        searchSummary: nil,
+                        onSessionSelected: onSessionSelected,
+                        deleteLastMessageAction: deleteLastMessageAction,
+                        sendSessionToCompanionAction: sendSessionToCompanionAction
+                    )
+                }
             }
         }
         .navigationTitle("历史会话")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSessionSearch = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("搜索会话")
+            }
+        }
+        .navigationDestination(isPresented: $showSessionSearch) {
+            WatchSessionSearchView(
+                sessions: sessions,
+                currentSessionID: currentSession?.id,
+                onSelect: { session in
+                    onSessionSelected(session)
+                }
+            )
+        }
         .sheet(item: $sessionToEdit) {
             sessionToEdit in 
             if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionToEdit.id }) {
@@ -107,6 +135,148 @@ struct SessionListView: View {
     }
 }
 
+private struct WatchSessionSearchView: View {
+    let sessions: [ChatSession]
+    let currentSessionID: UUID?
+    let onSelect: (ChatSession) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText: String = ""
+
+    private var normalizedQuery: String {
+        SessionHistorySearchSupport.normalizedQuery(searchText)
+    }
+
+    private var searchHits: [UUID: SessionHistorySearchHit] {
+        guard !normalizedQuery.isEmpty else { return [:] }
+        return SessionHistorySearchSupport.searchHits(
+            sessions: sessions,
+            query: searchText,
+            messageLoader: { sessionID in
+                Persistence.loadMessages(for: sessionID)
+            }
+        )
+    }
+
+    private var displayedSessions: [ChatSession] {
+        guard !normalizedQuery.isEmpty else { return [] }
+        return sessions.filter { searchHits[$0.id] != nil }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("搜索会话标题或消息", text: $searchText.watchKeyboardNewlineBinding())
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Section {
+                if normalizedQuery.isEmpty {
+                    Text("输入关键词后显示匹配结果。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("匹配 \(displayedSessions.count) / \(sessions.count) 个会话")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                if normalizedQuery.isEmpty {
+                    EmptyView()
+                } else if displayedSessions.isEmpty {
+                    Text("未找到匹配的历史会话。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(displayedSessions) { session in
+                        resultRow(session)
+                    }
+                }
+            }
+        }
+        .navigationTitle("搜索会话")
+    }
+
+    @ViewBuilder
+    private func resultRow(_ session: ChatSession) -> some View {
+        let summary = searchSummary(for: session)
+
+        Button {
+            onSelect(session)
+            dismiss()
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.name)
+                        .font(.footnote)
+                        .lineLimit(1)
+
+                    if let summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    } else if let topic = session.topicPrompt, !topic.isEmpty {
+                        Text(topic)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                if session.id == currentSessionID {
+                    Image(systemName: "checkmark")
+                        .font(.caption.bold())
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func searchSummary(for session: ChatSession) -> String? {
+        guard let hit = searchHits[session.id] else { return nil }
+        return "\(sourceLabel(for: hit.source))：\(hit.preview)"
+    }
+
+    private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
+        switch source {
+        case .sessionName:
+            return "标题"
+        case .topicPrompt:
+            return "主题提示"
+        case .enhancedPrompt:
+            return "增强提示词"
+        case .userMessage:
+            return "用户消息"
+        case .assistantMessage:
+            return "助手消息"
+        case .systemMessage:
+            return "系统消息"
+        case .toolMessage:
+            return "工具消息"
+        case .errorMessage:
+            return "错误消息"
+        }
+    }
+}
+
 // MARK: - 私有子视图
 
 /// SessionListView 的列表行视图
@@ -123,24 +293,35 @@ private struct SessionRowView: View {
     @Binding var showBranchOptions: Bool
     @Binding var sessionIndexToDelete: IndexSet?
     @Binding var showDeleteSessionConfirm: Bool
+    let searchSummary: String?
     
     // MARK: 操作
     
     let onSessionSelected: (ChatSession) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
+    let sendSessionToCompanionAction: (ChatSession) -> Void
 
     // MARK: 视图主体
     
     var body: some View {
         Button(action: { onSessionSelected(session) }) {
-            HStack {
-                MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
-                    .foregroundColor(.primary)
-                    .allowsHitTesting(false) // 修复 Bug #1：让点击可以“穿透”滚动文本
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
+                        .foregroundColor(.primary)
+                        .allowsHitTesting(false) // 修复 Bug #1：让点击可以“穿透”滚动文本
 
-                if currentSession?.id == session.id {
-                    Spacer()
-                    Image(systemName: "checkmark")
+                    if currentSession?.id == session.id {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                    }
+                }
+
+                if let searchSummary, !searchSummary.isEmpty {
+                    Text(searchSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading) // 修复 Bug #2：让整行都能被点击
@@ -157,7 +338,8 @@ private struct SessionRowView: View {
                     sessionIndexToDelete: $sessionIndexToDelete,
                     showDeleteSessionConfirm: $showDeleteSessionConfirm,
                     sessions: $sessions,
-                    onDeleteLastMessage: { deleteLastMessageAction(session) }
+                    onDeleteLastMessage: { deleteLastMessageAction(session) },
+                    onSendSessionToCompanion: { sendSessionToCompanionAction(session) }
                 )
             } label: {
                 Label("更多", systemImage: "ellipsis")

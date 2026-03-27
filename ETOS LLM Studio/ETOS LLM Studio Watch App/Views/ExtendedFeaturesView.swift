@@ -162,6 +162,20 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    ThirdPartyImportWatchHintView()
+                } label: {
+                    Label("第三方导入", systemImage: "square.and.arrow.down.on.square")
+                        .font(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("请在 iPhone 端完成第三方数据导入。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     ImageGenerationFeatureView()
                         .environmentObject(viewModel)
                 } label: {

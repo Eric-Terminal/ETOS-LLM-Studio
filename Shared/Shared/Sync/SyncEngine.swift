@@ -18,7 +18,8 @@ public enum SyncEngine {
     public static func buildPackage(
         options: SyncOptions,
         chatService: ChatService = .shared,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        sessionIDs: Set<UUID>? = nil
     ) -> SyncPackage {
         var providers: [Provider] = []
         var sessions: [SyncedSession] = []
@@ -45,7 +46,11 @@ public enum SyncEngine {
         }
         
         if options.contains(.sessions) {
-            let allSessions = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
+            let allSessions = chatService.chatSessionsSubject.value.filter { session in
+                guard !session.isTemporary else { return false }
+                guard let sessionIDs else { return true }
+                return sessionIDs.contains(session.id)
+            }
             for session in allSessions {
                 let messages = Persistence.loadMessages(for: session.id)
                 sessions.append(SyncedSession(session: session, messages: messages))

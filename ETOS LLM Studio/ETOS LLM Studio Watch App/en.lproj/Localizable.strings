@@ -1146,3 +1146,9 @@
 "旧文本在文件中出现了 %d 次，请改用 replace_all 或提供更精确的片段。" = "The old text appears %d times in the file. Use replace_all or provide a more specific snippet.";
 "不允许删除 Documents 根目录。" = "Deleting the Documents root directory is not allowed.";
 "内容没有变化。" = "There are no content changes.";
+
+"快速定位" = "Quick jump";
+"输入消息序号（1-%d）" = "Enter message index (1-%d)";
+"跳转到该条消息" = "Jump to this message";
+"请输入有效的序号。" = "Enter a valid index.";
+"序号超出范围，请输入 1 到 %d。" = "Index out of range. Enter 1 to %d.";

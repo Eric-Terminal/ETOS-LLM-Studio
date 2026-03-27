@@ -42,7 +42,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         return WCSession.default
     }
     
-    private var pendingTransfers: [ObjectIdentifier: SyncOptions] = [:]
+    private struct PendingTransferContext {
+        let expectsResponse: Bool
+    }
+
+    private var pendingTransfers: [ObjectIdentifier: PendingTransferContext] = [:]
     /// 标记是否为静默同步（启动时自动同步）
     private var isSilentSync = false
     private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
@@ -60,43 +64,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     /// 执行双向同步：发送本地数据并接收对端数据
     public func performSync(options: SyncOptions, silent: Bool = false) {
         isSilentSync = silent
-        
-        guard let session else {
-            if !silent {
-                state = .failed("此设备不支持 WatchConnectivity。")
-            }
-            return
-        }
-        
-        guard !options.isEmpty else {
-            if !silent {
-                state = .failed("请至少勾选一项同步内容。")
-            }
-            return
-        }
-        
-#if os(iOS)
-        guard session.isPaired else {
-            if !silent {
-                state = .failed("未检测到已配对的对端设备。")
-            }
-            return
-        }
-#elseif os(watchOS)
-        guard session.isCompanionAppInstalled else {
-            if !silent {
-                state = .failed("未检测到配套的 iPhone 应用。")
-            }
-            return
-        }
-#endif
-        
-        guard session.isReachable else {
-            if !silent {
-                state = .failed("对端不在线，稍后重试。")
-            }
-            return
-        }
+        guard validateSessionBeforeTransfer(options: options, silent: silent) != nil else { return }
         
         if !silent {
             state = .syncing("正在同步数据…")
@@ -105,6 +73,28 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         
         // 双向同步：发送本地数据，对端会自动回传
         sendPackage(options: options, isResponse: false)
+    }
+
+    /// 发送单个会话到对端设备（单向）
+    public func sendSessionToCompanion(sessionID: UUID) {
+        isSilentSync = false
+        guard validateSessionBeforeTransfer(options: [.sessions], silent: false) != nil else { return }
+
+        guard let selectedSession = ChatService.shared.chatSessionsSubject.value.first(where: {
+            $0.id == sessionID && !$0.isTemporary
+        }) else {
+            state = .failed("未找到可发送的会话。")
+            return
+        }
+
+        state = .syncing("正在发送“\(selectedSession.name)”…")
+        lastSummary = .empty
+        sendPackage(
+            options: [.sessions],
+            isResponse: false,
+            sessionIDs: Set([sessionID]),
+            expectsResponse: false
+        )
     }
     
     /// 启动时自动同步（静默模式）
@@ -144,6 +134,47 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: key) != nil else { return defaultValue }
         return defaults.bool(forKey: key)
+    }
+
+    private func validateSessionBeforeTransfer(options: SyncOptions, silent: Bool) -> WCSession? {
+        guard let session else {
+            if !silent {
+                state = .failed("此设备不支持 WatchConnectivity。")
+            }
+            return nil
+        }
+
+        guard !options.isEmpty else {
+            if !silent {
+                state = .failed("请至少勾选一项同步内容。")
+            }
+            return nil
+        }
+
+#if os(iOS)
+        guard session.isPaired else {
+            if !silent {
+                state = .failed("未检测到已配对的对端设备。")
+            }
+            return nil
+        }
+#elseif os(watchOS)
+        guard session.isCompanionAppInstalled else {
+            if !silent {
+                state = .failed("未检测到配套的 iPhone 应用。")
+            }
+            return nil
+        }
+#endif
+
+        guard session.isReachable else {
+            if !silent {
+                state = .failed("对端不在线，稍后重试。")
+            }
+            return nil
+        }
+
+        return session
     }
     
     // MARK: - Notifications
@@ -200,9 +231,21 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
-    private func sendPackage(options: SyncOptions, isResponse: Bool, requestID: String? = nil) {
+    private func sendPackage(
+        options: SyncOptions,
+        isResponse: Bool,
+        requestID: String? = nil,
+        sessionIDs: Set<UUID>? = nil,
+        expectsResponse: Bool = true
+    ) {
         guard let session else { return }
-        let package = SyncEngine.buildPackage(options: options)
+        let package = SyncEngine.buildPackage(options: options, sessionIDs: sessionIDs)
+        if options.contains(.sessions), sessionIDs != nil, package.sessions.isEmpty {
+            if !isSilentSync {
+                state = .failed("未找到可发送的会话。")
+            }
+            return
+        }
         guard let data = try? JSONEncoder().encode(package) else {
             if !isSilentSync {
                 state = .failed("无法编码同步数据。")
@@ -224,6 +267,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         var metadata: [String: Any] = [
             "options": options.rawValue,
             "response": isResponse,
+            "expectsResponse": expectsResponse,
             "timestamp": Date().timeIntervalSince1970
         ]
         if let requestID {
@@ -231,13 +275,16 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
         
         let transfer = session.transferFile(tempURL, metadata: metadata)
-        pendingTransfers[ObjectIdentifier(transfer)] = options
+        pendingTransfers[ObjectIdentifier(transfer)] = PendingTransferContext(
+            expectsResponse: expectsResponse
+        )
     }
     
     private func applyPackage(
         from url: URL,
         isResponse: Bool,
-        requestID: String?
+        requestID: String?,
+        expectsResponse: Bool
     ) async {
         do {
             let data = try Data(contentsOf: url)
@@ -254,9 +301,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             // 发送通知（仅静默模式下）
             sendSyncSuccessNotification(summary: summary)
             
-            if !isResponse {
+            if !isResponse && expectsResponse {
                 // 主动回传对端最新数据，实现双向同步
-                sendPackage(options: package.options, isResponse: true)
+                sendPackage(options: package.options, isResponse: true, expectsResponse: false)
             }
             
             if let idString = requestID, let uuid = UUID(uuidString: idString) {
@@ -297,7 +344,13 @@ extension WatchSyncManager: WCSessionDelegate {
         Task { @MainActor in
             let isResponse = (file.metadata?["response"] as? Bool) ?? false
             let requestID = file.metadata?["requestID"] as? String
-            await applyPackage(from: file.fileURL, isResponse: isResponse, requestID: requestID)
+            let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
+            await applyPackage(
+                from: file.fileURL,
+                isResponse: isResponse,
+                requestID: requestID,
+                expectsResponse: expectsResponse
+            )
         }
     }
     
@@ -308,6 +361,7 @@ extension WatchSyncManager: WCSessionDelegate {
     ) {
         Task { @MainActor in
             let identifier = ObjectIdentifier(fileTransfer)
+            let transferContext = pendingTransfers[identifier]
             defer { pendingTransfers.removeValue(forKey: identifier) }
             
             if let error {
@@ -315,7 +369,13 @@ extension WatchSyncManager: WCSessionDelegate {
                     state = .failed("发送失败: \(error.localizedDescription)")
                 }
             } else if !isSilentSync {
-                state = .syncing("等待对端处理…")
+                if transferContext?.expectsResponse == false {
+                    lastSummary = .empty
+                    lastUpdatedAt = Date()
+                    state = .success(.empty)
+                } else {
+                    state = .syncing("等待对端处理…")
+                }
             }
         }
     }

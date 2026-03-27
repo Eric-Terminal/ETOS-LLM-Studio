@@ -67,14 +67,21 @@ struct ChatView: View {
     @State private var sessionInfo: SessionPickerInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
+    @State private var sessionPickerSearchText: String = ""
+    @State private var showSessionPickerSearchInput: Bool = false
     @State private var imageDownloadAlertMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
+    @State private var chatScrollViewportHeight: CGFloat = 0
+    @State private var chatBottomAnchorMaxY: CGFloat = .greatestFiniteMagnitude
+    @State private var pendingJumpRequest: MessageJumpRequest?
     @FocusState private var composerFocused: Bool
+    @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
+    private let chatScrollCoordinateSpace = "chat-scroll-coordinate-space"
     private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
     private let navBarSubtitleFont = UIFont.systemFont(ofSize: 12)
     private let navBarVerticalPadding: CGFloat = 8
@@ -179,24 +186,31 @@ struct ChatView: View {
                                 .contextMenu {
                                     contextMenu(for: message)
                                 }
-                                .onAppear {
-                                    if state.id == displayedMessages.last?.id {
-                                        showScrollToBottom = false
-                                    }
-                                }
-                                .onDisappear {
-                                    if state.id == displayedMessages.last?.id {
-                                        showScrollToBottom = true
-                                    }
-                                }
                             }
 
                             Color.clear
                                 .frame(height: 8)
                                 .id(scrollBottomAnchorID)
+                                .background(
+                                    GeometryReader { proxy in
+                                        Color.clear.preference(
+                                            key: ChatBottomAnchorMaxYPreferenceKey.self,
+                                            value: proxy.frame(in: .named(chatScrollCoordinateSpace)).maxY
+                                        )
+                                    }
+                                )
                         }
                         .padding(.horizontal, 8)
                     }
+                    .coordinateSpace(name: chatScrollCoordinateSpace)
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: ChatScrollViewportHeightPreferenceKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    )
                     .scrollDismissesKeyboard(.interactively)
                     .scrollIndicators(.hidden)
                     .simultaneousGesture(
@@ -215,6 +229,20 @@ struct ChatView: View {
                     .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
                         guard newValue != nil, !showScrollToBottom else { return }
                         scrollToBottom(proxy: proxy)
+                    }
+                    .onChange(of: pendingJumpRequest) { _, request in
+                        guard let request else { return }
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(request.messageID, anchor: .center)
+                        }
+                    }
+                    .onPreferenceChange(ChatScrollViewportHeightPreferenceKey.self) { newHeight in
+                        chatScrollViewportHeight = newHeight
+                        updateScrollToBottomVisibility()
+                    }
+                    .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { newMaxY in
+                        chatBottomAnchorMaxY = newMaxY
+                        updateScrollToBottomVisibility()
                     }
                     .overlay(alignment: .bottomTrailing) {
                         // Telegram 风格的滚动到底部按钮
@@ -291,7 +319,12 @@ struct ChatView: View {
                 .presentationDetents([.medium, .large])
             }
             .sheet(item: $messageInfo) { info in
-                MessageInfoSheet(payload: info)
+                MessageInfoSheet(
+                    payload: info,
+                    onJumpToMessage: { displayIndex in
+                        jumpToMessage(displayIndex: displayIndex)
+                    }
+                )
             }
             .sheet(item: $fullErrorContent) { payload in
                 FullErrorContentSheet(payload: payload)
@@ -665,6 +698,9 @@ struct ChatView: View {
             if showModelPickerPanel {
                 showModelPickerPanel = false
             }
+            if showSessionPickerPanel {
+                resetSessionPickerSearchState()
+            }
             showSessionPickerPanel.toggle()
         }
     }
@@ -672,7 +708,14 @@ struct ChatView: View {
     private func dismissSessionPickerPanel() {
         withAnimation(modelPickerAnimation) {
             showSessionPickerPanel = false
+            resetSessionPickerSearchState()
         }
+    }
+
+    private func resetSessionPickerSearchState() {
+        sessionPickerSearchText = ""
+        showSessionPickerSearchInput = false
+        sessionPickerSearchFocused = false
     }
 
     private var modelPickerOverlay: some View {
@@ -842,7 +885,24 @@ struct ChatView: View {
     }
 
     private var sessionPickerOverlay: some View {
-        GeometryReader { proxy in
+        let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(sessionPickerSearchText)
+        let queryActive = !normalizedQuery.isEmpty
+        let searchHits = queryActive
+            ? SessionHistorySearchSupport.searchHits(
+                sessions: viewModel.chatSessions,
+                query: sessionPickerSearchText,
+                currentSessionID: viewModel.currentSession?.id,
+                currentSessionMessages: viewModel.allMessagesForSession,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+            : [:]
+        let displayedSessions = queryActive
+            ? viewModel.chatSessions.filter { searchHits[$0.id] != nil }
+            : viewModel.chatSessions
+
+        return GeometryReader { proxy in
             let panelHeight = proxy.size.height * sessionPickerHeightRatio
             ZStack(alignment: .top) {
                 Color.black.opacity(colorScheme == .dark ? 0.35 : 0.2)
@@ -853,15 +913,19 @@ struct ChatView: View {
                     .transition(.opacity)
 
                 VStack(spacing: 12) {
-                    sessionPickerHeader
+                    sessionPickerHeader(queryActive: queryActive, displayedCount: displayedSessions.count)
 
-                    if viewModel.chatSessions.isEmpty {
-                        sessionPickerEmptyState
+                    if displayedSessions.isEmpty {
+                        sessionPickerEmptyState(queryActive: queryActive)
                     } else {
-                        sessionPickerList
+                        sessionPickerList(
+                            displayedSessions: displayedSessions,
+                            searchHits: searchHits,
+                            queryActive: queryActive
+                        )
                     }
 
-                    sessionPickerFooter
+                    sessionPickerFooter(queryActive: queryActive, displayedCount: displayedSessions.count)
                 }
                 .frame(width: proxy.size.width, height: panelHeight, alignment: .top)
                 .background(sessionPickerPanelBackground)
@@ -881,20 +945,36 @@ struct ChatView: View {
         }
     }
 
-    private var sessionPickerHeader: some View {
+    private func sessionPickerHeader(queryActive: Bool, displayedCount: Int) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("会话")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
-                Text("快速切换与管理")
-                    .font(.system(size: 12))
-                    .foregroundColor(TelegramColors.navBarSubtitle)
+                if queryActive {
+                    Text("匹配 \(displayedCount) / \(viewModel.chatSessions.count)")
+                        .font(.system(size: 12))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+                } else {
+                    Text("快速切换与管理")
+                        .font(.system(size: 12))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+                }
             }
 
             Spacer()
 
             HStack(spacing: 8) {
+                pickerHeaderActionButton(
+                    systemName: "magnifyingglass",
+                    accessibilityLabel: "搜索会话"
+                ) {
+                    showSessionPickerSearchInput = true
+                    DispatchQueue.main.async {
+                        sessionPickerSearchFocused = true
+                    }
+                }
+
                 pickerHeaderActionButton(
                     systemName: "plus",
                     accessibilityLabel: "开启新对话"
@@ -913,16 +993,46 @@ struct ChatView: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if showSessionPickerSearchInput {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("搜索会话标题或消息", text: $sessionPickerSearchText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($sessionPickerSearchFocused)
+                    if !sessionPickerSearchText.isEmpty {
+                        Button {
+                            sessionPickerSearchText = ""
+                            sessionPickerSearchFocused = true
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
+                )
+                .offset(y: 50)
+            }
+        }
         .padding(.horizontal, 18)
         .padding(.top, 14)
+        .padding(.bottom, showSessionPickerSearchInput ? 52 : 0)
     }
 
-    private var sessionPickerEmptyState: some View {
+    private func sessionPickerEmptyState(queryActive: Bool) -> some View {
         VStack(spacing: 8) {
-            Text("暂无会话")
+            Text(queryActive ? "未找到匹配会话" : "暂无会话")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarText)
-            Text("创建一个新对话开始吧")
+            Text(queryActive ? "换个关键词试试看" : "创建一个新对话开始吧")
                 .font(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
@@ -931,11 +1041,18 @@ struct ChatView: View {
         .padding(.bottom, 16)
     }
 
-    private var sessionPickerList: some View {
+    private func sessionPickerList(
+        displayedSessions: [ChatSession],
+        searchHits: [UUID: SessionHistorySearchHit],
+        queryActive: Bool
+    ) -> some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                ForEach(viewModel.chatSessions) { session in
-                    sessionPickerRow(session)
+                ForEach(displayedSessions) { session in
+                    sessionPickerRow(
+                        session,
+                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: queryActive)
+                    )
                 }
             }
             .padding(.horizontal, 16)
@@ -944,8 +1061,12 @@ struct ChatView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private var sessionPickerFooter: some View {
-        Text(String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count))
+    private func sessionPickerFooter(queryActive: Bool, displayedCount: Int) -> some View {
+        Text(
+            queryActive
+            ? "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话"
+            : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
+        )
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(TelegramColors.navBarSubtitle)
             .padding(.bottom, 14)
@@ -970,7 +1091,7 @@ struct ChatView: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
-    private func sessionPickerRow(_ session: ChatSession) -> some View {
+    private func sessionPickerRow(_ session: ChatSession, searchSummary: String?) -> some View {
         let isCurrent = session.id == viewModel.currentSession?.id
         let isEditing = editingSessionID == session.id
         let baseFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
@@ -981,6 +1102,7 @@ struct ChatView: View {
             isCurrent: isCurrent,
             isEditing: isEditing,
             draftName: isEditing ? $sessionDraftName : .constant(session.name),
+            searchSummary: searchSummary,
             onCommit: { newName in
                 viewModel.updateSessionName(session, newName: newName)
                 editingSessionID = nil
@@ -1025,6 +1147,36 @@ struct ChatView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.white.opacity(isCurrent ? 0.3 : 0.15), lineWidth: isCurrent ? 0.8 : 0.5)
         )
+    }
+
+    private func searchSummary(
+        for session: ChatSession,
+        in hits: [UUID: SessionHistorySearchHit],
+        queryActive: Bool
+    ) -> String? {
+        guard queryActive, let hit = hits[session.id] else { return nil }
+        return "\(sourceLabel(for: hit.source))：\(hit.preview)"
+    }
+
+    private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
+        switch source {
+        case .sessionName:
+            return "标题"
+        case .topicPrompt:
+            return "主题提示"
+        case .enhancedPrompt:
+            return "增强提示词"
+        case .userMessage:
+            return "用户消息"
+        case .assistantMessage:
+            return "助手消息"
+        case .systemMessage:
+            return "系统消息"
+        case .toolMessage:
+            return "工具消息"
+        case .errorMessage:
+            return "错误消息"
+        }
     }
 
     private func selectSessionFromPicker(_ session: ChatSession) {
@@ -1324,9 +1476,43 @@ private struct SafeAreaBottomKey: PreferenceKey {
     }
 }
 
+private struct ChatScrollViewportHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = .greatestFiniteMagnitude
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Helpers
 
 private extension ChatView {
+    func jumpToMessage(displayIndex: Int) -> Bool {
+        let targetZeroBasedIndex = displayIndex - 1
+        guard targetZeroBasedIndex >= 0, targetZeroBasedIndex < viewModel.allMessagesForSession.count else {
+            return false
+        }
+
+        let targetMessageID = viewModel.allMessagesForSession[targetZeroBasedIndex].id
+        let isVisible = viewModel.displayMessages.contains(where: { $0.id == targetMessageID })
+        if !isVisible {
+            viewModel.loadEntireHistory()
+        }
+
+        DispatchQueue.main.async {
+            pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
+        }
+        return true
+    }
+
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
@@ -1356,6 +1542,25 @@ private extension ChatView {
         }
     }
 
+    func updateScrollToBottomVisibility() {
+        guard !viewModel.displayMessages.isEmpty else {
+            showScrollToBottom = false
+            return
+        }
+        guard chatScrollViewportHeight > 0 else { return }
+
+        let distanceToBottom = chatBottomAnchorMaxY - chatScrollViewportHeight
+        let shouldShow = distanceToBottom > 24
+        if showScrollToBottom != shouldShow {
+            showScrollToBottom = shouldShow
+        }
+    }
+
+}
+
+private struct MessageJumpRequest: Equatable {
+    let token = UUID()
+    let messageID: UUID
 }
 
 // MARK: - Telegram Default Background
@@ -2707,6 +2912,7 @@ private struct SessionPickerRow: View {
     let isCurrent: Bool
     let isEditing: Bool
     @Binding var draftName: String
+    let searchSummary: String?
 
     let onCommit: (String) -> Void
     let onSelect: () -> Void
@@ -2747,7 +2953,12 @@ private struct SessionPickerRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(session.name)
                             .font(.headline)
-                        if let topic = session.topicPrompt, !topic.isEmpty {
+                        if let searchSummary, !searchSummary.isEmpty {
+                            Text(searchSummary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        } else if let topic = session.topicPrompt, !topic.isEmpty {
                             Text(topic)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -2872,7 +3083,10 @@ private struct FullErrorContentSheet: View {
 /// 消息详情弹窗，展示消息的唯一标识与位置索引。
 private struct MessageInfoSheet: View {
     let payload: MessageInfoPayload
+    let onJumpToMessage: (Int) -> Bool
     @Environment(\.dismiss) private var dismiss
+    @State private var jumpInput: String = ""
+    @State private var jumpError: String?
     
     var body: some View {
         NavigationStack {
@@ -2889,6 +3103,34 @@ private struct MessageInfoSheet: View {
                                 payload.totalCount
                             )
                         )
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        TextField(
+                            String(
+                                format: NSLocalizedString("输入消息序号（1-%d）", comment: "Message index input placeholder"),
+                                payload.totalCount
+                            ),
+                            text: $jumpInput
+                        )
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                        Button(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title")) {
+                            submitJump()
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        if let jumpError, !jumpError.isEmpty {
+                            Text(jumpError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
                     }
                 }
                 
@@ -2999,6 +3241,33 @@ private struct MessageInfoSheet: View {
             return "\(base) (\(NSLocalizedString("估算", comment: "Estimated")))"
         }
         return base
+    }
+
+    private func submitJump() {
+        let trimmed = jumpInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let displayIndex = Int(trimmed) else {
+            jumpError = NSLocalizedString("请输入有效的序号。", comment: "Invalid message index hint")
+            return
+        }
+
+        guard displayIndex >= 1 && displayIndex <= payload.totalCount else {
+            jumpError = String(
+                format: NSLocalizedString("序号超出范围，请输入 1 到 %d。", comment: "Out of range message index hint"),
+                payload.totalCount
+            )
+            return
+        }
+
+        guard onJumpToMessage(displayIndex) else {
+            jumpError = String(
+                format: NSLocalizedString("序号超出范围，请输入 1 到 %d。", comment: "Out of range message index hint"),
+                payload.totalCount
+            )
+            return
+        }
+
+        jumpError = nil
+        dismiss()
     }
 }
 

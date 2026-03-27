@@ -1031,6 +1031,71 @@ struct OpenAIAdapterTests {
         #expect(provider == "gemini")
     }
 
+    @Test("OpenAI 解析 Gemini extra_content 中的 thought_signature")
+    func testParseResponsePreservesGeminiExtraContentThoughtSignature() throws {
+        let json = """
+        {
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_extra_1",
+                    "type": "function",
+                    "function": {
+                      "name": "save_memory",
+                      "arguments": "{\\"content\\":\\"Hello\\"}"
+                    },
+                    "extra_content": {
+                      "google": {
+                        "thought_signature": "sig-extra-1"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let message = try adapter.parseResponse(data: data)
+        let call = try #require(message.toolCalls?.first)
+        #expect(call.id == "call_extra_1")
+        #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-extra-1"))
+    }
+
+    @Test("OpenAI 请求会镜像 thought_signature 到 Gemini extra_content")
+    func testBuildRequestIncludesGeminiExtraContentThoughtSignature() throws {
+        let toolCall = InternalToolCall(
+            id: "call_gemini_sig_1",
+            toolName: "save_memory",
+            arguments: #"{"content":"test"}"#,
+            providerSpecificFields: [
+                "thought_signature": .string("sig-gemini-1")
+            ]
+        )
+        let messages = [ChatMessage(role: .assistant, content: "", toolCalls: [toolCall])]
+
+        guard let request = adapter.buildChatRequest(for: dummyModel, commonPayload: [:], messages: messages, tools: nil, audioAttachments: [:], imageAttachments: [:], fileAttachments: [:]),
+              let httpBody = request.httpBody,
+              let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+              let payloadMessages = jsonPayload["messages"] as? [[String: Any]],
+              let firstMessage = payloadMessages.first,
+              let payloadToolCalls = firstMessage["tool_calls"] as? [[String: Any]],
+              let firstToolCall = payloadToolCalls.first,
+              let extraContent = firstToolCall["extra_content"] as? [String: Any],
+              let googleExtra = extraContent["google"] as? [String: Any],
+              let thoughtSignature = googleExtra["thought_signature"] as? String else {
+            Issue.record("请求体中未找到 Gemini extra_content.thought_signature。")
+            return
+        }
+
+        #expect(thoughtSignature == "sig-gemini-1")
+    }
+
     @Test("OpenAI 流式增量保留 provider_specific_fields")
     func testStreamingDeltaPreservesProviderSpecificFields() throws {
         let line = """
@@ -1039,6 +1104,16 @@ struct OpenAIAdapterTests {
         let part = adapter.parseStreamingResponse(line: line)
         let firstDelta = try #require(part?.toolCallDeltas?.first)
         #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
+    }
+
+    @Test("OpenAI 流式增量解析 Gemini extra_content")
+    func testStreamingDeltaPreservesGeminiExtraContentThoughtSignature() throws {
+        let line = """
+        data: {"choices":[{"delta":{"tool_calls":[{"id":"call_stream_2","index":0,"type":"function","function":{"name":"save_memory","arguments":"{}"},"extra_content":{"google":{"thought_signature":"sig-stream-extra"}}}]}}]}
+        """
+        let part = adapter.parseStreamingResponse(line: line)
+        let firstDelta = try #require(part?.toolCallDeltas?.first)
+        #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream-extra"))
     }
 
     @Test("OpenAI 流式 usage-only 片段可解析 token 用量")
@@ -1572,6 +1647,112 @@ struct GeminiAdapterTests {
         #expect(usage.completionTokens == 34)
         #expect(usage.totalTokens == 46)
         #expect(usage.thinkingTokens == 7)
+    }
+
+    @Test("Gemini 响应解析保留函数调用 ID 与 thought_signature")
+    func testGeminiResponsePreservesCallIDAndThoughtSignature() throws {
+        let payload = """
+        {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "id": "function-call-123",
+                      "name": "shortcut_weather",
+                      "args": {
+                        "city": "上海"
+                      }
+                    },
+                    "thoughtSignature": "sig-123"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        """
+
+        let message = try adapter.parseResponse(data: Data(payload.utf8))
+        let call = try #require(message.toolCalls?.first)
+        #expect(call.id == "function-call-123")
+        #expect(call.toolName == "shortcut_weather")
+        #expect(call.arguments == #"{"city":"上海"}"#)
+        #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-123"))
+    }
+
+    @Test("Gemini 请求体保留 thought_signature 并透传 function id")
+    func testGeminiBuildRequestPreservesThoughtSignatureAndCallID() throws {
+        let assistantCall = InternalToolCall(
+            id: "function-call-456",
+            toolName: "shortcut_weather",
+            arguments: #"{"city":"上海"}"#,
+            providerSpecificFields: [
+                "thought_signature": .string("sig-456")
+            ]
+        )
+        let toolResultCall = InternalToolCall(
+            id: "function-call-456",
+            toolName: "shortcut_weather",
+            arguments: #"{"city":"上海"}"#
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "帮我查天气"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [assistantCall]),
+            ChatMessage(role: .tool, content: #"{"temp":"24C"}"#, toolCalls: [toolResultCall])
+        ]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let contents = jsonPayload["contents"] as? [[String: Any]],
+        contents.count == 3 else {
+            Issue.record("Gemini 请求体未正确包含 contents。")
+            return
+        }
+
+        let assistantPayload = contents[1]
+        let toolPayload = contents[2]
+
+        guard let assistantParts = assistantPayload["parts"] as? [[String: Any]],
+        let firstAssistantPart = assistantParts.first,
+        let functionCall = firstAssistantPart["functionCall"] as? [String: Any],
+        let callID = functionCall["id"] as? String,
+        let thoughtSignature = firstAssistantPart["thought_signature"] as? String,
+        let toolParts = toolPayload["parts"] as? [[String: Any]],
+        let firstToolPart = toolParts.first,
+        let functionResponse = firstToolPart["functionResponse"] as? [String: Any],
+        let functionResponseID = functionResponse["id"] as? String else {
+            Issue.record("Gemini 请求体未正确包含 function id 或 thought_signature。")
+            return
+        }
+
+        #expect(callID == "function-call-456")
+        #expect(thoughtSignature == "sig-456")
+        #expect(toolPayload["role"] as? String == "user")
+        #expect(functionResponseID == "function-call-456")
+    }
+
+    @Test("Gemini 流式增量保留 thought_signature")
+    func testGeminiStreamingDeltaPreservesThoughtSignature() throws {
+        let line = """
+        data: {"candidates":[{"content":{"parts":[{"functionCall":{"id":"function-call-stream","name":"shortcut_weather","args":{"city":"上海"}},"thoughtSignature":"sig-stream"}]}}]}
+        """
+
+        let part = adapter.parseStreamingResponse(line: line)
+        let delta = try #require(part?.toolCallDeltas?.first)
+        #expect(delta.id == "function-call-stream")
+        #expect(delta.nameFragment == "shortcut_weather")
+        #expect(delta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
     }
 }
 
@@ -3759,5 +3940,72 @@ fileprivate struct VectorSearchTests {
         let differentLengthVector: [Float] = [1.0, 2.0]
         
         
+    }
+}
+
+@Suite("历史会话检索支持 Tests")
+fileprivate struct SessionHistorySearchSupportTests {
+    @Test("按会话标题与主题提示检索")
+    func testSearchHitsBySessionMetadata() {
+        let target = ChatSession(
+            id: UUID(),
+            name: "周报讨论",
+            topicPrompt: "产品复盘与改进点"
+        )
+        let other = ChatSession(
+            id: UUID(),
+            name: "随手记录",
+            topicPrompt: "午饭吃什么"
+        )
+
+        let byTitle = SessionHistorySearchSupport.searchHits(
+            sessions: [target, other],
+            query: "周报",
+            messageLoader: { _ in [] }
+        )
+        #expect(byTitle[target.id]?.source == .sessionName)
+        #expect(byTitle[other.id] == nil)
+
+        let byTopic = SessionHistorySearchSupport.searchHits(
+            sessions: [target, other],
+            query: "改进点",
+            messageLoader: { _ in [] }
+        )
+        #expect(byTopic[target.id]?.source == .topicPrompt)
+        #expect(byTopic[other.id] == nil)
+    }
+
+    @Test("按消息正文检索并返回命中来源")
+    func testSearchHitsByMessageContent() {
+        let session = ChatSession(id: UUID(), name: "旅行计划")
+        let userMessage = ChatMessage(role: .user, content: "请帮我整理大阪旅行清单")
+        let assistantMessage = ChatMessage(role: .assistant, content: "好的，我先给你一个 5 天行程草案。")
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "旅行清单",
+            messageLoader: { _ in [userMessage, assistantMessage] }
+        )
+
+        #expect(hits[session.id]?.source == .userMessage)
+        #expect(hits[session.id]?.preview.contains("大阪旅行清单") == true)
+    }
+
+    @Test("当前会话优先使用内存消息检索")
+    func testSearchHitsPrefersCurrentSessionMessages() {
+        let session = ChatSession(id: UUID(), name: "开发讨论")
+        let persistedMessages = [ChatMessage(role: .assistant, content: "这是磁盘里的旧消息")]
+        let inMemoryMessages = [ChatMessage(role: .assistant, content: "这是内存里的最新回复")]
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "最新回复",
+            currentSessionID: session.id,
+            currentSessionMessages: inMemoryMessages,
+            messageLoader: { _ in persistedMessages }
+        )
+
+        #expect(hits[session.id]?.source == .assistantMessage)
+        #expect(hits[session.id]?.preview.contains("内存里的最新回复") == true)
     }
 }
