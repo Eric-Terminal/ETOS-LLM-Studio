@@ -1043,6 +1043,8 @@ public class OpenAIAdapter: APIAdapter {
             case function
             case providerSpecificFields
             case provider_specific_fields
+            case extraContent
+            case extra_content
         }
 
         init(from decoder: Decoder) throws {
@@ -1051,8 +1053,20 @@ public class OpenAIAdapter: APIAdapter {
             type = try container.decode(String.self, forKey: .type)
             index = try container.decodeIfPresent(Int.self, forKey: .index)
             function = try container.decode(Function.self, forKey: .function)
-            providerSpecificFields = try container.decodeIfPresent([String: JSONValue].self, forKey: .providerSpecificFields)
+            var mergedProviderSpecificFields = try container.decodeIfPresent([String: JSONValue].self, forKey: .providerSpecificFields)
                 ?? (try container.decodeIfPresent([String: JSONValue].self, forKey: .provider_specific_fields))
+                ?? [:]
+            let extraContent = try container.decodeIfPresent([String: JSONValue].self, forKey: .extraContent)
+                ?? (try container.decodeIfPresent([String: JSONValue].self, forKey: .extra_content))
+            if let extraContent,
+               let googleValue = extraContent["google"],
+               case let .dictionary(googleDict) = googleValue,
+               let thoughtSignatureValue = googleDict["thought_signature"],
+               case let .string(thoughtSignature) = thoughtSignatureValue,
+               !thoughtSignature.isEmpty {
+                mergedProviderSpecificFields["thought_signature"] = .string(thoughtSignature)
+            }
+            providerSpecificFields = mergedProviderSpecificFields.isEmpty ? nil : mergedProviderSpecificFields
         }
     }
     
@@ -1230,6 +1244,15 @@ public class OpenAIAdapter: APIAdapter {
                     ]
                     if let providerSpecificFields = call.providerSpecificFields, !providerSpecificFields.isEmpty {
                         apiToolCall["provider_specific_fields"] = providerSpecificFields.mapValues { $0.toAny() }
+                        if let rawThoughtSignature = providerSpecificFields["thought_signature"],
+                           case let .string(thoughtSignature) = rawThoughtSignature,
+                           !thoughtSignature.isEmpty {
+                            apiToolCall["extra_content"] = [
+                                "google": [
+                                    "thought_signature": thoughtSignature
+                                ]
+                            ]
+                        }
                     }
                     return apiToolCall
                 }
@@ -2393,7 +2416,7 @@ public class GeminiAdapter: APIAdapter {
                         functionResponse["id"] = toolCallId
                     }
                     geminiContents.append([
-                        "role": "function",
+                        "role": "user",
                         "parts": [["functionResponse": functionResponse]]
                     ])
                 }

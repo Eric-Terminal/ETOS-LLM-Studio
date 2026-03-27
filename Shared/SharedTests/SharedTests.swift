@@ -1031,6 +1031,71 @@ struct OpenAIAdapterTests {
         #expect(provider == "gemini")
     }
 
+    @Test("OpenAI 解析 Gemini extra_content 中的 thought_signature")
+    func testParseResponsePreservesGeminiExtraContentThoughtSignature() throws {
+        let json = """
+        {
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_extra_1",
+                    "type": "function",
+                    "function": {
+                      "name": "save_memory",
+                      "arguments": "{\\"content\\":\\"Hello\\"}"
+                    },
+                    "extra_content": {
+                      "google": {
+                        "thought_signature": "sig-extra-1"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let message = try adapter.parseResponse(data: data)
+        let call = try #require(message.toolCalls?.first)
+        #expect(call.id == "call_extra_1")
+        #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-extra-1"))
+    }
+
+    @Test("OpenAI 请求会镜像 thought_signature 到 Gemini extra_content")
+    func testBuildRequestIncludesGeminiExtraContentThoughtSignature() throws {
+        let toolCall = InternalToolCall(
+            id: "call_gemini_sig_1",
+            toolName: "save_memory",
+            arguments: #"{"content":"test"}"#,
+            providerSpecificFields: [
+                "thought_signature": .string("sig-gemini-1")
+            ]
+        )
+        let messages = [ChatMessage(role: .assistant, content: "", toolCalls: [toolCall])]
+
+        guard let request = adapter.buildChatRequest(for: dummyModel, commonPayload: [:], messages: messages, tools: nil, audioAttachments: [:], imageAttachments: [:], fileAttachments: [:]),
+              let httpBody = request.httpBody,
+              let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+              let payloadMessages = jsonPayload["messages"] as? [[String: Any]],
+              let firstMessage = payloadMessages.first,
+              let payloadToolCalls = firstMessage["tool_calls"] as? [[String: Any]],
+              let firstToolCall = payloadToolCalls.first,
+              let extraContent = firstToolCall["extra_content"] as? [String: Any],
+              let googleExtra = extraContent["google"] as? [String: Any],
+              let thoughtSignature = googleExtra["thought_signature"] as? String else {
+            Issue.record("请求体中未找到 Gemini extra_content.thought_signature。")
+            return
+        }
+
+        #expect(thoughtSignature == "sig-gemini-1")
+    }
+
     @Test("OpenAI 流式增量保留 provider_specific_fields")
     func testStreamingDeltaPreservesProviderSpecificFields() throws {
         let line = """
@@ -1039,6 +1104,16 @@ struct OpenAIAdapterTests {
         let part = adapter.parseStreamingResponse(line: line)
         let firstDelta = try #require(part?.toolCallDeltas?.first)
         #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
+    }
+
+    @Test("OpenAI 流式增量解析 Gemini extra_content")
+    func testStreamingDeltaPreservesGeminiExtraContentThoughtSignature() throws {
+        let line = """
+        data: {"choices":[{"delta":{"tool_calls":[{"id":"call_stream_2","index":0,"type":"function","function":{"name":"save_memory","arguments":"{}"},"extra_content":{"google":{"thought_signature":"sig-stream-extra"}}}]}}]}
+        """
+        let part = adapter.parseStreamingResponse(line: line)
+        let firstDelta = try #require(part?.toolCallDeltas?.first)
+        #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream-extra"))
     }
 
     @Test("OpenAI 流式 usage-only 片段可解析 token 用量")
@@ -1663,6 +1738,7 @@ struct GeminiAdapterTests {
 
         #expect(callID == "function-call-456")
         #expect(thoughtSignature == "sig-456")
+        #expect(toolPayload["role"] as? String == "user")
         #expect(functionResponseID == "function-call-456")
     }
 
