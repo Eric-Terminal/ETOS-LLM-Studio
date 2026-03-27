@@ -453,10 +453,94 @@ private extension ThirdPartyImportService {
     // MARK: RikkaHub
 
     static func parseRikkaHub(fileURL: URL) throws -> ParsedPayload {
-        _ = fileURL
-        throw ThirdPartyImportError.unsupportedBackupFormat(
-            reason: "RikkaHub 导入将在下一次提交中完成。"
+        var warnings: [String] = [
+            "RikkaHub 备份当前仅支持读取 settings.json 中的提供商配置，会话内容暂未解析。"
+        ]
+
+        let settings: [String: Any]
+        if isDirectory(fileURL),
+           let parsed = findJSONInDirectory(fileURL, preferredNames: ["settings.json"]) {
+            settings = parsed
+        } else if let parsed = tryParseDictionaryJSON(from: fileURL) {
+            settings = parsed
+        } else {
+            if isLikelyCompressedBackup(fileURL) {
+                throw ThirdPartyImportError.unsupportedBackupFormat(
+                    reason: "当前版本暂不支持直接读取压缩包，请先解压后再导入 settings.json。"
+                )
+            }
+            throw ThirdPartyImportError.unsupportedBackupFormat(
+                reason: "未找到 RikkaHub 可识别的 settings.json。"
+            )
+        }
+
+        let providerList = normalizeJSONArray(settings["providers"])
+        let providers = parseRikkaProviders(providerList)
+
+        if providers.isEmpty {
+            warnings.append("未在 RikkaHub 备份中识别到可导入的提供商。")
+            throw ThirdPartyImportError.noImportableContent
+        }
+
+        return ParsedPayload(
+            providers: dedupeProviders(providers),
+            sessions: [],
+            warnings: warnings
         )
+    }
+
+    static func parseRikkaProviders(_ providerList: [Any]) -> [Provider] {
+        var result: [Provider] = []
+
+        for providerAny in providerList {
+            guard let provider = dictionary(providerAny) else { continue }
+
+            let type = string(provider["type"])?.lowercased()
+            let format = normalizeProviderFormat(typeHint: type, modelIDs: [])
+            let name = nonEmpty(string(provider["name"]))
+                ?? (type?.capitalized ?? "RikkaHub")
+            let apiKey = nonEmpty(string(provider["apiKey"])) ?? ""
+            let baseURL = normalizeBaseURL(string(provider["baseUrl"]), for: format)
+            let enabled = bool(provider["enabled"], defaultValue: true)
+
+            let modelsRaw = normalizeJSONArray(provider["models"])
+            let models: [Model] = modelsRaw.compactMap { modelAny in
+                if let modelName = nonEmpty(string(modelAny)) {
+                    return Model(
+                        modelName: modelName,
+                        displayName: modelName,
+                        isActivated: enabled,
+                        capabilities: [.chat]
+                    )
+                }
+
+                guard let model = dictionary(modelAny) else { return nil }
+                let modelID = nonEmpty(string(model["modelId"]))
+                    ?? nonEmpty(string(model["id"]))
+                guard let modelID else { return nil }
+                let displayName = nonEmpty(string(model["displayName"]))
+                    ?? nonEmpty(string(model["name"]))
+                    ?? modelID
+                return Model(
+                    modelName: modelID,
+                    displayName: displayName,
+                    isActivated: enabled,
+                    capabilities: [.chat]
+                )
+            }
+
+            let imported = Provider(
+                id: stableUUID(from: string(provider["id"])) ?? UUID(),
+                name: name,
+                baseURL: baseURL,
+                apiKeys: apiKey.isEmpty ? [] : [apiKey],
+                apiFormat: format,
+                models: models
+            )
+            result.append(imported)
+        }
+
+        return result
     }
 
     // MARK: Kelivo
