@@ -216,7 +216,10 @@ public final class FeedbackService: ObservableObject {
             lastKnownStatus: status,
             lastCheckedAt: now,
             lastKnownUpdatedAt: now,
-            publicURL: submitResponse.publicURL
+            publicURL: submitResponse.publicURL,
+            moderationBlocked: submitResponse.moderationBlocked,
+            moderationMessage: submitResponse.moderationMessage,
+            archiveID: submitResponse.archiveID
         )
 
         FeedbackStore.upsertTicket(ticket)
@@ -434,12 +437,18 @@ private struct SubmitIssueResponse: Decodable {
     let ticketToken: String
     let publicURL: URL?
     let status: String?
+    let moderationBlocked: Bool?
+    let moderationMessage: String?
+    let archiveID: String?
 
     enum CodingKeys: String, CodingKey {
         case issueNumber = "issue_number"
         case ticketToken = "ticket_token"
         case publicURL = "public_url"
         case status
+        case moderationBlocked = "moderation_blocked"
+        case moderationMessage = "moderation_message"
+        case archiveID = "archive_id"
     }
 }
 

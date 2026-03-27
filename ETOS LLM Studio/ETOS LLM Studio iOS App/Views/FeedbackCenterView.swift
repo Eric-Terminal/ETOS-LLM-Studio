@@ -313,6 +313,15 @@ private struct FeedbackDetailView: View {
                 }
             }
 
+            if let moderationMessage = ticket?.moderationMessage,
+               !moderationMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section {
+                    Text(moderationMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             Section(NSLocalizedString("标签", comment: "Labels section")) {
                 let labels = snapshot?.labels ?? []
                 if labels.isEmpty {

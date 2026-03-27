@@ -137,3 +137,35 @@ struct FeedbackDraftTests {
         #expect(draft.extraContext == "补充信息")
     }
 }
+
+@Suite("FeedbackTicket Tests")
+struct FeedbackTicketTests {
+    @Test("审核字段可正常编码与解码")
+    func moderationFieldsRoundTrip() throws {
+        let now = Date(timeIntervalSince1970: 1_730_000_000)
+        let ticket = FeedbackTicket(
+            issueNumber: 100,
+            ticketToken: "token-abc",
+            category: .bug,
+            title: "测试标题",
+            createdAt: now,
+            lastKnownStatus: .blocked,
+            lastCheckedAt: now,
+            lastKnownUpdatedAt: now,
+            publicURL: URL(string: "https://example.com/issues/100"),
+            moderationBlocked: true,
+            moderationMessage: "AI 审核暂时隐藏：包含不适合公开内容",
+            archiveID: "archive-123"
+        )
+
+        let encoder = FeedbackDateCodec.makeJSONEncoder()
+        let decoder = FeedbackDateCodec.makeJSONDecoder()
+        let data = try encoder.encode([ticket])
+        let decoded = try decoder.decode([FeedbackTicket].self, from: data)
+
+        #expect(decoded.count == 1)
+        #expect(decoded[0].moderationBlocked == true)
+        #expect(decoded[0].moderationMessage == "AI 审核暂时隐藏：包含不适合公开内容")
+        #expect(decoded[0].archiveID == "archive-123")
+    }
+}

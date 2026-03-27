@@ -215,6 +215,9 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
     public var lastCheckedAt: Date?
     public var lastKnownUpdatedAt: Date?
     public var publicURL: URL?
+    public var moderationBlocked: Bool?
+    public var moderationMessage: String?
+    public var archiveID: String?
 
     public init(
         issueNumber: Int,
@@ -225,7 +228,10 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         lastKnownStatus: FeedbackTicketStatus,
         lastCheckedAt: Date? = nil,
         lastKnownUpdatedAt: Date? = nil,
-        publicURL: URL? = nil
+        publicURL: URL? = nil,
+        moderationBlocked: Bool? = nil,
+        moderationMessage: String? = nil,
+        archiveID: String? = nil
     ) {
         self.issueNumber = issueNumber
         self.ticketToken = ticketToken
@@ -236,6 +242,9 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         self.lastCheckedAt = lastCheckedAt
         self.lastKnownUpdatedAt = lastKnownUpdatedAt
         self.publicURL = publicURL
+        self.moderationBlocked = moderationBlocked
+        self.moderationMessage = moderationMessage
+        self.archiveID = archiveID
     }
 
     public func merged(with snapshot: FeedbackStatusSnapshot, checkedAt: Date = Date()) -> FeedbackTicket {
