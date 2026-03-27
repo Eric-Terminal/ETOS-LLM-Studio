@@ -328,10 +328,11 @@ public final class MCPManager: ObservableObject {
     private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     private var autoConnectRetryAttempts: [UUID: Int] = [:]
     private var autoConnectFailureNotifiedAt: [UUID: Date] = [:]
+    // 启动阶段连接失败后最多自动重试 1 次（含首次请求共 2 次）
     private let autoConnectMaxRetries = 1
     private let autoConnectBaseDelay: TimeInterval = 1.0
     private let autoConnectMaxDelay: TimeInterval = 30.0
-    private let autoConnectHandshakeTimeout: TimeInterval = 60.0
+    private let autoConnectHandshakeTimeout: TimeInterval = 120.0
     private let autoConnectFailureNotificationCooldown: TimeInterval = 120.0
     private let configWatcherInterval: TimeInterval = 2.0
     private let defaultToolCallTimeout: TimeInterval = 60
