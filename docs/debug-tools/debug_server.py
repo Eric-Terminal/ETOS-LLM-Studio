@@ -231,10 +231,7 @@ class DebugServer:
         # 🔥 关键修复：移除错误的 /private 前缀
         # Swift 替换后留下的 /private + 文件路径，如 /private.DS_Store -> .DS_Store
         if path.startswith('/private'):
-            clean_path = path[8:]  # 移除 '/private' (8个字符)
-            if DEBUG_MODE:
-                print(f"[DEBUG] 路径清理（移除/private前缀）: '{path}' -> '{clean_path}'")
-            return clean_path
+            return path[8:]  # 静默移除 '/private' (8个字符)
         
         # 如果已经是相对路径，直接返回
         if not path.startswith('/'):
