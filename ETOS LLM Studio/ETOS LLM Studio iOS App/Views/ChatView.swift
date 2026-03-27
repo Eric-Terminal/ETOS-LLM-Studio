@@ -872,7 +872,7 @@ struct ChatView: View {
             ? viewModel.chatSessions.filter { searchHits[$0.id] != nil }
             : viewModel.chatSessions
 
-        GeometryReader { proxy in
+        return GeometryReader { proxy in
             let panelHeight = proxy.size.height * sessionPickerHeightRatio
             ZStack(alignment: .top) {
                 Color.black.opacity(colorScheme == .dark ? 0.35 : 0.2)
