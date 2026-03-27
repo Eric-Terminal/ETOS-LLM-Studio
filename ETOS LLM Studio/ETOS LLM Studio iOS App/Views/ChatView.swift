@@ -72,12 +72,15 @@ struct ChatView: View {
     @State private var imageDownloadAlertMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
+    @State private var chatScrollViewportHeight: CGFloat = 0
+    @State private var chatBottomAnchorMaxY: CGFloat = .greatestFiniteMagnitude
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
+    private let chatScrollCoordinateSpace = "chat-scroll-coordinate-space"
     private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
     private let navBarSubtitleFont = UIFont.systemFont(ofSize: 12)
     private let navBarVerticalPadding: CGFloat = 8
@@ -182,24 +185,31 @@ struct ChatView: View {
                                 .contextMenu {
                                     contextMenu(for: message)
                                 }
-                                .onAppear {
-                                    if state.id == displayedMessages.last?.id {
-                                        showScrollToBottom = false
-                                    }
-                                }
-                                .onDisappear {
-                                    if state.id == displayedMessages.last?.id {
-                                        showScrollToBottom = true
-                                    }
-                                }
                             }
 
                             Color.clear
                                 .frame(height: 8)
                                 .id(scrollBottomAnchorID)
+                                .background(
+                                    GeometryReader { proxy in
+                                        Color.clear.preference(
+                                            key: ChatBottomAnchorMaxYPreferenceKey.self,
+                                            value: proxy.frame(in: .named(chatScrollCoordinateSpace)).maxY
+                                        )
+                                    }
+                                )
                         }
                         .padding(.horizontal, 8)
                     }
+                    .coordinateSpace(name: chatScrollCoordinateSpace)
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: ChatScrollViewportHeightPreferenceKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    )
                     .scrollDismissesKeyboard(.interactively)
                     .scrollIndicators(.hidden)
                     .simultaneousGesture(
@@ -218,6 +228,14 @@ struct ChatView: View {
                     .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
                         guard newValue != nil, !showScrollToBottom else { return }
                         scrollToBottom(proxy: proxy)
+                    }
+                    .onPreferenceChange(ChatScrollViewportHeightPreferenceKey.self) { newHeight in
+                        chatScrollViewportHeight = newHeight
+                        updateScrollToBottomVisibility()
+                    }
+                    .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { newMaxY in
+                        chatBottomAnchorMaxY = newMaxY
+                        updateScrollToBottomVisibility()
                     }
                     .overlay(alignment: .bottomTrailing) {
                         // Telegram 风格的滚动到底部按钮
@@ -1446,6 +1464,22 @@ private struct SafeAreaBottomKey: PreferenceKey {
     }
 }
 
+private struct ChatScrollViewportHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = .greatestFiniteMagnitude
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Helpers
 
 private extension ChatView {
@@ -1475,6 +1509,20 @@ private extension ChatView {
             }
         } else {
             action()
+        }
+    }
+
+    func updateScrollToBottomVisibility() {
+        guard !viewModel.displayMessages.isEmpty else {
+            showScrollToBottom = false
+            return
+        }
+        guard chatScrollViewportHeight > 0 else { return }
+
+        let distanceToBottom = chatBottomAnchorMaxY - chatScrollViewportHeight
+        let shouldShow = distanceToBottom > 24
+        if showScrollToBottom != shouldShow {
+            showScrollToBottom = shouldShow
         }
     }
 
