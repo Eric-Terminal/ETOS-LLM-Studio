@@ -25,6 +25,7 @@ struct SessionActionsView: View {
     // MARK: - 操作
     
     let onDeleteLastMessage: () -> Void
+    let onSendSessionToCompanion: () -> Void
 
     // MARK: - 环境
     
@@ -48,6 +49,13 @@ struct SessionActionsView: View {
                     dismiss()
                 } label: {
                     Label("创建分支", systemImage: "arrow.branch")
+                }
+
+                Button {
+                    onSendSessionToCompanion()
+                    dismiss()
+                } label: {
+                    Label("发送到 iPhone", systemImage: "iphone")
                 }
 
             }

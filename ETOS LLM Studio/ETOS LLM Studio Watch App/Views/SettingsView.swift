@@ -98,6 +98,9 @@ struct SettingsView: View {
                         deleteLastMessageAction: { session in
                             viewModel.deleteLastMessage(for: session)
                         },
+                        sendSessionToCompanionAction: { session in
+                            WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
+                        },
                         onSessionSelected: { selectedSession in
                             ChatService.shared.setCurrentSession(selectedSession)
                             dismiss()

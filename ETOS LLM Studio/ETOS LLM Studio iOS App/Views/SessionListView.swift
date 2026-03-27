@@ -12,6 +12,7 @@ import Shared
 
 struct SessionListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @EnvironmentObject private var syncManager: WatchSyncManager
     @Environment(\.dismiss) private var dismiss
     
     @State private var editingSessionID: UUID?
@@ -102,6 +103,9 @@ struct SessionListView: View {
                                 messageCount: viewModel.messageCount(for: session),
                                 isCurrent: session.id == viewModel.currentSession?.id
                             )
+                        },
+                        onSendToCompanion: {
+                            syncManager.sendSessionToCompanion(sessionID: session.id)
                         }
                     )
                 }
@@ -230,6 +234,7 @@ private struct SessionRow: View {
     let onDelete: () -> Void
     let onCancelRename: () -> Void
     let onInfo: () -> Void
+    let onSendToCompanion: () -> Void
     
     @FocusState private var focused: Bool
     
@@ -325,6 +330,13 @@ private struct SessionRow: View {
             } label: {
                 Label("查看会话信息", systemImage: "info.circle")
             }
+
+            Button {
+                onSendToCompanion()
+            } label: {
+                Label("发送到 Apple Watch", systemImage: "applewatch")
+            }
+            .disabled(session.isTemporary)
             
             Button(role: .destructive) {
                 onDelete()

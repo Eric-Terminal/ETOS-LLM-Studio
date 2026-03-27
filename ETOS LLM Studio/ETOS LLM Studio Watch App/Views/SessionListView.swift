@@ -25,6 +25,7 @@ struct SessionListView: View {
     let deleteAction: (IndexSet) -> Void
     let branchAction: (ChatSession, Bool) -> ChatSession?
     let deleteLastMessageAction: (ChatSession) -> Void
+    let sendSessionToCompanionAction: (ChatSession) -> Void
     let onSessionSelected: (ChatSession) -> Void
     let updateSessionAction: (ChatSession) -> Void
     
@@ -58,7 +59,8 @@ struct SessionListView: View {
                         showDeleteSessionConfirm: $showDeleteSessionConfirm,
                         searchSummary: nil,
                         onSessionSelected: onSessionSelected,
-                        deleteLastMessageAction: deleteLastMessageAction
+                        deleteLastMessageAction: deleteLastMessageAction,
+                        sendSessionToCompanionAction: sendSessionToCompanionAction
                     )
                 }
             }
@@ -297,6 +299,7 @@ private struct SessionRowView: View {
     
     let onSessionSelected: (ChatSession) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
+    let sendSessionToCompanionAction: (ChatSession) -> Void
 
     // MARK: 视图主体
     
@@ -335,7 +338,8 @@ private struct SessionRowView: View {
                     sessionIndexToDelete: $sessionIndexToDelete,
                     showDeleteSessionConfirm: $showDeleteSessionConfirm,
                     sessions: $sessions,
-                    onDeleteLastMessage: { deleteLastMessageAction(session) }
+                    onDeleteLastMessage: { deleteLastMessageAction(session) },
+                    onSendSessionToCompanion: { sendSessionToCompanionAction(session) }
                 )
             } label: {
                 Label("更多", systemImage: "ellipsis")
