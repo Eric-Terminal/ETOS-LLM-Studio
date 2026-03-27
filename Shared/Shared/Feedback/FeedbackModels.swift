@@ -139,12 +139,14 @@ public struct FeedbackComment: Codable, Hashable, Identifiable, Sendable {
     public let author: String
     public let body: String
     public let createdAt: Date
+    public let isDeveloper: Bool
 
-    public init(id: String, author: String, body: String, createdAt: Date) {
+    public init(id: String, author: String, body: String, createdAt: Date, isDeveloper: Bool = false) {
         self.id = id
         self.author = author
         self.body = body
         self.createdAt = createdAt
+        self.isDeveloper = isDeveloper
     }
 
     enum CodingKeys: String, CodingKey {
@@ -152,6 +154,7 @@ public struct FeedbackComment: Codable, Hashable, Identifiable, Sendable {
         case author
         case body
         case createdAt = "created_at"
+        case isDeveloper = "is_developer"
     }
 
     public init(from decoder: Decoder) throws {
@@ -170,6 +173,7 @@ public struct FeedbackComment: Codable, Hashable, Identifiable, Sendable {
         author = try container.decode(String.self, forKey: .author)
         body = try container.decode(String.self, forKey: .body)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        isDeveloper = try container.decodeIfPresent(Bool.self, forKey: .isDeveloper) ?? false
     }
 }
 

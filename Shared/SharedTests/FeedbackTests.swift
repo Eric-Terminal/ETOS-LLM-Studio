@@ -169,3 +169,23 @@ struct FeedbackTicketTests {
         #expect(decoded[0].archiveID == "archive-123")
     }
 }
+
+@Suite("FeedbackComment Tests")
+struct FeedbackCommentTests {
+    @Test("开发者标记字段可解码")
+    func decodeDeveloperFlag() throws {
+        let json = """
+        {
+          "id": "1",
+          "author": "feedback-bot",
+          "body": "测试评论",
+          "created_at": "2026-03-29T00:00:00Z",
+          "is_developer": true
+        }
+        """
+
+        let decoder = FeedbackDateCodec.makeJSONDecoder()
+        let comment = try decoder.decode(FeedbackComment.self, from: Data(json.utf8))
+        #expect(comment.isDeveloper == true)
+    }
+}
