@@ -710,12 +710,188 @@ private struct ImageParameterExpressionRow: View {
     }
 }
 
+private struct ImageGenerationGallerySearchResult: Identifiable {
+    let item: GeneratedImageItem
+    let position: Int
+    let total: Int
+
+    var id: String {
+        item.id
+    }
+}
+
+private struct ImageGenerationGallerySearchView: View {
+    let items: [GeneratedImageItem]
+
+    @State private var searchText: String = ""
+    @State private var previewPayload: ImagePreviewPayload?
+
+    private var normalizedQuery: String {
+        normalizedText(searchText)
+    }
+
+    private var filteredResults: [ImageGenerationGallerySearchResult] {
+        guard !normalizedQuery.isEmpty else { return [] }
+
+        let total = items.count
+        return items.enumerated().compactMap { index, item in
+            let title = itemTitle(item)
+            let content = itemContent(item)
+            let searchable = "\(title)\n\(content)\n\(item.fileName)"
+            guard normalizedText(searchable).contains(normalizedQuery) else { return nil }
+            return ImageGenerationGallerySearchResult(
+                item: item,
+                position: index + 1,
+                total: total
+            )
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                if normalizedQuery.isEmpty {
+                    Text(NSLocalizedString("输入关键词后可搜索标题和内容。", comment: "Image gallery search empty query hint"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(
+                        String(
+                            format: NSLocalizedString("共 %d 条匹配（总计 %d 条）。", comment: "Image gallery search result summary"),
+                            filteredResults.count,
+                            items.count
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                if normalizedQuery.isEmpty {
+                    EmptyView()
+                } else if filteredResults.isEmpty {
+                    Text(NSLocalizedString("未找到匹配的历史绘画。", comment: "Image gallery search no result"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredResults) { result in
+                        resultRow(for: result)
+                    }
+                }
+            }
+        }
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text(NSLocalizedString("搜索标题或内容", comment: "Image gallery search field prompt"))
+        )
+        .navigationTitle(NSLocalizedString("搜索生图", comment: "Image gallery search page title"))
+        .sheet(item: $previewPayload) { payload in
+            ScrollView {
+                VStack(spacing: 16) {
+                    Image(uiImage: payload.image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                    if !payload.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(payload.prompt)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func resultRow(for result: ImageGenerationGallerySearchResult) -> some View {
+        let image = generatedUIImage(fileName: result.item.fileName)
+        let title = itemTitle(result.item)
+        let content = itemContent(result.item)
+
+        Button {
+            guard let image else { return }
+            previewPayload = ImagePreviewPayload(image: image, prompt: result.item.prompt)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    if let image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        Color(uiColor: .secondarySystemBackground)
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 58, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.body)
+                        .lineLimit(1)
+
+                    if !content.isEmpty, content != title {
+                        Text(content)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    Text(
+                        String(
+                            format: NSLocalizedString("第 %d 条 / 共 %d 条", comment: "Image gallery search result position"),
+                            result.position,
+                            result.total
+                        )
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func itemTitle(_ item: GeneratedImageItem) -> String {
+        let trimmedPrompt = item.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return item.fileName }
+        if let firstLine = trimmedPrompt
+            .components(separatedBy: .newlines)
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }) {
+            return firstLine
+        }
+        return trimmedPrompt
+    }
+
+    private func itemContent(_ item: GeneratedImageItem) -> String {
+        item.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizedText(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .lowercased()
+    }
+
+    private func generatedUIImage(fileName: String) -> UIImage? {
+        let url = Persistence.getImageDirectory().appendingPathComponent(fileName)
+        return UIImage(contentsOfFile: url.path)
+    }
+}
+
 private struct ImageGenerationGalleryView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var previewPayload: ImagePreviewPayload?
     @State private var pendingDeleteItem: GeneratedImageItem?
     @State private var alertMessage: String?
+    @State private var showSearchResults: Bool = false
     let onReusePrompt: (String) -> Void
     let onContinueGeneration: (String, ImageAttachment) -> Void
     
@@ -764,6 +940,26 @@ private struct ImageGenerationGalleryView: View {
             }
         }
         .navigationTitle(NSLocalizedString("生成相册", comment: "Generated image gallery title"))
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    showSearchResults = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel(NSLocalizedString("搜索生图", comment: "Image gallery search button"))
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel(NSLocalizedString("新建生图", comment: "Create new generation from gallery"))
+            }
+        }
+        .navigationDestination(isPresented: $showSearchResults) {
+            ImageGenerationGallerySearchView(items: generatedImageItems)
+        }
         .sheet(item: $previewPayload) { payload in
             ScrollView {
                 VStack(spacing: 16) {
