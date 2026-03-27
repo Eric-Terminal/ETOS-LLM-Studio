@@ -1573,6 +1573,111 @@ struct GeminiAdapterTests {
         #expect(usage.totalTokens == 46)
         #expect(usage.thinkingTokens == 7)
     }
+
+    @Test("Gemini 响应解析保留函数调用 ID 与 thought_signature")
+    func testGeminiResponsePreservesCallIDAndThoughtSignature() throws {
+        let payload = """
+        {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "id": "function-call-123",
+                      "name": "shortcut_weather",
+                      "args": {
+                        "city": "上海"
+                      }
+                    },
+                    "thoughtSignature": "sig-123"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        """
+
+        let message = try adapter.parseResponse(data: Data(payload.utf8))
+        let call = try #require(message.toolCalls?.first)
+        #expect(call.id == "function-call-123")
+        #expect(call.toolName == "shortcut_weather")
+        #expect(call.arguments == #"{"city":"上海"}"#)
+        #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-123"))
+    }
+
+    @Test("Gemini 请求体保留 thought_signature 并透传 function id")
+    func testGeminiBuildRequestPreservesThoughtSignatureAndCallID() throws {
+        let assistantCall = InternalToolCall(
+            id: "function-call-456",
+            toolName: "shortcut_weather",
+            arguments: #"{"city":"上海"}"#,
+            providerSpecificFields: [
+                "thought_signature": .string("sig-456")
+            ]
+        )
+        let toolResultCall = InternalToolCall(
+            id: "function-call-456",
+            toolName: "shortcut_weather",
+            arguments: #"{"city":"上海"}"#
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "帮我查天气"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [assistantCall]),
+            ChatMessage(role: .tool, content: #"{"temp":"24C"}"#, toolCalls: [toolResultCall])
+        ]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let contents = jsonPayload["contents"] as? [[String: Any]],
+        contents.count == 3 else {
+            Issue.record("Gemini 请求体未正确包含 contents。")
+            return
+        }
+
+        let assistantPayload = contents[1]
+        let toolPayload = contents[2]
+
+        guard let assistantParts = assistantPayload["parts"] as? [[String: Any]],
+        let firstAssistantPart = assistantParts.first,
+        let functionCall = firstAssistantPart["functionCall"] as? [String: Any],
+        let callID = functionCall["id"] as? String,
+        let thoughtSignature = firstAssistantPart["thought_signature"] as? String,
+        let toolParts = toolPayload["parts"] as? [[String: Any]],
+        let firstToolPart = toolParts.first,
+        let functionResponse = firstToolPart["functionResponse"] as? [String: Any],
+        let functionResponseID = functionResponse["id"] as? String else {
+            Issue.record("Gemini 请求体未正确包含 function id 或 thought_signature。")
+            return
+        }
+
+        #expect(callID == "function-call-456")
+        #expect(thoughtSignature == "sig-456")
+        #expect(functionResponseID == "function-call-456")
+    }
+
+    @Test("Gemini 流式增量保留 thought_signature")
+    func testGeminiStreamingDeltaPreservesThoughtSignature() throws {
+        let line = """
+        data: {"candidates":[{"content":{"parts":[{"functionCall":{"id":"function-call-stream","name":"shortcut_weather","args":{"city":"上海"}},"thoughtSignature":"sig-stream"}]}}]}
+        """
+
+        let part = adapter.parseStreamingResponse(line: line)
+        let delta = try #require(part?.toolCallDeltas?.first)
+        #expect(delta.id == "function-call-stream")
+        #expect(delta.nameFragment == "shortcut_weather")
+        #expect(delta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
+    }
 }
 
 @Suite("AnthropicAdapter Tests")

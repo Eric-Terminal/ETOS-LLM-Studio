@@ -2205,12 +2205,15 @@ public class GeminiAdapter: APIAdapter {
             struct Part: Decodable {
                 let text: String?
                 let thought: Bool?
+                let thoughtSignature: String?
                 let functionCall: FunctionCall?
                 let inlineData: InlineData?
 
                 enum CodingKeys: String, CodingKey {
                     case text
                     case thought
+                    case thoughtSignature
+                    case thought_signature
                     case functionCall
                     case inlineData
                     case inline_data
@@ -2220,12 +2223,15 @@ public class GeminiAdapter: APIAdapter {
                     let container = try decoder.container(keyedBy: CodingKeys.self)
                     text = try container.decodeIfPresent(String.self, forKey: .text)
                     thought = try container.decodeIfPresent(Bool.self, forKey: .thought)
+                    thoughtSignature = try container.decodeIfPresent(String.self, forKey: .thoughtSignature)
+                        ?? (try container.decodeIfPresent(String.self, forKey: .thought_signature))
                     functionCall = try container.decodeIfPresent(FunctionCall.self, forKey: .functionCall)
                     inlineData = try container.decodeIfPresent(InlineData.self, forKey: .inlineData)
                         ?? (try container.decodeIfPresent(InlineData.self, forKey: .inline_data))
                 }
             }
             struct FunctionCall: Decodable {
+                let id: String?
                 let name: String
                 let args: [String: AnyCodable]?
             }
@@ -2378,10 +2384,14 @@ public class GeminiAdapter: APIAdapter {
                         logger.error("Gemini 工具结果缺少有效名称，已忽略该条工具响应。")
                         continue
                     }
-                    let functionResponse: [String: Any] = [
+                    var functionResponse: [String: Any] = [
                         "name": sanitizedName,
                         "response": ["result": msg.content]
                     ]
+                    let toolCallId = toolCall.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !toolCallId.isEmpty {
+                        functionResponse["id"] = toolCallId
+                    }
                     geminiContents.append([
                         "role": "function",
                         "parts": [["functionResponse": functionResponse]]
@@ -2455,12 +2465,24 @@ public class GeminiAdapter: APIAdapter {
                        let parsed = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] {
                         argsDict = parsed
                     }
-                    parts.append([
+                    var functionCallPart: [String: Any] = [
                         "functionCall": [
                             "name": sanitizedName,
                             "args": argsDict
                         ]
-                    ])
+                    ]
+                    let toolCallId = toolCall.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !toolCallId.isEmpty {
+                        var functionCall = functionCallPart["functionCall"] as? [String: Any] ?? [:]
+                        functionCall["id"] = toolCallId
+                        functionCallPart["functionCall"] = functionCall
+                    }
+                    if let rawThoughtSignature = toolCall.providerSpecificFields?["thought_signature"],
+                       case let .string(thoughtSignature) = rawThoughtSignature,
+                       !thoughtSignature.isEmpty {
+                        functionCallPart["thought_signature"] = thoughtSignature
+                    }
+                    parts.append(functionCallPart)
                 }
             }
             
@@ -2610,7 +2632,7 @@ public class GeminiAdapter: APIAdapter {
         var reasoningContent: String? = nil
         var internalToolCalls: [InternalToolCall] = []
         
-        for part in parts {
+        for (index, part) in parts.enumerated() {
             if let text = part.text {
                 if part.thought == true {
                     // 这是思考内容
@@ -2620,8 +2642,13 @@ public class GeminiAdapter: APIAdapter {
                 }
             }
             if let functionCall = part.functionCall {
-                // Gemini 没有内置的 tool_call_id，我们生成一个
-                let callId = "gemini_call_\(UUID().uuidString.prefix(8))"
+                let callId: String
+                if let existingCallId = functionCall.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !existingCallId.isEmpty {
+                    callId = existingCallId
+                } else {
+                    callId = "gemini_call_\(index)"
+                }
                 var argsString = "{}"
                 if let args = functionCall.args {
                     let argsDict = args.mapValues { $0.value }
@@ -2630,7 +2657,16 @@ public class GeminiAdapter: APIAdapter {
                         argsString = str
                     }
                 }
-                internalToolCalls.append(InternalToolCall(id: callId, toolName: functionCall.name, arguments: argsString))
+                var providerSpecificFields: [String: JSONValue]? = nil
+                if let thoughtSignature = part.thoughtSignature, !thoughtSignature.isEmpty {
+                    providerSpecificFields = ["thought_signature": .string(thoughtSignature)]
+                }
+                internalToolCalls.append(InternalToolCall(
+                    id: callId,
+                    toolName: functionCall.name,
+                    arguments: argsString,
+                    providerSpecificFields: providerSpecificFields
+                ))
             }
         }
         
@@ -2679,7 +2715,13 @@ public class GeminiAdapter: APIAdapter {
                     }
                 }
                 if let functionCall = part.functionCall {
-                    let callId = "gemini_call_\(UUID().uuidString.prefix(8))"
+                    let callId: String
+                    if let existingCallId = functionCall.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !existingCallId.isEmpty {
+                        callId = existingCallId
+                    } else {
+                        callId = "gemini_call_\(index)"
+                    }
                     var argsString: String? = nil
                     if let args = functionCall.args {
                         let argsDict = args.mapValues { $0.value }
@@ -2689,11 +2731,18 @@ public class GeminiAdapter: APIAdapter {
                         }
                     }
                     if toolCallDeltas == nil { toolCallDeltas = [] }
+                    let providerSpecificFields: [String: JSONValue]?
+                    if let thoughtSignature = part.thoughtSignature, !thoughtSignature.isEmpty {
+                        providerSpecificFields = ["thought_signature": .string(thoughtSignature)]
+                    } else {
+                        providerSpecificFields = nil
+                    }
                     toolCallDeltas?.append(ChatMessagePart.ToolCallDelta(
                         id: callId,
                         index: index,
                         nameFragment: functionCall.name,
-                        argumentsFragment: argsString
+                        argumentsFragment: argsString,
+                        providerSpecificFields: providerSpecificFields
                     ))
                 }
             }
