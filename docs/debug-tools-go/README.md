@@ -1,0 +1,73 @@
+# ETOS LLM Studio 调试工具（Go 版）
+
+这是 `docs/debug-tools/debug_server.py` 的 Go 可执行版。
+
+## 为什么要有 Go 版
+
+- 用户机器没有 Python 环境也能直接运行
+- 单文件可执行程序，下载即用
+- 可通过 GitHub Actions 自动跨平台编译并发布 Release
+
+## 功能覆盖
+
+- WebSocket 调试通道（推荐）
+- HTTP 轮询调试通道（备用）
+- OpenAI 请求捕获代理（`/v1/chat/completions`）
+- 交互式菜单：列目录、上传、下载、删除、批量同步
+- 与现有 iOS/watchOS 设备端协议兼容（命令字保持一致）
+
+## 本地运行
+
+```bash
+cd docs/debug-tools-go
+go run .
+```
+
+默认端口：
+
+- WebSocket: `8765`
+- HTTP 轮询: `7654`
+- HTTP 代理: `8080`
+
+### 自定义端口
+
+```bash
+go run . <ws_port> <http_poll_port> <proxy_port>
+```
+
+例如：
+
+```bash
+go run . 8765 7654 8080
+```
+
+### 调试日志开关
+
+默认开启详细日志，可用环境变量关闭：
+
+```bash
+ETOS_DEBUG_MODE=false go run .
+```
+
+## 构建二进制
+
+```bash
+cd docs/debug-tools-go
+go build -o etos-debug-server-go
+```
+
+## Release 下载（CI）
+
+仓库提供了 GitHub Actions 工作流：
+
+- 文件：`.github/workflows/debug-tools-go-release.yml`
+- 触发：推送 tag `debug-tools-go-v*`
+
+示例：
+
+```bash
+git tag debug-tools-go-v0.1.0
+git push origin debug-tools-go-v0.1.0
+```
+
+CI 会自动构建多平台压缩包并附加到 GitHub Release。

@@ -1,0 +1,96 @@
+name: 调试工具 Go 版构建与发布
+
+on:
+  push:
+    tags:
+      - 'debug-tools-go-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: docs/debug-tools-go/go.mod
+
+      - name: 下载依赖
+        working-directory: docs/debug-tools-go
+        run: go mod download
+
+      - name: 编译与打包
+        shell: bash
+        working-directory: docs/debug-tools-go
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist
+
+          BINARY_BASE="etos-debug-server-go-${{ matrix.goos }}-${{ matrix.goarch }}"
+          BINARY_NAME="$BINARY_BASE"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o "dist/${BINARY_NAME}" .
+
+          PACKAGE_DIR="dist/${BINARY_BASE}"
+          mkdir -p "$PACKAGE_DIR"
+          cp "dist/${BINARY_NAME}" "$PACKAGE_DIR/"
+          cp README.md "$PACKAGE_DIR/"
+
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            (cd dist && zip -r "${BINARY_BASE}.zip" "${BINARY_BASE}")
+          else
+            (cd dist && tar -czf "${BINARY_BASE}.tar.gz" "${BINARY_BASE}")
+          fi
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            docs/debug-tools-go/dist/*.zip
+            docs/debug-tools-go/dist/*.tar.gz
+
+  release:
+    name: 发布 Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true

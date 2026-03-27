@@ -51,10 +51,20 @@ python debug_server.py
 **自定义端口:**
 
 ```bash
-python3 debug_server.py 8765 8080
+python3 debug_server.py 8765 7654 8080
 ```
 
-第一个参数是 WebSocket 端口(默认8765)，第二个是 OpenAI 代理端口(默认8080)。
+参数顺序：
+- 第一个参数：WebSocket 端口（默认 `8765`）
+- 第二个参数：HTTP 轮询端口（默认 `7654`）
+- 第三个参数：OpenAI 代理端口（默认 `8080`）
+
+**没有 Python 环境？可直接用 Go 版二进制：**
+
+- Go 版目录：`docs/debug-tools-go`
+- 本地运行：`go run .`
+- CI 发布：推送 tag `debug-tools-go-v*` 后自动生成多平台 Release 产物
+- 详细说明见：`docs/debug-tools-go/README.md`
 
 ### 2. 设备端设置
 
@@ -134,6 +144,11 @@ $env:OPENAI_API_BASE="http://192.168.1.10:8080"
 - `websockets` 库提供 WS 服务器
 - `aiohttp` 提供 HTTP 代理
 - 交互式菜单界面
+
+**电脑端 (Go，可选)**:
+- 单文件可执行程序，便于无 Python 环境用户直接下载运行
+- 与现有设备端协议兼容（命令字保持一致）
+- 可通过 GitHub Actions 自动构建并发布 Release
 
 ## ⚠️ 注意事项
 
