@@ -134,6 +134,7 @@ struct ThirdPartyImportView: View {
 
         append(.json)
         append(.data)
+        append(.folder)
 
         if selectedSource != .chatgpt {
             if let zipType = UTType(filenameExtension: "zip") {
@@ -150,13 +151,13 @@ struct ThirdPartyImportView: View {
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
         case .cherryStudio:
-            return NSLocalizedString("支持 Cherry Studio 的 .json 备份；若是 .zip / .bak，请先解压后再导入。", comment: "Cherry source hint")
+            return NSLocalizedString("支持 Cherry Studio 的 .json 或解压后的备份目录；若是 .zip / .bak，请先解压后再导入。", comment: "Cherry source hint")
         case .rikkahub:
-            return NSLocalizedString("支持 RikkaHub 备份中的 settings.json（当前先导入提供商配置）。", comment: "Rikka source hint")
+            return NSLocalizedString("支持 RikkaHub 的 settings.json（可直接选文件或解压目录，当前先导入提供商配置）。", comment: "Rikka source hint")
         case .kelivo:
-            return NSLocalizedString("支持 Kelivo 的 settings.json + chats.json 备份结构。", comment: "Kelivo source hint")
+            return NSLocalizedString("支持 Kelivo 的 settings.json + chats.json（建议选择解压后的目录一次导入）。", comment: "Kelivo source hint")
         case .chatgpt:
-            return NSLocalizedString("支持 ChatGPT 官方 conversations.json 导出。", comment: "ChatGPT source hint")
+            return NSLocalizedString("支持 ChatGPT 官方 conversations.json（可直接选文件或包含该文件的目录）。", comment: "ChatGPT source hint")
         }
     }
 

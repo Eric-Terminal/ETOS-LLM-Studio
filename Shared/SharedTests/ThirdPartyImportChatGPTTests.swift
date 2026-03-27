@@ -69,6 +69,32 @@ struct ThirdPartyImportChatGPTTests {
         #expect(session.messages[1].content == "你好，我是助手")
     }
 
+    @Test("ChatGPT 可从目录中的 conversations.json 导入")
+    func testPrepareChatGPTImportFromDirectory() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let conversation: [String: Any] = [
+            "id": "chatgpt-conv-dir-1",
+            "title": "目录导入会话",
+            "messages": [
+                ["id": "flat-1", "role": "user", "content": "目录消息"]
+            ]
+        ]
+
+        try JSONSerialization.data(withJSONObject: [conversation])
+            .write(to: sandbox.appendingPathComponent("conversations.json"))
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .chatgpt,
+            fileURL: sandbox
+        )
+
+        #expect(prepared.package.sessions.count == 1)
+        #expect(prepared.package.sessions[0].session.name == "目录导入会话")
+        #expect(prepared.package.sessions[0].messages.map(\.content) == ["目录消息"])
+    }
+
     private func makeTemporaryDirectory() -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

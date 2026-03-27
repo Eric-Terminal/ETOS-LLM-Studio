@@ -789,11 +789,17 @@ private extension ThirdPartyImportService {
         let conversations: [[String: Any]]
         if let list = json as? [[String: Any]] {
             conversations = list
-        } else if let root = json as? [String: Any],
-                  let list = normalizeJSONArray(root["conversations"]).compactMap(dictionary) as [[String: Any]]? {
-            conversations = list
-        } else if let single = json as? [String: Any], single["mapping"] != nil || single["messages"] != nil {
-            conversations = [single]
+        } else if let root = json as? [String: Any] {
+            let list: [[String: Any]] = normalizeJSONArray(root["conversations"]).compactMap(dictionary)
+            if !list.isEmpty {
+                conversations = list
+            } else if root["mapping"] != nil || root["messages"] != nil {
+                conversations = [root]
+            } else {
+                throw ThirdPartyImportError.unsupportedBackupFormat(
+                    reason: "未识别到 ChatGPT conversations.json 结构。"
+                )
+            }
         } else {
             throw ThirdPartyImportError.unsupportedBackupFormat(
                 reason: "未识别到 ChatGPT conversations.json 结构。"
