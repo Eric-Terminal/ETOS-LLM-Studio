@@ -10,6 +10,7 @@ import json
 import base64
 import os
 import socket
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 import websockets
@@ -44,7 +45,7 @@ class DebugServer:
         self.last_poll_time = None  # 最后轮询时间（HTTP模式）
         
         # HTTP 轮询相关
-        self.command_queue = []  # 待发送的命令队列
+        self.command_queue = deque()  # 待发送的命令队列
         
         # 流式传输相关
         self.stream_backup_dir = None  # 流式接收的保存目录
@@ -58,6 +59,13 @@ class DebugServer:
         self.compatible_download_in_progress = False  # 兼容模式下载进行中
         self.compatible_file_list = None  # 待下载的文件路径列表
         self.compatible_download_event = None  # 用于等待响应的事件
+
+    def reset_stream_download_state(self):
+        """重置流式下载状态"""
+        self.download_in_progress = False
+        self.stream_backup_dir = None
+        self.download_file_count = 0
+        self.download_expected_total = 0
         
     async def handle_websocket(self, websocket):
         """处理来自设备的 WebSocket 连接"""
@@ -105,79 +113,97 @@ class DebugServer:
             print(f"[DEBUG] 响应状态: {status}, 键: {list(data.keys())}")
         
         if status == 'ok':
-            message = data.get('message', '')
-            
-            # 流式下载完成标志
-            if data.get('stream_complete'):
-                total = data.get('total', 0)
-                success_count = data.get('success_count', total)  # 实际成功发送的文件数
-                fail_count = data.get('fail_count', 0)
-                
-                # 保存目录路径（在重置前）
-                saved_dir = self.stream_backup_dir
-                received_count = self.download_file_count
-                
-                self.download_in_progress = False  # 下载完成
-                
-                print(f"\n\n✅ 流式下载完成！")
-                print(f"   📊 设备报告: 总计 {total}, 成功发送 {success_count}, 失败 {fail_count}")
-                print(f"   📥 服务器收到: {received_count} 个文件")
-                
-                # 🔥 验证：检查实际收到的文件数是否与设备发送的一致
-                if received_count < success_count:
-                    print(f"   ⚠️  警告: 有 {success_count - received_count} 个文件可能丢失！")
-                    print(f"      (设备发送了 {success_count} 个，但只收到 {received_count} 个)")
-                elif received_count == success_count and success_count > 0:
-                    print(f"   ✅ 验证通过: 所有文件都已收到")
-                
-                if saved_dir:
-                    print(f"💾 保存目录: {saved_dir}")
-                elif total > 0 and received_count == 0:
-                    print(f"⚠️  警告: 收到完成信号但未收到任何文件数据！")
-                    print(f"      这可能是网络乱序问题，请重试")
-                else:
-                    print(f"💾 保存目录: 无文件需要保存")
-                
-                self.stream_backup_dir = None  # 重置
-                self.download_file_count = 0  # 重置计数
-                self.download_expected_total = 0  # 重置期望总数
-                return
-            
+            self.handle_ok_response(data)
+        else:
+            self.handle_error_response(data)
+
+    def handle_ok_response(self, data):
+        """处理 status=ok 的响应内容"""
+        if data.get('stream_complete'):
+            self.handle_stream_complete(data)
+            return
+
+        if 'path' in data and 'data' in data and 'index' in data:
             # 流式下载：单个文件
-            if 'path' in data and 'data' in data and 'index' in data:
-                self.download_file_count = data.get('index', 0)
-                self.download_expected_total = data.get('total', 0)
-                self.save_stream_file(data)
+            self.download_file_count = data.get('index', 0)
+            self.download_expected_total = data.get('total', 0)
+            self.save_stream_file(data)
+            return
+
+        if 'paths' in data and 'total' in data:
             # 兼容模式：收到文件路径列表（list_all 响应）
-            elif 'paths' in data and 'total' in data:
-                self.compatible_file_list = data.get('paths', [])
-                total = data.get('total', 0)
-                print(f"\n📋 收到文件列表: {total} 个文件")
+            self.compatible_file_list = data.get('paths', [])
+            total = data.get('total', 0)
+            print(f"\n📋 收到文件列表: {total} 个文件")
+            if self.compatible_download_event:
+                self.compatible_download_event.set()
+            return
+
+        if 'items' in data:
+            # 批量下载：目录列表（WebSocket模式）
+            if DEBUG_MODE:
+                print(f"[DEBUG] 找到 {len(data['items'])} 个项目")
+            self.print_directory_list(data['items'])
+            return
+
+        if 'files' in data:
+            # 批量下载：文件内容（WebSocket模式）
+            self.save_all_files(data['files'])
+            return
+
+        if 'data' in data and 'path' in data:
+            # 单文件下载（兼容模式或普通下载）
+            if self.compatible_download_in_progress:
+                self.save_compatible_file(data)
                 if self.compatible_download_event:
                     self.compatible_download_event.set()
-            # 批量下载：所有文件（WebSocket模式）
-            elif 'items' in data:
-                if DEBUG_MODE:
-                    print(f"[DEBUG] 找到 {len(data['items'])} 个项目")
-                self.print_directory_list(data['items'])
-            elif 'files' in data:
-                self.save_all_files(data['files'])
-            # 单文件下载（兼容模式或普通下载）
-            elif 'data' in data and 'path' in data:
-                if self.compatible_download_in_progress:
-                    # 兼容模式：保存到指定目录，然后触发事件
-                    self.save_compatible_file(data)
-                    if self.compatible_download_event:
-                        self.compatible_download_event.set()
-                else:
-                    self.save_downloaded_file(data)
-            elif message:
-                print(f"\n✅ 成功: {message}")
+            else:
+                self.save_downloaded_file(data)
+            return
+
+        message = data.get('message', '')
+        if message:
+            print(f"\n✅ 成功: {message}")
+
+    def handle_error_response(self, data):
+        """处理 status!=ok 的响应内容"""
+        error_msg = data.get('message', '未知错误')
+        print(f"\n❌ 错误: {error_msg}")
+        if DEBUG_MODE:
+            print(f"[DEBUG] 完整错误数据: {data}")
+
+    def handle_stream_complete(self, data):
+        """处理流式下载完成信号"""
+        total = data.get('total', 0)
+        success_count = data.get('success_count', total)  # 实际成功发送的文件数
+        fail_count = data.get('fail_count', 0)
+
+        # 保存目录路径（在重置前）
+        saved_dir = self.stream_backup_dir
+        received_count = self.download_file_count
+
+        self.download_in_progress = False  # 下载完成
+
+        print(f"\n\n✅ 流式下载完成！")
+        print(f"   📊 设备报告: 总计 {total}, 成功发送 {success_count}, 失败 {fail_count}")
+        print(f"   📥 服务器收到: {received_count} 个文件")
+
+        # 🔥 验证：检查实际收到的文件数是否与设备发送的一致
+        if received_count < success_count:
+            print(f"   ⚠️  警告: 有 {success_count - received_count} 个文件可能丢失！")
+            print(f"      (设备发送了 {success_count} 个，但只收到 {received_count} 个)")
+        elif received_count == success_count and success_count > 0:
+            print(f"   ✅ 验证通过: 所有文件都已收到")
+
+        if saved_dir:
+            print(f"💾 保存目录: {saved_dir}")
+        elif total > 0 and received_count == 0:
+            print(f"⚠️  警告: 收到完成信号但未收到任何文件数据！")
+            print(f"      这可能是网络乱序问题，请重试")
         else:
-            error_msg = data.get('message', '未知错误')
-            print(f"\n❌ 错误: {error_msg}")
-            if DEBUG_MODE:
-                print(f"[DEBUG] 完整错误数据: {data}")
+            print(f"💾 保存目录: 无文件需要保存")
+
+        self.reset_stream_download_state()
             
     def print_directory_list(self, items):
         """打印目录列表"""
@@ -472,46 +498,76 @@ class DebugServer:
                 print(f"[HTTP] 📦 队列命令: {command.get('command')}")
             self.command_queue.append(command)
             return True
+
+    def get_connection_status(self):
+        """获取当前连接状态"""
+        if self.device_connection:
+            return True, "WebSocket"
+
+        if self.last_poll_time:
+            # HTTP模式：检查最后轮询时间（10秒内算连接）
+            time_diff = (datetime.now() - self.last_poll_time).total_seconds()
+            if time_diff < 10:
+                return True, "HTTP 轮询"
+            return False, "HTTP 轮询（已断开）"
+
+        return False, "等待连接"
+
+    async def show_transfer_progress_if_needed(self):
+        """如有传输任务则显示进度，返回是否已处理"""
+        if self.download_in_progress:
+            if self.download_expected_total > 0:
+                print(
+                    f"\r⏳ 下载中... 已接收 {self.download_file_count}/{self.download_expected_total} 个文件",
+                    end="",
+                    flush=True
+                )
+            else:
+                print(f"\r⏳ 下载中... 已接收 {self.download_file_count} 个文件", end="", flush=True)
+            await asyncio.sleep(0.5)
+            return True
+
+        if self.upload_in_progress:
+            remaining = len(self.upload_file_queue)
+            print(f"\r⏳ 上传中... 剩余 {remaining} 个文件", end="", flush=True)
+            await asyncio.sleep(0.5)
+            return True
+
+        return False
+
+    def collect_local_files_for_upload(self, local_dir):
+        """扫描本地目录并编码文件用于上传"""
+        files = []
+        for root, _, filenames in os.walk(local_dir):
+            for filename in filenames:
+                file_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(file_path, local_dir)
+
+                with open(file_path, 'rb') as f:
+                    data = base64.b64encode(f.read()).decode()
+
+                files.append({
+                    "path": rel_path,
+                    "data": data
+                })
+                print(f"  ➤ {rel_path}")
+        return files
             
     async def interactive_menu(self):
         """交互式菜单"""
         while True:
             await asyncio.sleep(0.1)  # 给 WebSocket/HTTP 处理留空间
-            
+
             # 检测连接状态
-            is_connected = False
-            if self.device_connection:
-                connection_type = "WebSocket"
-                is_connected = True
-            elif self.last_poll_time:
-                # HTTP模式：检查最后轮询时间（10秒内算连接）
-                time_diff = (datetime.now() - self.last_poll_time).total_seconds()
-                if time_diff < 10:
-                    connection_type = "HTTP 轮询"
-                    is_connected = True
-                else:
-                    connection_type = "HTTP 轮询（已断开）"
-            else:
-                connection_type = "等待连接"
+            is_connected, connection_type = self.get_connection_status()
             
             if not is_connected:
                 print(f"\n⏳ 等待设备连接... (模式: {connection_type})")
                 await asyncio.sleep(5)
                 continue
-            
+
             # 如果正在进行传输，等待完成
-            if self.download_in_progress:
-                if self.download_expected_total > 0:
-                    print(f"\r⏳ 下载中... 已接收 {self.download_file_count}/{self.download_expected_total} 个文件", end="", flush=True)
-                else:
-                    print(f"\r⏳ 下载中... 已接收 {self.download_file_count} 个文件", end="", flush=True)
-                await asyncio.sleep(0.5)
-                continue
-            
-            if self.upload_in_progress:
-                remaining = len(self.upload_file_queue)
-                print(f"\r⏳ 上传中... 剩余 {remaining} 个文件", end="", flush=True)
-                await asyncio.sleep(0.5)
+            if await self.show_transfer_progress_if_needed():
                 continue
                 
             print(f"\n{'='*60}")
@@ -591,10 +647,8 @@ class DebugServer:
                     await asyncio.sleep(5)
                 else:
                     # HTTP模式：流式下载
-                    self.stream_backup_dir = None  # 重置流式目录
+                    self.reset_stream_download_state()
                     self.download_in_progress = True  # 开始下载
-                    self.download_file_count = 0  # 重置计数
-                    self.download_expected_total = 0  # 重置期望总数
                     await self.send_command({"command": "download_all"})
                     print("⏳ 命令已队列，等待设备传输文件...")
                     print("💡 提示：如果长时间没有进度，可能是设备端发送格式有问题")
@@ -611,21 +665,7 @@ class DebugServer:
                     confirm = await asyncio.to_thread(input, f"⚠️  确认覆盖设备 Documents 目录? 所有数据将被删除! (yes/no): ")
                     if confirm.lower() == 'yes':
                         print("📦 扫描本地目录...")
-                        
-                        files = []
-                        for root, dirs, filenames in os.walk(local_dir):
-                            for filename in filenames:
-                                file_path = os.path.join(root, filename)
-                                rel_path = os.path.relpath(file_path, local_dir)
-                                
-                                with open(file_path, 'rb') as f:
-                                    data = base64.b64encode(f.read()).decode()
-                                
-                                files.append({
-                                    "path": rel_path,
-                                    "data": data
-                                })
-                                print(f"  ➤ {rel_path}")
+                        files = self.collect_local_files_for_upload(local_dir)
                         
                         if self.device_connection:
                             # WebSocket模式：批量上传
@@ -686,14 +726,14 @@ class DebugServer:
             print(f"\n✅ 设备已连接 (HTTP 轮询): {client_ip}")
         
         # 检查流式上传是否完成
-        if self.upload_in_progress and isinstance(self.upload_file_queue, dict) and not self.upload_file_queue:
+        if self.upload_in_progress and not self.upload_file_queue:
             self.upload_in_progress = False
             print(f"[HTTP] ✅ 流式上传完成")
             return web.json_response({"command": "upload_complete"})
         
         # 处理普通命令队列
         if self.command_queue:
-            command = self.command_queue.pop(0)
+            command = self.command_queue.popleft()
             if DEBUG_MODE:
                 print(f"[DEBUG] HTTP轮询：返回命令 {command.get('command')}")
             else:
@@ -726,7 +766,7 @@ class DebugServer:
             data = await request.json()
             path = data.get("path")
             
-            if not path or not isinstance(self.upload_file_queue, dict):
+            if not path:
                 return web.json_response({"status": "error", "message": "无效请求"}, status=400)
             
             if path in self.upload_file_queue:
@@ -752,38 +792,35 @@ class DebugServer:
     
     async def handle_openai_proxy(self, request):
         """处理 HTTP OpenAI 代理请求"""
-        if request.path == '/v1/chat/completions' and request.method == 'POST':
-            try:
-                openai_data = await request.json()
+        try:
+            openai_data = await request.json()
+            
+            # 转发到设备
+            await self.send_command({
+                "command": "openai_capture",
+                "request": openai_data
+            })
+            
+            if DEBUG_MODE:
+                print(f"[DEBUG] OpenAI 请求已转发到设备")
+            else:
+                print(f"📨 OpenAI 请求已转发到设备")
                 
-                # 转发到设备
-                await self.send_command({
-                    "command": "openai_capture",
-                    "request": openai_data
-                })
-                
-                if DEBUG_MODE:
-                    print(f"[DEBUG] OpenAI 请求已转发到设备")
-                else:
-                    print(f"📨 OpenAI 请求已转发到设备")
-                    
-                # 返回空响应（让实际 API 处理）
-                return web.json_response({
-                    "id": "proxy-capture",
-                    "object": "chat.completion",
-                    "created": int(datetime.now().timestamp()),
-                    "model": openai_data.get("model", "unknown"),
-                    "choices": [{
-                        "index": 0,
-                        "message": {"role": "assistant", "content": ""},
-                        "finish_reason": "stop"
-                    }]
-                })
-            except Exception as e:
-                print(f"❌ 处理 OpenAI 请求失败: {e}")
-                return web.json_response({"error": str(e)}, status=500)
-        
-        return web.Response(text="ETOS LLM Studio Proxy", status=200)
+            # 返回空响应（让实际 API 处理）
+            return web.json_response({
+                "id": "proxy-capture",
+                "object": "chat.completion",
+                "created": int(datetime.now().timestamp()),
+                "model": openai_data.get("model", "unknown"),
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": ""},
+                    "finish_reason": "stop"
+                }]
+            })
+        except Exception as e:
+            print(f"❌ 处理 OpenAI 请求失败: {e}")
+            return web.json_response({"error": str(e)}, status=500)
         
     async def start_http_server(self):
         """启动 HTTP 服务器（轮询服务器 + OpenAI代理服务器）"""
