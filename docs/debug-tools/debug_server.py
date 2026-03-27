@@ -45,12 +45,10 @@ class DebugServer:
         
         # HTTP 轮询相关
         self.command_queue = []  # 待发送的命令队列
-        self.response_queue = []  # 收到的响应队列
-        self.http_app = None
         
         # 流式传输相关
         self.stream_backup_dir = None  # 流式接收的保存目录
-        self.upload_file_queue = []  # 流式上传的文件队列（电脑→设备）
+        self.upload_file_queue = {}  # 流式上传文件数据（路径 -> Base64）
         self.upload_in_progress = False  # 是否正在进行流式上传
         self.download_in_progress = False  # 是否正在进行流式下载
         self.download_file_count = 0  # 下载文件计数
@@ -357,8 +355,6 @@ class DebugServer:
     
     async def download_all_compatible(self):
         """兼容模式下载：先获取文件列表，再逐个下载"""
-        import aiohttp
-        
         # 重置状态
         self.compatible_download_in_progress = True
         self.compatible_file_list = None
@@ -754,36 +750,6 @@ class DebugServer:
             print(f"[ERROR] 处理文件请求失败: {e}")
             return web.json_response({"status": "error", "message": str(e)}, status=500)
     
-    async def handle_http_fetch_file(self, request):
-        """HTTP 文件请求端点 - 设备请求单个文件数据"""
-        try:
-            data = await request.json()
-            path = data.get("path")
-            
-            if not path or not isinstance(self.upload_file_queue, dict):
-                return web.json_response({"status": "error", "message": "无效请求"}, status=400)
-            
-            if path in self.upload_file_queue:
-                file_data = self.upload_file_queue.pop(path)
-                remaining = len(self.upload_file_queue)
-                
-                if DEBUG_MODE:
-                    print(f"[DEBUG] 响应文件请求: {path} (剩余 {remaining})")
-                else:
-                    print(f"[HTTP] 📤 发送文件: {path} (剩余 {remaining})")
-                
-                return web.json_response({
-                    "status": "ok",
-                    "path": path,
-                    "data": file_data,
-                    "remaining": remaining
-                })
-            else:
-                return web.json_response({"status": "error", "message": "文件不存在"}, status=404)
-        except Exception as e:
-            print(f"[ERROR] 处理文件请求失败: {e}")
-            return web.json_response({"status": "error", "message": str(e)}, status=500)
-    
     async def handle_openai_proxy(self, request):
         """处理 HTTP OpenAI 代理请求"""
         if request.path == '/v1/chat/completions' and request.method == 'POST':
@@ -821,8 +787,6 @@ class DebugServer:
         
     async def start_http_server(self):
         """启动 HTTP 服务器（轮询服务器 + OpenAI代理服务器）"""
-        local_ip = get_local_ip()
-        
         # ============================================================
         # HTTP 轮询服务器 (端口 7654) - 用于设备调试
         # ============================================================
