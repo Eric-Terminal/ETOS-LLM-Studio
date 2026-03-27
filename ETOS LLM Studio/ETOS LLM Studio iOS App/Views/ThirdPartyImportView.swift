@@ -97,7 +97,7 @@ struct ThirdPartyImportView: View {
                     )
                 }
 
-                Section(NSLocalizedString("导入范围", comment: "Import scope section title")) {
+                Section {
                     if preparedResult.parsedProvidersCount > 0 {
                         Toggle(
                             NSLocalizedString("导入提供商配置", comment: "Import providers toggle"),
@@ -121,6 +121,8 @@ struct ThirdPartyImportView: View {
                         )
                     }
                     .disabled(isBusy || !canStartImport)
+                } header: {
+                    Text(NSLocalizedString("导入范围", comment: "Import scope section title"))
                 } footer: {
                     Text(NSLocalizedString("冲突预览为本地启发式估算，最终结果以导入完成后的统计为准。", comment: "Import scope footer"))
                         .font(.footnote)

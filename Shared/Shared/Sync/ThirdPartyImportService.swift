@@ -42,7 +42,7 @@ public enum ThirdPartyImportSource: String, CaseIterable, Codable, Sendable {
     }
 }
 
-public struct ThirdPartyImportPreparedResult: Sendable {
+public struct ThirdPartyImportPreparedResult {
     public var source: ThirdPartyImportSource
     public var package: SyncPackage
     public var warnings: [String]
@@ -57,7 +57,7 @@ public struct ThirdPartyImportPreparedResult: Sendable {
     public var parsedSessionsCount: Int { package.sessions.count }
 }
 
-public struct ThirdPartyImportReport: Sendable {
+public struct ThirdPartyImportReport {
     public var source: ThirdPartyImportSource
     public var parsedProvidersCount: Int
     public var parsedSessionsCount: Int
