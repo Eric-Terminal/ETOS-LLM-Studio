@@ -42,6 +42,7 @@ public struct FeedbackServiceConfig: Sendable {
 
 public enum FeedbackServiceError: LocalizedError {
     case invalidInput
+    case invalidComment
     case invalidURL
     case serverError(String)
     case invalidResponse
@@ -53,6 +54,8 @@ public enum FeedbackServiceError: LocalizedError {
         switch self {
         case .invalidInput:
             return NSLocalizedString("请至少填写标题和详细描述。", comment: "Feedback invalid input")
+        case .invalidComment:
+            return NSLocalizedString("评论内容不能为空。", comment: "Feedback invalid comment")
         case .invalidURL:
             return NSLocalizedString("反馈服务地址无效。", comment: "Feedback invalid url")
         case .serverError(let message):
@@ -216,7 +219,10 @@ public final class FeedbackService: ObservableObject {
             lastKnownStatus: status,
             lastCheckedAt: now,
             lastKnownUpdatedAt: now,
-            publicURL: submitResponse.publicURL
+            publicURL: submitResponse.publicURL,
+            moderationBlocked: submitResponse.moderationBlocked,
+            moderationMessage: submitResponse.moderationMessage,
+            archiveID: submitResponse.archiveID
         )
 
         FeedbackStore.upsertTicket(ticket)
@@ -269,6 +275,87 @@ public final class FeedbackService: ObservableObject {
         FeedbackStore.upsertTicket(ticket.merged(with: snapshot))
         tickets = FeedbackStore.loadTickets()
         return snapshot
+    }
+
+    @discardableResult
+    public func submitComment(ticket: FeedbackTicket, body: String) async throws -> FeedbackComment {
+        let sanitizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sanitizedBody.isEmpty else {
+            throw FeedbackServiceError.invalidComment
+        }
+
+        let challenge = try await requestChallenge()
+        let payload = SubmitCommentPayload(body: FeedbackTextSanitizer.redact(sanitizedBody))
+        let bodyData = try encoder.encode(payload)
+
+        let commentPath = "\(config.issuesPath)/\(ticket.issueNumber)/comments"
+        var request = try buildRequest(
+            path: commentPath,
+            method: "POST",
+            queryItems: [URLQueryItem(name: "ticket_token", value: ticket.ticketToken)]
+        )
+
+        let timestamp = String(Int(Date().timeIntervalSince1970))
+        let bodyHash = FeedbackSignature.bodyHashHex(bodyData)
+        let signingText = "POST\n\(commentPath)\n\(timestamp)\n\(bodyHash)\n\(challenge.nonce)"
+        let signature = FeedbackSignature.hmacSHA256Hex(message: signingText, secret: challenge.clientSecret)
+        let powBits = max(challenge.powBits ?? 0, 0)
+        let powSalt = challenge.powSalt ?? ""
+        let challengeID = challenge.challengeID
+        let powSolution = await Task.detached(priority: .userInitiated) {
+            FeedbackProofOfWork.solve(
+                method: "POST",
+                path: commentPath,
+                timestamp: timestamp,
+                bodyHashHex: bodyHash,
+                challengeID: challengeID,
+                powSalt: powSalt,
+                bits: powBits
+            )
+        }.value
+
+        if powBits > 0 && powSolution == nil {
+            throw FeedbackServiceError.proofOfWorkFailed
+        }
+
+        request.httpBody = bodyData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(challengeID, forHTTPHeaderField: "X-ELS-Challenge-Id")
+        request.setValue(timestamp, forHTTPHeaderField: "X-ELS-Timestamp")
+        request.setValue(signature, forHTTPHeaderField: "X-ELS-Signature")
+        if let powSolution {
+            request.setValue(powSolution.nonce, forHTTPHeaderField: "X-ELS-PoW-Nonce")
+            request.setValue(powSolution.hashHex, forHTTPHeaderField: "X-ELS-PoW-Hash")
+            request.setValue(String(powSolution.bits), forHTTPHeaderField: "X-ELS-PoW-Bits")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        try validateHTTPResponse(response, data: data)
+
+        let submitResponse: SubmitCommentResponse
+        do {
+            submitResponse = try decoder.decode(SubmitCommentResponse.self, from: data)
+        } catch {
+            logger.error("解析评论响应失败: \(error.localizedDescription)")
+            throw FeedbackServiceError.decodeFailed
+        }
+
+        if submitResponse.moderationBlocked == true {
+            if let index = tickets.firstIndex(where: { $0.issueNumber == ticket.issueNumber }) {
+                var updated = tickets[index]
+                updated.lastKnownStatus = .blocked
+                updated.moderationBlocked = true
+                updated.moderationMessage = submitResponse.moderationMessage ?? updated.moderationMessage
+                updated.archiveID = submitResponse.archiveID ?? updated.archiveID
+                FeedbackStore.upsertTicket(updated)
+                tickets = FeedbackStore.loadTickets()
+            }
+        }
+
+        guard let comment = submitResponse.comment else {
+            throw FeedbackServiceError.invalidResponse
+        }
+        return comment
     }
 
     public func refreshAllTickets() async {
@@ -429,17 +516,41 @@ private struct SubmitIssuePayload: Encodable {
     }
 }
 
+private struct SubmitCommentPayload: Encodable {
+    let body: String
+}
+
 private struct SubmitIssueResponse: Decodable {
     let issueNumber: Int
     let ticketToken: String
     let publicURL: URL?
     let status: String?
+    let moderationBlocked: Bool?
+    let moderationMessage: String?
+    let archiveID: String?
 
     enum CodingKeys: String, CodingKey {
         case issueNumber = "issue_number"
         case ticketToken = "ticket_token"
         case publicURL = "public_url"
         case status
+        case moderationBlocked = "moderation_blocked"
+        case moderationMessage = "moderation_message"
+        case archiveID = "archive_id"
+    }
+}
+
+private struct SubmitCommentResponse: Decodable {
+    let comment: FeedbackComment?
+    let moderationBlocked: Bool?
+    let moderationMessage: String?
+    let archiveID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case comment
+        case moderationBlocked = "moderation_blocked"
+        case moderationMessage = "moderation_message"
+        case archiveID = "archive_id"
     }
 }
 

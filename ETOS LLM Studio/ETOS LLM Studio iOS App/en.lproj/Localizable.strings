@@ -1248,3 +1248,8 @@
 "跳转到该条消息" = "Jump to this message";
 "请输入有效的序号。" = "Enter a valid index.";
 "序号超出范围，请输入 1 到 %d。" = "Index out of range. Enter 1 to %d.";
+
+"评论内容不能为空。" = "Comment cannot be empty.";
+"补充评论（会进入同一工单）" = "Add a comment (will be posted to the same ticket)";
+"发送中..." = "Sending...";
+"发送评论" = "Send Comment";

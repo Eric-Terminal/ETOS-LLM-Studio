@@ -243,6 +243,8 @@ private struct FeedbackDetailView: View {
     @State private var snapshot: FeedbackStatusSnapshot?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var commentDraft: String = ""
+    @State private var isSendingComment = false
 
     private var ticket: FeedbackTicket? {
         service.tickets.first { $0.issueNumber == issueNumber }
@@ -289,6 +291,23 @@ private struct FeedbackDetailView: View {
                 }
             }
 
+            Section {
+                TextField(NSLocalizedString("补充评论（会进入同一工单）", comment: "Feedback comment input"), text: $commentDraft, axis: .vertical)
+                    .lineLimit(2...6)
+                Button {
+                    Task {
+                        await sendComment()
+                    }
+                } label: {
+                    if isSendingComment {
+                        Label(NSLocalizedString("发送中...", comment: "Sending comment"), systemImage: "paperplane")
+                    } else {
+                        Label(NSLocalizedString("发送评论", comment: "Send comment"), systemImage: "paperplane")
+                    }
+                }
+                .disabled(isSendingComment || ticket == nil || commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
             Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
                 if (snapshot?.comments ?? []).isEmpty {
                     Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
@@ -300,6 +319,11 @@ private struct FeedbackDetailView: View {
                             HStack {
                                 Text(comment.author)
                                     .font(.caption.weight(.semibold))
+                                if comment.isDeveloper {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.green)
+                                }
                                 Spacer()
                                 Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption2)
@@ -310,6 +334,15 @@ private struct FeedbackDetailView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                }
+            }
+
+            if let moderationMessage = ticket?.moderationMessage,
+               !moderationMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section {
+                    Text(moderationMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
                 }
             }
 
@@ -354,6 +387,23 @@ private struct FeedbackDetailView: View {
         defer { isLoading = false }
 
         do {
+            snapshot = try await service.fetchStatus(ticket: ticket)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func sendComment() async {
+        guard let ticket else { return }
+        let pending = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pending.isEmpty else { return }
+
+        isSendingComment = true
+        defer { isSendingComment = false }
+
+        do {
+            _ = try await service.submitComment(ticket: ticket, body: pending)
+            commentDraft = ""
             snapshot = try await service.fetchStatus(ticket: ticket)
         } catch {
             errorMessage = error.localizedDescription

@@ -216,6 +216,8 @@ private struct WatchFeedbackDetailView: View {
     @State private var snapshot: FeedbackStatusSnapshot?
     @State private var isRefreshing = false
     @State private var errorMessage: String?
+    @State private var commentDraft: String = ""
+    @State private var isSendingComment = false
 
     private var ticket: FeedbackTicket? {
         service.tickets.first { $0.issueNumber == issueNumber }
@@ -251,6 +253,28 @@ private struct WatchFeedbackDetailView: View {
                 }
             }
 
+            Section {
+                TextField(
+                    NSLocalizedString("补充评论（会进入同一工单）", comment: "Feedback comment input"),
+                    text: $commentDraft.watchKeyboardNewlineBinding(),
+                    axis: .vertical
+                )
+                .lineLimit(2...5)
+
+                Button {
+                    Task {
+                        await sendComment()
+                    }
+                } label: {
+                    if isSendingComment {
+                        Label(NSLocalizedString("发送中...", comment: "Sending comment"), systemImage: "paperplane")
+                    } else {
+                        Label(NSLocalizedString("发送评论", comment: "Send comment"), systemImage: "paperplane")
+                    }
+                }
+                .disabled(isSendingComment || ticket == nil || commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
             Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
                 if (snapshot?.comments ?? []).isEmpty {
                     Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
@@ -259,8 +283,15 @@ private struct WatchFeedbackDetailView: View {
                 } else {
                     ForEach(snapshot?.comments ?? []) { comment in
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(comment.author)
-                                .font(.caption2.weight(.semibold))
+                            HStack(spacing: 4) {
+                                Text(comment.author)
+                                    .font(.caption2.weight(.semibold))
+                                if comment.isDeveloper {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.green)
+                                }
+                            }
                             Text(comment.body)
                                 .font(.caption2)
                                 .lineLimit(6)
@@ -270,6 +301,15 @@ private struct WatchFeedbackDetailView: View {
                         }
                         .padding(.vertical, 2)
                     }
+                }
+            }
+
+            if let moderationMessage = ticket?.moderationMessage,
+               !moderationMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section {
+                    Text(moderationMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
                 }
             }
 
@@ -308,6 +348,24 @@ private struct WatchFeedbackDetailView: View {
         defer { isRefreshing = false }
 
         do {
+            snapshot = try await service.fetchStatus(ticket: ticket)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func sendComment() async {
+        guard let ticket else { return }
+        let pending = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pending.isEmpty else { return }
+
+        isSendingComment = true
+        defer { isSendingComment = false }
+
+        do {
+            _ = try await service.submitComment(ticket: ticket, body: pending)
+            commentDraft = ""
             snapshot = try await service.fetchStatus(ticket: ticket)
             errorMessage = nil
         } catch {

@@ -139,12 +139,14 @@ public struct FeedbackComment: Codable, Hashable, Identifiable, Sendable {
     public let author: String
     public let body: String
     public let createdAt: Date
+    public let isDeveloper: Bool
 
-    public init(id: String, author: String, body: String, createdAt: Date) {
+    public init(id: String, author: String, body: String, createdAt: Date, isDeveloper: Bool = false) {
         self.id = id
         self.author = author
         self.body = body
         self.createdAt = createdAt
+        self.isDeveloper = isDeveloper
     }
 
     enum CodingKeys: String, CodingKey {
@@ -152,6 +154,7 @@ public struct FeedbackComment: Codable, Hashable, Identifiable, Sendable {
         case author
         case body
         case createdAt = "created_at"
+        case isDeveloper = "is_developer"
     }
 
     public init(from decoder: Decoder) throws {
@@ -170,6 +173,7 @@ public struct FeedbackComment: Codable, Hashable, Identifiable, Sendable {
         author = try container.decode(String.self, forKey: .author)
         body = try container.decode(String.self, forKey: .body)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        isDeveloper = try container.decodeIfPresent(Bool.self, forKey: .isDeveloper) ?? false
     }
 }
 
@@ -215,6 +219,9 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
     public var lastCheckedAt: Date?
     public var lastKnownUpdatedAt: Date?
     public var publicURL: URL?
+    public var moderationBlocked: Bool?
+    public var moderationMessage: String?
+    public var archiveID: String?
 
     public init(
         issueNumber: Int,
@@ -225,7 +232,10 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         lastKnownStatus: FeedbackTicketStatus,
         lastCheckedAt: Date? = nil,
         lastKnownUpdatedAt: Date? = nil,
-        publicURL: URL? = nil
+        publicURL: URL? = nil,
+        moderationBlocked: Bool? = nil,
+        moderationMessage: String? = nil,
+        archiveID: String? = nil
     ) {
         self.issueNumber = issueNumber
         self.ticketToken = ticketToken
@@ -236,6 +246,9 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         self.lastCheckedAt = lastCheckedAt
         self.lastKnownUpdatedAt = lastKnownUpdatedAt
         self.publicURL = publicURL
+        self.moderationBlocked = moderationBlocked
+        self.moderationMessage = moderationMessage
+        self.archiveID = archiveID
     }
 
     public func merged(with snapshot: FeedbackStatusSnapshot, checkedAt: Date = Date()) -> FeedbackTicket {
