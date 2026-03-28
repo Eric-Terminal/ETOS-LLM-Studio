@@ -28,6 +28,8 @@ struct ModelAdvancedSettingsView: View {
     @Binding var enableAutoSessionNaming: Bool
     @Binding var currentSession: ChatSession?
     @Binding var includeSystemTimeInPrompt: Bool
+    @Binding var enablePeriodicTimeLandmark: Bool
+    @Binding var periodicTimeLandmarkIntervalMinutes: Int
 
     let addGlobalSystemPromptEntry: () -> Void
     let selectGlobalSystemPromptEntry: (UUID?) -> Void
@@ -124,6 +126,27 @@ struct ModelAdvancedSettingsView: View {
                     .foregroundColor(.secondary)
             ) {
                 Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
+            }
+
+            Section(
+                footer: Text("开启后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            ) {
+                Toggle("周期性时间路标", isOn: $enablePeriodicTimeLandmark)
+                HStack {
+                    Text("路标时间（分钟）")
+                    Spacer()
+                    TextField("分钟", value: $periodicTimeLandmarkIntervalMinutes, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                        .disabled(!enablePeriodicTimeLandmark)
+                }
+            }
+            .onChange(of: periodicTimeLandmarkIntervalMinutes) { newValue in
+                if newValue < 1 {
+                    periodicTimeLandmarkIntervalMinutes = 1
+                }
             }
 
             Section(header: Text("会话设置")) {

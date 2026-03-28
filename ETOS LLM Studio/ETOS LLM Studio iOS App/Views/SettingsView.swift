@@ -90,6 +90,8 @@ struct SettingsView: View {
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
                         currentSession: $viewModel.currentSession,
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+                        enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+                        periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
                         addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
                         selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
                         updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,

@@ -2468,6 +2468,107 @@ fileprivate struct ChatServiceTests {
         
         await cleanup()
     }
+
+    @Test("周期性时间路标支持自定义分钟并插入在锚点消息前")
+    func testPeriodicTimeLandmark_CustomIntervalAndInsertPosition() async throws {
+        await cleanup()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "ok")
+
+        let now = Date()
+        let session = try #require(chatService.currentSessionSubject.value)
+        let oldMessage = ChatMessage(
+            role: .user,
+            content: "10分钟前的消息",
+            requestedAt: now.addingTimeInterval(-10 * 60)
+        )
+        let nearMessage = ChatMessage(
+            role: .assistant,
+            content: "3分钟前的消息",
+            requestedAt: now.addingTimeInterval(-3 * 60)
+        )
+        let historicalMessages = [oldMessage, nearMessage]
+        chatService.messagesForSessionSubject.send(historicalMessages)
+        Persistence.saveMessages(historicalMessages, for: session.id)
+
+        await chatService.sendAndProcessMessage(
+            content: "现在继续聊",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 20,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            enablePeriodicTimeLandmark: true,
+            periodicTimeLandmarkIntervalMinutes: 5
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let landmarkIndex = sentMessages.firstIndex(where: {
+            $0.role == .system && $0.content.contains("本条对话的请求时间为：")
+        })
+        let insertedIndex = try #require(landmarkIndex)
+        #expect(insertedIndex + 1 < sentMessages.count)
+        #expect(sentMessages[insertedIndex + 1].id == oldMessage.id, "路标应插入在命中的历史消息前面。")
+        #expect(!sentMessages[insertedIndex].content.contains("<periodic_time_landmark>"), "路标提示词应保持为一句短句。")
+
+        await cleanup()
+    }
+
+    @Test("周期性时间路标在同一时间窗口内最多注入一次")
+    func testPeriodicTimeLandmark_ThrottleByIntervalWindow() async throws {
+        await cleanup()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "ok")
+
+        let now = Date()
+        let session = try #require(chatService.currentSessionSubject.value)
+        let historicalMessages = [
+            ChatMessage(role: .user, content: "很早之前的问题", requestedAt: now.addingTimeInterval(-120 * 60)),
+            ChatMessage(role: .assistant, content: "很早之前的回答", requestedAt: now.addingTimeInterval(-90 * 60))
+        ]
+        chatService.messagesForSessionSubject.send(historicalMessages)
+        Persistence.saveMessages(historicalMessages, for: session.id)
+
+        await chatService.sendAndProcessMessage(
+            content: "第一次请求",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 20,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            enablePeriodicTimeLandmark: true,
+            periodicTimeLandmarkIntervalMinutes: 30
+        )
+        let firstSentMessages = mockAdapter.receivedMessages ?? []
+        let firstCount = firstSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        #expect(firstCount == 1)
+
+        await chatService.sendAndProcessMessage(
+            content: "紧接着第二次请求",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 20,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            enablePeriodicTimeLandmark: true,
+            periodicTimeLandmarkIntervalMinutes: 30
+        )
+        let secondSentMessages = mockAdapter.receivedMessages ?? []
+        let secondCount = secondSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        #expect(secondCount == 0, "同一时间窗口内不应重复注入路标。")
+
+        await cleanup()
+    }
     
     @Test("save_memory tool is provided when memory is enabled")
     func testToolProvision_Enabled() async throws {
