@@ -21,15 +21,21 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableMathRendering: Bool
     @Environment(\.colorScheme) private var colorScheme
 
-    private var shouldUseMathWebRenderer: Bool {
-        enableAdvancedRenderer
-            && enableMathRendering
-            && ETMathContentParser.containsMath(in: content)
+    private var shouldUseWebRenderer: Bool {
+        enableAdvancedRenderer && (containsMathContent || containsMermaidContent)
+    }
+
+    private var containsMathContent: Bool {
+        enableMathRendering && ETMathContentParser.containsMath(in: content)
+    }
+
+    private var containsMermaidContent: Bool {
+        enableMarkdown && Self.containsMermaidFence(in: content)
     }
 
     var body: some View {
         let normalizedContent = Self.normalizedMarkdownForStreaming(content)
-        if shouldUseMathWebRenderer {
+        if shouldUseWebRenderer {
             ETMathWebMarkdownView(
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
@@ -83,6 +89,22 @@ struct ETAdvancedMarkdownRenderer: View {
         let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
         let tail = String(trimmed[startIndex...])
         return (marker: marker, count: count, tail: tail)
+    }
+
+    private static func containsMermaidFence(in text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+        for line in lines {
+            guard let fence = parseFenceLine(line) else { continue }
+            let infoToken = fence.tail
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isWhitespace)
+                .first?
+                .lowercased()
+            if infoToken == "mermaid" || infoToken == "mmd" {
+                return true
+            }
+        }
+        return false
     }
 
     @ViewBuilder
@@ -444,6 +466,28 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       vertical-align: top;
     }
 
+    .et-mermaid-scroll {
+      margin: 0.3em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+    .et-mermaid-block {
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
+    }
+    .et-mermaid-block .mermaid {
+      width: max-content;
+      min-width: 100%;
+    }
+    .et-mermaid-block svg {
+      display: block;
+      max-width: none;
+      height: auto;
+    }
+
     .katex {
       color: var(--text);
       font-size: 1em;
@@ -499,6 +543,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       container.innerHTML = escaped;
     }
 
+    function __rawHasMermaidFence(raw) {
+      if (!raw) {
+        return false;
+      }
+      return /(^|\\n)\\s*(```|~~~)\\s*(mermaid|mmd)(\\s+[^\\n]*)?(\\n|$)/i.test(raw);
+    }
+
     function __languageLabelFromCodeElement(codeElement) {
       if (!codeElement) {
         return "";
@@ -513,6 +564,94 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         }
       }
       return (codeElement.getAttribute("data-language") || "").trim();
+    }
+
+    function __isMermaidLanguage(language) {
+      const normalized = (language || "").trim().toLowerCase();
+      return normalized === "mermaid" || normalized === "mmd";
+    }
+
+    function __prepareMermaidBlocks(container) {
+      const codeNodes = container.querySelectorAll("pre > code");
+      let index = 0;
+      codeNodes.forEach((codeNode) => {
+        if (!__isMermaidLanguage(__languageLabelFromCodeElement(codeNode))) {
+          return;
+        }
+        const preNode = codeNode.parentElement;
+        if (!preNode || !preNode.parentNode) {
+          return;
+        }
+
+        const source = (codeNode.textContent || "").trim();
+        if (!source) {
+          return;
+        }
+
+        const scroll = document.createElement("div");
+        scroll.className = "et-mermaid-scroll";
+        const block = document.createElement("div");
+        block.className = "et-mermaid-block";
+        const mermaidNode = document.createElement("div");
+        mermaidNode.className = "mermaid";
+        mermaidNode.setAttribute("data-et-mermaid-id", `et-mermaid-${Date.now()}-${index}`);
+        mermaidNode.textContent = source;
+        index += 1;
+
+        block.appendChild(mermaidNode);
+        scroll.appendChild(block);
+
+        preNode.parentNode.insertBefore(scroll, preNode);
+        preNode.remove();
+      });
+    }
+
+    function __ensureMermaidConfigured() {
+      if (!window.mermaid || window.__etMermaidConfigured) {
+        return;
+      }
+
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      try {
+        window.mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: prefersDark ? "dark" : "default",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+        });
+        window.__etMermaidConfigured = true;
+      } catch (_) {}
+    }
+
+    function __setMermaidFallback(node, source) {
+      const fallback = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = source;
+      fallback.appendChild(code);
+      node.innerHTML = "";
+      node.appendChild(fallback);
+    }
+
+    async function __renderMermaidBlocks(container) {
+      if (!window.mermaid) {
+        return;
+      }
+      __ensureMermaidConfigured();
+      const nodes = container.querySelectorAll(".mermaid[data-et-mermaid-id]");
+      for (const node of nodes) {
+        const source = (node.textContent || "").trim();
+        if (!source) {
+          continue;
+        }
+        const renderId = node.getAttribute("data-et-mermaid-id")
+          || `et-mermaid-${Math.random().toString(36).slice(2)}`;
+        try {
+          const result = await window.mermaid.render(renderId, source);
+          node.innerHTML = result.svg;
+        } catch (_) {
+          __setMermaidFallback(node, source);
+        }
+      }
     }
 
     async function __copyText(content) {
@@ -707,6 +846,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
           gfm: true
         });
         __renderMathBlocks(container, tokenized.blocks);
+        __prepareMermaidBlocks(container);
       } else if (!__enableMarkdown) {
         __setFallbackContent();
       } else {
@@ -729,7 +869,9 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         } catch (_) {}
       }
 
-      __notifyHeightNow();
+      __renderMermaidBlocks(container)
+        .catch(() => {})
+        .then(() => __notifyHeightNow());
     }
 
     function __scheduleBootstrap(retryCount = 0) {
@@ -738,7 +880,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       const markdownReady = !__enableMarkdown || !!window.marked;
       const mathReady = !!window.renderMathInElement && !!window.katex;
       const codeReady = !__enableMarkdown || !!window.hljs;
-      if ((markdownReady && mathReady && codeReady) || retryCount >= 80) {
+      const mermaidReady = !__enableMarkdown || !__rawHasMermaidFence(__state.raw) || !!window.mermaid;
+      if ((markdownReady && mathReady && codeReady && mermaidReady) || retryCount >= 80) {
         return;
       }
 
@@ -803,6 +946,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
   <script
     src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
     onerror="this.onerror=null;this.src='https://unpkg.com/katex@0.16.11/dist/contrib/auto-render.min.js';"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
+    onerror="this.onerror=null;this.src='https://unpkg.com/mermaid@11/dist/mermaid.min.js';"
   ></script>
 </body>
 </html>
