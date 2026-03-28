@@ -83,6 +83,7 @@ struct ChatView: View {
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
+    @Namespace private var sessionPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     private let chatScrollCoordinateSpace = "chat-scroll-coordinate-space"
@@ -96,6 +97,7 @@ struct ChatView: View {
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     private let modelPickerMorphID = "modelPickerMorph"
+    private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
     private var tabBarCompensation: CGFloat {
@@ -621,36 +623,12 @@ struct ChatView: View {
     }
 
     private var sessionPickerButtonBackground: some View {
-        navBarIconBackground
+        sessionPickerMorphBackground(isExpanded: false, isSource: !showSessionPickerPanel)
     }
 
+    @ViewBuilder
     private var sessionPickerPanelBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                .fill(modelPickerPanelBaseTint)
-
-            if isLiquidGlassEnabled {
-                if #available(iOS 26.0, *) {
-                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                        .fill(Color.clear)
-                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                                .fill(navBarGlassOverlayColor)
-                        )
-                } else {
-                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                                .fill(navBarGlassOverlayColor)
-                        )
-                }
-            } else {
-                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            }
-        }
+        sessionPickerMorphBackground(isExpanded: true, isSource: showSessionPickerPanel)
     }
 
     private var modelSubtitle: String {
@@ -890,6 +868,41 @@ struct ChatView: View {
             }
         }
         .matchedGeometryEffect(id: modelPickerMorphID, in: modelPickerNamespace, isSource: isSource)
+    }
+
+    @ViewBuilder
+    private func sessionPickerMorphBackground(isExpanded: Bool, isSource: Bool) -> some View {
+        let cornerRadius = isExpanded ? sessionPickerCornerRadius : navBarIconSize / 2
+
+        ZStack {
+            if isExpanded {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(modelPickerPanelBaseTint)
+            }
+
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
+                } else {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
+                }
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
+        }
+        .matchedGeometryEffect(id: sessionPickerMorphID, in: sessionPickerNamespace, isSource: isSource)
     }
 
     private var sessionPickerOverlay: some View {
