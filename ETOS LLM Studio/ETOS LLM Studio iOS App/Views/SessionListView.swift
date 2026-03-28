@@ -22,20 +22,13 @@ struct SessionListView: View {
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
     @State private var searchText: String = ""
+    @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
+    @State private var isSearching: Bool = false
+    @State private var latestSearchToken: Int = 0
+    @State private var pendingSearchWorkItem: DispatchWorkItem?
     
     var body: some View {
         let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(searchText)
-        let searchHits = normalizedQuery.isEmpty
-            ? [:]
-            : SessionHistorySearchSupport.searchHits(
-                sessions: viewModel.chatSessions,
-                query: searchText,
-                currentSessionID: viewModel.currentSession?.id,
-                currentSessionMessages: viewModel.allMessagesForSession,
-                messageLoader: { sessionID in
-                    Persistence.loadMessages(for: sessionID)
-                }
-            )
         let displayedSessions = normalizedQuery.isEmpty
             ? viewModel.chatSessions
             : viewModel.chatSessions.filter { searchHits[$0.id] != nil }
@@ -54,13 +47,23 @@ struct SessionListView: View {
             
             Section("会话") {
                 if !normalizedQuery.isEmpty {
-                    Text("匹配 \(displayedSessions.count) / \(viewModel.chatSessions.count) 个会话")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if isSearching {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("正在搜索历史会话…")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("匹配 \(displayedSessions.count) / \(viewModel.chatSessions.count) 个会话")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if displayedSessions.isEmpty {
-                    Text(normalizedQuery.isEmpty ? "暂无会话。" : "未找到匹配的历史会话。")
+                    Text(normalizedQuery.isEmpty ? "暂无会话。" : (isSearching ? "正在搜索，请稍候…" : "未找到匹配的历史会话。"))
                         .foregroundStyle(.secondary)
                 }
 
@@ -122,6 +125,25 @@ struct SessionListView: View {
             placement: .navigationBarDrawer(displayMode: .always),
             prompt: Text("搜索会话标题或消息")
         )
+        .onAppear {
+            scheduleSearch(for: searchText)
+        }
+        .onChange(of: searchText) { _, newValue in
+            scheduleSearch(for: newValue)
+        }
+        .onChange(of: viewModel.chatSessions) { _, _ in
+            scheduleSearch(for: searchText)
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            scheduleSearch(for: searchText)
+        }
+        .onChange(of: viewModel.allMessagesForSession) { _, _ in
+            scheduleSearch(for: searchText)
+        }
+        .onDisappear {
+            pendingSearchWorkItem?.cancel()
+            pendingSearchWorkItem = nil
+        }
         .alert("确认删除会话", isPresented: Binding(
             get: { sessionToDelete != nil },
             set: { isPresented in
@@ -214,6 +236,47 @@ struct SessionListView: View {
         case .errorMessage:
             return "错误消息"
         }
+    }
+
+    private func scheduleSearch(for query: String) {
+        pendingSearchWorkItem?.cancel()
+        pendingSearchWorkItem = nil
+
+        let normalized = SessionHistorySearchSupport.normalizedQuery(query)
+        guard !normalized.isEmpty else {
+            searchHits = [:]
+            isSearching = false
+            return
+        }
+
+        isSearching = true
+        latestSearchToken += 1
+        let searchToken = latestSearchToken
+        let sessionsSnapshot = viewModel.chatSessions
+        let currentSessionIDSnapshot = viewModel.currentSession?.id
+        let currentMessagesSnapshot = viewModel.allMessagesForSession
+        let querySnapshot = query
+
+        let workItem = DispatchWorkItem {
+            let hits = SessionHistorySearchSupport.searchHits(
+                sessions: sessionsSnapshot,
+                query: querySnapshot,
+                currentSessionID: currentSessionIDSnapshot,
+                currentSessionMessages: currentMessagesSnapshot,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+            DispatchQueue.main.async {
+                guard searchToken == latestSearchToken else { return }
+                searchHits = hits
+                isSearching = false
+                pendingSearchWorkItem = nil
+            }
+        }
+
+        pendingSearchWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 }
 

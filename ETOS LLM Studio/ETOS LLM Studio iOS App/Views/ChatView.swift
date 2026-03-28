@@ -68,6 +68,10 @@ struct ChatView: View {
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
     @State private var sessionPickerSearchText: String = ""
+    @State private var sessionPickerSearchHits: [UUID: SessionHistorySearchHit] = [:]
+    @State private var isSessionPickerSearching: Bool = false
+    @State private var sessionPickerLatestSearchToken: Int = 0
+    @State private var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
     @State private var showSessionPickerSearchInput: Bool = false
     @State private var imageDownloadAlertMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
@@ -713,7 +717,11 @@ struct ChatView: View {
     }
 
     private func resetSessionPickerSearchState() {
+        sessionPickerPendingSearchWorkItem?.cancel()
+        sessionPickerPendingSearchWorkItem = nil
         sessionPickerSearchText = ""
+        sessionPickerSearchHits = [:]
+        isSessionPickerSearching = false
         showSessionPickerSearchInput = false
         sessionPickerSearchFocused = false
     }
@@ -887,19 +895,8 @@ struct ChatView: View {
     private var sessionPickerOverlay: some View {
         let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(sessionPickerSearchText)
         let queryActive = !normalizedQuery.isEmpty
-        let searchHits = queryActive
-            ? SessionHistorySearchSupport.searchHits(
-                sessions: viewModel.chatSessions,
-                query: sessionPickerSearchText,
-                currentSessionID: viewModel.currentSession?.id,
-                currentSessionMessages: viewModel.allMessagesForSession,
-                messageLoader: { sessionID in
-                    Persistence.loadMessages(for: sessionID)
-                }
-            )
-            : [:]
         let displayedSessions = queryActive
-            ? viewModel.chatSessions.filter { searchHits[$0.id] != nil }
+            ? viewModel.chatSessions.filter { sessionPickerSearchHits[$0.id] != nil }
             : viewModel.chatSessions
 
         return GeometryReader { proxy in
@@ -913,19 +910,29 @@ struct ChatView: View {
                     .transition(.opacity)
 
                 VStack(spacing: 12) {
-                    sessionPickerHeader(queryActive: queryActive, displayedCount: displayedSessions.count)
+                    sessionPickerHeader(
+                        queryActive: queryActive,
+                        displayedCount: displayedSessions.count,
+                        isSearching: isSessionPickerSearching
+                    )
 
-                    if displayedSessions.isEmpty {
+                    if queryActive && isSessionPickerSearching {
+                        sessionPickerSearchingState
+                    } else if displayedSessions.isEmpty {
                         sessionPickerEmptyState(queryActive: queryActive)
                     } else {
                         sessionPickerList(
                             displayedSessions: displayedSessions,
-                            searchHits: searchHits,
+                            searchHits: sessionPickerSearchHits,
                             queryActive: queryActive
                         )
                     }
 
-                    sessionPickerFooter(queryActive: queryActive, displayedCount: displayedSessions.count)
+                    sessionPickerFooter(
+                        queryActive: queryActive,
+                        displayedCount: displayedSessions.count,
+                        isSearching: isSessionPickerSearching
+                    )
                 }
                 .frame(width: proxy.size.width, height: panelHeight, alignment: .top)
                 .background(sessionPickerPanelBackground)
@@ -943,16 +950,35 @@ struct ChatView: View {
                 )
             }
         }
+        .onAppear {
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: sessionPickerSearchText) { _, newValue in
+            scheduleSessionPickerSearch(for: newValue)
+        }
+        .onChange(of: viewModel.chatSessions) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: viewModel.allMessagesForSession) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onDisappear {
+            sessionPickerPendingSearchWorkItem?.cancel()
+            sessionPickerPendingSearchWorkItem = nil
+        }
     }
 
-    private func sessionPickerHeader(queryActive: Bool, displayedCount: Int) -> some View {
+    private func sessionPickerHeader(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("会话")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
                 if queryActive {
-                    Text("匹配 \(displayedCount) / \(viewModel.chatSessions.count)")
+                    Text(isSearching ? "正在搜索历史会话…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count)")
                         .font(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
                 } else {
@@ -1027,6 +1053,18 @@ struct ChatView: View {
         .padding(.bottom, showSessionPickerSearchInput ? 52 : 0)
     }
 
+    private var sessionPickerSearchingState: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+            Text("正在搜索历史会话…")
+                .font(.system(size: 12))
+                .foregroundColor(TelegramColors.navBarSubtitle)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 16)
+    }
+
     private func sessionPickerEmptyState(queryActive: Bool) -> some View {
         VStack(spacing: 8) {
             Text(queryActive ? "未找到匹配会话" : "暂无会话")
@@ -1061,15 +1099,56 @@ struct ChatView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private func sessionPickerFooter(queryActive: Bool, displayedCount: Int) -> some View {
+    private func sessionPickerFooter(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
         Text(
             queryActive
-            ? "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话"
+            ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话")
             : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
         )
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(TelegramColors.navBarSubtitle)
             .padding(.bottom, 14)
+    }
+
+    private func scheduleSessionPickerSearch(for query: String) {
+        sessionPickerPendingSearchWorkItem?.cancel()
+        sessionPickerPendingSearchWorkItem = nil
+
+        let normalized = SessionHistorySearchSupport.normalizedQuery(query)
+        guard !normalized.isEmpty else {
+            sessionPickerSearchHits = [:]
+            isSessionPickerSearching = false
+            return
+        }
+
+        isSessionPickerSearching = true
+        sessionPickerLatestSearchToken += 1
+        let searchToken = sessionPickerLatestSearchToken
+        let sessionsSnapshot = viewModel.chatSessions
+        let currentSessionIDSnapshot = viewModel.currentSession?.id
+        let currentMessagesSnapshot = viewModel.allMessagesForSession
+        let querySnapshot = query
+
+        let workItem = DispatchWorkItem {
+            let hits = SessionHistorySearchSupport.searchHits(
+                sessions: sessionsSnapshot,
+                query: querySnapshot,
+                currentSessionID: currentSessionIDSnapshot,
+                currentSessionMessages: currentMessagesSnapshot,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+            DispatchQueue.main.async {
+                guard searchToken == sessionPickerLatestSearchToken else { return }
+                sessionPickerSearchHits = hits
+                isSessionPickerSearching = false
+                sessionPickerPendingSearchWorkItem = nil
+            }
+        }
+
+        sessionPickerPendingSearchWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 
     private func pickerHeaderActionButton(
