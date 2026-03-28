@@ -331,6 +331,9 @@
 				"zh-Hans",
 				ja,
 				ru,
+				es,
+				ar,
+				fr,
 			);
 			mainGroup = 073CA6D22E8CFD65004516A0;
 			minimizedProjectReferenceProxies = 1;
@@ -574,7 +577,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Config/iOSInfo.plist";
+				INFOPLIST_FILE = Config/iOSInfo.plist;
 				INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
 				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers_0 = com.ericterminal.els.dailyPulse.refresh;
 				INFOPLIST_KEY_CFBundleDisplayName = ELS;
@@ -585,9 +588,9 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以连接到调试服务器,用于配置管理和文件传输";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以发送图片给AI模型";
-				INFOPLIST_KEY_UIBackgroundModes_0 = fetch;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes_0 = fetch;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -623,7 +626,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Config/iOSInfo.plist";
+				INFOPLIST_FILE = Config/iOSInfo.plist;
 				INFOPLIST_KEY_AppIdentifierPrefix = "$(AppIdentifierPrefix)";
 				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers_0 = com.ericterminal.els.dailyPulse.refresh;
 				INFOPLIST_KEY_CFBundleDisplayName = ELS;
@@ -634,9 +637,9 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "需要访问本地网络以连接到调试服务器,用于配置管理和文件传输";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要访问麦克风";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以发送图片给AI模型";
-				INFOPLIST_KEY_UIBackgroundModes_0 = fetch;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes_0 = fetch;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
