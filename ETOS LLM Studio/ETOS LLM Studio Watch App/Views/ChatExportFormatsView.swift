@@ -17,6 +17,7 @@ struct ChatExportFormatsView: View {
 
     @State private var fileURLs: [ChatTranscriptExportFormat: URL] = [:]
     @State private var prepareError: String?
+    @State private var includeReasoning: Bool = true
 
     private let exportService = ChatTranscriptExportService()
 
@@ -26,6 +27,13 @@ struct ChatExportFormatsView: View {
                 Text(scopeDescription)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("导出范围") {
+                Picker("思考内容", selection: $includeReasoning) {
+                    Text("包含思考").tag(true)
+                    Text("不包含思考").tag(false)
+                }
             }
 
             ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
@@ -69,6 +77,9 @@ struct ChatExportFormatsView: View {
         .onAppear {
             prepareFiles()
         }
+        .onChange(of: includeReasoning) { _, _ in
+            prepareFiles()
+        }
     }
 
     private var scopeDescription: String {
@@ -93,6 +104,7 @@ struct ChatExportFormatsView: View {
                     session: session,
                     messages: messages,
                     format: format,
+                    includeReasoning: includeReasoning,
                     upToMessageID: upToMessageID
                 )
 

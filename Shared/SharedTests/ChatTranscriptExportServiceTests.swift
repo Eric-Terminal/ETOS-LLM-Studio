@@ -44,6 +44,28 @@ struct ChatTranscriptExportServiceTests {
         #expect(text.contains("search"))
     }
 
+    @Test("不包含思考导出时会移除推理段落并标记文件名")
+    func testExportWithoutReasoningRemovesReasoningSections() throws {
+        let service = ChatTranscriptExportService()
+
+        var message = ChatMessage(role: .assistant, content: "正文")
+        message.reasoningContent = "这段推理不应被导出"
+
+        let output = try service.export(
+            session: ChatSession(id: UUID(), name: "思考开关"),
+            messages: [message],
+            format: .markdown,
+            includeReasoning: false,
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_050)
+        )
+
+        let text = String(decoding: output.data, as: UTF8.self)
+        #expect(output.suggestedFileName.contains("不含思考"))
+        #expect(text.contains("思考/推理：不包含"))
+        #expect(!text.contains("### 推理"))
+        #expect(!text.contains("这段推理不应被导出"))
+    }
+
     @Test("截至指定消息导出时只包含上文")
     func testExportUpToMessageTruncatesFollowingMessages() throws {
         let service = ChatTranscriptExportService()

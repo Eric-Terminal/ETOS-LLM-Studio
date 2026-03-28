@@ -1269,8 +1269,8 @@ struct ChatView: View {
                     isCurrent: isCurrent
                 )
             },
-            onExport: { format in
-                exportSession(session, format: format)
+            onExport: { format, includeReasoning in
+                exportSession(session, format: format, includeReasoning: includeReasoning)
             }
         )
         .padding(.vertical, 10)
@@ -1451,40 +1451,78 @@ struct ChatView: View {
         }
 
         Menu {
-            Button {
-                exportConversation(format: .pdf, upToMessage: nil)
-            } label: {
-                Label("PDF", systemImage: "doc.richtext")
+            Menu("包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: true, upToMessage: nil)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: true, upToMessage: nil)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: true, upToMessage: nil)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
             }
-            Button {
-                exportConversation(format: .markdown, upToMessage: nil)
-            } label: {
-                Label("Markdown", systemImage: "number.square")
-            }
-            Button {
-                exportConversation(format: .text, upToMessage: nil)
-            } label: {
-                Label("TXT", systemImage: "doc.plaintext")
+            Menu("不包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: false, upToMessage: nil)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: false, upToMessage: nil)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: false, upToMessage: nil)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
             }
         } label: {
             Label("导出整个会话", systemImage: "square.and.arrow.up")
         }
 
         Menu {
-            Button {
-                exportConversation(format: .pdf, upToMessage: message)
-            } label: {
-                Label("PDF", systemImage: "doc.richtext")
+            Menu("包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: true, upToMessage: message)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: true, upToMessage: message)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: true, upToMessage: message)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
             }
-            Button {
-                exportConversation(format: .markdown, upToMessage: message)
-            } label: {
-                Label("Markdown", systemImage: "number.square")
-            }
-            Button {
-                exportConversation(format: .text, upToMessage: message)
-            } label: {
-                Label("TXT", systemImage: "doc.plaintext")
+            Menu("不包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: false, upToMessage: message)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: false, upToMessage: message)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: false, upToMessage: message)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
             }
         } label: {
             Label("导出到此消息（含上文）", systemImage: "arrow.up.doc")
@@ -1581,12 +1619,17 @@ struct ChatView: View {
         }
     }
 
-    private func exportConversation(format: ChatTranscriptExportFormat, upToMessage: ChatMessage?) {
+    private func exportConversation(
+        format: ChatTranscriptExportFormat,
+        includeReasoning: Bool,
+        upToMessage: ChatMessage?
+    ) {
         do {
             let output = try transcriptExportService.export(
                 session: viewModel.currentSession,
                 messages: viewModel.allMessagesForSession,
                 format: format,
+                includeReasoning: includeReasoning,
                 upToMessageID: upToMessage?.id
             )
             applyExportOutput(output)
@@ -1595,7 +1638,11 @@ struct ChatView: View {
         }
     }
 
-    private func exportSession(_ session: ChatSession, format: ChatTranscriptExportFormat) {
+    private func exportSession(
+        _ session: ChatSession,
+        format: ChatTranscriptExportFormat,
+        includeReasoning: Bool
+    ) {
         do {
             let messages: [ChatMessage]
             if viewModel.currentSession?.id == session.id {
@@ -1608,6 +1655,7 @@ struct ChatView: View {
                 session: session,
                 messages: messages,
                 format: format,
+                includeReasoning: includeReasoning,
                 upToMessageID: nil
             )
             applyExportOutput(output)
@@ -3147,7 +3195,7 @@ private struct SessionPickerRow: View {
     let onDelete: () -> Void
     let onCancelRename: () -> Void
     let onInfo: () -> Void
-    let onExport: (ChatTranscriptExportFormat) -> Void
+    let onExport: (ChatTranscriptExportFormat, Bool) -> Void
 
     @FocusState private var focused: Bool
 
@@ -3244,20 +3292,39 @@ private struct SessionPickerRow: View {
             }
 
             Menu {
-                Button {
-                    onExport(.pdf)
-                } label: {
-                    Label("PDF", systemImage: "doc.richtext")
+                Menu("包含思考") {
+                    Button {
+                        onExport(.pdf, true)
+                    } label: {
+                        Label("PDF", systemImage: "doc.richtext")
+                    }
+                    Button {
+                        onExport(.markdown, true)
+                    } label: {
+                        Label("Markdown", systemImage: "number.square")
+                    }
+                    Button {
+                        onExport(.text, true)
+                    } label: {
+                        Label("TXT", systemImage: "doc.plaintext")
+                    }
                 }
-                Button {
-                    onExport(.markdown)
-                } label: {
-                    Label("Markdown", systemImage: "number.square")
-                }
-                Button {
-                    onExport(.text)
-                } label: {
-                    Label("TXT", systemImage: "doc.plaintext")
+                Menu("不包含思考") {
+                    Button {
+                        onExport(.pdf, false)
+                    } label: {
+                        Label("PDF", systemImage: "doc.richtext")
+                    }
+                    Button {
+                        onExport(.markdown, false)
+                    } label: {
+                        Label("Markdown", systemImage: "number.square")
+                    }
+                    Button {
+                        onExport(.text, false)
+                    } label: {
+                        Label("TXT", systemImage: "doc.plaintext")
+                    }
                 }
             } label: {
                 Label("导出会话", systemImage: "square.and.arrow.up")

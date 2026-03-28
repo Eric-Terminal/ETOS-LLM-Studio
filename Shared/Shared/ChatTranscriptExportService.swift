@@ -74,6 +74,7 @@ public struct ChatTranscriptExportService {
         session: ChatSession?,
         messages: [ChatMessage],
         format: ChatTranscriptExportFormat,
+        includeReasoning: Bool = true,
         upToMessageID: UUID? = nil,
         exportedAt: Date = Date()
     ) throws -> ChatTranscriptExportOutput {
@@ -82,6 +83,7 @@ public struct ChatTranscriptExportService {
             session: session,
             messages: scopedMessages,
             format: format,
+            includeReasoning: includeReasoning,
             exportedAt: exportedAt,
             upToMessageID: upToMessageID,
             sourceCount: messages.count
@@ -90,8 +92,8 @@ public struct ChatTranscriptExportService {
         let data: Data
         switch format {
         case .pdf:
-            let plain = buildPlainText(context)
-            data = try makePDF(from: plain)
+            let markdown = buildMarkdown(context)
+            data = try makePDF(fromMarkdown: markdown)
         case .markdown:
             let markdown = buildMarkdown(context)
             data = Data(markdown.utf8)
@@ -140,7 +142,8 @@ public struct ChatTranscriptExportService {
             scopeSuffix = "-完整"
         }
 
-        return "\(baseName)\(scopeSuffix)-\(stamp).\(context.format.fileExtension)"
+        let reasoningSuffix = context.includeReasoning ? "-含思考" : "-不含思考"
+        return "\(baseName)\(scopeSuffix)\(reasoningSuffix)-\(stamp).\(context.format.fileExtension)"
     }
 
     private func sanitizeFileName(_ raw: String) -> String {
@@ -161,6 +164,7 @@ public struct ChatTranscriptExportService {
         lines.append("- 会话名称：\(context.session?.name ?? "未命名会话")")
         lines.append("- 导出时间：\(formattedDateTime(context.exportedAt))")
         lines.append("- 导出范围：\(scopeDescription(context))")
+        lines.append("- 思考/推理：\(context.includeReasoning ? "包含" : "不包含")")
         lines.append("- 消息数量：\(context.messages.count)")
 
         appendPromptLinesIfNeeded(for: context.session, markdownLines: &lines)
@@ -175,7 +179,7 @@ public struct ChatTranscriptExportService {
             lines.append(messageBodyOrPlaceholder(message.content))
             lines.append("")
 
-            if let reasoning = trimmedOrNil(message.reasoningContent) {
+            if context.includeReasoning, let reasoning = trimmedOrNil(message.reasoningContent) {
                 lines.append("### 推理")
                 lines.append("")
                 lines.append(reasoning)
@@ -200,6 +204,7 @@ public struct ChatTranscriptExportService {
         lines.append("会话名称：\(context.session?.name ?? "未命名会话")")
         lines.append("导出时间：\(formattedDateTime(context.exportedAt))")
         lines.append("导出范围：\(scopeDescription(context))")
+        lines.append("思考/推理：\(context.includeReasoning ? "包含" : "不包含")")
         lines.append("消息数量：\(context.messages.count)")
 
         appendPromptLinesIfNeeded(for: context.session, plainLines: &lines)
@@ -210,7 +215,7 @@ public struct ChatTranscriptExportService {
             lines.append(String(repeating: "-", count: 42))
             lines.append(messageBodyOrPlaceholder(message.content))
 
-            if let reasoning = trimmedOrNil(message.reasoningContent) {
+            if context.includeReasoning, let reasoning = trimmedOrNil(message.reasoningContent) {
                 lines.append("")
                 lines.append("[推理]")
                 lines.append(reasoning)
@@ -421,8 +426,8 @@ public struct ChatTranscriptExportService {
             .joined(separator: "\n")
     }
 
-    private func makePDF(from plainText: String) throws -> Data {
-        let content = plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "（空内容）" : plainText
+    private func makePDF(fromMarkdown markdownText: String) throws -> Data {
+        let content = markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "（空内容）" : markdownText
         let outputData = NSMutableData()
 
         guard let consumer = CGDataConsumer(data: outputData as CFMutableData) else {
@@ -434,13 +439,7 @@ public struct ChatTranscriptExportService {
             throw ChatTranscriptExportError.pdfRenderFailed
         }
 
-        let font = CTFontCreateWithName("PingFangSC-Regular" as CFString, 11, nil)
-        let attributed = NSAttributedString(
-            string: content,
-            attributes: [
-                NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font
-            ]
-        )
+        let attributed = renderReadyAttributedString(fromMarkdown: content)
         let framesetter = CTFramesetterCreateWithAttributedString(attributed)
 
         let pageRect = mediaBox
@@ -488,10 +487,41 @@ public struct ChatTranscriptExportService {
         return outputData as Data
     }
 
+    private func renderReadyAttributedString(fromMarkdown markdown: String) -> NSAttributedString {
+        if #available(iOS 15.0, watchOS 8.0, *) {
+            let options = AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .full,
+                failurePolicy: .returnPartiallyParsedIfPossible
+            )
+            if let parsed = try? AttributedString(markdown: markdown, options: options) {
+                let attributed = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
+                let fullRange = NSRange(location: 0, length: attributed.length)
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.lineSpacing = 4
+                attributed.addAttributes(
+                    [
+                        .paragraphStyle: paragraphStyle
+                    ],
+                    range: fullRange
+                )
+                return attributed
+            }
+        }
+
+        let font = CTFontCreateWithName("PingFangSC-Regular" as CFString, 11, nil)
+        return NSAttributedString(
+            string: markdown,
+            attributes: [
+                NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font
+            ]
+        )
+    }
+
     private struct ExportContext {
         let session: ChatSession?
         let messages: [ChatMessage]
         let format: ChatTranscriptExportFormat
+        let includeReasoning: Bool
         let exportedAt: Date
         let upToMessageID: UUID?
         let sourceCount: Int
