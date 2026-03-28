@@ -1043,9 +1043,39 @@ private enum ETCodePreviewSupport {
 </body>
 </html>
 """
+        case "html", "htm", "xhtml":
+            return wrappedHTMLIfNeeded(content)
         default:
             return content
         }
+    }
+
+    private static func wrappedHTMLIfNeeded(_ content: String) -> String {
+        let lowercased = content.lowercased()
+        if lowercased.contains("<html") || lowercased.contains("<!doctype") {
+            return content
+        }
+        return """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: #FFFFFF;
+      color: #1C1C1E;
+    }
+  </style>
+</head>
+<body>
+\(content)
+</body>
+</html>
+"""
     }
 
     private static func normalizedLanguage(_ language: String?) -> String {
@@ -1072,7 +1102,7 @@ private struct ETCodePreviewButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("预览代码")
-        .sheet(isPresented: $showingPreview) {
+        .fullScreenCover(isPresented: $showingPreview) {
             ETCodePreviewSheet(
                 content: content,
                 language: language
@@ -1091,6 +1121,7 @@ private struct ETCodePreviewSheet: View {
             ETCodePreviewWebView(
                 htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(ETCodePreviewSupport.previewTitle(language))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1107,17 +1138,35 @@ private struct ETCodePreviewSheet: View {
 private struct ETCodePreviewWebView: UIViewRepresentable {
     let htmlContent: String
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
+        webView.scrollView.isScrollEnabled = true
+        webView.scrollView.bounces = true
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.allowsBackForwardNavigationGestures = true
+        webView.allowsLinkPreview = true
+        webView.isUserInteractionEnabled = true
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        guard context.coordinator.lastLoadedHTML != htmlContent else { return }
+        context.coordinator.lastLoadedHTML = htmlContent
         webView.loadHTMLString(htmlContent, baseURL: nil)
+    }
+
+    final class Coordinator {
+        var lastLoadedHTML: String?
     }
 }
 
