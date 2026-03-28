@@ -128,6 +128,8 @@ struct SettingsView: View {
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
                         currentSession: $viewModel.currentSession,
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+                        enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+                        periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
                         addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
                         selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
                         updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,

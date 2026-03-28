@@ -380,6 +380,79 @@ struct DailyPulseTests {
         #expect(merged.first?.preview == "今天有 3 个提醒。")
     }
 
+    @Test("同步公告信号时会自动移除已不存在的公告条目")
+    func syncingAnnouncementSignalsRemovesStaleAnnouncements() {
+        let oldAnnouncementSignal = DailyPulseExternalSignal(
+            source: .announcement,
+            title: "旧公告",
+            preview: "旧公告正文",
+            capturedAt: Date(timeIntervalSince1970: 100),
+            isFailure: false
+        )
+        let shortcutSignal = DailyPulseExternalSignal(
+            source: .shortcutResult,
+            title: "快捷指令结果",
+            preview: "结果预览",
+            capturedAt: Date(timeIntervalSince1970: 120),
+            isFailure: false
+        )
+        let announcements = [
+            Announcement(
+                id: 11,
+                type: .warning,
+                minBuild: nil,
+                maxBuild: nil,
+                language: nil,
+                platform: nil,
+                title: "新公告",
+                body: "新公告正文"
+            )
+        ]
+
+        let merged = DailyPulseManager.syncingAnnouncementSignals(
+            announcements,
+            in: [oldAnnouncementSignal, shortcutSignal],
+            limit: 20
+        )
+
+        #expect(merged.contains(where: { $0.source == .shortcutResult && $0.title == "快捷指令结果" }))
+        #expect(merged.contains(where: { $0.source == .announcement && $0.title == "新公告" }))
+        #expect(!merged.contains(where: { $0.source == .announcement && $0.title == "旧公告" }))
+    }
+
+    @Test("同步空公告列表时会清理全部公告信号并保留其他外部信号")
+    func syncingAnnouncementSignalsClearsAnnouncementHistoryWhenEmpty() {
+        let signals = [
+            DailyPulseExternalSignal(
+                source: .announcement,
+                title: "公告A",
+                preview: "A",
+                capturedAt: Date(timeIntervalSince1970: 100),
+                isFailure: false
+            ),
+            DailyPulseExternalSignal(
+                source: .announcement,
+                title: "公告B",
+                preview: "B",
+                capturedAt: Date(timeIntervalSince1970: 90),
+                isFailure: true
+            ),
+            DailyPulseExternalSignal(
+                source: .mcpOutput,
+                title: "MCP 输出",
+                preview: "执行成功",
+                capturedAt: Date(timeIntervalSince1970: 80),
+                isFailure: false
+            )
+        ]
+
+        let merged = DailyPulseManager.syncingAnnouncementSignals([], in: signals, limit: 20)
+
+        #expect(merged.count == 1)
+        #expect(merged.first?.source == .mcpOutput)
+        #expect(merged.first?.title == "MCP 输出")
+    }
+
     @Test("Pulse 任务合并会保留较新的状态与完成标记")
     func mergeTaskKeepsLatestCompletionState() {
         let local = DailyPulseTask(

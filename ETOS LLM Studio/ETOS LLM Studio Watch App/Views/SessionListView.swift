@@ -240,7 +240,7 @@ private struct WatchSessionSearchView: View {
                         Text(summary)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                            .lineLimit(nil)
                     } else if let topic = session.topicPrompt, !topic.isEmpty {
                         Text(topic)
                             .font(.caption2)
@@ -263,7 +263,17 @@ private struct WatchSessionSearchView: View {
 
     private func searchSummary(for session: ChatSession) -> String? {
         guard let hit = searchHits[session.id] else { return nil }
-        return "\(sourceLabel(for: hit.source))：\(hit.preview)"
+        let detailLines = hit.matches.map { match in
+            let preview = compactSearchPreview(match.preview)
+            if let messageOrdinal = match.messageOrdinal {
+                return "• \(sourceLabel(for: match.source)) 第\(messageOrdinal)条：\(preview)"
+            }
+            return "• \(sourceLabel(for: match.source))：\(preview)"
+        }
+        if detailLines.count <= 1 {
+            return detailLines.first
+        }
+        return "共命中 \(hit.matchCount) 处\n" + detailLines.joined(separator: "\n")
     }
 
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
@@ -285,6 +295,11 @@ private struct WatchSessionSearchView: View {
         case .errorMessage:
             return "错误消息"
         }
+    }
+
+    private func compactSearchPreview(_ text: String, maxLength: Int = 40) -> String {
+        guard text.count > maxLength else { return text }
+        return String(text.prefix(maxLength)) + "…"
     }
 
     private func submitSearch() {
@@ -384,7 +399,7 @@ private struct SessionRowView: View {
                     Text(searchSummary)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(nil)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading) // 修复 Bug #2：让整行都能被点击

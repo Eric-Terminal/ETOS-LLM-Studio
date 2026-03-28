@@ -130,6 +130,8 @@ public class ChatService {
     private var currentLoadingMessageID: UUID?
     /// 当前生图请求上下文，用于向 UI 广播更细粒度的生图状态。
     private var currentImageGenerationContext: ImageGenerationContext?
+    /// 记录每个会话上一次注入周期性时间路标的时间，保证路标按周期出现且不会过于频繁。
+    private var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]
     /// 重试时要添加新版本的assistant消息ID（如果有）
     private var retryTargetMessageID: UUID?
     private var providers: [Provider]
@@ -840,6 +842,7 @@ public class ChatService {
             Persistence.deleteFileFiles(for: messages)
 
             Persistence.deleteSessionArtifacts(sessionID: session.id)
+            periodicTimeLandmarkLastInjectedAtBySessionID.removeValue(forKey: session.id)
             logger.info("删除了会话的数据文件: \(session.name)")
         }
         currentSessions.removeAll { session in sessionsToDelete.contains { $0.id == session.id } }
@@ -1563,6 +1566,8 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
+        enablePeriodicTimeLandmark: Bool = false,
+        periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true,
         audioAttachment: AudioAttachment? = nil,
         imageAttachments: [ImageAttachment] = [],
@@ -1605,6 +1610,7 @@ public class ChatService {
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
         var savedFileNames: [String] = []
+        let requestTimestamp = Date()
         var userMessages: [ChatMessage] = []
         var primaryUserMessage: ChatMessage?
         
@@ -1661,6 +1667,7 @@ public class ChatService {
             let audioMessage = ChatMessage(
                 role: .user,
                 content: audioPlaceholder,
+                requestedAt: requestTimestamp,
                 audioFileName: savedAudioFileName,
                 imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames,
                 fileFileNames: savedFileNames.isEmpty ? nil : savedFileNames
@@ -1675,6 +1682,7 @@ public class ChatService {
             let textMessage = ChatMessage(
                 role: .user,
                 content: messageContent,
+                requestedAt: requestTimestamp,
                 audioFileName: nil,
                 imageFileNames: imageNamesForText,
                 fileFileNames: fileNamesForText
@@ -1770,6 +1778,8 @@ public class ChatService {
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: audioAttachment,
                 currentFileAttachments: fileAttachments
@@ -1917,6 +1927,7 @@ public class ChatService {
         let userMessage = ChatMessage(
             role: .user,
             content: trimmedPrompt,
+            requestedAt: Date(),
             imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
         )
         let loadingMessage = ChatMessage(role: .assistant, content: "")
@@ -2452,6 +2463,8 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        enablePeriodicTimeLandmark: Bool,
+        periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?, // 当前消息的音频附件（用于首次发送，尚未保存到文件）
         currentFileAttachments: [FileAttachment] // 当前消息的文件附件（用于首次发送，尚未保存到文件）
@@ -2527,6 +2540,17 @@ public class ChatService {
         var chatHistory = requestMessages
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
             chatHistory = Array(chatHistory.suffix(maxChatHistory))
+        }
+
+        if enablePeriodicTimeLandmark {
+            chatHistory = injectPeriodicTimeLandmarkIfNeeded(
+                into: chatHistory,
+                sessionID: currentSessionID,
+                now: Date(),
+                intervalMinutes: periodicTimeLandmarkIntervalMinutes
+            )
+        } else {
+            periodicTimeLandmarkLastInjectedAtBySessionID.removeValue(forKey: currentSessionID)
         }
 
         if !worldbookResult.atDepth.isEmpty {
@@ -2634,6 +2658,8 @@ public class ChatService {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
                 requestLogContext: requestLogContext
@@ -2655,6 +2681,8 @@ public class ChatService {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
                 requestLogContext: requestLogContext
@@ -2690,6 +2718,8 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
+        enablePeriodicTimeLandmark: Bool = false,
+        periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
@@ -2873,6 +2903,8 @@ public class ChatService {
             enableMemoryWrite: enableMemoryWrite,
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             includeSystemTime: includeSystemTime,
+            enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             currentAudioAttachment: audioAttachment,
             currentFileAttachments: fileAttachments
@@ -2895,6 +2927,8 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        enablePeriodicTimeLandmark: Bool,
+        periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
         currentFileAttachments: [FileAttachment]
@@ -2932,6 +2966,8 @@ public class ChatService {
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
                 currentFileAttachments: currentFileAttachments
@@ -2974,6 +3010,8 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
+        enablePeriodicTimeLandmark: Bool = false,
+        periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true
     ) async {
         guard let currentSession = currentSessionSubject.value else { return }
@@ -3034,6 +3072,8 @@ public class ChatService {
             enableMemoryWrite: enableMemoryWrite,
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             includeSystemTime: includeSystemTime,
+            enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             audioAttachment: audioAttachment,
             imageAttachments: imageAttachments,
@@ -3633,6 +3673,8 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        enablePeriodicTimeLandmark: Bool,
+        periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
         requestLogContext: RequestLogContext
@@ -3678,7 +3720,9 @@ public class ChatService {
                     enableMemory: enableMemory,
                     enableMemoryWrite: enableMemoryWrite,
                     enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                    includeSystemTime: includeSystemTime
+                    includeSystemTime: includeSystemTime,
+                    enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes
                 )
             } catch is CancellationError {
                 logger.info("请求在解析阶段被取消，已忽略后续处理。")
@@ -3757,7 +3801,7 @@ public class ChatService {
     }
     
     /// 处理已解析的聊天消息，包含所有工具调用和UI更新的核心逻辑 (可测试)
-    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, enableMemoryActiveRetrieval: Bool = false, includeSystemTime: Bool) async {
+    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, enableMemoryActiveRetrieval: Bool = false, includeSystemTime: Bool, enablePeriodicTimeLandmark: Bool = false, periodicTimeLandmarkIntervalMinutes: Int = 30) async {
         var responseMessage = responseMessage // Make mutable
         if let reasoning = responseMessage.reasoningContent {
             let normalized = normalizeEscapedNewlinesIfNeeded(reasoning)
@@ -3924,6 +3968,8 @@ public class ChatService {
                 enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: false,
                 currentAudioAttachment: nil,
                 currentFileAttachments: []
@@ -3951,6 +3997,8 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        enablePeriodicTimeLandmark: Bool,
+        periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
         requestLogContext: RequestLogContext
@@ -4180,7 +4228,9 @@ public class ChatService {
                     enableMemory: enableMemory,
                     enableMemoryWrite: enableMemoryWrite,
                     enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                    includeSystemTime: includeSystemTime
+                    includeSystemTime: includeSystemTime,
+                    enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes
                 )
             } else {
                 persistRequestLog(
@@ -4741,6 +4791,77 @@ public class ChatService {
         return updated
     }
 
+    private func injectPeriodicTimeLandmarkIfNeeded(
+        into chatHistory: [ChatMessage],
+        sessionID: UUID,
+        now: Date,
+        intervalMinutes: Int
+    ) -> [ChatMessage] {
+        guard !chatHistory.isEmpty else { return chatHistory }
+
+        let safeIntervalMinutes = max(1, intervalMinutes)
+        let interval = TimeInterval(safeIntervalMinutes * 60)
+        if let lastInjectedAt = periodicTimeLandmarkLastInjectedAtBySessionID[sessionID],
+           now.timeIntervalSince(lastInjectedAt) < interval {
+            return chatHistory
+        }
+
+        let cutoff = now.addingTimeInterval(-interval)
+        var anchorIndex: Int?
+        var anchorTime: Date?
+
+        for (index, message) in chatHistory.enumerated() {
+            guard let timestamp = messageTimelineTimestamp(for: message), timestamp <= cutoff else {
+                continue
+            }
+            if let bestTime = anchorTime {
+                if timestamp >= bestTime {
+                    anchorTime = timestamp
+                    anchorIndex = index
+                }
+            } else {
+                anchorTime = timestamp
+                anchorIndex = index
+            }
+        }
+
+        guard let resolvedIndex = anchorIndex, let resolvedAnchorTime = anchorTime else {
+            return chatHistory
+        }
+
+        var updated = chatHistory
+        updated.insert(
+            makePeriodicTimeLandmarkMessage(anchorTime: resolvedAnchorTime),
+            at: resolvedIndex
+        )
+        periodicTimeLandmarkLastInjectedAtBySessionID[sessionID] = now
+        return updated
+    }
+
+    private func messageTimelineTimestamp(for message: ChatMessage) -> Date? {
+        if let requestedAt = message.requestedAt {
+            return requestedAt
+        }
+        if let requestStartedAt = message.responseMetrics?.requestStartedAt {
+            return requestStartedAt
+        }
+        return message.responseMetrics?.responseCompletedAt
+    }
+
+    private func makePeriodicTimeLandmarkMessage(anchorTime: Date) -> ChatMessage {
+        let content = "本条对话的请求时间为：\(formattedPeriodicTimeLandmarkDescription(at: anchorTime))。"
+        return ChatMessage(role: .system, content: content)
+    }
+
+    private func formattedPeriodicTimeLandmarkDescription(at date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone.current
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
+        return formatter.string(from: date)
+    }
+
     private func findSafeInsertIndex(_ preferredIndex: Int, in messages: [ChatMessage]) -> Int {
         guard !messages.isEmpty else { return max(0, preferredIndex) }
         var index = max(0, min(preferredIndex, messages.count))
@@ -4782,17 +4903,20 @@ public class ChatService {
     }
     
     private func formattedSystemTimeDescription() -> String {
-        let now = Date()
+        formattedSystemTimeDescription(at: Date())
+    }
+
+    private func formattedSystemTimeDescription(at date: Date) -> String {
         let localeFormatter = DateFormatter()
         localeFormatter.calendar = Calendar(identifier: .gregorian)
         localeFormatter.locale = Locale(identifier: "zh_CN")
         localeFormatter.timeZone = TimeZone.current
         localeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
-        let localTime = localeFormatter.string(from: now)
+        let localTime = localeFormatter.string(from: date)
         
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.timeZone = TimeZone.current
-        let isoTime = isoFormatter.string(from: now)
+        let isoTime = isoFormatter.string(from: date)
         
         let localTimeLine = String(format: NSLocalizedString("当前系统本地时间：%@", comment: "System local time line for model prompt."), localTime)
         let isoTimeLine = String(format: NSLocalizedString("ISO8601：%@", comment: "ISO8601 time line for model prompt."), isoTime)

@@ -367,57 +367,62 @@ struct DailyPulseView: View {
             }
 
             DisclosureGroup(isExpanded: expansionBinding(for: card.id)) {
-                Markdown(card.detailsMarkdown)
-                    .font(.subheadline)
-                    .padding(.top, 6)
+                VStack(alignment: .leading, spacing: 12) {
+                    Markdown(card.detailsMarkdown)
+                        .font(.subheadline)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            feedbackButton(title: "喜欢", systemImage: card.feedback == .liked ? "hand.thumbsup.fill" : "hand.thumbsup") {
+                                pulseManager.applyFeedback(.liked, cardID: card.id, runID: runID)
+                            }
+
+                            feedbackButton(title: "暂不感兴趣", systemImage: card.feedback == .disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown") {
+                                pulseManager.applyFeedback(.disliked, cardID: card.id, runID: runID)
+                            }
+                        }
+
+                        HStack(spacing: 10) {
+                            Button {
+                                let hadSavedSession = card.savedSessionID != nil
+                                viewModel.continueDailyPulseCard(card, from: runID)
+                                statusMessage = hadSavedSession
+                                    ? "已打开这张卡片对应的会话，并为你填好继续追问。"
+                                    : "已为这张卡片创建正式会话，并为你填好继续追问。"
+                            } label: {
+                                Label("继续聊", systemImage: "arrow.up.right.circle")
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+
+                        Button {
+                            let existing = pulseManager.linkedTask(cardID: card.id, runID: runID)
+                            if pulseManager.addTaskFromCard(cardID: card.id, runID: runID) != nil {
+                                statusMessage = existing == nil ? "已加入 Pulse 任务。" : "这张卡片已经在 Pulse 任务列表里。"
+                            }
+                        } label: {
+                            Label(
+                                pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "加入 Pulse 任务" : "已在 Pulse 任务中",
+                                systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(role: .destructive) {
+                            pulseManager.applyFeedback(.hidden, cardID: card.id, runID: runID)
+                        } label: {
+                            Label("隐藏这张卡片", systemImage: "eye.slash")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                .padding(.top, 6)
             } label: {
-                Label("展开详情", systemImage: "doc.text.magnifyingglass")
-                    .font(.subheadline)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    feedbackButton(title: "喜欢", systemImage: card.feedback == .liked ? "hand.thumbsup.fill" : "hand.thumbsup") {
-                        pulseManager.applyFeedback(.liked, cardID: card.id, runID: runID)
-                    }
-
-                    feedbackButton(title: "暂不感兴趣", systemImage: card.feedback == .disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown") {
-                        pulseManager.applyFeedback(.disliked, cardID: card.id, runID: runID)
-                    }
-                }
-
-                HStack(spacing: 10) {
-                    Button {
-                        let hadSavedSession = card.savedSessionID != nil
-                        viewModel.continueDailyPulseCard(card, from: runID)
-                        statusMessage = hadSavedSession
-                            ? "已打开这张卡片对应的会话，并为你填好继续追问。"
-                            : "已为这张卡片创建正式会话，并为你填好继续追问。"
-                    } label: {
-                        Label("继续聊", systemImage: "arrow.up.right.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                Button {
-                    let existing = pulseManager.linkedTask(cardID: card.id, runID: runID)
-                    if pulseManager.addTaskFromCard(cardID: card.id, runID: runID) != nil {
-                        statusMessage = existing == nil ? "已加入 Pulse 任务。" : "这张卡片已经在 Pulse 任务列表里。"
-                    }
-                } label: {
-                    Label(
-                        pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "加入 Pulse 任务" : "已在 Pulse 任务中",
-                        systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
-                    )
-                }
-                .buttonStyle(.bordered)
-
-                Button(role: .destructive) {
-                    pulseManager.applyFeedback(.hidden, cardID: card.id, runID: runID)
-                } label: {
-                    Label("隐藏这张卡片", systemImage: "eye.slash")
-                }
-                .buttonStyle(.borderless)
+                Label(
+                    expandedCardIDs.contains(card.id) ? "收起更多" : "展开更多",
+                    systemImage: expandedCardIDs.contains(card.id) ? "chevron.up.circle" : "ellipsis.circle"
+                )
+                .font(.subheadline)
             }
         }
         .padding(.vertical, 6)

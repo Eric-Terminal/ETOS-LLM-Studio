@@ -32,6 +32,7 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(message.getAllVersions(), ["Hello, world!"])
         XCTAssertEqual(message.getCurrentVersionIndex(), 0)
         XCTAssertFalse(message.hasMultipleVersions)
+        XCTAssertNil(message.requestedAt)
     }
     
     /// 测试新格式（多版本数组）的反序列化
@@ -248,6 +249,25 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decodedUsage.cacheReadTokens, 5)
         XCTAssertNil(decodedUsage.totalTokens)
         XCTAssertTrue(decodedUsage.hasAnyData)
+    }
+
+    /// 测试请求时间字段可序列化并向后兼容
+    func testRequestedAtRoundTrip() throws {
+        let requestedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let original = ChatMessage(
+            role: .user,
+            content: "带请求时间",
+            requestedAt: requestedAt
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(original)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertTrue(json.contains("\"requestedAt\""))
+
+        let decoded = try JSONDecoder().decode(ChatMessage.self, from: data)
+        XCTAssertEqual(decoded.requestedAt, requestedAt)
     }
 
     /// 测试工具调用的服务商专有字段在序列化往返中不丢失

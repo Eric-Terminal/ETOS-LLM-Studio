@@ -2086,6 +2086,46 @@ fileprivate struct ChatServiceTests {
         #expect(logs[0].tokenUsage?.thinkingTokens == 5)
     }
 
+    @Test("发送消息后会在会话 JSON 中保存请求时间")
+    func testSendMessagePersistsRequestedAtInSessionJSON() async {
+        await cleanup()
+
+        setupMockResponsesForChatAndTitle()
+        let startedAt = Date()
+
+        await chatService.sendAndProcessMessage(
+            content: "请记录请求时间",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let finishedAt = Date()
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证请求时间落盘。")
+            return
+        }
+
+        let messages = Persistence.loadMessages(for: sessionID)
+        guard let userMessage = messages.first(where: { $0.role == .user }) else {
+            Issue.record("未找到用户消息，无法验证请求时间字段。")
+            return
+        }
+
+        guard let requestedAt = userMessage.requestedAt else {
+            Issue.record("用户消息缺少 requestedAt 字段。")
+            return
+        }
+        #expect(requestedAt >= startedAt.addingTimeInterval(-1))
+        #expect(requestedAt <= finishedAt.addingTimeInterval(1))
+    }
+
     @Test("Auto-naming handles network error during title generation")
     func testAutoSessionNaming_HandlesNetworkError() async throws {
         await cleanup()
@@ -2426,6 +2466,107 @@ fileprivate struct ChatServiceTests {
         #expect(content.contains("<time>"), "System prompt should include <time> when the toggle is on.")
         #expect(content.contains("ISO8601"), "Time block should include ISO8601 representation for determinism.")
         
+        await cleanup()
+    }
+
+    @Test("周期性时间路标支持自定义分钟并插入在锚点消息前")
+    func testPeriodicTimeLandmark_CustomIntervalAndInsertPosition() async throws {
+        await cleanup()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "ok")
+
+        let now = Date()
+        let session = try #require(chatService.currentSessionSubject.value)
+        let oldMessage = ChatMessage(
+            role: .user,
+            content: "10分钟前的消息",
+            requestedAt: now.addingTimeInterval(-10 * 60)
+        )
+        let nearMessage = ChatMessage(
+            role: .assistant,
+            content: "3分钟前的消息",
+            requestedAt: now.addingTimeInterval(-3 * 60)
+        )
+        let historicalMessages = [oldMessage, nearMessage]
+        chatService.messagesForSessionSubject.send(historicalMessages)
+        Persistence.saveMessages(historicalMessages, for: session.id)
+
+        await chatService.sendAndProcessMessage(
+            content: "现在继续聊",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 20,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            enablePeriodicTimeLandmark: true,
+            periodicTimeLandmarkIntervalMinutes: 5
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let landmarkIndex = sentMessages.firstIndex(where: {
+            $0.role == .system && $0.content.contains("本条对话的请求时间为：")
+        })
+        let insertedIndex = try #require(landmarkIndex)
+        #expect(insertedIndex + 1 < sentMessages.count)
+        #expect(sentMessages[insertedIndex + 1].id == oldMessage.id, "路标应插入在命中的历史消息前面。")
+        #expect(!sentMessages[insertedIndex].content.contains("<periodic_time_landmark>"), "路标提示词应保持为一句短句。")
+
+        await cleanup()
+    }
+
+    @Test("周期性时间路标在同一时间窗口内最多注入一次")
+    func testPeriodicTimeLandmark_ThrottleByIntervalWindow() async throws {
+        await cleanup()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "ok")
+
+        let now = Date()
+        let session = try #require(chatService.currentSessionSubject.value)
+        let historicalMessages = [
+            ChatMessage(role: .user, content: "很早之前的问题", requestedAt: now.addingTimeInterval(-120 * 60)),
+            ChatMessage(role: .assistant, content: "很早之前的回答", requestedAt: now.addingTimeInterval(-90 * 60))
+        ]
+        chatService.messagesForSessionSubject.send(historicalMessages)
+        Persistence.saveMessages(historicalMessages, for: session.id)
+
+        await chatService.sendAndProcessMessage(
+            content: "第一次请求",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 20,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            enablePeriodicTimeLandmark: true,
+            periodicTimeLandmarkIntervalMinutes: 30
+        )
+        let firstSentMessages = mockAdapter.receivedMessages ?? []
+        let firstCount = firstSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        #expect(firstCount == 1)
+
+        await chatService.sendAndProcessMessage(
+            content: "紧接着第二次请求",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 20,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            enablePeriodicTimeLandmark: true,
+            periodicTimeLandmarkIntervalMinutes: 30
+        )
+        let secondSentMessages = mockAdapter.receivedMessages ?? []
+        let secondCount = secondSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        #expect(secondCount == 0, "同一时间窗口内不应重复注入路标。")
+
         await cleanup()
     }
     
@@ -3254,8 +3395,9 @@ fileprivate struct PersistenceTests {
     func testSaveAndLoadMessages() {
         // 1. Arrange
         let sessionId = UUID()
+        let requestedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let messagesToSave = [
-            ChatMessage(role: .user, content: "Hello"),
+            ChatMessage(role: .user, content: "Hello", requestedAt: requestedAt),
             ChatMessage(role: .assistant, content: "Hi there!")
         ]
         
@@ -3266,6 +3408,7 @@ fileprivate struct PersistenceTests {
         // 3. Assert
         #expect(loadedMessages.count == messagesToSave.count)
         #expect(loadedMessages.first?.content == "Hello")
+        #expect(loadedMessages.first?.requestedAt == requestedAt)
         #expect(loadedMessages.last?.role == .assistant)
 
         let sessionFileURL = currentSessionFileURL(sessionId)
@@ -3275,6 +3418,7 @@ fileprivate struct PersistenceTests {
             #expect(record.schemaVersion == 3)
             #expect(record.messages.count == 2)
             #expect(record.messages.first?.content == "Hello")
+            #expect(record.messages.first?.requestedAt == requestedAt)
         } else {
             Issue.record("会话文件不存在或格式不正确。")
         }
@@ -4087,6 +4231,7 @@ fileprivate struct SessionHistorySearchSupportTests {
 
         #expect(hits[session.id]?.source == .userMessage)
         #expect(hits[session.id]?.preview.contains("大阪旅行清单") == true)
+        #expect(hits[session.id]?.matches.first?.messageOrdinal == 1)
     }
 
     @Test("检索支持正则表达式模式")
@@ -4132,5 +4277,26 @@ fileprivate struct SessionHistorySearchSupportTests {
 
         #expect(hits[session.id]?.source == .assistantMessage)
         #expect(hits[session.id]?.preview.contains("内存里的最新回复") == true)
+    }
+
+    @Test("同一会话多条消息命中时返回完整命中序号")
+    func testSearchHitsReturnsAllMessageOrdinals() {
+        let session = ChatSession(id: UUID(), name: "排期讨论")
+        let messages = [
+            ChatMessage(role: .user, content: "今天先整理需求池"),
+            ChatMessage(role: .assistant, content: "收到，我先给你一个排期草案。"),
+            ChatMessage(role: .user, content: "排期里要加上联调时间"),
+            ChatMessage(role: .assistant, content: "好的，排期会补充风险说明。")
+        ]
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "排期",
+            messageLoader: { _ in messages }
+        )
+
+        let ordinals = hits[session.id]?.matches.compactMap(\.messageOrdinal) ?? []
+        #expect(ordinals == [2, 3, 4])
+        #expect(hits[session.id]?.matchCount == 3)
     }
 }

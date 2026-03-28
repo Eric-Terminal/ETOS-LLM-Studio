@@ -10,8 +10,48 @@ import Foundation
 import Combine
 import os.log
 
+public enum AppToolInputDraftMode: String, Codable, Hashable, Sendable {
+    case replace
+    case append
+}
+
+public struct AppToolInputDraftRequest: Equatable, Sendable {
+    public static let textUserInfoKey = "text"
+    public static let modeUserInfoKey = "mode"
+
+    public var text: String
+    public var mode: AppToolInputDraftMode
+
+    public init(text: String, mode: AppToolInputDraftMode = .replace) {
+        self.text = text
+        self.mode = mode
+    }
+
+    public var userInfo: [AnyHashable: Any] {
+        [
+            Self.textUserInfoKey: text,
+            Self.modeUserInfoKey: mode.rawValue
+        ]
+    }
+
+    public static func decode(from userInfo: [AnyHashable: Any]?) -> AppToolInputDraftRequest? {
+        guard let userInfo,
+              let text = userInfo[textUserInfoKey] as? String else {
+            return nil
+        }
+        let modeRawValue = (userInfo[modeUserInfoKey] as? String) ?? AppToolInputDraftMode.replace.rawValue
+        let mode = AppToolInputDraftMode(rawValue: modeRawValue) ?? .replace
+        return AppToolInputDraftRequest(text: text, mode: mode)
+    }
+}
+
+public extension Notification.Name {
+    static let appToolFillUserInputRequested = Notification.Name("com.ETOS.LLM.Studio.appTool.fillUserInput")
+}
+
 public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable {
     case echoText = "echo_text"
+    case fillUserInput = "fill_user_input"
     case editMemory = "edit_memory"
     case listSandboxDirectory = "list_sandbox_directory"
     case readSandboxFile = "read_sandbox_file"
@@ -34,6 +74,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .echoText:
             return "app_echo_text"
+        case .fillUserInput:
+            return "app_fill_user_input"
         case .editMemory:
             return "app_edit_memory"
         case .listSandboxDirectory:
@@ -71,6 +113,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .echoText:
             return NSLocalizedString("示例：文本回显", comment: "Example echo tool name")
+        case .fillUserInput:
+            return NSLocalizedString("填充输入框", comment: "Fill user input tool name")
         case .editMemory:
             return NSLocalizedString("记忆编辑", comment: "Memory edit tool name")
         case .listSandboxDirectory:
@@ -108,6 +152,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .echoText:
             return NSLocalizedString("把传入文本原样返回，用于验证拓展工具链路是否正常。", comment: "Example echo tool summary")
+        case .fillUserInput:
+            return NSLocalizedString("把文本放进聊天输入框，支持覆盖或追加。", comment: "Fill user input tool summary")
         case .editMemory:
             return NSLocalizedString("按记忆 ID 编辑既有记忆内容，并在需要时自动重新嵌入。", comment: "Memory edit tool summary")
         case .listSandboxDirectory:
@@ -145,6 +191,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .echoText:
             return NSLocalizedString("示例工具详情：文本回显", comment: "Example echo tool detail description")
+        case .fillUserInput:
+            return NSLocalizedString("工具详情：填充输入框", comment: "Fill user input tool detail description")
         case .editMemory:
             return NSLocalizedString("工具详情：记忆编辑", comment: "Memory edit tool detail description")
         case .listSandboxDirectory:
@@ -187,6 +235,22 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                     "text": .dictionary([
                         "type": .string("string"),
                         "description": .string(NSLocalizedString("要原样返回的文本内容。", comment: "Example echo tool text parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("text")])
+            ])
+        case .fillUserInput:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "text": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要放入用户输入框的文本内容。", comment: "Fill user input tool text parameter description"))
+                    ]),
+                    "mode": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("写入模式：replace 表示覆盖输入框，append 表示追加到输入框末尾。默认 replace。", comment: "Fill user input tool mode parameter description")),
+                        "enum": .array([.string("replace"), .string("append")])
                     ])
                 ]),
                 "required": .array([.string("text")])
@@ -487,6 +551,11 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                 "示例工具：把 text 参数中的文本原样返回，仅用于验证本地拓展工具链路与参数生成是否正常。",
                 comment: "Example echo tool description sent to model"
             )
+        case .fillUserInput:
+            return NSLocalizedString(
+                "把文本放入用户当前聊天输入框。text 为要填入的内容；mode=replace 会覆盖输入框，mode=append 会追加到末尾。适合为用户准备可编辑的草稿，而不是直接代替用户发送。",
+                comment: "Fill user input tool description sent to model"
+            )
         case .editMemory:
             return NSLocalizedString(
                 "编辑既有长期记忆。可按 memory_id 修改 content，也可切换归档状态。修改 content 后会自动重新生成这条记忆的嵌入。",
@@ -773,6 +842,40 @@ public final class AppToolManager: ObservableObject {
                 format: NSLocalizedString("文本回显结果：%@", comment: "Echo tool result format"),
                 text
             )
+        case .fillUserInput:
+            struct FillUserInputArgs: Decodable {
+                let text: String
+                let mode: String?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(FillUserInputArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 fill_user_input 的参数，请提供 text。", comment: "Fill user input tool invalid arguments")
+                )
+            }
+
+            let content = args.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !content.isEmpty else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：fill_user_input 的 text 不能为空。", comment: "Fill user input tool empty text")
+                )
+            }
+
+            let mode = AppToolInputDraftMode(rawValue: (args.mode ?? AppToolInputDraftMode.replace.rawValue).lowercased()) ?? .replace
+            let request = AppToolInputDraftRequest(text: args.text, mode: mode)
+            NotificationCenter.default.post(
+                name: .appToolFillUserInputRequested,
+                object: nil,
+                userInfo: request.userInfo
+            )
+
+            let payload: [String: Any] = [
+                "mode": mode.rawValue,
+                "characterCount": args.text.count,
+                "applied": true
+            ]
+            return prettyPrintedJSONString(from: payload)
         case .editMemory:
             struct EditMemoryArgs: Decodable {
                 let memory_id: String
@@ -863,7 +966,9 @@ public final class AppToolManager: ObservableObject {
             let argsData = argumentsJSON.data(using: .utf8)
             let args = argsData.flatMap { try? JSONDecoder().decode(ListDirectoryArgs.self, from: $0) }
             let relativePath = args?.path ?? ""
-            let items = try SandboxFileToolSupport.listDirectory(relativePath: relativePath)
+            let items = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.listDirectory(relativePath: relativePath)
+            }
             let payload: [String: Any] = [
                 "path": relativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Documents" : relativePath,
                 "items": items.map { item in
@@ -889,7 +994,9 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let content = try SandboxFileToolSupport.readTextFile(relativePath: args.path)
+            let content = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.readTextFile(relativePath: args.path)
+            }
             let payload: [String: Any] = [
                 "path": args.path,
                 "characterCount": content.count,
@@ -910,11 +1017,13 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.writeTextFile(
-                relativePath: args.path,
-                content: args.content,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.writeTextFile(
+                    relativePath: args.path,
+                    content: args.content,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -935,14 +1044,16 @@ public final class AppToolManager: ObservableObject {
             let argsData = argumentsJSON.data(using: .utf8)
             let args = argsData.flatMap { try? JSONDecoder().decode(SearchFilesArgs.self, from: $0) }
             let relativePath = args?.path ?? ""
-            let results = try SandboxFileToolSupport.searchItems(
-                relativePath: relativePath,
-                nameQuery: args?.name_query,
-                contentQuery: args?.content_query,
-                maxResults: args?.max_results ?? 20,
-                includeDirectories: args?.include_directories ?? false,
-                caseSensitive: args?.case_sensitive ?? false
-            )
+            let results = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.searchItems(
+                    relativePath: relativePath,
+                    nameQuery: args?.name_query,
+                    contentQuery: args?.content_query,
+                    maxResults: args?.max_results ?? 20,
+                    includeDirectories: args?.include_directories ?? false,
+                    caseSensitive: args?.case_sensitive ?? false
+                )
+            }
             let payload: [String: Any] = [
                 "path": relativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Documents" : relativePath,
                 "count": results.count,
@@ -973,11 +1084,13 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.readTextFileChunk(
-                relativePath: args.path,
-                startLine: args.start_line ?? 1,
-                maxLines: args.max_lines ?? 200
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.readTextFileChunk(
+                    relativePath: args.path,
+                    startLine: args.start_line ?? 1,
+                    maxLines: args.max_lines ?? 200
+                )
+            }
             let payload: [String: Any] = [
                 "path": result.path,
                 "startLine": result.startLine,
@@ -1002,12 +1115,14 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.moveItem(
-                from: args.source_path,
-                to: args.destination_path,
-                overwrite: args.overwrite ?? false,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.moveItem(
+                    from: args.source_path,
+                    to: args.destination_path,
+                    overwrite: args.overwrite ?? false,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(
                 mutatedPaths: [result.sourcePath, result.destinationPath]
             )
@@ -1034,12 +1149,14 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.copyItem(
-                from: args.source_path,
-                to: args.destination_path,
-                overwrite: args.overwrite ?? false,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.copyItem(
+                    from: args.source_path,
+                    to: args.destination_path,
+                    overwrite: args.overwrite ?? false,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.destinationPath])
             let payload: [String: Any] = [
                 "sourcePath": result.sourcePath,
@@ -1062,10 +1179,12 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.createDirectory(
-                relativePath: args.path,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.createDirectory(
+                    relativePath: args.path,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             let payload: [String: Any] = [
                 "path": result.path,
                 "created": result.created,
@@ -1094,12 +1213,14 @@ public final class AppToolManager: ObservableObject {
             let rules = args.rules.map { rule in
                 SandboxBatchEditRule(oldText: rule.old_text, newText: rule.new_text)
             }
-            let result = try SandboxFileToolSupport.batchReplaceText(
-                relativePath: args.path,
-                rules: rules,
-                replaceAll: args.replace_all ?? false,
-                ignoreMissing: args.ignore_missing ?? false
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.batchReplaceText(
+                    relativePath: args.path,
+                    rules: rules,
+                    replaceAll: args.replace_all ?? false,
+                    ignoreMissing: args.ignore_missing ?? false
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -1160,7 +1281,9 @@ public final class AppToolManager: ObservableObject {
             ]
             return prettyPrintedJSONString(from: payload)
         case .undoSandboxMutation:
-            let result = try SandboxFileToolSupport.undoLastMutation()
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.undoLastMutation()
+            }
             let payload: [String: Any] = [
                 "operation": result.operation,
                 "recordedAt": result.recordedAt
@@ -1179,10 +1302,12 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            return try SandboxFileToolSupport.diffTextFile(
-                relativePath: args.path,
-                updatedContent: args.updated_content
-            )
+            return try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.diffTextFile(
+                    relativePath: args.path,
+                    updatedContent: args.updated_content
+                )
+            }
         case .editSandboxFile:
             struct EditFileArgs: Decodable {
                 let path: String
@@ -1198,12 +1323,14 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.replaceText(
-                relativePath: args.path,
-                oldText: args.old_text,
-                newText: args.new_text,
-                replaceAll: args.replace_all ?? false
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.replaceText(
+                    relativePath: args.path,
+                    oldText: args.old_text,
+                    newText: args.new_text,
+                    replaceAll: args.replace_all ?? false
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -1223,7 +1350,9 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.deleteItem(relativePath: args.path)
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.deleteItem(relativePath: args.path)
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -1249,6 +1378,20 @@ public final class AppToolManager: ObservableObject {
         let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
         UserDefaults.standard.set(rawPolicyValues, forKey: Self.toolApprovalPoliciesUserDefaultsKey)
         objectWillChange.send()
+    }
+
+    internal nonisolated static func runSandboxFileOperationOffMainThread<T>(
+        _ operation: @escaping () throws -> T
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    continuation.resume(returning: try operation())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     private func persistEnabledToolIDs() {

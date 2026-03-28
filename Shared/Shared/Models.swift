@@ -569,6 +569,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
 public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var role: MessageRole
+    public var requestedAt: Date? // 对应请求的发起时间（用于会话 JSON 落盘）
     
     // MARK: - 多版本内容存储
     /// 所有版本的内容数组（内部存储）
@@ -623,6 +624,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         id: UUID = UUID(),
         role: MessageRole,
         content: String,
+        requestedAt: Date? = nil,
         reasoningContent: String? = nil,
         toolCalls: [InternalToolCall]? = nil,
         toolCallsPlacement: ToolCallsPlacement? = nil,
@@ -635,6 +637,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     ) {
         self.id = id
         self.role = role
+        self.requestedAt = requestedAt
         self.contentVersions = [content]
         self.currentVersionIndex = 0
         self.reasoningContent = reasoningContent
@@ -680,7 +683,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     // MARK: - Codable 支持（向后兼容）
     
     enum CodingKeys: String, CodingKey {
-        case id, role, content, currentVersionIndex
+        case id, role, requestedAt, content, currentVersionIndex
         case reasoningContent, toolCalls, toolCallsPlacement, tokenUsage
         case audioFileName, imageFileNames, fileFileNames, fullErrorContent, responseMetrics
     }
@@ -689,6 +692,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.role = try container.decode(MessageRole.self, forKey: .role)
+        self.requestedAt = try container.decodeIfPresent(Date.self, forKey: .requestedAt)
         
         // 读取 content 字段：可能是字符串（旧版）或数组（新版）
         if let contentArray = try? container.decode([String].self, forKey: .content) {
@@ -722,6 +726,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(role, forKey: .role)
+        try container.encodeIfPresent(requestedAt, forKey: .requestedAt)
         
         // 保存 content：如果只有一个版本，保存为字符串；多个版本保存为数组
         if contentVersions.count == 1 {
@@ -1038,16 +1043,51 @@ public enum SessionHistorySearchHitSource: Hashable, Sendable {
     case errorMessage
 }
 
+/// 历史会话检索命中明细
+public struct SessionHistorySearchMatch: Hashable, Sendable {
+    public let source: SessionHistorySearchHitSource
+    public let preview: String
+    /// 命中消息序号（从 1 开始）。标题/提示词命中时为 nil。
+    public let messageOrdinal: Int?
+
+    public init(source: SessionHistorySearchHitSource, preview: String, messageOrdinal: Int? = nil) {
+        self.source = source
+        self.preview = preview
+        self.messageOrdinal = messageOrdinal
+    }
+}
+
 /// 历史会话检索命中结果
 public struct SessionHistorySearchHit: Hashable, Sendable {
     public let sessionID: UUID
     public let source: SessionHistorySearchHitSource
     public let preview: String
+    public let matches: [SessionHistorySearchMatch]
+
+    public var matchCount: Int {
+        matches.count
+    }
 
     public init(sessionID: UUID, source: SessionHistorySearchHitSource, preview: String) {
         self.sessionID = sessionID
         self.source = source
         self.preview = preview
+        self.matches = [
+            SessionHistorySearchMatch(source: source, preview: preview)
+        ]
+    }
+
+    public init(sessionID: UUID, matches: [SessionHistorySearchMatch]) {
+        self.sessionID = sessionID
+        if let first = matches.first {
+            self.source = first.source
+            self.preview = first.preview
+            self.matches = matches
+        } else {
+            self.source = .sessionName
+            self.preview = ""
+            self.matches = []
+        }
     }
 }
 
@@ -1075,66 +1115,75 @@ public enum SessionHistorySearchSupport {
 
         var hits: [UUID: SessionHistorySearchHit] = [:]
         for session in sessions {
-            guard let hit = firstHit(
+            let matches = allMatches(
                 in: session,
                 matcher: matcher,
                 currentSessionID: currentSessionID,
                 currentSessionMessages: currentSessionMessages,
                 messageLoader: messageLoader
-            ) else {
+            )
+            guard !matches.isEmpty else {
                 continue
             }
-            hits[session.id] = hit
+            hits[session.id] = SessionHistorySearchHit(sessionID: session.id, matches: matches)
         }
         return hits
     }
 
-    private static func firstHit(
+    private static func allMatches(
         in session: ChatSession,
         matcher: SearchMatcher,
         currentSessionID: UUID?,
         currentSessionMessages: [ChatMessage],
         messageLoader: (UUID) -> [ChatMessage]
-    ) -> SessionHistorySearchHit? {
+    ) -> [SessionHistorySearchMatch] {
+        var collectedMatches: [SessionHistorySearchMatch] = []
+
         if matches(session.name, with: matcher) {
-            return SessionHistorySearchHit(
-                sessionID: session.id,
-                source: .sessionName,
-                preview: previewText(session.name)
+            collectedMatches.append(
+                SessionHistorySearchMatch(
+                    source: .sessionName,
+                    preview: previewText(session.name)
+                )
             )
         }
 
         if let topicPrompt = nonEmptyTrimmed(session.topicPrompt),
            matches(topicPrompt, with: matcher) {
-            return SessionHistorySearchHit(
-                sessionID: session.id,
-                source: .topicPrompt,
-                preview: previewText(topicPrompt)
+            collectedMatches.append(
+                SessionHistorySearchMatch(
+                    source: .topicPrompt,
+                    preview: previewText(topicPrompt)
+                )
             )
         }
 
         if let enhancedPrompt = nonEmptyTrimmed(session.enhancedPrompt),
            matches(enhancedPrompt, with: matcher) {
-            return SessionHistorySearchHit(
-                sessionID: session.id,
-                source: .enhancedPrompt,
-                preview: previewText(enhancedPrompt)
+            collectedMatches.append(
+                SessionHistorySearchMatch(
+                    source: .enhancedPrompt,
+                    preview: previewText(enhancedPrompt)
+                )
             )
         }
 
-        let messages = session.id == currentSessionID ? currentSessionMessages : messageLoader(session.id)
-        for message in messages {
+        let sessionMessages = session.id == currentSessionID ? currentSessionMessages : messageLoader(session.id)
+        for (messageIndex, message) in sessionMessages.enumerated() {
             for versionContent in message.getAllVersions() {
                 guard let content = nonEmptyTrimmed(versionContent) else { continue }
                 guard matches(content, with: matcher) else { continue }
-                return SessionHistorySearchHit(
-                    sessionID: session.id,
-                    source: source(for: message.role),
-                    preview: previewText(content)
+                collectedMatches.append(
+                    SessionHistorySearchMatch(
+                        source: source(for: message.role),
+                        preview: previewText(content),
+                        messageOrdinal: messageIndex + 1
+                    )
                 )
+                break
             }
         }
-        return nil
+        return collectedMatches
     }
 
     private static func source(for role: MessageRole) -> SessionHistorySearchHitSource {

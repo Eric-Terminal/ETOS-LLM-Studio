@@ -850,16 +850,12 @@ public final class DailyPulseManager: ObservableObject {
     }
 
     public func ingestAnnouncements(_ announcements: [Announcement]) {
-        let signals = Self.makeAnnouncementSignals(from: announcements)
-        guard !signals.isEmpty else { return }
-        var nextHistory = externalSignals
-        for signal in signals {
-            nextHistory = Self.appendingExternalSignal(
-                signal,
-                to: nextHistory,
-                limit: Self.externalSignalRetentionLimit
-            )
-        }
+        let nextHistory = Self.syncingAnnouncementSignals(
+            announcements,
+            in: externalSignals,
+            limit: Self.externalSignalRetentionLimit
+        )
+        guard nextHistory != externalSignals else { return }
         externalSignals = nextHistory
         Persistence.saveDailyPulseExternalSignals(externalSignals)
     }
@@ -1901,7 +1897,7 @@ public final class DailyPulseManager: ObservableObject {
             }
     }
 
-    internal static func makeAnnouncementSignals(from announcements: [Announcement]) -> [DailyPulseExternalSignal] {
+    internal nonisolated static func makeAnnouncementSignals(from announcements: [Announcement]) -> [DailyPulseExternalSignal] {
         announcements.map { announcement in
             DailyPulseExternalSignal(
                 source: .announcement,
@@ -1911,6 +1907,25 @@ public final class DailyPulseManager: ObservableObject {
                 isFailure: announcement.type == .blocking
             )
         }
+    }
+
+    internal nonisolated static func syncingAnnouncementSignals(
+        _ announcements: [Announcement],
+        in history: [DailyPulseExternalSignal],
+        limit: Int
+    ) -> [DailyPulseExternalSignal] {
+        var nextHistory = history.filter { $0.source != .announcement }
+        let signals = makeAnnouncementSignals(from: announcements)
+
+        for signal in signals {
+            nextHistory = appendingExternalSignal(
+                signal,
+                to: nextHistory,
+                limit: limit
+            )
+        }
+
+        return trimmedExternalSignals(nextHistory, limit: limit)
     }
 
     internal nonisolated static func historyAction(for feedback: DailyPulseCardFeedback) -> DailyPulseHistoryAction? {

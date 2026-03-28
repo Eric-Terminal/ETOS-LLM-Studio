@@ -119,6 +119,8 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
+    @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
+    @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
     @AppStorage("enableBackgroundReplyNotification") private var enableBackgroundReplyNotification: Bool = true {
         didSet {
@@ -487,6 +489,14 @@ final class ChatViewModel: ObservableObject {
                 self?.reloadGlobalSystemPromptEntries()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .appToolFillUserInputRequested)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let request = AppToolInputDraftRequest.decode(from: notification.userInfo) else { return }
+                self?.applyToolInputDraftRequest(request)
+            }
+            .store(in: &cancellables)
         
         syncSpeechModelSelection()
         syncTTSModelSelection()
@@ -537,6 +547,8 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 audioAttachment: audioToSend,
                 imageAttachments: imagesToSend,
@@ -769,6 +781,24 @@ final class ChatViewModel: ObservableObject {
             userInput += (needsSpace ? " " : "") + trimmed
         }
     }
+
+    private func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
+        let content = request.text
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        switch request.mode {
+        case .replace:
+            userInput = content
+        case .append:
+            if userInput.isEmpty {
+                userInput = content
+            } else if userInput.hasSuffix("\n") || userInput.last?.isWhitespace == true {
+                userInput += content
+            } else {
+                userInput += "\n" + content
+            }
+        }
+    }
     
     private func syncSpeechModelSelection() {
         if let match = speechModels.first(where: { $0.id == speechModelIdentifier }) {
@@ -916,6 +946,8 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
         }
@@ -1047,6 +1079,8 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
         }

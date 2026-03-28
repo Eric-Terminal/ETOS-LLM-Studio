@@ -1193,11 +1193,13 @@ public enum SyncEngine {
         let mergedFileFiles = mergeOrderedStrings(local.fileFileNames, incoming.fileFileNames)
         let mergedTokenUsage = mergeTokenUsage(local.tokenUsage, incoming.tokenUsage)
         let mergedResponseMetrics = mergeResponseMetrics(local.responseMetrics, incoming.responseMetrics)
+        let mergedRequestedAt = minOptional(local.requestedAt, incoming.requestedAt)
 
         var merged = buildMessage(
             from: local,
             versions: contentMerge.versions,
             currentVersionIndex: contentMerge.currentVersionIndex,
+            requestedAt: mergedRequestedAt,
             reasoningContent: reasoningMerge.value,
             toolCalls: toolCallsMerge.value,
             toolCallsPlacement: toolCallsPlacement.value,
@@ -1238,6 +1240,7 @@ public enum SyncEngine {
         from template: ChatMessage,
         versions: [String],
         currentVersionIndex: Int,
+        requestedAt: Date?,
         reasoningContent: String?,
         toolCalls: [InternalToolCall]?,
         toolCallsPlacement: ToolCallsPlacement?,
@@ -1253,6 +1256,7 @@ public enum SyncEngine {
             id: template.id,
             role: template.role,
             content: safeVersions[0],
+            requestedAt: requestedAt,
             reasoningContent: reasoningContent,
             toolCalls: toolCalls,
             toolCallsPlacement: toolCallsPlacement,
@@ -1872,6 +1876,7 @@ public enum SyncEngine {
         for fileName in message.fileFileNames ?? [] {
             hasher.combine(fileName)
         }
+        hasher.combine(message.requestedAt?.timeIntervalSince1970 ?? -1)
         hasher.combine(message.fullErrorContent ?? "")
         hasher.combine(message.tokenUsage?.promptTokens ?? -1)
         hasher.combine(message.tokenUsage?.completionTokens ?? -1)
