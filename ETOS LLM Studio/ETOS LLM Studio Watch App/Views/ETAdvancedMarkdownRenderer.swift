@@ -25,15 +25,61 @@ struct ETAdvancedMarkdownRenderer: View {
     }
 
     var body: some View {
+        let normalizedContent = Self.normalizedMarkdownForStreaming(content)
         if shouldUseMathEngine {
             ETMathAwareMarkdownView(
-                content: content,
+                content: normalizedContent,
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing
             )
         } else {
-            baseTextView(content)
+            baseTextView(normalizedContent)
         }
+    }
+
+    private static func normalizedMarkdownForStreaming(_ text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        var openedFence: (marker: Character, count: Int)?
+
+        for line in lines {
+            guard let fence = parseFenceLine(line) else { continue }
+            if let openedFence {
+                let isClosingFence = openedFence.marker == fence.marker
+                    && fence.count >= openedFence.count
+                    && fence.tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if isClosingFence {
+                    openedFence = nil
+                }
+            } else {
+                openedFence = fence
+            }
+        }
+
+        guard let openedFence else { return text }
+
+        let closingFence = String(repeating: String(openedFence.marker), count: max(3, openedFence.count))
+        if text.hasSuffix("\n") {
+            return text + closingFence
+        }
+        return text + "\n" + closingFence
+    }
+
+    private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let marker = trimmed.first, marker == "`" || marker == "~" else {
+            return nil
+        }
+
+        var count = 0
+        for character in trimmed {
+            guard character == marker else { break }
+            count += 1
+        }
+        guard count >= 3 else { return nil }
+
+        let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
+        let tail = String(trimmed[startIndex...])
+        return (marker: marker, count: count, tail: tail)
     }
 
     @ViewBuilder
@@ -41,7 +87,7 @@ struct ETAdvancedMarkdownRenderer: View {
         if enableMarkdown {
             let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
-                .etChatMarkdownBaseStyle(textColor: textColor)
+                .etChatMarkdownBaseStyle(textColor: textColor, isOutgoing: isOutgoing)
         } else {
             Text(text)
                 .foregroundStyle(isOutgoing ? Color.white : Color.primary)
@@ -113,7 +159,7 @@ private struct ETMathAwareMarkdownView: View {
             let text = parts.compactMap(\.textValue).joined()
             if enableMarkdown {
                 Markdown(text)
-                    .etChatMarkdownBaseStyle(textColor: textColor)
+                    .etChatMarkdownBaseStyle(textColor: textColor, isOutgoing: isOutgoing)
             } else {
                 Text(text)
                     .foregroundStyle(textColor)
@@ -124,11 +170,56 @@ private struct ETMathAwareMarkdownView: View {
 
 private extension View {
     @ViewBuilder
-    func etChatMarkdownBaseStyle(textColor: Color) -> some View {
+    func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool) -> some View {
+        let codeBlockBackground = isOutgoing
+            ? Color.white.opacity(0.12)
+            : Color.primary.opacity(0.06)
+        let codeHeaderBackground = isOutgoing
+            ? Color.white.opacity(0.14)
+            : Color.primary.opacity(0.05)
+        let codeBorderColor = isOutgoing
+            ? Color.white.opacity(0.2)
+            : Color.primary.opacity(0.12)
+        let codeHeaderTextColor = isOutgoing
+            ? Color.white.opacity(0.9)
+            : Color.secondary
+
         self
             .markdownSoftBreakMode(.lineBreak)
             .markdownTextStyle {
                 ForegroundColor(textColor)
+            }
+            .markdownBlockStyle(\.codeBlock) { configuration in
+                VStack(alignment: .leading, spacing: 0) {
+                    if let language = configuration.language, !language.isEmpty {
+                        Text(language)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(codeHeaderTextColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(codeHeaderBackground)
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        configuration.label
+                            .relativeLineSpacing(.em(0.12))
+                            .markdownTextStyle {
+                                FontFamilyVariant(.monospaced)
+                                FontSize(.em(0.88))
+                                ForegroundColor(textColor)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                    }
+                }
+                .background(codeBlockBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(codeBorderColor, lineWidth: 1)
+                )
+                .markdownMargin(top: .em(0.2), bottom: .em(0.7))
             }
             .markdownBlockStyle(\.table) { configuration in
                 ScrollView(.horizontal) {

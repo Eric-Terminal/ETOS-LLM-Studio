@@ -27,15 +27,61 @@ struct ETAdvancedMarkdownRenderer: View {
     }
 
     var body: some View {
+        let normalizedContent = Self.normalizedMarkdownForStreaming(content)
         if shouldUseMathWebRenderer {
             ETMathWebMarkdownView(
-                content: content,
+                content: normalizedContent,
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing
             )
         } else {
-            baseTextView(content)
+            baseTextView(normalizedContent)
         }
+    }
+
+    private static func normalizedMarkdownForStreaming(_ text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        var openedFence: (marker: Character, count: Int)?
+
+        for line in lines {
+            guard let fence = parseFenceLine(line) else { continue }
+            if let openedFence {
+                let isClosingFence = openedFence.marker == fence.marker
+                    && fence.count >= openedFence.count
+                    && fence.tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if isClosingFence {
+                    openedFence = nil
+                }
+            } else {
+                openedFence = fence
+            }
+        }
+
+        guard let openedFence else { return text }
+
+        let closingFence = String(repeating: String(openedFence.marker), count: max(3, openedFence.count))
+        if text.hasSuffix("\n") {
+            return text + closingFence
+        }
+        return text + "\n" + closingFence
+    }
+
+    private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let marker = trimmed.first, marker == "`" || marker == "~" else {
+            return nil
+        }
+
+        var count = 0
+        for character in trimmed {
+            guard character == marker else { break }
+            count += 1
+        }
+        guard count >= 3 else { return nil }
+
+        let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
+        let tail = String(trimmed[startIndex...])
+        return (marker: marker, count: count, tail: tail)
     }
 
     @ViewBuilder
@@ -43,7 +89,7 @@ struct ETAdvancedMarkdownRenderer: View {
         if enableMarkdown {
             let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
-                .etChatMarkdownBaseStyle(textColor: textColor)
+                .etChatMarkdownBaseStyle(textColor: textColor, isOutgoing: isOutgoing)
         } else {
             Text(text)
                 .foregroundStyle(isOutgoing ? Color.white : Color.primary)
@@ -258,13 +304,43 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       padding: 0.08em 0.3em;
       font-size: 0.92em;
     }
+    .et-code-block {
+      margin: 0.4em 0;
+      border-radius: 11px;
+      overflow: hidden;
+      border: 1px solid rgba(127,127,127,0.28);
+      background: rgba(127,127,127,0.12);
+      max-width: 100%;
+    }
+    .et-code-header {
+      min-height: 1.7em;
+      display: flex;
+      align-items: center;
+      padding: 0.22em 0.65em;
+      background: rgba(127,127,127,0.16);
+      border-bottom: 1px solid rgba(127,127,127,0.24);
+    }
+    .et-code-header:empty {
+      display: none;
+    }
+    .et-code-language {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 0.76em;
+      letter-spacing: 0.02em;
+      opacity: 0.9;
+    }
     pre {
-      margin: 0.35em 0;
-      padding: 0.55em 0.65em;
-      border-radius: 10px;
-      background: rgba(127,127,127,0.14);
+      margin: 0;
+      padding: 0.62em 0.72em;
+      border-radius: 0;
+      background: transparent;
+      overflow-x: visible;
+      -webkit-overflow-scrolling: auto;
+    }
+    .et-code-body {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
+      max-width: 100%;
     }
     pre code {
       background: transparent;
@@ -349,6 +425,58 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       const container = document.getElementById("content");
       const escaped = __escapeHTML(__state.raw).replaceAll("\\n", "<br/>");
       container.innerHTML = escaped;
+    }
+
+    function __languageLabelFromCodeElement(codeElement) {
+      if (!codeElement) {
+        return "";
+      }
+      for (const className of codeElement.classList) {
+        if (!className.startsWith("language-")) {
+          continue;
+        }
+        const language = className.slice("language-".length).trim();
+        if (language) {
+          return language;
+        }
+      }
+      return (codeElement.getAttribute("data-language") || "").trim();
+    }
+
+    function __decorateCodeBlocks(container) {
+      const codeNodes = container.querySelectorAll("pre > code");
+      codeNodes.forEach((codeNode) => {
+        const preNode = codeNode.parentElement;
+        if (!preNode || !preNode.parentNode) {
+          return;
+        }
+        const preParent = preNode.parentElement;
+        if (preParent && preParent.classList.contains("et-code-body")) {
+          return;
+        }
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "et-code-block";
+
+        const header = document.createElement("div");
+        header.className = "et-code-header";
+
+        const language = __languageLabelFromCodeElement(codeNode);
+        if (language) {
+          const languageTag = document.createElement("span");
+          languageTag.className = "et-code-language";
+          languageTag.textContent = language;
+          header.appendChild(languageTag);
+        }
+
+        const body = document.createElement("div");
+        body.className = "et-code-body";
+
+        preNode.parentNode.insertBefore(wrapper, preNode);
+        wrapper.appendChild(header);
+        wrapper.appendChild(body);
+        body.appendChild(preNode);
+      });
     }
 
     function __setContentWidth(width) {
@@ -460,6 +588,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         __setFallbackContent();
       }
 
+      __decorateCodeBlocks(container);
       __wrapTables(container);
 
       if (window.renderMathInElement) {
@@ -580,11 +709,56 @@ window.__etNotifyHeight && window.__etNotifyHeight();
 
 private extension View {
     @ViewBuilder
-    func etChatMarkdownBaseStyle(textColor: Color) -> some View {
+    func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool) -> some View {
+        let codeBlockBackground = isOutgoing
+            ? Color.white.opacity(0.12)
+            : Color.primary.opacity(0.06)
+        let codeHeaderBackground = isOutgoing
+            ? Color.white.opacity(0.14)
+            : Color.primary.opacity(0.05)
+        let codeBorderColor = isOutgoing
+            ? Color.white.opacity(0.2)
+            : Color.primary.opacity(0.12)
+        let codeHeaderTextColor = isOutgoing
+            ? Color.white.opacity(0.9)
+            : Color.secondary
+
         self
             .markdownSoftBreakMode(.lineBreak)
             .markdownTextStyle {
                 ForegroundColor(textColor)
+            }
+            .markdownBlockStyle(\.codeBlock) { configuration in
+                VStack(alignment: .leading, spacing: 0) {
+                    if let language = configuration.language, !language.isEmpty {
+                        Text(language)
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(codeHeaderTextColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(codeHeaderBackground)
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        configuration.label
+                            .relativeLineSpacing(.em(0.15))
+                            .markdownTextStyle {
+                                FontFamilyVariant(.monospaced)
+                                FontSize(.em(0.9))
+                                ForegroundColor(textColor)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                    }
+                }
+                .background(codeBlockBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(codeBorderColor, lineWidth: 1)
+                )
+                .markdownMargin(top: .em(0.2), bottom: .em(0.75))
             }
             .markdownBlockStyle(\.table) { configuration in
                 ScrollView(.horizontal) {
