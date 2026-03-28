@@ -461,11 +461,6 @@ public struct ChatTranscriptExportService {
             context.beginPDFPage(nil)
             renderedPageCount += 1
 
-            context.saveGState()
-            context.textMatrix = .identity
-            context.translateBy(x: 0, y: pageRect.height)
-            context.scaleBy(x: 1, y: -1)
-
             let path = CGMutablePath()
             path.addRect(textRect)
 
@@ -477,7 +472,6 @@ public struct ChatTranscriptExportService {
             )
             CTFrameDraw(frame, context)
 
-            context.restoreGState()
             context.endPDFPage()
 
             let visible = CTFrameGetVisibleStringRange(frame)
