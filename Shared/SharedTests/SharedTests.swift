@@ -1309,6 +1309,54 @@ struct OpenAIAdapterTests {
         #expect(usage.thinkingTokens == 2)
         #expect(usage.totalTokens == 16)
     }
+
+    @Test("OpenAI 生图无参考图时走 generations 端点")
+    func testOpenAIImageGenerationRequestUsesGenerationsEndpointWhenNoReferenceImages() throws {
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "一只戴墨镜的猫",
+                referenceImages: []
+            )
+        )
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/images/generations")
+        #expect(request.httpMethod == "POST")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(payload["model"] as? String == "test-model")
+        #expect(payload["prompt"] as? String == "一只戴墨镜的猫")
+        #expect(payload["n"] as? Int == 1)
+        #expect(payload["response_format"] as? String == "b64_json")
+    }
+
+    @Test("OpenAI 生图有参考图时走 edits 端点")
+    func testOpenAIImageGenerationRequestUsesEditsEndpointWhenReferenceImagesExist() throws {
+        let referenceImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "ref.png"
+        )
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "把它改成赛博朋克风格",
+                referenceImages: [referenceImage]
+            )
+        )
+        let contentType = try #require(request.value(forHTTPHeaderField: "Content-Type"))
+        let bodyData = try #require(request.httpBody)
+        let bodyString = String(data: bodyData, encoding: .utf8) ?? ""
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/images/edits")
+        #expect(request.httpMethod == "POST")
+        #expect(contentType.contains("multipart/form-data; boundary="))
+        #expect(bodyString.contains("name=\"model\""))
+        #expect(bodyString.contains("name=\"prompt\""))
+        #expect(bodyString.contains("name=\"image\""))
+        #expect(bodyString.contains("filename=\"ref.png\""))
+    }
 }
 
 @Suite("GeminiAdapter Tests")
