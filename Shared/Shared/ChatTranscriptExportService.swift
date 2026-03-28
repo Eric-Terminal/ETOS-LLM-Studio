@@ -158,7 +158,7 @@ public struct ChatTranscriptExportService {
 
         lines.append("# 会话导出")
         lines.append("")
-        lines.append("- 会话名称：\(context.session?.name ?? \"未命名会话\")")
+        lines.append("- 会话名称：\(context.session?.name ?? "未命名会话")")
         lines.append("- 导出时间：\(formattedDateTime(context.exportedAt))")
         lines.append("- 导出范围：\(scopeDescription(context))")
         lines.append("- 消息数量：\(context.messages.count)")
@@ -197,7 +197,7 @@ public struct ChatTranscriptExportService {
 
         lines.append("会话导出")
         lines.append(String(repeating: "=", count: 42))
-        lines.append("会话名称：\(context.session?.name ?? \"未命名会话\")")
+        lines.append("会话名称：\(context.session?.name ?? "未命名会话")")
         lines.append("导出时间：\(formattedDateTime(context.exportedAt))")
         lines.append("导出范围：\(scopeDescription(context))")
         lines.append("消息数量：\(context.messages.count)")
