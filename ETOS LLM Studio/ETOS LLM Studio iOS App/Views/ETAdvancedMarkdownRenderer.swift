@@ -261,9 +261,9 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             let codePunctuationColor = isOutgoing ? "rgba(255,255,255,0.88)" : "#4B5563"
             let codeCopyButtonBackground = isOutgoing ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.05)"
             let codeCopyButtonActiveBackground = isOutgoing ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"
-            let codeBlockBackgroundColor = "rgba(127,127,127,0.12)"
-            let codeHeaderBackgroundColor = "rgba(127,127,127,0.16)"
-            let codeBorderColor = "rgba(127,127,127,0.28)"
+            let codeBlockBackgroundColor = isOutgoing ? "rgba(255,255,255,0.16)" : "rgba(127,127,127,0.16)"
+            let codeHeaderBackgroundColor = isOutgoing ? "rgba(255,255,255,0.2)" : "rgba(127,127,127,0.2)"
+            let codeBorderColor = isOutgoing ? "rgba(255,255,255,0.28)" : "rgba(127,127,127,0.3)"
 
             return """
 <!doctype html>
@@ -334,6 +334,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       overflow: hidden;
       border: 1px solid \(codeBorderColor);
       background: \(codeBlockBackgroundColor);
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
       max-width: 100%;
     }
     .et-code-header {
@@ -343,6 +345,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       padding: 0.22em 0.65em;
       background: \(codeHeaderBackgroundColor);
       border-bottom: 1px solid \(codeBorderColor);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
     }
     .et-code-header:empty {
       display: none;
@@ -837,14 +841,14 @@ private extension View {
     @ViewBuilder
     func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool, prefersDarkPalette: Bool) -> some View {
         let codeBlockBackground = isOutgoing
-            ? Color.white.opacity(0.12)
-            : Color.primary.opacity(0.06)
+            ? Color.white.opacity(0.16)
+            : Color.primary.opacity(0.09)
         let codeHeaderBackground = isOutgoing
-            ? Color.white.opacity(0.14)
-            : Color.primary.opacity(0.05)
-        let codeBorderColor = isOutgoing
             ? Color.white.opacity(0.2)
-            : Color.primary.opacity(0.12)
+            : Color.primary.opacity(0.11)
+        let codeBorderColor = isOutgoing
+            ? Color.white.opacity(0.24)
+            : Color.primary.opacity(0.16)
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
@@ -881,7 +885,12 @@ private extension View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(codeHeaderBackground)
+                    .background {
+                        ZStack {
+                            Rectangle().fill(.ultraThinMaterial)
+                            Rectangle().fill(codeHeaderBackground)
+                        }
+                    }
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
@@ -895,7 +904,14 @@ private extension View {
                             .padding(.vertical, 10)
                     }
                 }
-                .background(codeBlockBackground)
+                .background {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(codeBlockBackground)
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
