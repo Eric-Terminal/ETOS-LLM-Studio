@@ -242,4 +242,12 @@ struct AppToolManagerTests {
         )
         #expect(!shouldRefresh)
     }
+
+    @Test("沙盒工具操作会切到后台线程执行")
+    func testSandboxOperationRunsOffMainThread() async throws {
+        let isMainThread = try await AppToolManager.runSandboxFileOperationOffMainThread {
+            Thread.isMainThread
+        }
+        #expect(!isMainThread)
+    }
 }

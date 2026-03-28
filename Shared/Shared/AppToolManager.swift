@@ -966,7 +966,9 @@ public final class AppToolManager: ObservableObject {
             let argsData = argumentsJSON.data(using: .utf8)
             let args = argsData.flatMap { try? JSONDecoder().decode(ListDirectoryArgs.self, from: $0) }
             let relativePath = args?.path ?? ""
-            let items = try SandboxFileToolSupport.listDirectory(relativePath: relativePath)
+            let items = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.listDirectory(relativePath: relativePath)
+            }
             let payload: [String: Any] = [
                 "path": relativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Documents" : relativePath,
                 "items": items.map { item in
@@ -992,7 +994,9 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let content = try SandboxFileToolSupport.readTextFile(relativePath: args.path)
+            let content = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.readTextFile(relativePath: args.path)
+            }
             let payload: [String: Any] = [
                 "path": args.path,
                 "characterCount": content.count,
@@ -1013,11 +1017,13 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.writeTextFile(
-                relativePath: args.path,
-                content: args.content,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.writeTextFile(
+                    relativePath: args.path,
+                    content: args.content,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -1038,14 +1044,16 @@ public final class AppToolManager: ObservableObject {
             let argsData = argumentsJSON.data(using: .utf8)
             let args = argsData.flatMap { try? JSONDecoder().decode(SearchFilesArgs.self, from: $0) }
             let relativePath = args?.path ?? ""
-            let results = try SandboxFileToolSupport.searchItems(
-                relativePath: relativePath,
-                nameQuery: args?.name_query,
-                contentQuery: args?.content_query,
-                maxResults: args?.max_results ?? 20,
-                includeDirectories: args?.include_directories ?? false,
-                caseSensitive: args?.case_sensitive ?? false
-            )
+            let results = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.searchItems(
+                    relativePath: relativePath,
+                    nameQuery: args?.name_query,
+                    contentQuery: args?.content_query,
+                    maxResults: args?.max_results ?? 20,
+                    includeDirectories: args?.include_directories ?? false,
+                    caseSensitive: args?.case_sensitive ?? false
+                )
+            }
             let payload: [String: Any] = [
                 "path": relativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Documents" : relativePath,
                 "count": results.count,
@@ -1076,11 +1084,13 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.readTextFileChunk(
-                relativePath: args.path,
-                startLine: args.start_line ?? 1,
-                maxLines: args.max_lines ?? 200
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.readTextFileChunk(
+                    relativePath: args.path,
+                    startLine: args.start_line ?? 1,
+                    maxLines: args.max_lines ?? 200
+                )
+            }
             let payload: [String: Any] = [
                 "path": result.path,
                 "startLine": result.startLine,
@@ -1105,12 +1115,14 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.moveItem(
-                from: args.source_path,
-                to: args.destination_path,
-                overwrite: args.overwrite ?? false,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.moveItem(
+                    from: args.source_path,
+                    to: args.destination_path,
+                    overwrite: args.overwrite ?? false,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(
                 mutatedPaths: [result.sourcePath, result.destinationPath]
             )
@@ -1137,12 +1149,14 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.copyItem(
-                from: args.source_path,
-                to: args.destination_path,
-                overwrite: args.overwrite ?? false,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.copyItem(
+                    from: args.source_path,
+                    to: args.destination_path,
+                    overwrite: args.overwrite ?? false,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.destinationPath])
             let payload: [String: Any] = [
                 "sourcePath": result.sourcePath,
@@ -1165,10 +1179,12 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.createDirectory(
-                relativePath: args.path,
-                createIntermediateDirectories: args.create_parent_directories ?? true
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.createDirectory(
+                    relativePath: args.path,
+                    createIntermediateDirectories: args.create_parent_directories ?? true
+                )
+            }
             let payload: [String: Any] = [
                 "path": result.path,
                 "created": result.created,
@@ -1197,12 +1213,14 @@ public final class AppToolManager: ObservableObject {
             let rules = args.rules.map { rule in
                 SandboxBatchEditRule(oldText: rule.old_text, newText: rule.new_text)
             }
-            let result = try SandboxFileToolSupport.batchReplaceText(
-                relativePath: args.path,
-                rules: rules,
-                replaceAll: args.replace_all ?? false,
-                ignoreMissing: args.ignore_missing ?? false
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.batchReplaceText(
+                    relativePath: args.path,
+                    rules: rules,
+                    replaceAll: args.replace_all ?? false,
+                    ignoreMissing: args.ignore_missing ?? false
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -1263,7 +1281,9 @@ public final class AppToolManager: ObservableObject {
             ]
             return prettyPrintedJSONString(from: payload)
         case .undoSandboxMutation:
-            let result = try SandboxFileToolSupport.undoLastMutation()
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.undoLastMutation()
+            }
             let payload: [String: Any] = [
                 "operation": result.operation,
                 "recordedAt": result.recordedAt
@@ -1282,10 +1302,12 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            return try SandboxFileToolSupport.diffTextFile(
-                relativePath: args.path,
-                updatedContent: args.updated_content
-            )
+            return try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.diffTextFile(
+                    relativePath: args.path,
+                    updatedContent: args.updated_content
+                )
+            }
         case .editSandboxFile:
             struct EditFileArgs: Decodable {
                 let path: String
@@ -1301,12 +1323,14 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.replaceText(
-                relativePath: args.path,
-                oldText: args.old_text,
-                newText: args.new_text,
-                replaceAll: args.replace_all ?? false
-            )
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.replaceText(
+                    relativePath: args.path,
+                    oldText: args.old_text,
+                    newText: args.new_text,
+                    replaceAll: args.replace_all ?? false
+                )
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -1326,7 +1350,9 @@ public final class AppToolManager: ObservableObject {
                 )
             }
 
-            let result = try SandboxFileToolSupport.deleteItem(relativePath: args.path)
+            let result = try await Self.runSandboxFileOperationOffMainThread {
+                try SandboxFileToolSupport.deleteItem(relativePath: args.path)
+            }
             refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
             let payload: [String: Any] = [
                 "path": result.path,
@@ -1352,6 +1378,20 @@ public final class AppToolManager: ObservableObject {
         let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
         UserDefaults.standard.set(rawPolicyValues, forKey: Self.toolApprovalPoliciesUserDefaultsKey)
         objectWillChange.send()
+    }
+
+    internal nonisolated static func runSandboxFileOperationOffMainThread<T>(
+        _ operation: @escaping () throws -> T
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    continuation.resume(returning: try operation())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     private func persistEnabledToolIDs() {
