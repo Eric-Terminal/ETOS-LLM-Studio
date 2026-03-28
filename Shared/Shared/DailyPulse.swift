@@ -1897,7 +1897,7 @@ public final class DailyPulseManager: ObservableObject {
             }
     }
 
-    internal static func makeAnnouncementSignals(from announcements: [Announcement]) -> [DailyPulseExternalSignal] {
+    internal nonisolated static func makeAnnouncementSignals(from announcements: [Announcement]) -> [DailyPulseExternalSignal] {
         announcements.map { announcement in
             DailyPulseExternalSignal(
                 source: .announcement,

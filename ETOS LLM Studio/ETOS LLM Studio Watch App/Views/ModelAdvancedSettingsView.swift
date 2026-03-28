@@ -143,7 +143,7 @@ struct ModelAdvancedSettingsView: View {
                         .disabled(!enablePeriodicTimeLandmark)
                 }
             }
-            .onChange(of: periodicTimeLandmarkIntervalMinutes) { newValue in
+            .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
                 if newValue < 1 {
                     periodicTimeLandmarkIntervalMinutes = 1
                 }
