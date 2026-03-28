@@ -24,8 +24,8 @@ struct ModelAdvancedSettingsView: View {
 
     let addGlobalSystemPromptEntry: () -> Void
     let selectGlobalSystemPromptEntry: (UUID?) -> Void
-    let updateSelectedGlobalSystemPromptTitle: (String) -> Void
     let updateSelectedGlobalSystemPromptContent: (String) -> Void
+    let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
     let deleteGlobalSystemPromptEntry: (UUID) -> Void
 
     private var numberFormatter: NumberFormatter {
@@ -40,13 +40,6 @@ struct ModelAdvancedSettingsView: View {
         return globalSystemPromptEntries.first(where: { $0.id == selectedGlobalSystemPromptEntryID })
     }
 
-    private var selectedGlobalPromptTitleBinding: Binding<String> {
-        Binding(
-            get: { selectedGlobalPromptEntry?.title ?? "" },
-            set: { updateSelectedGlobalSystemPromptTitle($0) }
-        )
-    }
-
     private var selectedGlobalPromptContentBinding: Binding<String> {
         Binding(
             get: { selectedGlobalPromptEntry?.content ?? "" },
@@ -57,66 +50,29 @@ struct ModelAdvancedSettingsView: View {
     var body: some View {
         Form {
             Section("全局系统提示词") {
-                HStack {
-                    Button {
-                        addGlobalSystemPromptEntry()
-                    } label: {
-                        Label("新增提示词", systemImage: "plus")
-                    }
+                TextField("自定义全局系统提示词", text: selectedGlobalPromptContentBinding, axis: .vertical)
+                    .lineLimit(3...8)
+                    .disabled(selectedGlobalPromptEntry == nil)
 
-                    Spacer()
-
-                    if let selectedID = selectedGlobalSystemPromptEntryID {
-                        Button(role: .destructive) {
-                            deleteGlobalSystemPromptEntry(selectedID)
-                        } label: {
-                            Label("删除当前", systemImage: "trash")
-                        }
+                NavigationLink {
+                    GlobalSystemPromptPickerView(
+                        entries: globalSystemPromptEntries,
+                        selectedEntryID: selectedGlobalSystemPromptEntryID,
+                        addGlobalSystemPromptEntry: addGlobalSystemPromptEntry,
+                        selectGlobalSystemPromptEntry: selectGlobalSystemPromptEntry,
+                        updateGlobalSystemPromptEntry: updateGlobalSystemPromptEntry,
+                        deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
+                    )
+                } label: {
+                    LabeledContent("提示词列表") {
+                        Text(displayTitle(for: selectedGlobalPromptEntry))
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                if globalSystemPromptEntries.isEmpty {
-                    Text("暂无提示词，点击“新增提示词”创建。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(globalSystemPromptEntries) { entry in
-                        Button {
-                            selectGlobalSystemPromptEntry(entry.id)
-                        } label: {
-                            HStack(spacing: 10) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(displayTitle(for: entry))
-                                        .font(.body)
-                                        .lineLimit(1)
-                                    Text(displayPreview(for: entry))
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-
-                                Spacer()
-
-                                if selectedGlobalSystemPromptEntryID == entry.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.blue)
-                                }
-                            }
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                    .onDelete(perform: deleteGlobalPromptRows)
-                }
-
-                if selectedGlobalPromptEntry != nil {
-                    TextField("提示词名称", text: selectedGlobalPromptTitleBinding)
-                    TextField("自定义全局系统提示词", text: selectedGlobalPromptContentBinding, axis: .vertical)
-                        .lineLimit(3...8)
-
-                    Text("当前提示词内容为空时，不会发送全局系统提示词。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                Text("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("当前会话提示词") {
@@ -211,11 +167,93 @@ struct ModelAdvancedSettingsView: View {
         .navigationTitle("高级模型设置")
     }
 
-    private func deleteGlobalPromptRows(at offsets: IndexSet) {
-        for index in offsets.sorted(by: >) {
-            guard globalSystemPromptEntries.indices.contains(index) else { continue }
-            let entryID = globalSystemPromptEntries[index].id
-            deleteGlobalSystemPromptEntry(entryID)
+    private func displayTitle(for entry: GlobalSystemPromptEntry?) -> String {
+        guard let entry else { return "未选择" }
+        let trimmedTitle = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? "未命名提示词" : trimmedTitle
+    }
+}
+
+private struct GlobalSystemPromptPickerView: View {
+    let entries: [GlobalSystemPromptEntry]
+    let selectedEntryID: UUID?
+    let addGlobalSystemPromptEntry: () -> Void
+    let selectGlobalSystemPromptEntry: (UUID?) -> Void
+    let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
+    let deleteGlobalSystemPromptEntry: (UUID) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var editingEntry: GlobalSystemPromptEntry?
+
+    var body: some View {
+        List {
+            Section {
+                Button {
+                    addGlobalSystemPromptEntry()
+                } label: {
+                    Label("新增提示词", systemImage: "plus")
+                }
+            }
+
+            Section("全局系统提示词") {
+                ForEach(entries) { entry in
+                    Button {
+                        selectGlobalSystemPromptEntry(entry.id)
+                        dismiss()
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(displayTitle(for: entry))
+                                    .lineLimit(1)
+                                Text(displayPreview(for: entry))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer()
+
+                            if selectedEntryID == entry.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteGlobalSystemPromptEntry(entry.id)
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button {
+                            editingEntry = entry
+                        } label: {
+                            Label("更多", systemImage: "ellipsis.circle")
+                        }
+                        .tint(.blue)
+                    }
+                    .contextMenu {
+                        Button {
+                            editingEntry = entry
+                        } label: {
+                            Label("编辑", systemImage: "square.and.pencil")
+                        }
+                        Button(role: .destructive) {
+                            deleteGlobalSystemPromptEntry(entry.id)
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("全局提示词")
+        .sheet(item: $editingEntry) { entry in
+            GlobalSystemPromptEditorView(entry: entry) { title, content in
+                updateGlobalSystemPromptEntry(entry.id, title, content)
+            }
         }
     }
 
@@ -229,7 +267,46 @@ struct ModelAdvancedSettingsView: View {
         if trimmedContent.isEmpty {
             return "空提示词（不发送）"
         }
-
         return trimmedContent.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+}
+
+private struct GlobalSystemPromptEditorView: View {
+    let entry: GlobalSystemPromptEntry
+    let onSave: (String, String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var content: String
+
+    init(entry: GlobalSystemPromptEntry, onSave: @escaping (String, String) -> Void) {
+        self.entry = entry
+        self.onSave = onSave
+        _title = State(initialValue: entry.title)
+        _content = State(initialValue: entry.content)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("提示词名称", text: $title)
+                TextField("提示词内容", text: $content, axis: .vertical)
+                    .lineLimit(4...10)
+            }
+            .navigationTitle("编辑提示词")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        onSave(title, content)
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }

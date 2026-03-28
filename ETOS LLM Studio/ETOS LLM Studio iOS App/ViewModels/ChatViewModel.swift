@@ -720,17 +720,29 @@ final class ChatViewModel: ObservableObject {
     func updateSelectedGlobalSystemPromptTitle(_ title: String) {
         guard let selectedID = selectedGlobalSystemPromptEntryID,
               let index = globalSystemPromptEntries.firstIndex(where: { $0.id == selectedID }) else { return }
-        globalSystemPromptEntries[index].title = title
-        globalSystemPromptEntries[index].updatedAt = Date()
-        persistGlobalSystemPromptEntries(selectedEntryID: selectedID)
+        updateGlobalSystemPromptEntry(
+            id: selectedID,
+            title: title,
+            content: globalSystemPromptEntries[index].content
+        )
     }
 
     func updateSelectedGlobalSystemPromptContent(_ content: String) {
         guard let selectedID = selectedGlobalSystemPromptEntryID,
               let index = globalSystemPromptEntries.firstIndex(where: { $0.id == selectedID }) else { return }
+        updateGlobalSystemPromptEntry(
+            id: selectedID,
+            title: globalSystemPromptEntries[index].title,
+            content: content
+        )
+    }
+
+    func updateGlobalSystemPromptEntry(id: UUID, title: String, content: String) {
+        guard let index = globalSystemPromptEntries.firstIndex(where: { $0.id == id }) else { return }
+        globalSystemPromptEntries[index].title = title
         globalSystemPromptEntries[index].content = content
         globalSystemPromptEntries[index].updatedAt = Date()
-        persistGlobalSystemPromptEntries(selectedEntryID: selectedID)
+        persistGlobalSystemPromptEntries(selectedEntryID: selectedGlobalSystemPromptEntryID)
     }
 
     func deleteGlobalSystemPromptEntry(id: UUID) {

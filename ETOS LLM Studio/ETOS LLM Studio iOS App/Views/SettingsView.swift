@@ -92,8 +92,8 @@ struct SettingsView: View {
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
                         addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
                         selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
-                        updateSelectedGlobalSystemPromptTitle: viewModel.updateSelectedGlobalSystemPromptTitle,
                         updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+                        updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
                         deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
                     )
                 } label: {
