@@ -188,6 +188,12 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         )
     }
 
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.navigationDelegate = nil
+        webView.stopLoading()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
+    }
+
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         static let heightMessageName = "etMathHeight"
 
@@ -196,6 +202,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         var lastShellConfiguration: ShellConfiguration?
         var pendingPayload: Payload?
         var isShellLoaded = false
+        var isShellLoading = false
 
         init(renderedHeight: Binding<CGFloat>) { self._renderedHeight = renderedHeight }
 
@@ -204,15 +211,25 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             shellConfiguration: ShellConfiguration,
             on webView: WKWebView
         ) {
-            let shouldReloadShell = lastShellConfiguration != shellConfiguration || !isShellLoaded
-            guard lastPayload != payload || shouldReloadShell else { return }
+            let shellConfigurationChanged = lastShellConfiguration != shellConfiguration
+            let shouldStartShellLoad: Bool
+            if shellConfigurationChanged {
+                shouldStartShellLoad = true
+            } else if isShellLoaded {
+                shouldStartShellLoad = false
+            } else {
+                shouldStartShellLoad = !isShellLoading
+            }
+
+            guard lastPayload != payload || shellConfigurationChanged || shouldStartShellLoad else { return }
 
             lastPayload = payload
             pendingPayload = payload
 
-            if shouldReloadShell {
+            if shouldStartShellLoad {
                 lastShellConfiguration = shellConfiguration
                 isShellLoaded = false
+                isShellLoading = true
                 webView.loadHTMLString(shellConfiguration.htmlDocument, baseURL: nil)
                 return
             }
@@ -246,6 +263,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            isShellLoading = false
             isShellLoaded = true
             applyPendingPayloadIfPossible(on: webView)
         }
@@ -255,6 +273,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             didFail navigation: WKNavigation!,
             withError error: Error
         ) {
+            isShellLoading = false
             isShellLoaded = false
         }
 
@@ -263,6 +282,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             didFailProvisionalNavigation navigation: WKNavigation!,
             withError error: Error
         ) {
+            isShellLoading = false
             isShellLoaded = false
         }
     }
@@ -753,8 +773,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       const rectHeight = content ? content.getBoundingClientRect().height : 0;
       const scrollHeight = content ? content.scrollHeight : 0;
       const height = Math.max(rectHeight, scrollHeight, 1);
+      const nextHeight = Math.max(1, Math.ceil(height));
+      const lastHeight = Number(window.__etLastNotifiedHeight || 0);
+      if (Math.abs(lastHeight - nextHeight) < 0.5) {
+        return;
+      }
+      window.__etLastNotifiedHeight = nextHeight;
       if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etMathHeight) {
-        window.webkit.messageHandlers.etMathHeight.postMessage(height);
+        window.webkit.messageHandlers.etMathHeight.postMessage(nextHeight);
       }
     }
 
@@ -875,13 +901,17 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     }
 
     function __scheduleBootstrap(retryCount = 0) {
-      __render();
-
       const markdownReady = !__enableMarkdown || !!window.marked;
       const mathReady = !!window.renderMathInElement && !!window.katex;
       const codeReady = !__enableMarkdown || !!window.hljs;
       const mermaidReady = !__enableMarkdown || !__rawHasMermaidFence(__state.raw) || !!window.mermaid;
-      if ((markdownReady && mathReady && codeReady && mermaidReady) || retryCount >= 80) {
+      const allReady = markdownReady && mathReady && codeReady && mermaidReady;
+
+      if (retryCount == 0 || allReady || retryCount >= 80) {
+        __render();
+      }
+
+      if (allReady || retryCount >= 80) {
         return;
       }
 
