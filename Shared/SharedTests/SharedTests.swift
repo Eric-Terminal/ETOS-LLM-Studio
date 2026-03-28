@@ -4087,6 +4087,7 @@ fileprivate struct SessionHistorySearchSupportTests {
 
         #expect(hits[session.id]?.source == .userMessage)
         #expect(hits[session.id]?.preview.contains("大阪旅行清单") == true)
+        #expect(hits[session.id]?.matches.first?.messageOrdinal == 1)
     }
 
     @Test("检索支持正则表达式模式")
@@ -4132,5 +4133,26 @@ fileprivate struct SessionHistorySearchSupportTests {
 
         #expect(hits[session.id]?.source == .assistantMessage)
         #expect(hits[session.id]?.preview.contains("内存里的最新回复") == true)
+    }
+
+    @Test("同一会话多条消息命中时返回完整命中序号")
+    func testSearchHitsReturnsAllMessageOrdinals() {
+        let session = ChatSession(id: UUID(), name: "排期讨论")
+        let messages = [
+            ChatMessage(role: .user, content: "今天先整理需求池"),
+            ChatMessage(role: .assistant, content: "收到，我先给你一个排期草案。"),
+            ChatMessage(role: .user, content: "排期里要加上联调时间"),
+            ChatMessage(role: .assistant, content: "好的，排期会补充风险说明。")
+        ]
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "排期",
+            messageLoader: { _ in messages }
+        )
+
+        let ordinals = hits[session.id]?.matches.compactMap(\.messageOrdinal) ?? []
+        #expect(ordinals == [2, 3, 4])
+        #expect(hits[session.id]?.matchCount == 3)
     }
 }

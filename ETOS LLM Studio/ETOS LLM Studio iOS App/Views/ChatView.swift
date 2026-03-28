@@ -1291,7 +1291,17 @@ struct ChatView: View {
         queryActive: Bool
     ) -> String? {
         guard queryActive, let hit = hits[session.id] else { return nil }
-        return "\(sourceLabel(for: hit.source))：\(hit.preview)"
+        let detailLines = hit.matches.map { match in
+            let preview = compactSearchPreview(match.preview)
+            if let messageOrdinal = match.messageOrdinal {
+                return "• \(sourceLabel(for: match.source)) 第\(messageOrdinal)条：\(preview)"
+            }
+            return "• \(sourceLabel(for: match.source))：\(preview)"
+        }
+        if detailLines.count <= 1 {
+            return detailLines.first
+        }
+        return "共命中 \(hit.matchCount) 处\n" + detailLines.joined(separator: "\n")
     }
 
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
@@ -1313,6 +1323,11 @@ struct ChatView: View {
         case .errorMessage:
             return "错误消息"
         }
+    }
+
+    private func compactSearchPreview(_ text: String, maxLength: Int = 48) -> String {
+        guard text.count > maxLength else { return text }
+        return String(text.prefix(maxLength)) + "…"
     }
 
     private func selectSessionFromPicker(_ session: ChatSession) {
@@ -3231,7 +3246,7 @@ private struct SessionPickerRow: View {
                             Text(searchSummary)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                .lineLimit(nil)
                         } else if let topic = session.topicPrompt, !topic.isEmpty {
                             Text(topic)
                                 .font(.caption)
