@@ -71,6 +71,8 @@ class ChatViewModel: ObservableObject {
     @Published var showMemoryEmbeddingErrorAlert: Bool = false
     @Published var memoryEmbeddingErrorMessage: String = ""
     @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
+    @Published var globalSystemPromptEntries: [GlobalSystemPromptEntry] = []
+    @Published var selectedGlobalSystemPromptEntryID: UUID?
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
@@ -212,6 +214,7 @@ class ChatViewModel: ObservableObject {
     private let waveformSampleCount: Int = 24
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
     private var autoReasoningPreviewMessageIDs: Set<UUID> = []
+    private var isPersistingGlobalSystemPrompts = false
     private var lastAutoPlayedAssistantMessageID: UUID?
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
@@ -268,6 +271,7 @@ class ChatViewModel: ObservableObject {
         self.chatService = chatService
         self.ttsManager = .shared
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
+        reloadGlobalSystemPromptEntries()
 
         // 设置 Combine 订阅
         setupSubscriptions()
@@ -284,6 +288,26 @@ class ChatViewModel: ObservableObject {
 #endif
         
         logger.info("ChatViewModel initialized and subscribed to ChatService.")
+    }
+
+    private func reloadGlobalSystemPromptEntries() {
+        guard !isPersistingGlobalSystemPrompts else { return }
+        let snapshot = GlobalSystemPromptStore.load()
+        globalSystemPromptEntries = snapshot.entries
+        selectedGlobalSystemPromptEntryID = snapshot.selectedEntryID
+        systemPrompt = snapshot.activeSystemPrompt
+    }
+
+    private func persistGlobalSystemPromptEntries(selectedEntryID: UUID?) {
+        isPersistingGlobalSystemPrompts = true
+        let snapshot = GlobalSystemPromptStore.save(
+            entries: globalSystemPromptEntries,
+            selectedEntryID: selectedEntryID
+        )
+        globalSystemPromptEntries = snapshot.entries
+        selectedGlobalSystemPromptEntryID = snapshot.selectedEntryID
+        systemPrompt = snapshot.activeSystemPrompt
+        isPersistingGlobalSystemPrompts = false
     }
     
     @objc private func handleDidBecomeActive() {
@@ -425,6 +449,13 @@ class ChatViewModel: ObservableObject {
                 if !speaking {
                     self.ttsManager.updateSelectedModel(self.selectedTTSModel)
                 }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadGlobalSystemPromptEntries()
             }
             .store(in: &cancellables)
         
@@ -680,6 +711,39 @@ class ChatViewModel: ObservableObject {
         if titleGenerationModelIdentifier != newIdentifier {
             titleGenerationModelIdentifier = newIdentifier
         }
+    }
+
+    func addGlobalSystemPromptEntry() {
+        let entry = GlobalSystemPromptEntry(title: "", content: "", updatedAt: Date())
+        globalSystemPromptEntries.insert(entry, at: 0)
+        persistGlobalSystemPromptEntries(selectedEntryID: entry.id)
+    }
+
+    func selectGlobalSystemPromptEntry(_ entryID: UUID?) {
+        persistGlobalSystemPromptEntries(selectedEntryID: entryID)
+    }
+
+    func updateSelectedGlobalSystemPromptTitle(_ title: String) {
+        guard let selectedID = selectedGlobalSystemPromptEntryID,
+              let index = globalSystemPromptEntries.firstIndex(where: { $0.id == selectedID }) else { return }
+        globalSystemPromptEntries[index].title = title
+        globalSystemPromptEntries[index].updatedAt = Date()
+        persistGlobalSystemPromptEntries(selectedEntryID: selectedID)
+    }
+
+    func updateSelectedGlobalSystemPromptContent(_ content: String) {
+        guard let selectedID = selectedGlobalSystemPromptEntryID,
+              let index = globalSystemPromptEntries.firstIndex(where: { $0.id == selectedID }) else { return }
+        globalSystemPromptEntries[index].content = content
+        globalSystemPromptEntries[index].updatedAt = Date()
+        persistGlobalSystemPromptEntries(selectedEntryID: selectedID)
+    }
+
+    func deleteGlobalSystemPromptEntry(id: UUID) {
+        guard let index = globalSystemPromptEntries.firstIndex(where: { $0.id == id }) else { return }
+        globalSystemPromptEntries.remove(at: index)
+        let fallbackSelection = (selectedGlobalSystemPromptEntryID == id) ? globalSystemPromptEntries.first?.id : selectedGlobalSystemPromptEntryID
+        persistGlobalSystemPromptEntries(selectedEntryID: fallbackSelection)
     }
     
     func appendTranscribedText(_ text: String) {
