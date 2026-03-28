@@ -158,6 +158,7 @@ struct SettingsView: View {
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         enableExperimentalToolResultDisplay: $viewModel.enableExperimentalToolResultDisplay,
+                        enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
                         allBackgrounds: viewModel.backgroundImages
                     )) {
                         Label("显示与外观", systemImage: "photo.on.rectangle")

@@ -53,6 +53,36 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(!shouldSkipCurrentlySpeaking)
     }
 
+    @Test("自动预览思考展开与收起条件判断")
+    func testAutoReasoningDisclosureTargetState() {
+        let shouldExpand = ChatViewModel.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: true,
+            isSendingMessage: true,
+            hasReasoning: true,
+            hasBodyContent: false,
+            wasAutoExpanded: false
+        )
+        #expect(shouldExpand == true)
+
+        let shouldCollapse = ChatViewModel.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: true,
+            isSendingMessage: false,
+            hasReasoning: true,
+            hasBodyContent: true,
+            wasAutoExpanded: true
+        )
+        #expect(shouldCollapse == false)
+
+        let shouldKeep = ChatViewModel.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: false,
+            isSendingMessage: true,
+            hasReasoning: true,
+            hasBodyContent: false,
+            wasAutoExpanded: false
+        )
+        #expect(shouldKeep == nil)
+    }
+
     @Test("App 层可调用文本分片函数")
     func testSplitTextFromAppLayer() {
         let chunks = TTSManager.splitTextForPlayback("你好世界。今天继续测试分片能力！", maxLength: 6)

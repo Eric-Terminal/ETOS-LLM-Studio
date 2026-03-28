@@ -79,6 +79,13 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
     @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false
     @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
+    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = false {
+        didSet {
+            if !enableAutoReasoningPreview {
+                autoReasoningPreviewMessageIDs.removeAll()
+            }
+        }
+    }
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }
@@ -174,6 +181,7 @@ final class ChatViewModel: ObservableObject {
     private let incrementalHistoryBatchSize = 5
     private var cancellables = Set<AnyCancellable>()
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    private var autoReasoningPreviewMessageIDs: Set<UUID> = []
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 8
@@ -234,6 +242,8 @@ final class ChatViewModel: ObservableObject {
         let baselineMarker: AssistantReplyMarker?
         let sessionName: String?
     }
+
+    private static let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
     
     // MARK: - Init
     
@@ -360,9 +370,11 @@ final class ChatViewModel: ObservableObject {
                     isSendingMessage = true
                     beginBackgroundTaskIfNeeded()
                     prepareBackgroundReplyNotificationContext()
+                    updateAutoReasoningPreviewState(with: allMessagesForSession)
                 case .finished, .error, .cancelled:
                     isSendingMessage = false
                     endBackgroundTaskIfNeeded()
+                    updateAutoReasoningPreviewState(with: allMessagesForSession)
                     if case .finished = status {
                         notifyIfAssistantReplyFinishedInBackground()
                         autoPlayLatestAssistantMessageIfNeeded()
@@ -373,6 +385,7 @@ final class ChatViewModel: ObservableObject {
                     isSendingMessage = false
                     endBackgroundTaskIfNeeded()
                     pendingBackgroundReplyNotificationContext = nil
+                    updateAutoReasoningPreviewState(with: allMessagesForSession)
                 }
             }
             .store(in: &cancellables)
@@ -1045,6 +1058,7 @@ final class ChatViewModel: ObservableObject {
     private func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
         let previousMessages = allMessagesForSession
         allMessagesForSession = incomingMessages
+        updateAutoReasoningPreviewState(with: incomingMessages)
 
         if hasMatchingMessageIdentity(previousMessages, incomingMessages) {
             applyIncrementalMessageUpdates(previousMessages: previousMessages, incomingMessages: incomingMessages)
@@ -1342,6 +1356,67 @@ final class ChatViewModel: ObservableObject {
                 return trimmedResult.isEmpty ? nil : call.id
             }
         )
+    }
+
+    private func updateAutoReasoningPreviewState(with messages: [ChatMessage]) {
+        guard let latestAssistantMessage = messages.last(where: { $0.role == .assistant }) else {
+            autoReasoningPreviewMessageIDs.removeAll()
+            return
+        }
+        autoReasoningPreviewMessageIDs.formIntersection([latestAssistantMessage.id])
+
+        let hasReasoning = Self.hasReasoningContent(latestAssistantMessage)
+        let hasBodyContent = Self.hasVisibleAssistantBodyContent(latestAssistantMessage)
+        let wasAutoExpanded = autoReasoningPreviewMessageIDs.contains(latestAssistantMessage.id)
+
+        guard let targetExpandedState = Self.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: enableAutoReasoningPreview,
+            isSendingMessage: isSendingMessage,
+            hasReasoning: hasReasoning,
+            hasBodyContent: hasBodyContent,
+            wasAutoExpanded: wasAutoExpanded
+        ) else {
+            if !hasReasoning {
+                autoReasoningPreviewMessageIDs.remove(latestAssistantMessage.id)
+            }
+            return
+        }
+
+        reasoningExpandedState[latestAssistantMessage.id] = targetExpandedState
+        if targetExpandedState {
+            autoReasoningPreviewMessageIDs.insert(latestAssistantMessage.id)
+        } else {
+            autoReasoningPreviewMessageIDs.remove(latestAssistantMessage.id)
+        }
+    }
+
+    nonisolated static func autoReasoningDisclosureTargetState(
+        autoPreviewEnabled: Bool,
+        isSendingMessage: Bool,
+        hasReasoning: Bool,
+        hasBodyContent: Bool,
+        wasAutoExpanded: Bool
+    ) -> Bool? {
+        guard autoPreviewEnabled else { return nil }
+        if isSendingMessage, hasReasoning, !hasBodyContent {
+            return true
+        }
+        if hasBodyContent, wasAutoExpanded {
+            return false
+        }
+        return nil
+    }
+
+    nonisolated private static func hasReasoningContent(_ message: ChatMessage) -> Bool {
+        !(message.reasoningContent ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    nonisolated private static func hasVisibleAssistantBodyContent(_ message: ChatMessage) -> Bool {
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else { return false }
+        return !assistantContentPlaceholders.contains(trimmedContent)
     }
 
     private func prepareBackgroundReplyNotificationContext() {

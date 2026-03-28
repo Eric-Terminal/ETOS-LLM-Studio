@@ -106,6 +106,8 @@
 "液态玻璃效果" = "Liquid Glass effect";
 "增强工具结果显示（实验性）" = "Enhanced Tool Result Display (Experimental)";
 "启用后会优先提取工具结果正文并折叠原始 JSON；关闭后恢复为原始结果文本展示。" = "When enabled, the app extracts the primary tool result text first and collapses the raw JSON; turn it off to restore the original plain result text display.";
+"自动预览思考过程" = "Auto-preview reasoning";
+"开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。" = "When enabled, reasoning auto-expands if the reply has only reasoning, then auto-collapses once body text appears.";
 "添加附件" = "Add attachment";
 "清空输入" = "Clear input";
 "渲染 Markdown" = "Render Markdown";
