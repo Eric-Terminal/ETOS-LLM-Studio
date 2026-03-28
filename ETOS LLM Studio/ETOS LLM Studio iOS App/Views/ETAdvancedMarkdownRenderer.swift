@@ -1159,7 +1159,7 @@ private struct ETCodePreviewSheet: View {
             ETCodePreviewWebView(
                 htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
             )
-            .ignoresSafeArea(.container, edges: .bottom)
+            .ignoresSafeArea()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -1169,6 +1169,7 @@ private struct ETCodePreviewSheet: View {
                     }
                 }
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
     }
 }
