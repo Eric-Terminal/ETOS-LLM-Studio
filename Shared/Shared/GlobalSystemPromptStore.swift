@@ -81,8 +81,8 @@ public enum GlobalSystemPromptStore {
                 selectedEntryID = nil
                 didMutate = true
             }
-        } else if let selectedEntryID {
-            if entries.contains(where: { $0.id == selectedEntryID }) == false {
+        } else if let selectedID = selectedEntryID {
+            if entries.contains(where: { $0.id == selectedID }) == false {
                 selectedEntryID = entries.first?.id
                 didMutate = true
             }
