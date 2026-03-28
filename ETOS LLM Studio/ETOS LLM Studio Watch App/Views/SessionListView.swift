@@ -142,13 +142,14 @@ private struct WatchSessionSearchView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText: String = ""
+    @State private var committedSearchText: String = ""
     @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
     @State private var isSearching: Bool = false
     @State private var latestSearchToken: Int = 0
     @State private var pendingSearchWorkItem: DispatchWorkItem?
 
     private var normalizedQuery: String {
-        SessionHistorySearchSupport.normalizedQuery(searchText)
+        SessionHistorySearchSupport.normalizedQuery(committedSearchText)
     }
 
     private var displayedSessions: [ChatSession] {
@@ -160,12 +161,13 @@ private struct WatchSessionSearchView: View {
         List {
             Section {
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
                     TextField("搜索会话标题或消息", text: $searchText.watchKeyboardNewlineBinding())
+                        .onSubmit {
+                            submitSearch()
+                        }
                     if !searchText.isEmpty {
                         Button {
-                            searchText = ""
+                            clearSearch()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
@@ -177,7 +179,7 @@ private struct WatchSessionSearchView: View {
 
             Section {
                 if normalizedQuery.isEmpty {
-                    Text("输入关键词后显示匹配结果。")
+                    Text("输入关键词后点完成开始搜索。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else if isSearching {
@@ -210,14 +212,9 @@ private struct WatchSessionSearchView: View {
             }
         }
         .navigationTitle("搜索会话")
-        .onAppear {
-            scheduleSearch(for: searchText)
-        }
-        .onChange(of: searchText) { _, newValue in
-            scheduleSearch(for: newValue)
-        }
         .onChange(of: sessions) { _, _ in
-            scheduleSearch(for: searchText)
+            guard !normalizedQuery.isEmpty else { return }
+            scheduleSearch(for: committedSearchText)
         }
         .onDisappear {
             pendingSearchWorkItem?.cancel()
@@ -288,6 +285,21 @@ private struct WatchSessionSearchView: View {
         case .errorMessage:
             return "错误消息"
         }
+    }
+
+    private func submitSearch() {
+        let committed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        committedSearchText = committed
+        scheduleSearch(for: committed)
+    }
+
+    private func clearSearch() {
+        searchText = ""
+        committedSearchText = ""
+        pendingSearchWorkItem?.cancel()
+        pendingSearchWorkItem = nil
+        searchHits = [:]
+        isSearching = false
     }
 
     private func scheduleSearch(for query: String) {
