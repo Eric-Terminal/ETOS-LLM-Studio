@@ -1014,14 +1014,6 @@ private enum ETCodePreviewSupport {
         previewableLanguages.contains(normalizedLanguage(language))
     }
 
-    static func previewTitle(_ language: String?) -> String {
-        let normalized = normalizedLanguage(language)
-        if normalized.isEmpty {
-            return "代码预览"
-        }
-        return "\(normalized.uppercased()) 预览"
-    }
-
     static func htmlDocument(content: String, language: String?) -> String {
         let normalized = normalizedLanguage(language)
         switch normalized {
@@ -1163,30 +1155,19 @@ private struct ETCodePreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .topTrailing) {
-                ETCodePreviewWebView(
-                    htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
-                )
-                .ignoresSafeArea()
-
-                HStack(spacing: 10) {
-                    Text(ETCodePreviewSupport.previewTitle(language))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
-
-                    Button("关闭") {
+        NavigationStack {
+            ETCodePreviewWebView(
+                htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
+            )
+            .ignoresSafeArea(.container, edges: .bottom)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
                 }
-                .padding(.top, geometry.safeAreaInsets.top + 8)
-                .padding(.trailing, 12)
             }
         }
     }
