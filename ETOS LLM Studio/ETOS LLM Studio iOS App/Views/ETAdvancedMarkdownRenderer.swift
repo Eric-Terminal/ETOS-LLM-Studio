@@ -874,6 +874,14 @@ private extension View {
 
                         Spacer(minLength: 8)
 
+                        if ETCodePreviewSupport.canPreview(configuration.language) {
+                            ETCodePreviewButton(
+                                content: configuration.content,
+                                language: configuration.language,
+                                tintColor: codeHeaderTextColor
+                            )
+                        }
+
                         if ETCodeClipboard.supportsCopy {
                             ETCodeCopyButton(
                                 content: configuration.content,
@@ -974,6 +982,142 @@ private struct ETCodeCopyButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("复制代码")
+    }
+}
+
+private enum ETCodePreviewSupport {
+    private static let previewableLanguages: Set<String> = [
+        "html", "htm", "xhtml", "xml", "svg"
+    ]
+
+    static func canPreview(_ language: String?) -> Bool {
+        previewableLanguages.contains(normalizedLanguage(language))
+    }
+
+    static func previewTitle(_ language: String?) -> String {
+        let normalized = normalizedLanguage(language)
+        if normalized.isEmpty {
+            return "代码预览"
+        }
+        return "\(normalized.uppercased()) 预览"
+    }
+
+    static func htmlDocument(content: String, language: String?) -> String {
+        let normalized = normalizedLanguage(language)
+        switch normalized {
+        case "svg":
+            return """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #FFFFFF;
+      color: #1C1C1E;
+      width: 100%;
+      min-height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    }
+    .et-svg-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .et-svg-wrap svg {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="et-svg-wrap">
+    \(content)
+  </div>
+</body>
+</html>
+"""
+        default:
+            return content
+        }
+    }
+
+    private static func normalizedLanguage(_ language: String?) -> String {
+        (language ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+}
+
+private struct ETCodePreviewButton: View {
+    let content: String
+    let language: String?
+    let tintColor: Color
+
+    @State private var showingPreview = false
+
+    var body: some View {
+        Button {
+            showingPreview = true
+        } label: {
+            Image(systemName: "safari")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tintColor)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("预览代码")
+        .sheet(isPresented: $showingPreview) {
+            ETCodePreviewSheet(
+                content: content,
+                language: language
+            )
+        }
+    }
+}
+
+private struct ETCodePreviewSheet: View {
+    let content: String
+    let language: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ETCodePreviewWebView(
+                htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
+            )
+            .navigationTitle(ETCodePreviewSupport.previewTitle(language))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ETCodePreviewWebView: UIViewRepresentable {
+    let htmlContent: String
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        webView.loadHTMLString(htmlContent, baseURL: nil)
     }
 }
 
