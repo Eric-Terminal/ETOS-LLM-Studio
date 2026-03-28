@@ -172,14 +172,14 @@ private extension View {
     @ViewBuilder
     func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool) -> some View {
         let codeBlockBackground = isOutgoing
-            ? Color.white.opacity(0.4)
-            : Color.primary.opacity(0.24)
+            ? Color.white.opacity(0.22)
+            : Color.primary.opacity(0.12)
         let codeHeaderBackground = isOutgoing
-            ? Color.white.opacity(0.5)
-            : Color.primary.opacity(0.32)
+            ? Color.white.opacity(0.26)
+            : Color.primary.opacity(0.16)
         let codeBorderColor = isOutgoing
-            ? Color.white.opacity(0.46)
-            : Color.primary.opacity(0.3)
+            ? Color.white.opacity(0.32)
+            : Color.primary.opacity(0.2)
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
@@ -212,7 +212,12 @@ private extension View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(codeHeaderBackground)
+                    .background {
+                        ZStack {
+                            Rectangle().fill(.ultraThinMaterial)
+                            Rectangle().fill(codeHeaderBackground)
+                        }
+                    }
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
@@ -226,7 +231,14 @@ private extension View {
                             .padding(.vertical, 8)
                     }
                 }
-                .background(codeBlockBackground)
+                .background {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(codeBlockBackground)
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
