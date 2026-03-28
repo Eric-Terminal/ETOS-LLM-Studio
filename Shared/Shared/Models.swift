@@ -569,6 +569,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
 public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var role: MessageRole
+    public var requestedAt: Date? // 对应请求的发起时间（用于会话 JSON 落盘）
     
     // MARK: - 多版本内容存储
     /// 所有版本的内容数组（内部存储）
@@ -623,6 +624,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         id: UUID = UUID(),
         role: MessageRole,
         content: String,
+        requestedAt: Date? = nil,
         reasoningContent: String? = nil,
         toolCalls: [InternalToolCall]? = nil,
         toolCallsPlacement: ToolCallsPlacement? = nil,
@@ -635,6 +637,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     ) {
         self.id = id
         self.role = role
+        self.requestedAt = requestedAt
         self.contentVersions = [content]
         self.currentVersionIndex = 0
         self.reasoningContent = reasoningContent
@@ -680,7 +683,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     // MARK: - Codable 支持（向后兼容）
     
     enum CodingKeys: String, CodingKey {
-        case id, role, content, currentVersionIndex
+        case id, role, requestedAt, content, currentVersionIndex
         case reasoningContent, toolCalls, toolCallsPlacement, tokenUsage
         case audioFileName, imageFileNames, fileFileNames, fullErrorContent, responseMetrics
     }
@@ -689,6 +692,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.role = try container.decode(MessageRole.self, forKey: .role)
+        self.requestedAt = try container.decodeIfPresent(Date.self, forKey: .requestedAt)
         
         // 读取 content 字段：可能是字符串（旧版）或数组（新版）
         if let contentArray = try? container.decode([String].self, forKey: .content) {
@@ -722,6 +726,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(role, forKey: .role)
+        try container.encodeIfPresent(requestedAt, forKey: .requestedAt)
         
         // 保存 content：如果只有一个版本，保存为字符串；多个版本保存为数组
         if contentVersions.count == 1 {

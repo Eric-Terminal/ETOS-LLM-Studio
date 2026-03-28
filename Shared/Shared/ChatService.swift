@@ -1605,6 +1605,7 @@ public class ChatService {
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
         var savedFileNames: [String] = []
+        let requestTimestamp = Date()
         var userMessages: [ChatMessage] = []
         var primaryUserMessage: ChatMessage?
         
@@ -1661,6 +1662,7 @@ public class ChatService {
             let audioMessage = ChatMessage(
                 role: .user,
                 content: audioPlaceholder,
+                requestedAt: requestTimestamp,
                 audioFileName: savedAudioFileName,
                 imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames,
                 fileFileNames: savedFileNames.isEmpty ? nil : savedFileNames
@@ -1675,6 +1677,7 @@ public class ChatService {
             let textMessage = ChatMessage(
                 role: .user,
                 content: messageContent,
+                requestedAt: requestTimestamp,
                 audioFileName: nil,
                 imageFileNames: imageNamesForText,
                 fileFileNames: fileNamesForText
@@ -1917,6 +1920,7 @@ public class ChatService {
         let userMessage = ChatMessage(
             role: .user,
             content: trimmedPrompt,
+            requestedAt: Date(),
             imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
         )
         let loadingMessage = ChatMessage(role: .assistant, content: "")

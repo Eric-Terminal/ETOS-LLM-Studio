@@ -2086,6 +2086,46 @@ fileprivate struct ChatServiceTests {
         #expect(logs[0].tokenUsage?.thinkingTokens == 5)
     }
 
+    @Test("发送消息后会在会话 JSON 中保存请求时间")
+    func testSendMessagePersistsRequestedAtInSessionJSON() async {
+        await cleanup()
+
+        setupMockResponsesForChatAndTitle()
+        let startedAt = Date()
+
+        await chatService.sendAndProcessMessage(
+            content: "请记录请求时间",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let finishedAt = Date()
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证请求时间落盘。")
+            return
+        }
+
+        let messages = Persistence.loadMessages(for: sessionID)
+        guard let userMessage = messages.first(where: { $0.role == .user }) else {
+            Issue.record("未找到用户消息，无法验证请求时间字段。")
+            return
+        }
+
+        guard let requestedAt = userMessage.requestedAt else {
+            Issue.record("用户消息缺少 requestedAt 字段。")
+            return
+        }
+        #expect(requestedAt >= startedAt.addingTimeInterval(-1))
+        #expect(requestedAt <= finishedAt.addingTimeInterval(1))
+    }
+
     @Test("Auto-naming handles network error during title generation")
     func testAutoSessionNaming_HandlesNetworkError() async throws {
         await cleanup()
@@ -3254,8 +3294,9 @@ fileprivate struct PersistenceTests {
     func testSaveAndLoadMessages() {
         // 1. Arrange
         let sessionId = UUID()
+        let requestedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let messagesToSave = [
-            ChatMessage(role: .user, content: "Hello"),
+            ChatMessage(role: .user, content: "Hello", requestedAt: requestedAt),
             ChatMessage(role: .assistant, content: "Hi there!")
         ]
         
@@ -3266,6 +3307,7 @@ fileprivate struct PersistenceTests {
         // 3. Assert
         #expect(loadedMessages.count == messagesToSave.count)
         #expect(loadedMessages.first?.content == "Hello")
+        #expect(loadedMessages.first?.requestedAt == requestedAt)
         #expect(loadedMessages.last?.role == .assistant)
 
         let sessionFileURL = currentSessionFileURL(sessionId)
@@ -3275,6 +3317,7 @@ fileprivate struct PersistenceTests {
             #expect(record.schemaVersion == 3)
             #expect(record.messages.count == 2)
             #expect(record.messages.first?.content == "Hello")
+            #expect(record.messages.first?.requestedAt == requestedAt)
         } else {
             Issue.record("会话文件不存在或格式不正确。")
         }
