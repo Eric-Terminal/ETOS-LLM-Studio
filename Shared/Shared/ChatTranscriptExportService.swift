@@ -494,17 +494,7 @@ public struct ChatTranscriptExportService {
                 failurePolicy: .returnPartiallyParsedIfPossible
             )
             if let parsed = try? AttributedString(markdown: markdown, options: options) {
-                let attributed = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
-                let fullRange = NSRange(location: 0, length: attributed.length)
-                let paragraphStyle = NSMutableParagraphStyle()
-                paragraphStyle.lineSpacing = 4
-                attributed.addAttributes(
-                    [
-                        .paragraphStyle: paragraphStyle
-                    ],
-                    range: fullRange
-                )
-                return attributed
+                return NSAttributedString(parsed)
             }
         }
 
