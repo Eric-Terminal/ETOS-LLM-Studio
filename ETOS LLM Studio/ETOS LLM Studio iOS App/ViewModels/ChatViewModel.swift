@@ -23,6 +23,7 @@ import UserNotifications
 #endif
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
+private let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
 
 @MainActor
 final class ChatViewModel: ObservableObject {
@@ -246,8 +247,6 @@ final class ChatViewModel: ObservableObject {
         let sessionName: String?
     }
 
-    nonisolated private static let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
-    
     // MARK: - Init
     
     convenience init() {

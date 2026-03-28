@@ -25,6 +25,7 @@ import UserNotifications
 #endif
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
+private let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
 
 @MainActor
 class ChatViewModel: ObservableObject {
@@ -227,8 +228,6 @@ class ChatViewModel: ObservableObject {
         return cache
     }()
     private var backgroundBlurTask: Task<Void, Never>?
-
-    nonisolated private static let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
 
     enum ImageGenerationFeedbackPhase {
         case idle
