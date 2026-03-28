@@ -256,9 +256,9 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             let codePunctuationColor = isOutgoing ? "rgba(255,255,255,0.88)" : "#4B5563"
             let codeCopyButtonBackground = isOutgoing ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.05)"
             let codeCopyButtonActiveBackground = isOutgoing ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"
-            let codeBlockBackgroundColor = isOutgoing ? "rgba(255,255,255,0.22)" : "rgba(127,127,127,0.18)"
-            let codeHeaderBackgroundColor = isOutgoing ? "rgba(255,255,255,0.28)" : "rgba(127,127,127,0.24)"
-            let codeBorderColor = isOutgoing ? "rgba(255,255,255,0.34)" : "rgba(127,127,127,0.34)"
+            let codeBlockBackgroundColor = isOutgoing ? "rgba(255,255,255,0.44)" : "rgba(127,127,127,0.32)"
+            let codeHeaderBackgroundColor = isOutgoing ? "rgba(255,255,255,0.56)" : "rgba(127,127,127,0.42)"
+            let codeBorderColor = isOutgoing ? "rgba(255,255,255,0.52)" : "rgba(127,127,127,0.48)"
 
             return """
 <!doctype html>
@@ -832,14 +832,14 @@ private extension View {
     @ViewBuilder
     func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool) -> some View {
         let codeBlockBackground = isOutgoing
-            ? Color.white.opacity(0.22)
-            : Color.primary.opacity(0.12)
+            ? Color.white.opacity(0.4)
+            : Color.primary.opacity(0.24)
         let codeHeaderBackground = isOutgoing
-            ? Color.white.opacity(0.26)
-            : Color.primary.opacity(0.16)
+            ? Color.white.opacity(0.5)
+            : Color.primary.opacity(0.32)
         let codeBorderColor = isOutgoing
-            ? Color.white.opacity(0.32)
-            : Color.primary.opacity(0.2)
+            ? Color.white.opacity(0.46)
+            : Color.primary.opacity(0.3)
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
