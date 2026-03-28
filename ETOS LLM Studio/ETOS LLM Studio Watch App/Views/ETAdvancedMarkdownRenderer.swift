@@ -172,14 +172,14 @@ private extension View {
     @ViewBuilder
     func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool) -> some View {
         let codeBlockBackground = isOutgoing
-            ? Color.white.opacity(0.12)
-            : Color.primary.opacity(0.06)
-        let codeHeaderBackground = isOutgoing
-            ? Color.white.opacity(0.14)
-            : Color.primary.opacity(0.05)
-        let codeBorderColor = isOutgoing
-            ? Color.white.opacity(0.2)
+            ? Color.white.opacity(0.22)
             : Color.primary.opacity(0.12)
+        let codeHeaderBackground = isOutgoing
+            ? Color.white.opacity(0.26)
+            : Color.primary.opacity(0.16)
+        let codeBorderColor = isOutgoing
+            ? Color.white.opacity(0.32)
+            : Color.primary.opacity(0.2)
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
