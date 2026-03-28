@@ -25,7 +25,6 @@ import UserNotifications
 #endif
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
-private let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
 
 @MainActor
 class ChatViewModel: ObservableObject {
@@ -1670,7 +1669,12 @@ class ChatViewModel: ObservableObject {
     nonisolated private static func hasVisibleAssistantBodyContent(_ message: ChatMessage) -> Bool {
         let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return false }
-        return !assistantContentPlaceholders.contains(trimmedContent)
+        switch trimmedContent {
+        case "[图片]", "[圖片]", "[Image]", "[画像]":
+            return false
+        default:
+            return true
+        }
     }
 
 #if canImport(UserNotifications)
