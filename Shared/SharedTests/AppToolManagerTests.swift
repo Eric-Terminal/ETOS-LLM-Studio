@@ -39,6 +39,7 @@ struct AppToolManagerTests {
         let kinds = Set(AppToolKind.allCases)
 
         #expect(kinds.contains(.editMemory))
+        #expect(kinds.contains(.fillUserInput))
         #expect(kinds.contains(.listSandboxDirectory))
         #expect(kinds.contains(.readSandboxFile))
         #expect(kinds.contains(.writeSandboxFile))
@@ -161,6 +162,47 @@ struct AppToolManagerTests {
         )
 
         #expect(result == "文本回显结果：测试文本")
+    }
+
+    @MainActor
+    @Test("填充输入框工具会广播输入框填充请求")
+    func testExecuteFillUserInputToolPostsNotification() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.fillUserInput]
+        )
+
+        var latestRequest: AppToolInputDraftRequest?
+        let observer = NotificationCenter.default.addObserver(
+            forName: .appToolFillUserInputRequested,
+            object: nil,
+            queue: nil
+        ) { notification in
+            latestRequest = AppToolInputDraftRequest.decode(from: notification.userInfo)
+        }
+        defer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        _ = try await manager.executeToolFromChat(
+            toolName: AppToolKind.fillUserInput.toolName,
+            argumentsJSON: #"{"text":"帮我润色这句话","mode":"append"}"#
+        )
+
+        #expect(latestRequest?.text == "帮我润色这句话")
+        #expect(latestRequest?.mode == .append)
     }
 
     @Test("当前会话文件路径命中时应触发会话刷新判断")

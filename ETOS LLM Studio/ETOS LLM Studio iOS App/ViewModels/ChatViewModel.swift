@@ -487,6 +487,14 @@ final class ChatViewModel: ObservableObject {
                 self?.reloadGlobalSystemPromptEntries()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .appToolFillUserInputRequested)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let request = AppToolInputDraftRequest.decode(from: notification.userInfo) else { return }
+                self?.applyToolInputDraftRequest(request)
+            }
+            .store(in: &cancellables)
         
         syncSpeechModelSelection()
         syncTTSModelSelection()
@@ -767,6 +775,24 @@ final class ChatViewModel: ObservableObject {
         } else {
             let needsSpace = !(userInput.last?.isWhitespace ?? true)
             userInput += (needsSpace ? " " : "") + trimmed
+        }
+    }
+
+    private func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
+        let content = request.text
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        switch request.mode {
+        case .replace:
+            userInput = content
+        case .append:
+            if userInput.isEmpty {
+                userInput = content
+            } else if userInput.hasSuffix("\n") || userInput.last?.isWhitespace == true {
+                userInput += content
+            } else {
+                userInput += "\n" + content
+            }
         }
     }
     
