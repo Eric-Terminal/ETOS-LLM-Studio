@@ -989,6 +989,26 @@ private enum ETCodePreviewSupport {
     private static let previewableLanguages: Set<String> = [
         "html", "htm", "xhtml", "xml", "svg"
     ]
+    private static let previewResetStyle = """
+<style id="et-preview-reset">
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 100%;
+    width: 100%;
+  }
+  body {
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  body > :first-child {
+    margin-top: 0 !important;
+  }
+  body > :last-child {
+    margin-bottom: 0 !important;
+  }
+</style>
+"""
 
     static func canPreview(_ language: String?) -> Bool {
         previewableLanguages.contains(normalizedLanguage(language))
@@ -1027,7 +1047,7 @@ private enum ETCodePreviewSupport {
       display: flex;
       align-items: flex-start;
       justify-content: center;
-      padding: 16px;
+      padding: 0;
       box-sizing: border-box;
     }
     .et-svg-wrap svg {
@@ -1053,7 +1073,7 @@ private enum ETCodePreviewSupport {
     private static func wrappedHTMLIfNeeded(_ content: String) -> String {
         let lowercased = content.lowercased()
         if lowercased.contains("<html") || lowercased.contains("<!doctype") {
-            return content
+            return injectingPreviewResetStyle(into: content)
         }
         return """
 <!doctype html>
@@ -1061,18 +1081,44 @@ private enum ETCodePreviewSupport {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      min-height: 100%;
-      background: #FFFFFF;
-      color: #1C1C1E;
-    }
-  </style>
+  \(previewResetStyle)
 </head>
 <body>
 \(content)
+</body>
+</html>
+"""
+    }
+
+    private static func injectingPreviewResetStyle(into html: String) -> String {
+        if html.contains("id=\"et-preview-reset\"") {
+            return html
+        }
+
+        if let headCloseRange = html.range(of: "</head>", options: [.caseInsensitive]) {
+            var output = html
+            output.insert(contentsOf: "\n\(previewResetStyle)\n", at: headCloseRange.lowerBound)
+            return output
+        }
+
+        if let htmlOpenRange = html.range(of: "<html", options: [.caseInsensitive]),
+           let htmlTagClose = html[htmlOpenRange.lowerBound...].firstIndex(of: ">") {
+            var output = html
+            let insertIndex = output.index(after: htmlTagClose)
+            output.insert(contentsOf: "\n<head>\n\(previewResetStyle)\n</head>\n", at: insertIndex)
+            return output
+        }
+
+        return """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  \(previewResetStyle)
+</head>
+<body>
+\(html)
 </body>
 </html>
 """
@@ -1117,19 +1163,30 @@ private struct ETCodePreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            ETCodePreviewWebView(
-                htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle(ETCodePreviewSupport.previewTitle(language))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+        GeometryReader { geometry in
+            ZStack(alignment: .topTrailing) {
+                ETCodePreviewWebView(
+                    htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
+                )
+                .ignoresSafeArea()
+
+                HStack(spacing: 10) {
+                    Text(ETCodePreviewSupport.previewTitle(language))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+
                     Button("关闭") {
                         dismiss()
                     }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
                 }
+                .padding(.top, geometry.safeAreaInsets.top + 8)
+                .padding(.trailing, 12)
             }
         }
     }
@@ -1153,6 +1210,8 @@ private struct ETCodePreviewWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = true
         webView.scrollView.bounces = true
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.contentInset = .zero
+        webView.scrollView.scrollIndicatorInsets = .zero
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsLinkPreview = true
         webView.isUserInteractionEnabled = true
