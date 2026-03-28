@@ -202,15 +202,11 @@ private extension View {
                         Spacer(minLength: 8)
 
                         if ETCodeClipboard.supportsCopy {
-                            Button {
-                                ETCodeClipboard.copy(configuration.content)
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(codeHeaderTextColor)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("复制代码")
+                            ETCodeCopyButton(
+                                content: configuration.content,
+                                normalColor: codeHeaderTextColor,
+                                successColor: isOutgoing ? Color.white : Color.green
+                            )
                         }
                     }
                     .padding(.horizontal, 8)
@@ -261,6 +257,38 @@ private enum ETCodeClipboard {
         #if os(iOS)
         UIPasteboard.general.string = content
         #endif
+    }
+}
+
+private struct ETCodeCopyButton: View {
+    let content: String
+    let normalColor: Color
+    let successColor: Color
+
+    @State private var didCopy = false
+
+    var body: some View {
+        Button {
+            ETCodeClipboard.copy(content)
+            #if os(iOS)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            #endif
+
+            withAnimation(.easeInOut(duration: 0.15)) {
+                didCopy = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    didCopy = false
+                }
+            }
+        } label: {
+            Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(didCopy ? successColor : normalColor)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("复制代码")
     }
 }
 
