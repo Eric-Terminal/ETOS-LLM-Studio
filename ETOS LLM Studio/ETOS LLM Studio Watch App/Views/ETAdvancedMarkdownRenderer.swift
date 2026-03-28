@@ -43,15 +43,15 @@ struct ETAdvancedMarkdownRenderer: View {
 
         for line in lines {
             guard let fence = parseFenceLine(line) else { continue }
-            if let openedFence {
-                let isClosingFence = openedFence.marker == fence.marker
-                    && fence.count >= openedFence.count
+            if let currentFence = openedFence {
+                let isClosingFence = currentFence.marker == fence.marker
+                    && fence.count >= currentFence.count
                     && fence.tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 if isClosingFence {
                     openedFence = nil
                 }
             } else {
-                openedFence = fence
+                openedFence = (marker: fence.marker, count: fence.count)
             }
         }
 
