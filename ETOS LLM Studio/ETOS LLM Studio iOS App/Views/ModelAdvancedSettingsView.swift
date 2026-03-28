@@ -219,6 +219,7 @@ private struct GlobalSystemPromptPickerView: View {
                             }
                         }
                     }
+                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
                             deleteGlobalSystemPromptEntry(entry.id)
