@@ -57,7 +57,18 @@ struct SessionActionsView: View {
                 } label: {
                     Label("发送到 iPhone", systemImage: "iphone")
                 }
+            }
 
+            Section("导出") {
+                NavigationLink {
+                    ChatExportFormatsView(
+                        session: session,
+                        messages: Persistence.loadMessages(for: session.id),
+                        upToMessageID: nil
+                    )
+                } label: {
+                    Label("导出整个会话", systemImage: "square.and.arrow.up")
+                }
             }
 
             Section {

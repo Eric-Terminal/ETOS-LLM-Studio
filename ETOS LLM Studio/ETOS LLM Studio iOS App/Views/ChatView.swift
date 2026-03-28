@@ -44,6 +44,30 @@ private func resolvedFileMimeType(for url: URL) -> String {
     return "application/octet-stream"
 }
 
+private struct ChatTranscriptExportFileDocument: FileDocument {
+    static var readableContentTypes: [UTType] = {
+        var types: [UTType] = [.data, .plainText, .pdf]
+        if let markdown = UTType(filenameExtension: "md") {
+            types.append(markdown)
+        }
+        return types
+    }()
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        self.data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
@@ -74,6 +98,10 @@ struct ChatView: View {
     @State private var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
     @State private var showSessionPickerSearchInput: Bool = false
     @State private var imageDownloadAlertMessage: String?
+    @State private var exportDocument: ChatTranscriptExportFileDocument?
+    @State private var exportContentType: UTType = .plainText
+    @State private var exportDefaultFileName: String = "会话导出"
+    @State private var exportErrorMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatScrollViewportHeight: CGFloat = 0
@@ -100,6 +128,7 @@ struct ChatView: View {
     private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
+    private let transcriptExportService = ChatTranscriptExportService()
     private var tabBarCompensation: CGFloat {
         guard keyboardHeight == 0 else { return 0 }
         let measuredTabBarHeight = UITabBarController().tabBar.frame.height
@@ -338,6 +367,27 @@ struct ChatView: View {
             .sheet(item: $sessionInfo) { info in
                 SessionPickerInfoSheet(payload: info)
             }
+            .fileExporter(
+                isPresented: Binding(
+                    get: { exportDocument != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            exportDocument = nil
+                        }
+                    }
+                ),
+                document: exportDocument,
+                contentType: exportContentType,
+                defaultFilename: exportDefaultFileName
+            ) { result in
+                if case .failure(let error) = result {
+                    exportErrorMessage = String(
+                        format: NSLocalizedString("导出失败：%@", comment: "Export failed alert message"),
+                        error.localizedDescription
+                    )
+                }
+                exportDocument = nil
+            }
             .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
                 Button("仅复制消息历史") {
                     if let message = messageToBranch {
@@ -427,6 +477,20 @@ struct ChatView: View {
                 }
             } message: {
                 Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
+            }
+            .alert("导出失败", isPresented: Binding(
+                get: { exportErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        exportErrorMessage = nil
+                    }
+                }
+            )) {
+                Button("确定", role: .cancel) {
+                    exportErrorMessage = nil
+                }
+            } message: {
+                Text(exportErrorMessage ?? "")
             }
             .alert(
                 Text(NSLocalizedString("提示", comment: "Notice")),
@@ -1227,6 +1291,9 @@ struct ChatView: View {
                     messageCount: viewModel.messageCount(for: session),
                     isCurrent: isCurrent
                 )
+            },
+            onExport: { format in
+                exportSession(session, format: format)
             }
         )
         .padding(.vertical, 10)
@@ -1406,6 +1473,46 @@ struct ChatView: View {
             Label("从此处创建分支", systemImage: "arrow.triangle.branch")
         }
 
+        Menu {
+            Button {
+                exportConversation(format: .pdf, upToMessage: nil)
+            } label: {
+                Label("PDF", systemImage: "doc.richtext")
+            }
+            Button {
+                exportConversation(format: .markdown, upToMessage: nil)
+            } label: {
+                Label("Markdown", systemImage: "number.square")
+            }
+            Button {
+                exportConversation(format: .text, upToMessage: nil)
+            } label: {
+                Label("TXT", systemImage: "doc.plaintext")
+            }
+        } label: {
+            Label("导出整个会话", systemImage: "square.and.arrow.up")
+        }
+
+        Menu {
+            Button {
+                exportConversation(format: .pdf, upToMessage: message)
+            } label: {
+                Label("PDF", systemImage: "doc.richtext")
+            }
+            Button {
+                exportConversation(format: .markdown, upToMessage: message)
+            } label: {
+                Label("Markdown", systemImage: "number.square")
+            }
+            Button {
+                exportConversation(format: .text, upToMessage: message)
+            } label: {
+                Label("TXT", systemImage: "doc.plaintext")
+            }
+        } label: {
+            Label("导出到此消息（含上文）", systemImage: "arrow.up.doc")
+        }
+
         if message.role == .assistant || message.role == .tool || message.role == .system {
             Button {
                 if ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking {
@@ -1494,6 +1601,58 @@ struct ChatView: View {
             } label: {
                 Label("查看消息信息", systemImage: "info.circle")
             }
+        }
+    }
+
+    private func exportConversation(format: ChatTranscriptExportFormat, upToMessage: ChatMessage?) {
+        do {
+            let output = try transcriptExportService.export(
+                session: viewModel.currentSession,
+                messages: viewModel.allMessagesForSession,
+                format: format,
+                upToMessageID: upToMessage?.id
+            )
+            applyExportOutput(output, format: format)
+        } catch {
+            exportErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func exportSession(_ session: ChatSession, format: ChatTranscriptExportFormat) {
+        do {
+            let messages: [ChatMessage]
+            if viewModel.currentSession?.id == session.id {
+                messages = viewModel.allMessagesForSession
+            } else {
+                messages = Persistence.loadMessages(for: session.id)
+            }
+
+            let output = try transcriptExportService.export(
+                session: session,
+                messages: messages,
+                format: format,
+                upToMessageID: nil
+            )
+            applyExportOutput(output, format: format)
+        } catch {
+            exportErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func applyExportOutput(_ output: ChatTranscriptExportOutput, format: ChatTranscriptExportFormat) {
+        exportDocument = ChatTranscriptExportFileDocument(data: output.data)
+        exportContentType = exportContentType(for: format)
+        exportDefaultFileName = (output.suggestedFileName as NSString).deletingPathExtension
+    }
+
+    private func exportContentType(for format: ChatTranscriptExportFormat) -> UTType {
+        switch format {
+        case .pdf:
+            return .pdf
+        case .markdown:
+            return UTType(filenameExtension: "md") ?? .plainText
+        case .text:
+            return .plainText
         }
     }
 
@@ -3014,6 +3173,7 @@ private struct SessionPickerRow: View {
     let onDelete: () -> Void
     let onCancelRename: () -> Void
     let onInfo: () -> Void
+    let onExport: (ChatTranscriptExportFormat) -> Void
 
     @FocusState private var focused: Bool
 
@@ -3107,6 +3267,26 @@ private struct SessionPickerRow: View {
                 onInfo()
             } label: {
                 Label("查看会话信息", systemImage: "info.circle")
+            }
+
+            Menu {
+                Button {
+                    onExport(.pdf)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    onExport(.markdown)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    onExport(.text)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
+            } label: {
+                Label("导出会话", systemImage: "square.and.arrow.up")
             }
 
             Button(role: .destructive) {

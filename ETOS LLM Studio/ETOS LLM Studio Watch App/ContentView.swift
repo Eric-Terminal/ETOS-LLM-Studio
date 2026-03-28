@@ -317,6 +317,8 @@ struct ContentView: View {
                 onJumpToMessageIndex: { displayIndex in
                     jumpToMessage(displayIndex: displayIndex)
                 },
+                session: viewModel.currentSession,
+                allMessages: viewModel.allMessagesForSession,
                 messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                 totalMessages: viewModel.allMessagesForSession.count
             )
