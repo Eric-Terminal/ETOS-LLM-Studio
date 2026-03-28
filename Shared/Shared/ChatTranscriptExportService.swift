@@ -488,23 +488,59 @@ public struct ChatTranscriptExportService {
     }
 
     private func renderReadyAttributedString(fromMarkdown markdown: String) -> NSAttributedString {
+        let normalizedMarkdown = markdownForPDFRendering(markdown)
         if #available(iOS 15.0, watchOS 8.0, *) {
             let options = AttributedString.MarkdownParsingOptions(
                 interpretedSyntax: .full,
                 failurePolicy: .returnPartiallyParsedIfPossible
             )
-            if let parsed = try? AttributedString(markdown: markdown, options: options) {
+            if let parsed = try? AttributedString(markdown: normalizedMarkdown, options: options) {
                 return NSAttributedString(parsed)
             }
         }
 
         let font = CTFontCreateWithName("PingFangSC-Regular" as CFString, 11, nil)
         return NSAttributedString(
-            string: markdown,
+            string: normalizedMarkdown,
             attributes: [
                 NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font
             ]
         )
+    }
+
+    /// 为 PDF 渲染预处理 Markdown：将软换行提升为硬换行，避免被解析后丢失换行。
+    private func markdownForPDFRendering(_ markdown: String) -> String {
+        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard !lines.isEmpty else { return markdown }
+
+        var result: [String] = []
+        result.reserveCapacity(lines.count)
+        var inCodeFence = false
+
+        for index in lines.indices {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let isFenceLine = trimmed.hasPrefix("```")
+            if isFenceLine {
+                inCodeFence.toggle()
+            }
+
+            let isLastLine = index == lines.count - 1
+            if isLastLine {
+                result.append(line)
+                continue
+            }
+
+            let nextLine = lines[index + 1]
+            let isParagraphBoundary = line.isEmpty || nextLine.isEmpty
+            if isFenceLine || inCodeFence || isParagraphBoundary {
+                result.append(line)
+            } else {
+                result.append("\(line)  ")
+            }
+        }
+
+        return result.joined(separator: "\n")
     }
 
     private struct ExportContext {
