@@ -228,7 +228,7 @@ class ChatViewModel: ObservableObject {
     }()
     private var backgroundBlurTask: Task<Void, Never>?
 
-    private static let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+    nonisolated private static let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
 
     enum ImageGenerationFeedbackPhase {
         case idle

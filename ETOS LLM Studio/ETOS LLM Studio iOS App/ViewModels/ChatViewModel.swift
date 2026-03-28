@@ -246,7 +246,7 @@ final class ChatViewModel: ObservableObject {
         let sessionName: String?
     }
 
-    private static let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+    nonisolated private static let assistantContentPlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
     
     // MARK: - Init
     

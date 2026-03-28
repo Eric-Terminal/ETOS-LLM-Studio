@@ -109,13 +109,6 @@ struct ModelAdvancedSettingsView: View {
                                 }
                             }
                         }
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                deleteGlobalSystemPromptEntry(entry.id)
-                            } label: {
-                                Label("删除", systemImage: "trash")
-                            }
-                        }
                     }
                 }
 
