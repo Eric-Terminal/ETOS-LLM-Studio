@@ -1190,8 +1190,13 @@ public final class DailyPulseManager: ObservableObject {
             }
             logger.info("每日脉冲已生成，触发方式: \(trigger.rawValue, privacy: .public)，卡片数: \(cards.count)")
         } catch {
+            if Self.isCancellationError(error) || Task.isCancelled {
+                logger.info("每日脉冲生成已取消，触发方式: \(trigger.rawValue, privacy: .public)")
+                return
+            }
+
             let description = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            if trigger == .manual || (trigger != .delivery && !runs.contains(where: { $0.dayKey == Self.dayKey(for: Date()) })) {
+            if trigger == .manual {
                 lastErrorMessage = description
             }
             logger.error("每日脉冲生成失败: \(description, privacy: .public)")
@@ -2067,6 +2072,17 @@ public final class DailyPulseManager: ObservableObject {
     public nonisolated static func nextDayKey(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
         return dayKey(for: nextDate, calendar: calendar)
+    }
+
+    private nonisolated static func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
 
     private nonisolated static func userFacingDateString(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
