@@ -44,28 +44,25 @@ private func resolvedFileMimeType(for url: URL) -> String {
     return "application/octet-stream"
 }
 
-private struct ChatTranscriptExportFileDocument: FileDocument {
-    static var readableContentTypes: [UTType] = {
-        var types: [UTType] = [.data, .plainText, .pdf]
-        if let markdown = UTType(filenameExtension: "md") {
-            types.append(markdown)
-        }
-        return types
-    }()
+private struct ChatExportSharePayload: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
 
-    var data: Data
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]?
 
-    init(data: Data) {
-        self.data = data
+    init(activityItems: [Any], applicationActivities: [UIActivity]? = nil) {
+        self.activityItems = activityItems
+        self.applicationActivities = applicationActivities
     }
 
-    init(configuration: ReadConfiguration) throws {
-        self.data = configuration.file.regularFileContents ?? Data()
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
-    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 struct ChatView: View {
@@ -98,9 +95,7 @@ struct ChatView: View {
     @State private var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
     @State private var showSessionPickerSearchInput: Bool = false
     @State private var imageDownloadAlertMessage: String?
-    @State private var exportDocument: ChatTranscriptExportFileDocument?
-    @State private var exportContentType: UTType = .plainText
-    @State private var exportDefaultFileName: String = "会话导出"
+    @State private var exportSharePayload: ChatExportSharePayload?
     @State private var exportErrorMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
@@ -367,26 +362,8 @@ struct ChatView: View {
             .sheet(item: $sessionInfo) { info in
                 SessionPickerInfoSheet(payload: info)
             }
-            .fileExporter(
-                isPresented: Binding(
-                    get: { exportDocument != nil },
-                    set: { isPresented in
-                        if !isPresented {
-                            exportDocument = nil
-                        }
-                    }
-                ),
-                document: exportDocument,
-                contentType: exportContentType,
-                defaultFilename: exportDefaultFileName
-            ) { result in
-                if case .failure(let error) = result {
-                    exportErrorMessage = String(
-                        format: NSLocalizedString("导出失败：%@", comment: "Export failed alert message"),
-                        error.localizedDescription
-                    )
-                }
-                exportDocument = nil
+            .sheet(item: $exportSharePayload) { payload in
+                ActivityShareSheet(activityItems: [payload.fileURL])
             }
             .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
                 Button("仅复制消息历史") {
@@ -1612,7 +1589,7 @@ struct ChatView: View {
                 format: format,
                 upToMessageID: upToMessage?.id
             )
-            applyExportOutput(output, format: format)
+            applyExportOutput(output)
         } catch {
             exportErrorMessage = error.localizedDescription
         }
@@ -1633,26 +1610,23 @@ struct ChatView: View {
                 format: format,
                 upToMessageID: nil
             )
-            applyExportOutput(output, format: format)
+            applyExportOutput(output)
         } catch {
             exportErrorMessage = error.localizedDescription
         }
     }
 
-    private func applyExportOutput(_ output: ChatTranscriptExportOutput, format: ChatTranscriptExportFormat) {
-        exportDocument = ChatTranscriptExportFileDocument(data: output.data)
-        exportContentType = exportContentType(for: format)
-        exportDefaultFileName = (output.suggestedFileName as NSString).deletingPathExtension
-    }
-
-    private func exportContentType(for format: ChatTranscriptExportFormat) -> UTType {
-        switch format {
-        case .pdf:
-            return .pdf
-        case .markdown:
-            return UTType(filenameExtension: "md") ?? .plainText
-        case .text:
-            return .plainText
+    private func applyExportOutput(_ output: ChatTranscriptExportOutput) {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+        do {
+            try output.data.write(to: fileURL, options: .atomic)
+            exportSharePayload = ChatExportSharePayload(fileURL: fileURL)
+        } catch {
+            exportErrorMessage = String(
+                format: NSLocalizedString("导出失败：%@", comment: "Export failed alert message"),
+                error.localizedDescription
+            )
         }
     }
 
