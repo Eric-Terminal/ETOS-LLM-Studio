@@ -1053,6 +1053,11 @@ public struct SessionHistorySearchHit: Hashable, Sendable {
 
 /// 历史会话检索工具
 public enum SessionHistorySearchSupport {
+    private enum SearchMatcher {
+        case plain(normalizedQuery: String)
+        case regex(NSRegularExpression)
+    }
+
     /// 归一化检索词，供 UI 层判断当前是否处于检索状态。
     public static func normalizedQuery(_ query: String) -> String {
         normalized(query)
@@ -1066,14 +1071,13 @@ public enum SessionHistorySearchSupport {
         currentSessionMessages: [ChatMessage] = [],
         messageLoader: (UUID) -> [ChatMessage]
     ) -> [UUID: SessionHistorySearchHit] {
-        let normalizedQuery = normalized(query)
-        guard !normalizedQuery.isEmpty else { return [:] }
+        guard let matcher = makeMatcher(query) else { return [:] }
 
         var hits: [UUID: SessionHistorySearchHit] = [:]
         for session in sessions {
             guard let hit = firstHit(
                 in: session,
-                normalizedQuery: normalizedQuery,
+                matcher: matcher,
                 currentSessionID: currentSessionID,
                 currentSessionMessages: currentSessionMessages,
                 messageLoader: messageLoader
@@ -1087,12 +1091,12 @@ public enum SessionHistorySearchSupport {
 
     private static func firstHit(
         in session: ChatSession,
-        normalizedQuery: String,
+        matcher: SearchMatcher,
         currentSessionID: UUID?,
         currentSessionMessages: [ChatMessage],
         messageLoader: (UUID) -> [ChatMessage]
     ) -> SessionHistorySearchHit? {
-        if normalized(session.name).contains(normalizedQuery) {
+        if matches(session.name, with: matcher) {
             return SessionHistorySearchHit(
                 sessionID: session.id,
                 source: .sessionName,
@@ -1101,7 +1105,7 @@ public enum SessionHistorySearchSupport {
         }
 
         if let topicPrompt = nonEmptyTrimmed(session.topicPrompt),
-           normalized(topicPrompt).contains(normalizedQuery) {
+           matches(topicPrompt, with: matcher) {
             return SessionHistorySearchHit(
                 sessionID: session.id,
                 source: .topicPrompt,
@@ -1110,7 +1114,7 @@ public enum SessionHistorySearchSupport {
         }
 
         if let enhancedPrompt = nonEmptyTrimmed(session.enhancedPrompt),
-           normalized(enhancedPrompt).contains(normalizedQuery) {
+           matches(enhancedPrompt, with: matcher) {
             return SessionHistorySearchHit(
                 sessionID: session.id,
                 source: .enhancedPrompt,
@@ -1122,7 +1126,7 @@ public enum SessionHistorySearchSupport {
         for message in messages {
             for versionContent in message.getAllVersions() {
                 guard let content = nonEmptyTrimmed(versionContent) else { continue }
-                guard normalized(content).contains(normalizedQuery) else { continue }
+                guard matches(content, with: matcher) else { continue }
                 return SessionHistorySearchHit(
                     sessionID: session.id,
                     source: source(for: message.role),
@@ -1153,6 +1157,25 @@ public enum SessionHistorySearchSupport {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return trimmed
+    }
+
+    private static func makeMatcher(_ query: String) -> SearchMatcher? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let regex = try? NSRegularExpression(pattern: trimmed, options: [.caseInsensitive]) {
+            return .regex(regex)
+        }
+        return .plain(normalizedQuery: normalized(trimmed))
+    }
+
+    private static func matches(_ text: String, with matcher: SearchMatcher) -> Bool {
+        switch matcher {
+        case .plain(let normalizedQuery):
+            return normalized(text).contains(normalizedQuery)
+        case .regex(let regex):
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return regex.firstMatch(in: text, options: [], range: range) != nil
+        }
     }
 
     private static func normalized(_ text: String) -> String {

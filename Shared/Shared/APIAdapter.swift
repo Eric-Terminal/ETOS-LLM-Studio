@@ -2872,14 +2872,20 @@ public class GeminiAdapter: APIAdapter {
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
 
         let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
-        var parts: [[String: Any]] = [["text": prompt]]
-        for image in referenceImages {
-            parts.append([
-                "inline_data": [
-                    "mime_type": image.mimeType,
-                    "data": image.data.base64EncodedString()
-                ]
-            ])
+        var parts: [[String: Any]] = []
+        if referenceImages.isEmpty {
+            parts.append(["text": prompt])
+        } else {
+            // 与 Gemini 官方示例保持一致：先给参考图，再给编辑指令文本。
+            for image in referenceImages {
+                parts.append([
+                    "inline_data": [
+                        "mime_type": image.mimeType,
+                        "data": image.data.base64EncodedString()
+                    ]
+                ])
+            }
+            parts.append(["text": prompt])
         }
 
         var payload: [String: Any] = [
@@ -2904,7 +2910,7 @@ public class GeminiAdapter: APIAdapter {
         if let maxTokens = overrides["max_tokens"] {
             generationConfig["maxOutputTokens"] = maxTokens
         }
-        if let responseModalities = overrides["response_modalities"] {
+        if let responseModalities = overrides["response_modalities"] ?? overrides["responseModalities"] {
             generationConfig["responseModalities"] = responseModalities
         } else {
             generationConfig["responseModalities"] = ["IMAGE"]

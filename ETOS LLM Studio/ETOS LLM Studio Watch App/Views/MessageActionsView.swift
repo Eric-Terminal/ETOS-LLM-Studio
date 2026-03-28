@@ -30,6 +30,8 @@ struct MessageActionsView: View {
     let isMathRenderingEnabled: Bool
     let onToggleMathRendering: () -> Void
     let onJumpToMessageIndex: (Int) -> Bool
+    let session: ChatSession?
+    let allMessages: [ChatMessage]
     
     let messageIndex: Int?
     let totalMessages: Int
@@ -50,6 +52,8 @@ struct MessageActionsView: View {
         isMathRenderingEnabled: Bool = false,
         onToggleMathRendering: @escaping () -> Void = {},
         onJumpToMessageIndex: @escaping (Int) -> Bool,
+        session: ChatSession?,
+        allMessages: [ChatMessage],
         messageIndex: Int?,
         totalMessages: Int
     ) {
@@ -68,6 +72,8 @@ struct MessageActionsView: View {
         self.isMathRenderingEnabled = isMathRenderingEnabled
         self.onToggleMathRendering = onToggleMathRendering
         self.onJumpToMessageIndex = onJumpToMessageIndex
+        self.session = session
+        self.allMessages = allMessages
         self.messageIndex = messageIndex
         self.totalMessages = totalMessages
     }
@@ -150,6 +156,28 @@ struct MessageActionsView: View {
                             systemImage: isMathRenderingEnabled ? "xmark.circle" : "function"
                         )
                     }
+                }
+            }
+
+            Section("导出") {
+                NavigationLink {
+                    ChatExportFormatsView(
+                        session: session,
+                        messages: allMessages,
+                        upToMessageID: nil
+                    )
+                } label: {
+                    Label("导出整个会话", systemImage: "square.and.arrow.up")
+                }
+
+                NavigationLink {
+                    ChatExportFormatsView(
+                        session: session,
+                        messages: allMessages,
+                        upToMessageID: message.id
+                    )
+                } label: {
+                    Label("导出到此消息（含上文）", systemImage: "arrow.up.doc")
                 }
             }
             

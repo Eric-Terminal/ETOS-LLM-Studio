@@ -1574,6 +1574,30 @@ public class ChatService {
             return
         }
 
+        // 若当前模型具备生图能力，则主聊天输入直接切到生图请求通道。
+        if let selectedModel = selectedModelSubject.value,
+           shouldRouteMessageToImageGeneration(using: selectedModel) {
+            if audioAttachment != nil {
+                let reason = NSLocalizedString("生图模式不支持语音附件。", comment: "Image mode does not support audio attachments")
+                addErrorMessage(reason)
+                requestStatusSubject.send(.error)
+                return
+            }
+            if !fileAttachments.isEmpty {
+                let reason = NSLocalizedString("生图模式仅支持文本提示词和图片参考图。", comment: "Image mode only supports text prompt and reference images")
+                addErrorMessage(reason)
+                requestStatusSubject.send(.error)
+                return
+            }
+
+            await generateImageAndProcessMessage(
+                prompt: content,
+                imageAttachments: imageAttachments,
+                runnableModel: selectedModel
+            )
+            return
+        }
+
         // 准备用户消息和UI占位消息
         let audioPlaceholder = NSLocalizedString("[语音消息]", comment: "Audio message placeholder")
         let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
@@ -3023,6 +3047,11 @@ public class ChatService {
             || lowered.contains("imagen")
             || lowered.contains("image")
             || lowered.contains("dall")
+    }
+
+    private func shouldRouteMessageToImageGeneration(using runnableModel: RunnableModel) -> Bool {
+        runnableModel.model.supportsImageGeneration
+            || likelyImageGenerationModelName(runnableModel.model.modelName)
     }
 
     private func executeImageGenerationRequest(

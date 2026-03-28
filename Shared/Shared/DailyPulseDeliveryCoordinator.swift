@@ -129,8 +129,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         guard granted else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "每日脉冲"
-        content.body = "到了查看今天每日脉冲的时间。打开 ETOS LLM Studio，看看新的主动情报卡片。"
+        content.title = "每日脉冲晨间提醒"
+        content.body = "到了每日脉冲提醒时间。若今天这一期仍在准备中，请稍候片刻，完成后会再收到“已准备好”通知。"
         content.sound = .default
         content.threadIdentifier = "dailyPulse.delivery"
         content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder")

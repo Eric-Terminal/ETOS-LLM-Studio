@@ -71,6 +71,8 @@ class ChatViewModel: ObservableObject {
     @Published var showMemoryEmbeddingErrorAlert: Bool = false
     @Published var memoryEmbeddingErrorMessage: String = ""
     @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
+    @Published var globalSystemPromptEntries: [GlobalSystemPromptEntry] = []
+    @Published var selectedGlobalSystemPromptEntryID: UUID?
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
@@ -90,6 +92,13 @@ class ChatViewModel: ObservableObject {
         }
     }
     @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
+    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = false {
+        didSet {
+            if !enableAutoReasoningPreview {
+                autoReasoningPreviewMessageIDs.removeAll()
+            }
+        }
+    }
     @AppStorage("enableBackground") var enableBackground: Bool = true {
         didSet { refreshBlurredBackgroundImage() }
     }
@@ -204,6 +213,8 @@ class ChatViewModel: ObservableObject {
     private var recordingTimer: Timer?
     private let waveformSampleCount: Int = 24
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    private var autoReasoningPreviewMessageIDs: Set<UUID> = []
+    private var isPersistingGlobalSystemPrompts = false
     private var lastAutoPlayedAssistantMessageID: UUID?
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
@@ -258,6 +269,7 @@ class ChatViewModel: ObservableObject {
         self.chatService = chatService
         self.ttsManager = .shared
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
+        reloadGlobalSystemPromptEntries()
 
         // 设置 Combine 订阅
         setupSubscriptions()
@@ -274,6 +286,26 @@ class ChatViewModel: ObservableObject {
 #endif
         
         logger.info("ChatViewModel initialized and subscribed to ChatService.")
+    }
+
+    private func reloadGlobalSystemPromptEntries() {
+        guard !isPersistingGlobalSystemPrompts else { return }
+        let snapshot = GlobalSystemPromptStore.load()
+        globalSystemPromptEntries = snapshot.entries
+        selectedGlobalSystemPromptEntryID = snapshot.selectedEntryID
+        systemPrompt = snapshot.activeSystemPrompt
+    }
+
+    private func persistGlobalSystemPromptEntries(selectedEntryID: UUID?) {
+        isPersistingGlobalSystemPrompts = true
+        let snapshot = GlobalSystemPromptStore.save(
+            entries: globalSystemPromptEntries,
+            selectedEntryID: selectedEntryID
+        )
+        globalSystemPromptEntries = snapshot.entries
+        selectedGlobalSystemPromptEntryID = snapshot.selectedEntryID
+        systemPrompt = snapshot.activeSystemPrompt
+        isPersistingGlobalSystemPrompts = false
     }
     
     @objc private func handleDidBecomeActive() {
@@ -337,15 +369,18 @@ class ChatViewModel: ObservableObject {
         chatService.requestStatusSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
+                guard let self else { return }
                 switch status {
                 case .started:
-                    self?.isSendingMessage = true
-                    self?.startExtendedSession()
+                    isSendingMessage = true
+                    startExtendedSession()
+                    updateAutoReasoningPreviewState(with: allMessagesForSession)
                 case .finished, .error, .cancelled:
-                    self?.isSendingMessage = false
-                    self?.stopExtendedSession()
+                    isSendingMessage = false
+                    stopExtendedSession()
+                    updateAutoReasoningPreviewState(with: allMessagesForSession)
                     if case .finished = status {
-                        self?.autoPlayLatestAssistantMessageIfNeeded()
+                        autoPlayLatestAssistantMessageIfNeeded()
                     }
                 @unknown default:
                     // 为未来可能的状态保留，不做任何操作
@@ -412,6 +447,13 @@ class ChatViewModel: ObservableObject {
                 if !speaking {
                     self.ttsManager.updateSelectedModel(self.selectedTTSModel)
                 }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadGlobalSystemPromptEntries()
             }
             .store(in: &cancellables)
         
@@ -667,6 +709,51 @@ class ChatViewModel: ObservableObject {
         if titleGenerationModelIdentifier != newIdentifier {
             titleGenerationModelIdentifier = newIdentifier
         }
+    }
+
+    func addGlobalSystemPromptEntry() {
+        let entry = GlobalSystemPromptEntry(title: "", content: "", updatedAt: Date())
+        globalSystemPromptEntries.insert(entry, at: 0)
+        persistGlobalSystemPromptEntries(selectedEntryID: entry.id)
+    }
+
+    func selectGlobalSystemPromptEntry(_ entryID: UUID?) {
+        persistGlobalSystemPromptEntries(selectedEntryID: entryID)
+    }
+
+    func updateSelectedGlobalSystemPromptTitle(_ title: String) {
+        guard let selectedID = selectedGlobalSystemPromptEntryID,
+              let index = globalSystemPromptEntries.firstIndex(where: { $0.id == selectedID }) else { return }
+        updateGlobalSystemPromptEntry(
+            id: selectedID,
+            title: title,
+            content: globalSystemPromptEntries[index].content
+        )
+    }
+
+    func updateSelectedGlobalSystemPromptContent(_ content: String) {
+        guard let selectedID = selectedGlobalSystemPromptEntryID,
+              let index = globalSystemPromptEntries.firstIndex(where: { $0.id == selectedID }) else { return }
+        updateGlobalSystemPromptEntry(
+            id: selectedID,
+            title: globalSystemPromptEntries[index].title,
+            content: content
+        )
+    }
+
+    func updateGlobalSystemPromptEntry(id: UUID, title: String, content: String) {
+        guard let index = globalSystemPromptEntries.firstIndex(where: { $0.id == id }) else { return }
+        globalSystemPromptEntries[index].title = title
+        globalSystemPromptEntries[index].content = content
+        globalSystemPromptEntries[index].updatedAt = Date()
+        persistGlobalSystemPromptEntries(selectedEntryID: selectedGlobalSystemPromptEntryID)
+    }
+
+    func deleteGlobalSystemPromptEntry(id: UUID) {
+        guard let index = globalSystemPromptEntries.firstIndex(where: { $0.id == id }) else { return }
+        globalSystemPromptEntries.remove(at: index)
+        let fallbackSelection = (selectedGlobalSystemPromptEntryID == id) ? globalSystemPromptEntries.first?.id : selectedGlobalSystemPromptEntryID
+        persistGlobalSystemPromptEntries(selectedEntryID: fallbackSelection)
     }
     
     func appendTranscribedText(_ text: String) {
@@ -1084,6 +1171,7 @@ class ChatViewModel: ObservableObject {
     private func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
         let previousMessages = allMessagesForSession
         allMessagesForSession = incomingMessages
+        updateAutoReasoningPreviewState(with: incomingMessages)
 
         if hasMatchingMessageIdentity(previousMessages, incomingMessages) {
             applyIncrementalMessageUpdates(previousMessages: previousMessages, incomingMessages: incomingMessages)
@@ -1521,6 +1609,72 @@ class ChatViewModel: ObservableObject {
                 return trimmedResult.isEmpty ? nil : call.id
             }
         )
+    }
+
+    private func updateAutoReasoningPreviewState(with messages: [ChatMessage]) {
+        guard let latestAssistantMessage = messages.last(where: { $0.role == .assistant }) else {
+            autoReasoningPreviewMessageIDs.removeAll()
+            return
+        }
+        autoReasoningPreviewMessageIDs.formIntersection([latestAssistantMessage.id])
+
+        let hasReasoning = Self.hasReasoningContent(latestAssistantMessage)
+        let hasBodyContent = Self.hasVisibleAssistantBodyContent(latestAssistantMessage)
+        let wasAutoExpanded = autoReasoningPreviewMessageIDs.contains(latestAssistantMessage.id)
+
+        guard let targetExpandedState = Self.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: enableAutoReasoningPreview,
+            isSendingMessage: isSendingMessage,
+            hasReasoning: hasReasoning,
+            hasBodyContent: hasBodyContent,
+            wasAutoExpanded: wasAutoExpanded
+        ) else {
+            if !hasReasoning {
+                autoReasoningPreviewMessageIDs.remove(latestAssistantMessage.id)
+            }
+            return
+        }
+
+        reasoningExpandedState[latestAssistantMessage.id] = targetExpandedState
+        if targetExpandedState {
+            autoReasoningPreviewMessageIDs.insert(latestAssistantMessage.id)
+        } else {
+            autoReasoningPreviewMessageIDs.remove(latestAssistantMessage.id)
+        }
+    }
+
+    nonisolated static func autoReasoningDisclosureTargetState(
+        autoPreviewEnabled: Bool,
+        isSendingMessage: Bool,
+        hasReasoning: Bool,
+        hasBodyContent: Bool,
+        wasAutoExpanded: Bool
+    ) -> Bool? {
+        guard autoPreviewEnabled else { return nil }
+        if isSendingMessage, hasReasoning, !hasBodyContent {
+            return true
+        }
+        if hasBodyContent, wasAutoExpanded {
+            return false
+        }
+        return nil
+    }
+
+    nonisolated private static func hasReasoningContent(_ message: ChatMessage) -> Bool {
+        !(message.reasoningContent ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    nonisolated private static func hasVisibleAssistantBodyContent(_ message: ChatMessage) -> Bool {
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else { return false }
+        switch trimmedContent {
+        case "[图片]", "[圖片]", "[Image]", "[画像]":
+            return false
+        default:
+            return true
+        }
     }
 
 #if canImport(UserNotifications)

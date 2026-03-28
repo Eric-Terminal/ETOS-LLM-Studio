@@ -56,6 +56,20 @@ struct ShortcutSyncTests {
         }
 
         defaults.set("这是同步测试提示词", forKey: "systemPrompt")
+        let promptEntries = [
+            GlobalSystemPromptEntry(
+                id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+                title: "绘画助手",
+                content: "请使用二次元插画风格",
+                updatedAt: Date(timeIntervalSince1970: 1_714_000_000)
+            )
+        ]
+        guard let promptEntriesData = try? JSONEncoder().encode(promptEntries) else {
+            Issue.record("编码全局提示词列表失败")
+            return
+        }
+        defaults.set(promptEntriesData, forKey: GlobalSystemPromptStore.entriesStorageKey)
+        defaults.set("11111111-1111-1111-1111-111111111111", forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
         defaults.set(true, forKey: "enableMarkdown")
         defaults.set(false, forKey: "enableExperimentalToolResultDisplay")
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
@@ -68,6 +82,8 @@ struct ShortcutSyncTests {
 
         let snapshot = decodeSnapshot(snapshotData)
         #expect(snapshot["systemPrompt"] as? String == "这是同步测试提示词")
+        #expect(snapshot[GlobalSystemPromptStore.entriesStorageKey] as? Data == promptEntriesData)
+        #expect(snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] as? String == "11111111-1111-1111-1111-111111111111")
         #expect((snapshot["enableMarkdown"] as? NSNumber)?.boolValue == true)
         #expect((snapshot["enableExperimentalToolResultDisplay"] as? NSNumber)?.boolValue == false)
     }
@@ -87,11 +103,25 @@ struct ShortcutSyncTests {
         defaults.set("旧提示词", forKey: "systemPrompt")
         defaults.set(false, forKey: "enableStreaming")
 
+        let incomingEntries = [
+            GlobalSystemPromptEntry(
+                id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+                title: "代码助手",
+                content: "请优先输出 Swift 代码"
+            )
+        ]
+        guard let incomingEntriesData = try? JSONEncoder().encode(incomingEntries) else {
+            Issue.record("编码待合并全局提示词列表失败")
+            return
+        }
+
         let incomingSnapshot: [String: Any] = [
             "systemPrompt": "新提示词",
             "enableStreaming": true,
             "maxChatHistory": 256,
-            "enableExperimentalToolResultDisplay": false
+            "enableExperimentalToolResultDisplay": false,
+            GlobalSystemPromptStore.entriesStorageKey: incomingEntriesData,
+            GlobalSystemPromptStore.selectedEntryIDStorageKey: "22222222-2222-2222-2222-222222222222"
         ]
         let snapshotData = encodeSnapshot(incomingSnapshot)
         let package = SyncPackage(
@@ -104,12 +134,14 @@ struct ShortcutSyncTests {
         #expect(defaults.bool(forKey: "enableStreaming") == true)
         #expect(defaults.integer(forKey: "maxChatHistory") == 256)
         #expect(defaults.bool(forKey: "enableExperimentalToolResultDisplay") == false)
-        #expect(summary.importedAppStorageValues == 4)
+        #expect(defaults.data(forKey: GlobalSystemPromptStore.entriesStorageKey) == incomingEntriesData)
+        #expect(defaults.string(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) == "22222222-2222-2222-2222-222222222222")
+        #expect(summary.importedAppStorageValues == 6)
         #expect(summary.skippedAppStorageValues == 0)
 
         let summary2 = await SyncEngine.apply(package: package, userDefaults: defaults)
         #expect(summary2.importedAppStorageValues == 0)
-        #expect(summary2.skippedAppStorageValues == 4)
+        #expect(summary2.skippedAppStorageValues == 6)
     }
 
     @Test("legacy global prompt payload is still merged")

@@ -1309,6 +1309,54 @@ struct OpenAIAdapterTests {
         #expect(usage.thinkingTokens == 2)
         #expect(usage.totalTokens == 16)
     }
+
+    @Test("OpenAI 生图无参考图时走 generations 端点")
+    func testOpenAIImageGenerationRequestUsesGenerationsEndpointWhenNoReferenceImages() throws {
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "一只戴墨镜的猫",
+                referenceImages: []
+            )
+        )
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/images/generations")
+        #expect(request.httpMethod == "POST")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(payload["model"] as? String == "test-model")
+        #expect(payload["prompt"] as? String == "一只戴墨镜的猫")
+        #expect(payload["n"] as? Int == 1)
+        #expect(payload["response_format"] as? String == "b64_json")
+    }
+
+    @Test("OpenAI 生图有参考图时走 edits 端点")
+    func testOpenAIImageGenerationRequestUsesEditsEndpointWhenReferenceImagesExist() throws {
+        let referenceImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "ref.png"
+        )
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "把它改成赛博朋克风格",
+                referenceImages: [referenceImage]
+            )
+        )
+        let contentType = try #require(request.value(forHTTPHeaderField: "Content-Type"))
+        let bodyData = try #require(request.httpBody)
+        let bodyString = String(data: bodyData, encoding: .utf8) ?? ""
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/images/edits")
+        #expect(request.httpMethod == "POST")
+        #expect(contentType.contains("multipart/form-data; boundary="))
+        #expect(bodyString.contains("name=\"model\""))
+        #expect(bodyString.contains("name=\"prompt\""))
+        #expect(bodyString.contains("name=\"image\""))
+        #expect(bodyString.contains("filename=\"ref.png\""))
+    }
 }
 
 @Suite("GeminiAdapter Tests")
@@ -1753,6 +1801,56 @@ struct GeminiAdapterTests {
         #expect(delta.id == "function-call-stream")
         #expect(delta.nameFragment == "shortcut_weather")
         #expect(delta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
+    }
+
+    @Test("Gemini 文生图请求走 generateContent 端点并带 key 参数")
+    func testGeminiImageGenerationRequestUsesGenerateContentEndpoint() throws {
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "画一只宇航员猫",
+                referenceImages: []
+            )
+        )
+        let payloadData = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: payloadData) as? [String: Any])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let parts = try #require(contents.first?["parts"] as? [[String: Any]])
+
+        #expect(request.url?.absoluteString.contains("/models/gemini-2.5-pro:generateContent") == true)
+        #expect(request.url?.query?.contains("key=test-key") == true)
+        #expect(parts.count == 1)
+        #expect(parts.first?["text"] as? String == "画一只宇航员猫")
+    }
+
+    @Test("Gemini 图生图请求会先发送 inline_data 再发送文本指令")
+    func testGeminiImageEditRequestPlacesReferenceImagesBeforePromptText() throws {
+        let firstImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "first.png"
+        )
+        let secondImage = ImageAttachment(
+            data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
+            mimeType: "image/jpeg",
+            fileName: "second.jpg"
+        )
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "把第一张图的风格应用到第二张图",
+                referenceImages: [firstImage, secondImage]
+            )
+        )
+        let payloadData = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: payloadData) as? [String: Any])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let parts = try #require(contents.first?["parts"] as? [[String: Any]])
+
+        #expect(parts.count == 3)
+        #expect(parts[0]["inline_data"] != nil)
+        #expect(parts[1]["inline_data"] != nil)
+        #expect(parts[2]["text"] as? String == "把第一张图的风格应用到第二张图")
     }
 }
 
@@ -3989,6 +4087,33 @@ fileprivate struct SessionHistorySearchSupportTests {
 
         #expect(hits[session.id]?.source == .userMessage)
         #expect(hits[session.id]?.preview.contains("大阪旅行清单") == true)
+    }
+
+    @Test("检索支持正则表达式模式")
+    func testSearchHitsSupportsRegexPattern() {
+        let session = ChatSession(id: UUID(), name: "旅行计划")
+        let userMessage = ChatMessage(role: .user, content: "请帮我整理大阪旅行清单")
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "旅行.*清单",
+            messageLoader: { _ in [userMessage] }
+        )
+
+        #expect(hits[session.id]?.source == .userMessage)
+    }
+
+    @Test("非法正则会回退到普通关键词匹配")
+    func testSearchHitsFallsBackWhenRegexIsInvalid() {
+        let session = ChatSession(id: UUID(), name: "处理 [abc 字符串")
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "[abc",
+            messageLoader: { _ in [] }
+        )
+
+        #expect(hits[session.id]?.source == .sessionName)
     }
 
     @Test("当前会话优先使用内存消息检索")

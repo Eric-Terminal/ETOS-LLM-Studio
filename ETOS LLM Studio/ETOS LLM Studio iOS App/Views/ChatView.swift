@@ -44,6 +44,27 @@ private func resolvedFileMimeType(for url: URL) -> String {
     return "application/octet-stream"
 }
 
+private struct ChatExportSharePayload: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]?
+
+    init(activityItems: [Any], applicationActivities: [UIActivity]? = nil) {
+        self.activityItems = activityItems
+        self.applicationActivities = applicationActivities
+    }
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
@@ -68,8 +89,14 @@ struct ChatView: View {
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
     @State private var sessionPickerSearchText: String = ""
+    @State private var sessionPickerSearchHits: [UUID: SessionHistorySearchHit] = [:]
+    @State private var isSessionPickerSearching: Bool = false
+    @State private var sessionPickerLatestSearchToken: Int = 0
+    @State private var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
     @State private var showSessionPickerSearchInput: Bool = false
     @State private var imageDownloadAlertMessage: String?
+    @State private var exportSharePayload: ChatExportSharePayload?
+    @State private var exportErrorMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatScrollViewportHeight: CGFloat = 0
@@ -79,6 +106,7 @@ struct ChatView: View {
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @Namespace private var modelPickerNamespace
+    @Namespace private var sessionPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
     private let chatScrollCoordinateSpace = "chat-scroll-coordinate-space"
@@ -92,8 +120,10 @@ struct ChatView: View {
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     private let modelPickerMorphID = "modelPickerMorph"
+    private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
+    private let transcriptExportService = ChatTranscriptExportService()
     private var tabBarCompensation: CGFloat {
         guard keyboardHeight == 0 else { return 0 }
         let measuredTabBarHeight = UITabBarController().tabBar.frame.height
@@ -332,6 +362,9 @@ struct ChatView: View {
             .sheet(item: $sessionInfo) { info in
                 SessionPickerInfoSheet(payload: info)
             }
+            .sheet(item: $exportSharePayload) { payload in
+                ActivityShareSheet(activityItems: [payload.fileURL])
+            }
             .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
                 Button("仅复制消息历史") {
                     if let message = messageToBranch {
@@ -421,6 +454,20 @@ struct ChatView: View {
                 }
             } message: {
                 Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
+            }
+            .alert("导出失败", isPresented: Binding(
+                get: { exportErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        exportErrorMessage = nil
+                    }
+                }
+            )) {
+                Button("确定", role: .cancel) {
+                    exportErrorMessage = nil
+                }
+            } message: {
+                Text(exportErrorMessage ?? "")
             }
             .alert(
                 Text(NSLocalizedString("提示", comment: "Notice")),
@@ -617,36 +664,12 @@ struct ChatView: View {
     }
 
     private var sessionPickerButtonBackground: some View {
-        navBarIconBackground
+        sessionPickerMorphBackground(isExpanded: false, isSource: !showSessionPickerPanel)
     }
 
+    @ViewBuilder
     private var sessionPickerPanelBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                .fill(modelPickerPanelBaseTint)
-
-            if isLiquidGlassEnabled {
-                if #available(iOS 26.0, *) {
-                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                        .fill(Color.clear)
-                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                                .fill(navBarGlassOverlayColor)
-                        )
-                } else {
-                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                                .fill(navBarGlassOverlayColor)
-                        )
-                }
-            } else {
-                RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            }
-        }
+        sessionPickerMorphBackground(isExpanded: true, isSource: showSessionPickerPanel)
     }
 
     private var modelSubtitle: String {
@@ -713,7 +736,11 @@ struct ChatView: View {
     }
 
     private func resetSessionPickerSearchState() {
+        sessionPickerPendingSearchWorkItem?.cancel()
+        sessionPickerPendingSearchWorkItem = nil
         sessionPickerSearchText = ""
+        sessionPickerSearchHits = [:]
+        isSessionPickerSearching = false
         showSessionPickerSearchInput = false
         sessionPickerSearchFocused = false
     }
@@ -884,22 +911,46 @@ struct ChatView: View {
         .matchedGeometryEffect(id: modelPickerMorphID, in: modelPickerNamespace, isSource: isSource)
     }
 
+    @ViewBuilder
+    private func sessionPickerMorphBackground(isExpanded: Bool, isSource: Bool) -> some View {
+        let cornerRadius = isExpanded ? sessionPickerCornerRadius : navBarIconSize / 2
+
+        ZStack {
+            if isExpanded {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(modelPickerPanelBaseTint)
+            }
+
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
+                } else {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .fill(navBarGlassOverlayColor)
+                        )
+                }
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
+        }
+        .matchedGeometryEffect(id: sessionPickerMorphID, in: sessionPickerNamespace, isSource: isSource)
+    }
+
     private var sessionPickerOverlay: some View {
         let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(sessionPickerSearchText)
         let queryActive = !normalizedQuery.isEmpty
-        let searchHits = queryActive
-            ? SessionHistorySearchSupport.searchHits(
-                sessions: viewModel.chatSessions,
-                query: sessionPickerSearchText,
-                currentSessionID: viewModel.currentSession?.id,
-                currentSessionMessages: viewModel.allMessagesForSession,
-                messageLoader: { sessionID in
-                    Persistence.loadMessages(for: sessionID)
-                }
-            )
-            : [:]
         let displayedSessions = queryActive
-            ? viewModel.chatSessions.filter { searchHits[$0.id] != nil }
+            ? viewModel.chatSessions.filter { sessionPickerSearchHits[$0.id] != nil }
             : viewModel.chatSessions
 
         return GeometryReader { proxy in
@@ -913,19 +964,29 @@ struct ChatView: View {
                     .transition(.opacity)
 
                 VStack(spacing: 12) {
-                    sessionPickerHeader(queryActive: queryActive, displayedCount: displayedSessions.count)
+                    sessionPickerHeader(
+                        queryActive: queryActive,
+                        displayedCount: displayedSessions.count,
+                        isSearching: isSessionPickerSearching
+                    )
 
-                    if displayedSessions.isEmpty {
+                    if queryActive && isSessionPickerSearching {
+                        sessionPickerSearchingState
+                    } else if displayedSessions.isEmpty {
                         sessionPickerEmptyState(queryActive: queryActive)
                     } else {
                         sessionPickerList(
                             displayedSessions: displayedSessions,
-                            searchHits: searchHits,
+                            searchHits: sessionPickerSearchHits,
                             queryActive: queryActive
                         )
                     }
 
-                    sessionPickerFooter(queryActive: queryActive, displayedCount: displayedSessions.count)
+                    sessionPickerFooter(
+                        queryActive: queryActive,
+                        displayedCount: displayedSessions.count,
+                        isSearching: isSessionPickerSearching
+                    )
                 }
                 .frame(width: proxy.size.width, height: panelHeight, alignment: .top)
                 .background(sessionPickerPanelBackground)
@@ -943,16 +1004,35 @@ struct ChatView: View {
                 )
             }
         }
+        .onAppear {
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: sessionPickerSearchText) { _, newValue in
+            scheduleSessionPickerSearch(for: newValue)
+        }
+        .onChange(of: viewModel.chatSessions) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: viewModel.allMessagesForSession) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onDisappear {
+            sessionPickerPendingSearchWorkItem?.cancel()
+            sessionPickerPendingSearchWorkItem = nil
+        }
     }
 
-    private func sessionPickerHeader(queryActive: Bool, displayedCount: Int) -> some View {
+    private func sessionPickerHeader(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("会话")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
                 if queryActive {
-                    Text("匹配 \(displayedCount) / \(viewModel.chatSessions.count)")
+                    Text(isSearching ? "正在搜索历史会话…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count)")
                         .font(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
                 } else {
@@ -1027,6 +1107,18 @@ struct ChatView: View {
         .padding(.bottom, showSessionPickerSearchInput ? 52 : 0)
     }
 
+    private var sessionPickerSearchingState: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+            Text("正在搜索历史会话…")
+                .font(.system(size: 12))
+                .foregroundColor(TelegramColors.navBarSubtitle)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 16)
+    }
+
     private func sessionPickerEmptyState(queryActive: Bool) -> some View {
         VStack(spacing: 8) {
             Text(queryActive ? "未找到匹配会话" : "暂无会话")
@@ -1061,15 +1153,56 @@ struct ChatView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private func sessionPickerFooter(queryActive: Bool, displayedCount: Int) -> some View {
+    private func sessionPickerFooter(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
         Text(
             queryActive
-            ? "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话"
+            ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话")
             : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
         )
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(TelegramColors.navBarSubtitle)
             .padding(.bottom, 14)
+    }
+
+    private func scheduleSessionPickerSearch(for query: String) {
+        sessionPickerPendingSearchWorkItem?.cancel()
+        sessionPickerPendingSearchWorkItem = nil
+
+        let normalized = SessionHistorySearchSupport.normalizedQuery(query)
+        guard !normalized.isEmpty else {
+            sessionPickerSearchHits = [:]
+            isSessionPickerSearching = false
+            return
+        }
+
+        isSessionPickerSearching = true
+        sessionPickerLatestSearchToken += 1
+        let searchToken = sessionPickerLatestSearchToken
+        let sessionsSnapshot = viewModel.chatSessions
+        let currentSessionIDSnapshot = viewModel.currentSession?.id
+        let currentMessagesSnapshot = viewModel.allMessagesForSession
+        let querySnapshot = query
+
+        let workItem = DispatchWorkItem {
+            let hits = SessionHistorySearchSupport.searchHits(
+                sessions: sessionsSnapshot,
+                query: querySnapshot,
+                currentSessionID: currentSessionIDSnapshot,
+                currentSessionMessages: currentMessagesSnapshot,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+            DispatchQueue.main.async {
+                guard searchToken == sessionPickerLatestSearchToken else { return }
+                sessionPickerSearchHits = hits
+                isSessionPickerSearching = false
+                sessionPickerPendingSearchWorkItem = nil
+            }
+        }
+
+        sessionPickerPendingSearchWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 
     private func pickerHeaderActionButton(
@@ -1135,6 +1268,9 @@ struct ChatView: View {
                     messageCount: viewModel.messageCount(for: session),
                     isCurrent: isCurrent
                 )
+            },
+            onExport: { format, includeReasoning in
+                exportSession(session, format: format, includeReasoning: includeReasoning)
             }
         )
         .padding(.vertical, 10)
@@ -1314,6 +1450,84 @@ struct ChatView: View {
             Label("从此处创建分支", systemImage: "arrow.triangle.branch")
         }
 
+        Menu {
+            Menu("包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: true, upToMessage: nil)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: true, upToMessage: nil)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: true, upToMessage: nil)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
+            }
+            Menu("不包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: false, upToMessage: nil)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: false, upToMessage: nil)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: false, upToMessage: nil)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
+            }
+        } label: {
+            Label("导出整个会话", systemImage: "square.and.arrow.up")
+        }
+
+        Menu {
+            Menu("包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: true, upToMessage: message)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: true, upToMessage: message)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: true, upToMessage: message)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
+            }
+            Menu("不包含思考") {
+                Button {
+                    exportConversation(format: .pdf, includeReasoning: false, upToMessage: message)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    exportConversation(format: .markdown, includeReasoning: false, upToMessage: message)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    exportConversation(format: .text, includeReasoning: false, upToMessage: message)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
+            }
+        } label: {
+            Label("导出到此消息（含上文）", systemImage: "arrow.up.doc")
+        }
+
         if message.role == .assistant || message.role == .tool || message.role == .system {
             Button {
                 if ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking {
@@ -1402,6 +1616,65 @@ struct ChatView: View {
             } label: {
                 Label("查看消息信息", systemImage: "info.circle")
             }
+        }
+    }
+
+    private func exportConversation(
+        format: ChatTranscriptExportFormat,
+        includeReasoning: Bool,
+        upToMessage: ChatMessage?
+    ) {
+        do {
+            let output = try transcriptExportService.export(
+                session: viewModel.currentSession,
+                messages: viewModel.allMessagesForSession,
+                format: format,
+                includeReasoning: includeReasoning,
+                upToMessageID: upToMessage?.id
+            )
+            applyExportOutput(output)
+        } catch {
+            exportErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func exportSession(
+        _ session: ChatSession,
+        format: ChatTranscriptExportFormat,
+        includeReasoning: Bool
+    ) {
+        do {
+            let messages: [ChatMessage]
+            if viewModel.currentSession?.id == session.id {
+                messages = viewModel.allMessagesForSession
+            } else {
+                messages = Persistence.loadMessages(for: session.id)
+            }
+
+            let output = try transcriptExportService.export(
+                session: session,
+                messages: messages,
+                format: format,
+                includeReasoning: includeReasoning,
+                upToMessageID: nil
+            )
+            applyExportOutput(output)
+        } catch {
+            exportErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func applyExportOutput(_ output: ChatTranscriptExportOutput) {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+        do {
+            try output.data.write(to: fileURL, options: .atomic)
+            exportSharePayload = ChatExportSharePayload(fileURL: fileURL)
+        } catch {
+            exportErrorMessage = String(
+                format: NSLocalizedString("导出失败：%@", comment: "Export failed alert message"),
+                error.localizedDescription
+            )
         }
     }
 
@@ -2922,6 +3195,7 @@ private struct SessionPickerRow: View {
     let onDelete: () -> Void
     let onCancelRename: () -> Void
     let onInfo: () -> Void
+    let onExport: (ChatTranscriptExportFormat, Bool) -> Void
 
     @FocusState private var focused: Bool
 
@@ -3015,6 +3289,45 @@ private struct SessionPickerRow: View {
                 onInfo()
             } label: {
                 Label("查看会话信息", systemImage: "info.circle")
+            }
+
+            Menu {
+                Menu("包含思考") {
+                    Button {
+                        onExport(.pdf, true)
+                    } label: {
+                        Label("PDF", systemImage: "doc.richtext")
+                    }
+                    Button {
+                        onExport(.markdown, true)
+                    } label: {
+                        Label("Markdown", systemImage: "number.square")
+                    }
+                    Button {
+                        onExport(.text, true)
+                    } label: {
+                        Label("TXT", systemImage: "doc.plaintext")
+                    }
+                }
+                Menu("不包含思考") {
+                    Button {
+                        onExport(.pdf, false)
+                    } label: {
+                        Label("PDF", systemImage: "doc.richtext")
+                    }
+                    Button {
+                        onExport(.markdown, false)
+                    } label: {
+                        Label("Markdown", systemImage: "number.square")
+                    }
+                    Button {
+                        onExport(.text, false)
+                    } label: {
+                        Label("TXT", systemImage: "doc.plaintext")
+                    }
+                }
+            } label: {
+                Label("导出会话", systemImage: "square.and.arrow.up")
             }
 
             Button(role: .destructive) {

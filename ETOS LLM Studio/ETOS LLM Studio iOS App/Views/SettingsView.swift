@@ -45,10 +45,9 @@ struct SettingsView: View {
                     } label: {
                         HStack {
                             Text("模型")
-                            MarqueeText(
-                                content: selectedModelLabel(in: options),
-                                uiFont: .preferredFont(forTextStyle: .body)
-                            )
+                            Text(selectedModelLabel(in: options))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             .foregroundStyle(.secondary)
                             .allowsHitTesting(false)
                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -82,14 +81,20 @@ struct SettingsView: View {
                     ModelAdvancedSettingsView(
                         aiTemperature: $viewModel.aiTemperature,
                         aiTopP: $viewModel.aiTopP,
-                        systemPrompt: $viewModel.systemPrompt,
+                        globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
+                        selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
                         maxChatHistory: $viewModel.maxChatHistory,
                         lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
                         enableStreaming: $viewModel.enableStreaming,
                         enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
                         currentSession: $viewModel.currentSession,
-                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt
+                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+                        addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+                        selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
+                        updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+                        updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
+                        deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
                     )
                 } label: {
                     Label("高级模型设置", systemImage: "slider.vertical.3")
@@ -205,6 +210,7 @@ struct SettingsView: View {
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         enableExperimentalToolResultDisplay: $viewModel.enableExperimentalToolResultDisplay,
+                        enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
                         allBackgrounds: viewModel.backgroundImages
                     )
                 } label: {

@@ -142,20 +142,14 @@ private struct WatchSessionSearchView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText: String = ""
+    @State private var committedSearchText: String = ""
+    @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
+    @State private var isSearching: Bool = false
+    @State private var latestSearchToken: Int = 0
+    @State private var pendingSearchWorkItem: DispatchWorkItem?
 
     private var normalizedQuery: String {
-        SessionHistorySearchSupport.normalizedQuery(searchText)
-    }
-
-    private var searchHits: [UUID: SessionHistorySearchHit] {
-        guard !normalizedQuery.isEmpty else { return [:] }
-        return SessionHistorySearchSupport.searchHits(
-            sessions: sessions,
-            query: searchText,
-            messageLoader: { sessionID in
-                Persistence.loadMessages(for: sessionID)
-            }
-        )
+        SessionHistorySearchSupport.normalizedQuery(committedSearchText)
     }
 
     private var displayedSessions: [ChatSession] {
@@ -167,12 +161,13 @@ private struct WatchSessionSearchView: View {
         List {
             Section {
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
                     TextField("搜索会话标题或消息", text: $searchText.watchKeyboardNewlineBinding())
+                        .onSubmit {
+                            submitSearch()
+                        }
                     if !searchText.isEmpty {
                         Button {
-                            searchText = ""
+                            clearSearch()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
@@ -184,9 +179,17 @@ private struct WatchSessionSearchView: View {
 
             Section {
                 if normalizedQuery.isEmpty {
-                    Text("输入关键词后显示匹配结果。")
+                    Text("输入关键词后点完成开始搜索。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                } else if isSearching {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text("正在搜索历史会话…")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     Text("匹配 \(displayedSessions.count) / \(sessions.count) 个会话")
                         .font(.footnote)
@@ -209,6 +212,14 @@ private struct WatchSessionSearchView: View {
             }
         }
         .navigationTitle("搜索会话")
+        .onChange(of: sessions) { _, _ in
+            guard !normalizedQuery.isEmpty else { return }
+            scheduleSearch(for: committedSearchText)
+        }
+        .onDisappear {
+            pendingSearchWorkItem?.cancel()
+            pendingSearchWorkItem = nil
+        }
     }
 
     @ViewBuilder
@@ -274,6 +285,58 @@ private struct WatchSessionSearchView: View {
         case .errorMessage:
             return "错误消息"
         }
+    }
+
+    private func submitSearch() {
+        let committed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        committedSearchText = committed
+        scheduleSearch(for: committed)
+    }
+
+    private func clearSearch() {
+        searchText = ""
+        committedSearchText = ""
+        pendingSearchWorkItem?.cancel()
+        pendingSearchWorkItem = nil
+        searchHits = [:]
+        isSearching = false
+    }
+
+    private func scheduleSearch(for query: String) {
+        pendingSearchWorkItem?.cancel()
+        pendingSearchWorkItem = nil
+
+        let normalized = SessionHistorySearchSupport.normalizedQuery(query)
+        guard !normalized.isEmpty else {
+            searchHits = [:]
+            isSearching = false
+            return
+        }
+
+        isSearching = true
+        latestSearchToken += 1
+        let searchToken = latestSearchToken
+        let sessionSnapshot = sessions
+        let querySnapshot = query
+
+        let workItem = DispatchWorkItem {
+            let hits = SessionHistorySearchSupport.searchHits(
+                sessions: sessionSnapshot,
+                query: querySnapshot,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+            DispatchQueue.main.async {
+                guard searchToken == latestSearchToken else { return }
+                searchHits = hits
+                isSearching = false
+                pendingSearchWorkItem = nil
+            }
+        }
+
+        pendingSearchWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 }
 
