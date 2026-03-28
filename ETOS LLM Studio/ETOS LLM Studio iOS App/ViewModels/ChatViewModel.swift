@@ -271,9 +271,7 @@ final class ChatViewModel: ObservableObject {
     private func reloadGlobalSystemPromptEntries() {
         guard !isPersistingGlobalSystemPrompts else { return }
         let snapshot = GlobalSystemPromptStore.load()
-        globalSystemPromptEntries = snapshot.entries
-        selectedGlobalSystemPromptEntryID = snapshot.selectedEntryID
-        systemPrompt = snapshot.activeSystemPrompt
+        applyGlobalSystemPromptSnapshot(snapshot)
     }
 
     private func persistGlobalSystemPromptEntries(selectedEntryID: UUID?) {
@@ -282,10 +280,20 @@ final class ChatViewModel: ObservableObject {
             entries: globalSystemPromptEntries,
             selectedEntryID: selectedEntryID
         )
-        globalSystemPromptEntries = snapshot.entries
-        selectedGlobalSystemPromptEntryID = snapshot.selectedEntryID
-        systemPrompt = snapshot.activeSystemPrompt
+        applyGlobalSystemPromptSnapshot(snapshot)
         isPersistingGlobalSystemPrompts = false
+    }
+
+    private func applyGlobalSystemPromptSnapshot(_ snapshot: GlobalSystemPromptSnapshot) {
+        if globalSystemPromptEntries != snapshot.entries {
+            globalSystemPromptEntries = snapshot.entries
+        }
+        if selectedGlobalSystemPromptEntryID != snapshot.selectedEntryID {
+            selectedGlobalSystemPromptEntryID = snapshot.selectedEntryID
+        }
+        if systemPrompt != snapshot.activeSystemPrompt {
+            systemPrompt = snapshot.activeSystemPrompt
+        }
     }
     
     private func registerLifecycleObservers() {

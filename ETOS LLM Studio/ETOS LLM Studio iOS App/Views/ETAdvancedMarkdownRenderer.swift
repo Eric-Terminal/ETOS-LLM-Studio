@@ -21,15 +21,21 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableMathRendering: Bool
     @Environment(\.colorScheme) private var colorScheme
 
-    private var shouldUseMathWebRenderer: Bool {
-        enableAdvancedRenderer
-            && enableMathRendering
-            && ETMathContentParser.containsMath(in: content)
+    private var shouldUseWebRenderer: Bool {
+        enableAdvancedRenderer && (containsMathContent || containsMermaidContent)
+    }
+
+    private var containsMathContent: Bool {
+        enableMathRendering && ETMathContentParser.containsMath(in: content)
+    }
+
+    private var containsMermaidContent: Bool {
+        enableMarkdown && Self.containsMermaidFence(in: content)
     }
 
     var body: some View {
         let normalizedContent = Self.normalizedMarkdownForStreaming(content)
-        if shouldUseMathWebRenderer {
+        if shouldUseWebRenderer {
             ETMathWebMarkdownView(
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
@@ -83,6 +89,22 @@ struct ETAdvancedMarkdownRenderer: View {
         let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
         let tail = String(trimmed[startIndex...])
         return (marker: marker, count: count, tail: tail)
+    }
+
+    private static func containsMermaidFence(in text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+        for line in lines {
+            guard let fence = parseFenceLine(line) else { continue }
+            let infoToken = fence.tail
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isWhitespace)
+                .first?
+                .lowercased()
+            if infoToken == "mermaid" || infoToken == "mmd" {
+                return true
+            }
+        }
+        return false
     }
 
     @ViewBuilder
@@ -166,6 +188,12 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         )
     }
 
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.navigationDelegate = nil
+        webView.stopLoading()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
+    }
+
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         static let heightMessageName = "etMathHeight"
 
@@ -174,6 +202,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         var lastShellConfiguration: ShellConfiguration?
         var pendingPayload: Payload?
         var isShellLoaded = false
+        var isShellLoading = false
 
         init(renderedHeight: Binding<CGFloat>) { self._renderedHeight = renderedHeight }
 
@@ -182,15 +211,25 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             shellConfiguration: ShellConfiguration,
             on webView: WKWebView
         ) {
-            let shouldReloadShell = lastShellConfiguration != shellConfiguration || !isShellLoaded
-            guard lastPayload != payload || shouldReloadShell else { return }
+            let shellConfigurationChanged = lastShellConfiguration != shellConfiguration
+            let shouldStartShellLoad: Bool
+            if shellConfigurationChanged {
+                shouldStartShellLoad = true
+            } else if isShellLoaded {
+                shouldStartShellLoad = false
+            } else {
+                shouldStartShellLoad = !isShellLoading
+            }
+
+            guard lastPayload != payload || shellConfigurationChanged || shouldStartShellLoad else { return }
 
             lastPayload = payload
             pendingPayload = payload
 
-            if shouldReloadShell {
+            if shouldStartShellLoad {
                 lastShellConfiguration = shellConfiguration
                 isShellLoaded = false
+                isShellLoading = true
                 webView.loadHTMLString(shellConfiguration.htmlDocument, baseURL: nil)
                 return
             }
@@ -224,6 +263,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            isShellLoading = false
             isShellLoaded = true
             applyPendingPayloadIfPossible(on: webView)
         }
@@ -233,6 +273,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             didFail navigation: WKNavigation!,
             withError error: Error
         ) {
+            isShellLoading = false
             isShellLoaded = false
         }
 
@@ -241,6 +282,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             didFailProvisionalNavigation navigation: WKNavigation!,
             withError error: Error
         ) {
+            isShellLoading = false
             isShellLoaded = false
         }
     }
@@ -444,6 +486,28 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       vertical-align: top;
     }
 
+    .et-mermaid-scroll {
+      margin: 0.3em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+    .et-mermaid-block {
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
+    }
+    .et-mermaid-block .mermaid {
+      width: max-content;
+      min-width: 100%;
+    }
+    .et-mermaid-block svg {
+      display: block;
+      max-width: none;
+      height: auto;
+    }
+
     .katex {
       color: var(--text);
       font-size: 1em;
@@ -499,6 +563,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       container.innerHTML = escaped;
     }
 
+    function __rawHasMermaidFence(raw) {
+      if (!raw) {
+        return false;
+      }
+      return /(^|\\n)\\s*(```|~~~)\\s*(mermaid|mmd)(\\s+[^\\n]*)?(\\n|$)/i.test(raw);
+    }
+
     function __languageLabelFromCodeElement(codeElement) {
       if (!codeElement) {
         return "";
@@ -513,6 +584,94 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         }
       }
       return (codeElement.getAttribute("data-language") || "").trim();
+    }
+
+    function __isMermaidLanguage(language) {
+      const normalized = (language || "").trim().toLowerCase();
+      return normalized === "mermaid" || normalized === "mmd";
+    }
+
+    function __prepareMermaidBlocks(container) {
+      const codeNodes = container.querySelectorAll("pre > code");
+      let index = 0;
+      codeNodes.forEach((codeNode) => {
+        if (!__isMermaidLanguage(__languageLabelFromCodeElement(codeNode))) {
+          return;
+        }
+        const preNode = codeNode.parentElement;
+        if (!preNode || !preNode.parentNode) {
+          return;
+        }
+
+        const source = (codeNode.textContent || "").trim();
+        if (!source) {
+          return;
+        }
+
+        const scroll = document.createElement("div");
+        scroll.className = "et-mermaid-scroll";
+        const block = document.createElement("div");
+        block.className = "et-mermaid-block";
+        const mermaidNode = document.createElement("div");
+        mermaidNode.className = "mermaid";
+        mermaidNode.setAttribute("data-et-mermaid-id", `et-mermaid-${Date.now()}-${index}`);
+        mermaidNode.textContent = source;
+        index += 1;
+
+        block.appendChild(mermaidNode);
+        scroll.appendChild(block);
+
+        preNode.parentNode.insertBefore(scroll, preNode);
+        preNode.remove();
+      });
+    }
+
+    function __ensureMermaidConfigured() {
+      if (!window.mermaid || window.__etMermaidConfigured) {
+        return;
+      }
+
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      try {
+        window.mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: prefersDark ? "dark" : "default",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+        });
+        window.__etMermaidConfigured = true;
+      } catch (_) {}
+    }
+
+    function __setMermaidFallback(node, source) {
+      const fallback = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = source;
+      fallback.appendChild(code);
+      node.innerHTML = "";
+      node.appendChild(fallback);
+    }
+
+    async function __renderMermaidBlocks(container) {
+      if (!window.mermaid) {
+        return;
+      }
+      __ensureMermaidConfigured();
+      const nodes = container.querySelectorAll(".mermaid[data-et-mermaid-id]");
+      for (const node of nodes) {
+        const source = (node.textContent || "").trim();
+        if (!source) {
+          continue;
+        }
+        const renderId = node.getAttribute("data-et-mermaid-id")
+          || `et-mermaid-${Math.random().toString(36).slice(2)}`;
+        try {
+          const result = await window.mermaid.render(renderId, source);
+          node.innerHTML = result.svg;
+        } catch (_) {
+          __setMermaidFallback(node, source);
+        }
+      }
     }
 
     async function __copyText(content) {
@@ -614,8 +773,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       const rectHeight = content ? content.getBoundingClientRect().height : 0;
       const scrollHeight = content ? content.scrollHeight : 0;
       const height = Math.max(rectHeight, scrollHeight, 1);
+      const nextHeight = Math.max(1, Math.ceil(height));
+      const lastHeight = Number(window.__etLastNotifiedHeight || 0);
+      if (Math.abs(lastHeight - nextHeight) < 0.5) {
+        return;
+      }
+      window.__etLastNotifiedHeight = nextHeight;
       if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etMathHeight) {
-        window.webkit.messageHandlers.etMathHeight.postMessage(height);
+        window.webkit.messageHandlers.etMathHeight.postMessage(nextHeight);
       }
     }
 
@@ -707,6 +872,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
           gfm: true
         });
         __renderMathBlocks(container, tokenized.blocks);
+        __prepareMermaidBlocks(container);
       } else if (!__enableMarkdown) {
         __setFallbackContent();
       } else {
@@ -729,16 +895,23 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         } catch (_) {}
       }
 
-      __notifyHeightNow();
+      __renderMermaidBlocks(container)
+        .catch(() => {})
+        .then(() => __notifyHeightNow());
     }
 
     function __scheduleBootstrap(retryCount = 0) {
-      __render();
-
       const markdownReady = !__enableMarkdown || !!window.marked;
       const mathReady = !!window.renderMathInElement && !!window.katex;
       const codeReady = !__enableMarkdown || !!window.hljs;
-      if ((markdownReady && mathReady && codeReady) || retryCount >= 80) {
+      const mermaidReady = !__enableMarkdown || !__rawHasMermaidFence(__state.raw) || !!window.mermaid;
+      const allReady = markdownReady && mathReady && codeReady && mermaidReady;
+
+      if (retryCount == 0 || allReady || retryCount >= 80) {
+        __render();
+      }
+
+      if (allReady || retryCount >= 80) {
         return;
       }
 
@@ -803,6 +976,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
   <script
     src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
     onerror="this.onerror=null;this.src='https://unpkg.com/katex@0.16.11/dist/contrib/auto-render.min.js';"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
+    onerror="this.onerror=null;this.src='https://unpkg.com/mermaid@11/dist/mermaid.min.js';"
   ></script>
 </body>
 </html>
