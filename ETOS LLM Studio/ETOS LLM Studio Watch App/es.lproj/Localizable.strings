@@ -1254,3 +1254,10 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "补充评论（会进入同一工单）" = "Agregar a Comentario (va ser posted a el same ticket)";
 "发送中..." = "Enviando…";
 "发送评论" = "Enviar Comentario";
+
+/* Localization completion (auto-appended) */
+"自动预览思考过程" = "Vista previa automática del razonamiento";
+"开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。" = "Al activarlo, la respuesta de la IA se expandirá automáticamente si solo contiene razonamiento; en cuanto aparezca el texto principal, se contraerá automáticamente.";
+"👻 发现 %d 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 ¡Se encontraron %d sesiones fantasma merodeando! Sus archivos de mensajes ya no están, pero los registros siguen ahí.";
+"👻 哇！%d 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 ¡Vaya! ¡%d sesiones fantasma! Esto parece un cementerio de sesiones. ¿Quieres limpiarlas?";
+"👻👻👻 天呐！发现了 %d 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 ¡Dios mío! ¡Se detectaron %d sesiones fantasma! Este lugar está embrujado. Se recomienda limpiar de inmediato.";

@@ -457,11 +457,23 @@ public enum StorageUtility {
         case 1:
             return NSLocalizedString("👻 发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了...", comment: "")
         case 2...5:
-            return NSLocalizedString("👻 发现 \(count) 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。", comment: "")
+            return String(
+                format: NSLocalizedString("👻 发现 %d 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。", comment: ""),
+                locale: Locale.current,
+                count
+            )
         case 6...10:
-            return NSLocalizedString("👻 哇！\(count) 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？", comment: "")
+            return String(
+                format: NSLocalizedString("👻 哇！%d 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？", comment: ""),
+                locale: Locale.current,
+                count
+            )
         default:
-            return NSLocalizedString("👻👻👻 天呐！发现了 \(count) 个幽灵会话！这里已经闹鬼了！建议立即清理。", comment: "")
+            return String(
+                format: NSLocalizedString("👻👻👻 天呐！发现了 %d 个幽灵会话！这里已经闹鬼了！建议立即清理。", comment: ""),
+                locale: Locale.current,
+                count
+            )
         }
     }
     

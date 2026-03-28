@@ -1255,3 +1255,8 @@
 "补充评论（会进入同一工单）" = "Add a comment (will be posted to the same ticket)";
 "发送中..." = "Sending...";
 "发送评论" = "Send Comment";
+
+/* Localization completion (auto-appended) */
+"👻 发现 %d 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 Found %d ghost sessions roaming around! Their message files are gone, but the records remain.";
+"👻 哇！%d 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 Wow! %d ghost sessions! It's like a session graveyard. Want to exorcise them?";
+"👻👻👻 天呐！发现了 %d 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 Oh no! Found %d ghost sessions! This place is haunted. Recommend cleaning up now.";
