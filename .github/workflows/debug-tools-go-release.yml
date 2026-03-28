@@ -50,6 +50,7 @@ jobs:
           set -euo pipefail
 
           mkdir -p dist
+          mkdir -p dist/bin
 
           BINARY_BASE="etos-debug-server-go-${{ matrix.goos }}-${{ matrix.goarch }}"
           BINARY_NAME="$BINARY_BASE"
@@ -57,12 +58,14 @@ jobs:
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
 
+          BINARY_OUTPUT="dist/bin/${BINARY_NAME}"
+
           CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o "dist/${BINARY_NAME}" .
+            go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o "${BINARY_OUTPUT}" .
 
           PACKAGE_DIR="dist/${BINARY_BASE}"
           mkdir -p "$PACKAGE_DIR"
-          cp "dist/${BINARY_NAME}" "$PACKAGE_DIR/"
+          cp "${BINARY_OUTPUT}" "$PACKAGE_DIR/"
           cp README.md "$PACKAGE_DIR/"
 
           if [ "${{ matrix.goos }}" = "windows" ]; then
