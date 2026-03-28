@@ -3991,6 +3991,33 @@ fileprivate struct SessionHistorySearchSupportTests {
         #expect(hits[session.id]?.preview.contains("大阪旅行清单") == true)
     }
 
+    @Test("检索支持正则表达式模式")
+    func testSearchHitsSupportsRegexPattern() {
+        let session = ChatSession(id: UUID(), name: "旅行计划")
+        let userMessage = ChatMessage(role: .user, content: "请帮我整理大阪旅行清单")
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "旅行.*清单",
+            messageLoader: { _ in [userMessage] }
+        )
+
+        #expect(hits[session.id]?.source == .userMessage)
+    }
+
+    @Test("非法正则会回退到普通关键词匹配")
+    func testSearchHitsFallsBackWhenRegexIsInvalid() {
+        let session = ChatSession(id: UUID(), name: "处理 [abc 字符串")
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "[abc",
+            messageLoader: { _ in [] }
+        )
+
+        #expect(hits[session.id]?.source == .sessionName)
+    }
+
     @Test("当前会话优先使用内存消息检索")
     func testSearchHitsPrefersCurrentSessionMessages() {
         let session = ChatSession(id: UUID(), name: "开发讨论")
