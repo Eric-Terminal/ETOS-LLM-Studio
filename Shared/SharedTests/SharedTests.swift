@@ -1802,6 +1802,56 @@ struct GeminiAdapterTests {
         #expect(delta.nameFragment == "shortcut_weather")
         #expect(delta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
     }
+
+    @Test("Gemini 文生图请求走 generateContent 端点并带 key 参数")
+    func testGeminiImageGenerationRequestUsesGenerateContentEndpoint() throws {
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "画一只宇航员猫",
+                referenceImages: []
+            )
+        )
+        let payloadData = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: payloadData) as? [String: Any])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let parts = try #require(contents.first?["parts"] as? [[String: Any]])
+
+        #expect(request.url?.absoluteString.contains("/models/gemini-2.5-pro:generateContent") == true)
+        #expect(request.url?.query?.contains("key=test-key") == true)
+        #expect(parts.count == 1)
+        #expect(parts.first?["text"] as? String == "画一只宇航员猫")
+    }
+
+    @Test("Gemini 图生图请求会先发送 inline_data 再发送文本指令")
+    func testGeminiImageEditRequestPlacesReferenceImagesBeforePromptText() throws {
+        let firstImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "first.png"
+        )
+        let secondImage = ImageAttachment(
+            data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
+            mimeType: "image/jpeg",
+            fileName: "second.jpg"
+        )
+        let request = try #require(
+            adapter.buildImageGenerationRequest(
+                for: dummyModel,
+                prompt: "把第一张图的风格应用到第二张图",
+                referenceImages: [firstImage, secondImage]
+            )
+        )
+        let payloadData = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: payloadData) as? [String: Any])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let parts = try #require(contents.first?["parts"] as? [[String: Any]])
+
+        #expect(parts.count == 3)
+        #expect(parts[0]["inline_data"] != nil)
+        #expect(parts[1]["inline_data"] != nil)
+        #expect(parts[2]["text"] as? String == "把第一张图的风格应用到第二张图")
+    }
 }
 
 @Suite("AnthropicAdapter Tests")
