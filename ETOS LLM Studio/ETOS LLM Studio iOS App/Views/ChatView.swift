@@ -155,7 +155,7 @@ struct ChatView: View {
         return false
     }
     private var navBarGlassOverlayColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.2)
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
     }
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
@@ -835,8 +835,10 @@ struct ChatView: View {
 
     private func modelPickerRow(_ runnable: RunnableModel) -> some View {
         let isSelected = runnable.id == viewModel.selectedModel?.id
-        let baseFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
-        let selectedFill = colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
+        let baseFill = colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05)
+        let selectedFill = colorScheme == .dark ? Color.black.opacity(0.36) : Color.black.opacity(0.08)
+        let borderOpacitySelected: Double = colorScheme == .dark ? 0.18 : 0.35
+        let borderOpacityUnselected: Double = colorScheme == .dark ? 0.1 : 0.15
 
         return Button {
             viewModel.setSelectedModel(runnable)
@@ -865,7 +867,7 @@ struct ChatView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.white.opacity(isSelected ? 0.35 : 0.15), lineWidth: isSelected ? 0.8 : 0.5)
+                    .stroke(Color.white.opacity(isSelected ? borderOpacitySelected : borderOpacityUnselected), lineWidth: isSelected ? 0.8 : 0.5)
             )
         }
         .buttonStyle(.plain)
@@ -1227,8 +1229,10 @@ struct ChatView: View {
     private func sessionPickerRow(_ session: ChatSession, searchSummary: String?) -> some View {
         let isCurrent = session.id == viewModel.currentSession?.id
         let isEditing = editingSessionID == session.id
-        let baseFill = colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
-        let selectedFill = colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
+        let baseFill = colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05)
+        let selectedFill = colorScheme == .dark ? Color.black.opacity(0.36) : Color.black.opacity(0.08)
+        let borderOpacitySelected: Double = colorScheme == .dark ? 0.16 : 0.3
+        let borderOpacityUnselected: Double = colorScheme == .dark ? 0.1 : 0.15
 
         return SessionPickerRow(
             session: session,
@@ -1281,7 +1285,7 @@ struct ChatView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(isCurrent ? 0.3 : 0.15), lineWidth: isCurrent ? 0.8 : 0.5)
+                .stroke(Color.white.opacity(isCurrent ? borderOpacitySelected : borderOpacityUnselected), lineWidth: isCurrent ? 0.8 : 0.5)
         )
     }
 
@@ -2632,7 +2636,7 @@ private struct TelegramMessageComposer: View {
     }
     
     private var glassOverlayColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.2)
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
     }
     
     private var glassStrokeColor: Color {

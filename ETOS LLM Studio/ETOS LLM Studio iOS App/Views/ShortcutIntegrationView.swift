@@ -375,6 +375,7 @@ private struct ShortcutToolDetailView: View {
                         Text("桥接优先").tag(ShortcutRunModeHint.bridge)
                     }
                     .pickerStyle(.segmented)
+                    .tint(.blue)
                 }
 
                 Section("工具描述") {

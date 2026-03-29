@@ -54,6 +54,7 @@ struct ModelSettingsView: View {
                     Text("原始 JSON").tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
                 .pickerStyle(.segmented)
+                .tint(.blue)
             }
 
             if requestBodyMode == .expression {

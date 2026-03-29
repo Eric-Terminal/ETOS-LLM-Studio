@@ -1353,6 +1353,7 @@ private struct WorldbookSessionBindingView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .tint(.blue)
             }
 
             Section {
