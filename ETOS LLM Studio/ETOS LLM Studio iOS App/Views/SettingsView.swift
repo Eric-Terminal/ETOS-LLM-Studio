@@ -87,6 +87,7 @@ struct SettingsView: View {
                         lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
                         enableStreaming: $viewModel.enableStreaming,
                         enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+                        enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
                         currentSession: $viewModel.currentSession,
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,

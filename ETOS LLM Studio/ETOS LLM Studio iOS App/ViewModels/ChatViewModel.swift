@@ -102,6 +102,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = true
     @AppStorage("enableResponseSpeedMetrics") var enableResponseSpeedMetrics: Bool = true
+    @AppStorage("enableOpenAIStreamIncludeUsage") var enableOpenAIStreamIncludeUsage: Bool = true
     @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 0
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
         didSet { refreshBlurredBackgroundImage() }

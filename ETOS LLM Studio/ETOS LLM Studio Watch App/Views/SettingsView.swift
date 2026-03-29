@@ -125,6 +125,7 @@ struct SettingsView: View {
                         lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
                         enableStreaming: $viewModel.enableStreaming,
                         enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+                        enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
                         currentSession: $viewModel.currentSession,
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
