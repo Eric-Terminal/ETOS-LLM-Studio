@@ -216,7 +216,7 @@ public extension APIAdapter {
 public class OpenAIAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
-    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_-]", options: [])
     static let streamIncludeUsageControlKey = "openai_stream_include_usage"
     private static let responsesModeSignalKeys: Set<String> = [
         "background",
@@ -282,6 +282,17 @@ public class OpenAIAdapter: APIAdapter {
         let prefixLength = maxLength - 1 - hash.count
         let prefix = name.prefix(prefixLength)
         return "\(prefix)_\(hash)"
+    }
+
+    private func shouldAutoAttachStreamUsage(for model: RunnableModel) -> Bool {
+        if model.model.mainstreamFamily == .glm {
+            return false
+        }
+        let normalizedBaseURL = model.provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalizedBaseURL.contains("bigmodel.cn") {
+            return false
+        }
+        return true
     }
 
     private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
@@ -1275,7 +1286,8 @@ public class OpenAIAdapter: APIAdapter {
 
         if let shouldStream = finalPayload["stream"] as? Bool, shouldStream {
             var streamOptions = finalPayload["stream_options"] as? [String: Any] ?? [:]
-            if shouldIncludeUsageInStream {
+            let canAutoAttachUsage = shouldAutoAttachStreamUsage(for: model)
+            if shouldIncludeUsageInStream, canAutoAttachUsage {
                 if streamOptions["include_usage"] == nil {
                     streamOptions["include_usage"] = true
                 }
@@ -1863,7 +1875,7 @@ private func applyHeaderOverrides(_ overrides: [String: String], apiKey: String?
 public class GeminiAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "GeminiAdapter")
-    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3027,7 +3039,7 @@ public class GeminiAdapter: APIAdapter {
 public class AnthropicAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AnthropicAdapter")
-    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)

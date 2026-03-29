@@ -1177,6 +1177,74 @@ struct OpenAIAdapterTests {
         #expect(jsonPayload[OpenAIAdapter.streamIncludeUsageControlKey] == nil)
     }
 
+    @Test("GLM 模型默认不自动附带 include_usage")
+    func testGLMStreamingRequestSkipsIncludeUsageByDefault() throws {
+        let glmModel = RunnableModel(
+            provider: Provider(
+                id: UUID(),
+                name: "智谱",
+                baseURL: "https://open.bigmodel.cn/api/paas/v4",
+                apiKeys: ["test-key"],
+                apiFormat: "openai-compatible"
+            ),
+            model: Model(modelName: "glm-4.7")
+        )
+        let messages = [ChatMessage(role: .user, content: "你好")]
+        guard let request = adapter.buildChatRequest(
+            for: glmModel,
+            commonPayload: ["stream": true],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any] else {
+            Issue.record("无法解析 GLM 请求体。")
+            return
+        }
+
+        #expect(jsonPayload["stream_options"] == nil)
+    }
+
+    @Test("OpenAI 工具名中的点号会被替换为下划线")
+    func testToolNameDotIsSanitizedToUnderscore() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "mcp_12345678_filesystem.read_file",
+                description: "读取文件",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([:]),
+                    "required": .array([])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "你好")]
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let payloadTools = jsonPayload["tools"] as? [[String: Any]],
+        let firstTool = payloadTools.first,
+        let function = firstTool["function"] as? [String: Any],
+        let functionName = function["name"] as? String else {
+            Issue.record("无法解析工具名。")
+            return
+        }
+
+        #expect(functionName == "mcp_12345678_filesystem_read_file")
+        #expect(!functionName.contains("."))
+    }
+
     @Test("OpenAI 可切换为 Responses API 请求体")
     func testBuildResponsesAPIRequestPayload() throws {
         let responseModel = RunnableModel(
