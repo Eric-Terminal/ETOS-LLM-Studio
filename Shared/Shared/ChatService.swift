@@ -55,7 +55,7 @@ private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet,
 public class ChatService {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
-    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_-]", options: [])
+    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
     private static let modelOrderStorageKey = "modelOrder.runnableModels"
     private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
     private static let ttsModelStorageKey = "ttsModelIdentifier"
