@@ -16,6 +16,7 @@ public protocol MemoryEmbeddingGenerating {
 public enum MemoryEmbeddingError: LocalizedError {
     case emptyInput
     case noAvailableModel
+    case preferredModelUnavailable(String)
     case adapterMissing(String)
     case requestBuildFailed
     case httpStatus(Int, String?)
@@ -28,6 +29,8 @@ public enum MemoryEmbeddingError: LocalizedError {
             return "未提供任何待编码文本。"
         case .noAvailableModel:
             return "尚未配置可用的嵌入模型。"
+        case .preferredModelUnavailable(let identifier):
+            return "已选嵌入模型不可用或不支持嵌入：\(identifier)"
         case .adapterMissing(let format):
             return "找不到 '\(format)' 对应的嵌入适配器。"
         case .requestBuildFailed:
@@ -50,7 +53,7 @@ public enum MemoryEmbeddingError: LocalizedError {
         case .httpStatus(let code, _):
             // 4xx 客户端错误通常是硬错误，不应重试
             return (400...499).contains(code)
-        case .noAvailableModel, .adapterMissing, .requestBuildFailed:
+        case .noAvailableModel, .preferredModelUnavailable, .adapterMissing, .requestBuildFailed:
             return true
         default:
             return false
@@ -89,11 +92,12 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         }
         
         let runnableModels = loadRunnableModels()
-        guard !runnableModels.isEmpty else {
+        let embeddingModels = runnableModels.filter { $0.model.supportsEmbedding }
+        guard !embeddingModels.isEmpty else {
             throw MemoryEmbeddingError.noAvailableModel
         }
         
-        let targetModel = resolveModel(preferredID: preferredModelID, from: runnableModels)
+        let targetModel = try resolveModel(preferredID: preferredModelID, from: embeddingModels)
         guard let adapter = adapters[targetModel.provider.apiFormat] else {
             throw MemoryEmbeddingError.adapterMissing(targetModel.provider.apiFormat)
         }
@@ -144,11 +148,17 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         }
     }
     
-    private func resolveModel(preferredID: String?, from models: [RunnableModel]) -> RunnableModel {
+    private func resolveModel(preferredID: String?, from models: [RunnableModel]) throws -> RunnableModel {
         if let preferredID,
+           !preferredID.isEmpty,
            let match = models.first(where: { $0.id == preferredID }) {
             return match
         }
+
+        if let preferredID, !preferredID.isEmpty {
+            throw MemoryEmbeddingError.preferredModelUnavailable(preferredID)
+        }
+
         return models[0]
     }
 }

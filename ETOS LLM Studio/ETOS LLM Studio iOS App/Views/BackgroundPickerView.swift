@@ -340,6 +340,7 @@ private struct BackgroundCropEditorView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .tint(.blue)
                 .padding(.horizontal)
                 
                 Text("拖动和缩放以调整取景范围")

@@ -102,6 +102,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = true
     @AppStorage("enableResponseSpeedMetrics") var enableResponseSpeedMetrics: Bool = true
+    @AppStorage("enableOpenAIStreamIncludeUsage") var enableOpenAIStreamIncludeUsage: Bool = true
     @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 0
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
         didSet { refreshBlurredBackgroundImage() }
@@ -169,7 +170,7 @@ final class ChatViewModel: ObservableObject {
     }
     
     var embeddingModelOptions: [RunnableModel] {
-        configuredModels
+        configuredModels.filter { $0.model.supportsEmbedding }
     }
 
     var titleGenerationModelOptions: [RunnableModel] {
@@ -202,6 +203,9 @@ final class ChatViewModel: ObservableObject {
     private var pendingBackgroundReplyNotificationContext: PendingBackgroundReplyNotificationContext?
     private var lastNotifiedAssistantMarker: AssistantReplyMarker?
     private var lastAutoPlayedAssistantMessageID: UUID?
+    private var lastMemoryEmbeddingErrorSignature: String = ""
+    private var lastMemoryEmbeddingErrorDate: Date = .distantPast
+    private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
 #if canImport(UIKit)
     private var activeBackgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
 #endif
@@ -344,6 +348,24 @@ final class ChatViewModel: ObservableObject {
         isApplicationActive = true
         // 预留: 恢复 UI 或触发刷新
     }
+
+    private func shouldPresentMemoryEmbeddingErrorAlert(message: String) -> Bool {
+        guard !message.isEmpty else { return false }
+        guard isApplicationActive else { return false }
+
+        let now = Date()
+        if showMemoryEmbeddingErrorAlert && memoryEmbeddingErrorMessage == message {
+            return false
+        }
+        if lastMemoryEmbeddingErrorSignature == message,
+           now.timeIntervalSince(lastMemoryEmbeddingErrorDate) < memoryEmbeddingErrorAlertCooldown {
+            return false
+        }
+
+        lastMemoryEmbeddingErrorSignature = message
+        lastMemoryEmbeddingErrorDate = now
+        return true
+    }
     
     // MARK: - Combine Subscriptions
     
@@ -455,13 +477,15 @@ final class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] error in
                 guard let self else { return }
-                self.memoryEmbeddingErrorMessage = String(
+                let message = String(
                     format: NSLocalizedString(
                         "记忆已保存，但向量嵌入失败：%@",
                         comment: "Message shown when memory text is stored but embedding generation failed."
                     ),
                     error.localizedDescription
                 )
+                guard self.shouldPresentMemoryEmbeddingErrorAlert(message: message) else { return }
+                self.memoryEmbeddingErrorMessage = message
                 self.showMemoryEmbeddingErrorAlert = true
             }
             .store(in: &cancellables)
@@ -855,7 +879,7 @@ final class ChatViewModel: ObservableObject {
             return
         }
         
-        guard !embeddingModelOptions.isEmpty else { return }
+        guard !configuredModels.isEmpty else { return }
         
         selectedEmbeddingModel = nil
         memoryEmbeddingModelIdentifier = ""

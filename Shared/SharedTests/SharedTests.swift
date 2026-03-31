@@ -1130,6 +1130,53 @@ struct OpenAIAdapterTests {
         #expect(part.reasoningContent == nil)
     }
 
+    @Test("OpenAI 流式请求默认附带 include_usage")
+    func testStreamingRequestIncludesUsageByDefault() throws {
+        let messages = [ChatMessage(role: .user, content: "你好")]
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: ["stream": true],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let streamOptions = jsonPayload["stream_options"] as? [String: Any] else {
+            Issue.record("流式请求体缺少 stream_options。")
+            return
+        }
+
+        #expect(streamOptions["include_usage"] as? Bool == true)
+    }
+
+    @Test("OpenAI 流式请求可关闭 include_usage")
+    func testStreamingRequestCanDisableIncludeUsage() throws {
+        let messages = [ChatMessage(role: .user, content: "你好")]
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [
+                "stream": true,
+                OpenAIAdapter.streamIncludeUsageControlKey: false
+            ],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any] else {
+            Issue.record("无法解析请求体。")
+            return
+        }
+
+        #expect(jsonPayload["stream_options"] == nil)
+        #expect(jsonPayload[OpenAIAdapter.streamIncludeUsageControlKey] == nil)
+    }
+
     @Test("OpenAI 可切换为 Responses API 请求体")
     func testBuildResponsesAPIRequestPayload() throws {
         let responseModel = RunnableModel(

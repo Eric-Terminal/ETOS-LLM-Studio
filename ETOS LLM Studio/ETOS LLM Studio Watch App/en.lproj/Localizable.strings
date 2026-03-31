@@ -763,6 +763,8 @@
 "启用响应测速" = "Enable response speed metrics";
 "响应测速" = "Response metrics";
 "开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。" = "When enabled, records total time for each API request; streaming also tracks time to first token and token/s.";
+"流式附带官方 Token 用量" = "Include official token usage in streaming";
+"“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。" = "When enabled, OpenAI-compatible streaming requests send stream_options.include_usage=true. Disable this if a provider does not support it.";
 "首字时间" = "Time to first token";
 "总回复时间" = "Total response time";
 "测速 Tokens" = "Speed tokens";

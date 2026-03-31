@@ -1057,6 +1057,7 @@ private struct ShortcutToolCenterDetailView: View {
                             .tag(ShortcutRunModeHint.bridge)
                     }
                     .pickerStyle(.segmented)
+                    .tint(.blue)
                 }
 
                 Section(NSLocalizedString("工具描述", comment: "Tool description section")) {

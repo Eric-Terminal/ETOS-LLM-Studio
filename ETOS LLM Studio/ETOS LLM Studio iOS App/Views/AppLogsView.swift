@@ -31,6 +31,7 @@ struct AppLogsView: View {
                     Text("开发者").tag(AppLogChannel.developer)
                 }
                 .pickerStyle(.segmented)
+                .tint(.blue)
             }
 
             Section("筛选") {

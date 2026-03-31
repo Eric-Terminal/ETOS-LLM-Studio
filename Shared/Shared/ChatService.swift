@@ -2617,7 +2617,11 @@ public class ChatService {
             }
         }
         
-        let commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
+        var commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
+        if adapter is OpenAIAdapter {
+            let includeUsageInStream = UserDefaults.standard.object(forKey: "enableOpenAIStreamIncludeUsage") as? Bool ?? true
+            commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
+        }
         let requestStartedAt = Date()
         let requestLogContext = RequestLogContext(
             requestID: UUID(),

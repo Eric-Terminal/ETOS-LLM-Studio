@@ -25,6 +25,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var lazyLoadMessageCount: Int
     @Binding var enableStreaming: Bool
     @Binding var enableResponseSpeedMetrics: Bool
+    @Binding var enableOpenAIStreamIncludeUsage: Bool
     @Binding var enableAutoSessionNaming: Bool
     @Binding var currentSession: ChatSession?
     @Binding var includeSystemTimeInPrompt: Bool
@@ -159,11 +160,14 @@ struct ModelAdvancedSettingsView: View {
 
             Section(
                 header: Text(NSLocalizedString("响应测速", comment: "Response speed metrics section title")),
-                footer: Text(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))
+                footer: Text(
+                    "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
+                )
                     .font(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
+                Toggle(NSLocalizedString("流式附带官方 Token 用量", comment: "Enable stream include usage in OpenAI-compatible requests"), isOn: $enableOpenAIStreamIncludeUsage)
             }
 
             Section(header: Text("参数调整")) {

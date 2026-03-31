@@ -17,6 +17,7 @@ struct TTSSettingsView: View {
                     Text("自动").tag(TTSPlaybackMode.auto)
                 }
                 .pickerStyle(.segmented)
+                .tint(.blue)
 
                 Text("自动模式会优先系统 TTS，失败后自动回退云端。")
                     .font(.footnote)

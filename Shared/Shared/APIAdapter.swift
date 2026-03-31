@@ -217,6 +217,7 @@ public class OpenAIAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    static let streamIncludeUsageControlKey = "openai_stream_include_usage"
     private static let responsesModeSignalKeys: Set<String> = [
         "background",
         "context_management",
@@ -232,7 +233,8 @@ public class OpenAIAdapter: APIAdapter {
     private static let openAIControlOverrideKeys: Set<String> = [
         "openai_api",
         "openai_api_mode",
-        "use_responses_api"
+        "use_responses_api",
+        streamIncludeUsageControlKey
     ]
     private static let chatCompletionsOnlyKeys: Set<String> = [
         "functions",
@@ -1263,17 +1265,28 @@ public class OpenAIAdapter: APIAdapter {
             return dict
         }
 
+        let shouldIncludeUsageInStream = boolValue(from: commonPayload[Self.streamIncludeUsageControlKey]) ?? true
+
         var finalPayload = overrides
         finalPayload.merge(commonPayload) { _, new in new }
+        finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload["model"] = model.model.modelName
         finalPayload["messages"] = apiMessages
 
         if let shouldStream = finalPayload["stream"] as? Bool, shouldStream {
             var streamOptions = finalPayload["stream_options"] as? [String: Any] ?? [:]
-            if streamOptions["include_usage"] == nil {
-                streamOptions["include_usage"] = true
+            if shouldIncludeUsageInStream {
+                if streamOptions["include_usage"] == nil {
+                    streamOptions["include_usage"] = true
+                }
+            } else {
+                streamOptions.removeValue(forKey: "include_usage")
             }
-            finalPayload["stream_options"] = streamOptions
+            if streamOptions.isEmpty {
+                finalPayload.removeValue(forKey: "stream_options")
+            } else {
+                finalPayload["stream_options"] = streamOptions
+            }
         }
 
         if let tools, !tools.isEmpty {
@@ -1389,6 +1402,7 @@ public class OpenAIAdapter: APIAdapter {
 
         var finalPayload = overrides
         finalPayload.merge(commonPayload) { _, new in new }
+        finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload["model"] = model.model.modelName
         finalPayload["input"] = inputItems
 
