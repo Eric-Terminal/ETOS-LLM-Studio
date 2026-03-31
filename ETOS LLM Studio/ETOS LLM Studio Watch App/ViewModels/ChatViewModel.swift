@@ -70,6 +70,7 @@ class ChatViewModel: ObservableObject {
     @Published var dimensionMismatchMessage: String = ""
     @Published var showMemoryEmbeddingErrorAlert: Bool = false
     @Published var memoryEmbeddingErrorMessage: String = ""
+    @Published var memoryRetryStoppedNoticeMessage: String?
     @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
     @Published var globalSystemPromptEntries: [GlobalSystemPromptEntry] = []
     @Published var selectedGlobalSystemPromptEntryID: UUID?
@@ -222,6 +223,7 @@ class ChatViewModel: ObservableObject {
     private var lastMemoryEmbeddingErrorSignature: String = ""
     private var lastMemoryEmbeddingErrorDate: Date = .distantPast
     private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
+    private var memoryRetryStoppedNoticeTask: Task<Void, Never>?
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 6
@@ -443,6 +445,7 @@ class ChatViewModel: ObservableObject {
                     ),
                     error.localizedDescription
                 )
+                self.presentMemoryRetryStoppedNotice()
                 guard self.shouldPresentMemoryEmbeddingErrorAlert(message: message) else { return }
                 self.memoryEmbeddingErrorMessage = message
                 self.showMemoryEmbeddingErrorAlert = true
@@ -1469,6 +1472,25 @@ class ChatViewModel: ObservableObject {
         lastMemoryEmbeddingErrorSignature = message
         lastMemoryEmbeddingErrorDate = now
         return true
+    }
+
+    private func presentMemoryRetryStoppedNotice() {
+        let message = NSLocalizedString(
+            "长期记忆嵌入已停止自动重试，请前往“记忆设置”检查嵌入模型。",
+            comment: "Non-modal notice shown when automatic memory embedding retry is stopped."
+        )
+        memoryRetryStoppedNoticeMessage = message
+
+        memoryRetryStoppedNoticeTask?.cancel()
+        memoryRetryStoppedNoticeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                self.memoryRetryStoppedNoticeMessage = nil
+                self.memoryRetryStoppedNoticeTask = nil
+            }
+        }
     }
 
     private func syncTitleGenerationModelSelection() {

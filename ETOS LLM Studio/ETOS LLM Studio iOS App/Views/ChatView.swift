@@ -313,6 +313,17 @@ struct ChatView: View {
                 if showSessionPickerPanel {
                     sessionPickerOverlay
                 }
+
+                if let notice = viewModel.memoryRetryStoppedNoticeMessage {
+                    VStack {
+                        memoryRetryStoppedNoticeBanner(text: notice)
+                            .padding(.top, 12)
+                            .padding(.horizontal, 12)
+                        Spacer()
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(30)
+                }
             }
             .background(
                 GeometryReader { proxy in
@@ -490,10 +501,53 @@ struct ChatView: View {
             } message: {
                 Text(viewModel.memoryEmbeddingErrorMessage)
             }
+            .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
         }
     }
     
     // MARK: - Background
+
+    private func memoryRetryStoppedNoticeBanner(text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                viewModel.memoryRetryStoppedNoticeMessage = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .padding(6)
+                    .background(
+                        Circle()
+                            .fill(Color.primary.opacity(0.08))
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("关闭提示")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 3)
+    }
     
     /// Telegram 风格的背景层
     private var telegramBackgroundLayer: some View {

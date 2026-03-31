@@ -111,14 +111,61 @@ struct ContentView: View {
                 }
             }
 
+            if let notice = viewModel.memoryRetryStoppedNoticeMessage {
+                VStack {
+                    memoryRetryStoppedNoticeBanner(text: notice)
+                        .padding(.top, 8)
+                        .padding(.horizontal, 8)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(20)
+            }
+
             VStack {
                 Spacer()
                 TTSFloatingController()
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
     }
     
     // MARK: - 视图组件
+
+    private func memoryRetryStoppedNoticeBanner(text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+
+            Text(text)
+                .font(.footnote)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                viewModel.memoryRetryStoppedNoticeMessage = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("关闭提示")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.black.opacity(0.18))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+    }
     
     @ViewBuilder
     private func sheetView(for item: ActiveSheet) -> some View {
