@@ -121,6 +121,12 @@ public class MemoryManager {
     private let embeddingRetryPolicy: MemoryEmbeddingRetryPolicy
     private let consistencyCheckDefaultDelay: TimeInterval = 2.0
     private let storageRootDirectory: URL?
+    private let maxAutoReconcileAttemptsPerMemory: Int = 3
+    private let autoRetryStateQueue = DispatchQueue(label: "com.etos.memory.auto-retry.state.queue")
+    private var autoReconcileFailureCounts: [UUID: Int] = [:]
+    private var autoReconcileSuspendedByHardError: Bool = false
+    private var autoReconcileModelIdentifierSnapshot: String = ""
+    private var consistencyCheckScheduled: Bool = false
 
     private static var isRunningUnitTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -260,7 +266,9 @@ public class MemoryManager {
         } catch {
             logger.error("添加记忆失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
-            scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
+            if shouldScheduleAutoRetry(for: memory.id, error: error) {
+                scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
+            }
         }
     }
     
@@ -290,7 +298,9 @@ public class MemoryManager {
         } catch {
             logger.error("恢复外部记忆失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
-            scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
+            if shouldScheduleAutoRetry(for: memory.id, error: error) {
+                scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
+            }
             return false
         }
     }
@@ -324,7 +334,9 @@ public class MemoryManager {
         } catch {
             logger.error("更新记忆失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
-            scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
+            if shouldScheduleAutoRetry(for: updatedMemory.id, error: error) {
+                scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
+            }
         }
     }
 
@@ -335,6 +347,7 @@ public class MemoryManager {
         cachedMemories.removeAll { idsToDelete.contains($0.id) }
         internalMemoriesPublisher.send(cachedMemories)
         persistRawMemories()
+        resetAutoRetryState(for: idsToDelete)
         
         removeVectorEntries(for: idsToDelete)
         saveIndex()
@@ -384,6 +397,7 @@ public class MemoryManager {
             throw MemoryEmbeddingError.noAvailableModel
         }
         logger.info("正在重新生成全部记忆嵌入...")
+        resetAllAutoRetryState()
         let memories = cachedMemories
         let totalMemories = memories.count
         let jobID = UUID()
@@ -741,6 +755,7 @@ public class MemoryManager {
         }
         
         cacheMemory(memory)
+        resetAutoRetryState(for: memory.id)
         saveIndex()
     }
     
@@ -776,7 +791,15 @@ public class MemoryManager {
         }
         
         let providers = ConfigLoader.loadProviders()
-        return !providers.isEmpty && providers.contains { !$0.models.isEmpty }
+        for provider in providers {
+            for model in provider.models {
+                let runnable = RunnableModel(provider: provider, model: model)
+                if runnable.id == selectedModelID {
+                    return model.supportsEmbedding
+                }
+            }
+        }
+        return false
     }
     
     /// 判断是否为硬错误（400/401/403等，不应重试）
@@ -786,7 +809,7 @@ public class MemoryManager {
             case .httpStatus(let code, _):
                 // 4xx客户端错误通常是硬错误，不应重试
                 return (400...499).contains(code)
-            case .noAvailableModel, .adapterMissing, .requestBuildFailed:
+            case .noAvailableModel, .preferredModelUnavailable, .adapterMissing, .requestBuildFailed:
                 return true
             default:
                 return false
@@ -816,18 +839,38 @@ public class MemoryManager {
     }
     
     private func scheduleConsistencyCheck(after delay: TimeInterval = 0) {
-        Task { [weak self] in
-            guard let self else { return }
+        let shouldSchedule = autoRetryStateQueue.sync { () -> Bool in
+            guard !autoReconcileSuspendedByHardError else { return false }
+            guard !consistencyCheckScheduled else { return false }
+            consistencyCheckScheduled = true
+            return true
+        }
+        guard shouldSchedule else { return }
+
+        Task {
+            defer {
+                autoRetryStateQueue.sync {
+                    consistencyCheckScheduled = false
+                }
+            }
             if delay > 0 {
                 let nanoseconds = UInt64(delay * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: nanoseconds)
             }
-            _ = await self.reconcilePendingEmbeddings()
+            _ = await reconcilePendingEmbeddings()
         }
     }
     
     @discardableResult
     internal func reconcilePendingEmbeddings() async -> Int {
+        refreshAutoReconcileStateIfModelChanged()
+
+        let suspendedByHardError = autoRetryStateQueue.sync { autoReconcileSuspendedByHardError }
+        if suspendedByHardError {
+            logger.warning("检测到嵌入硬错误，自动补偿已熔断，等待用户修正配置后再恢复。")
+            return 0
+        }
+
         let memoryIDs = Set(cachedMemories.map { $0.id })
         guard !memoryIDs.isEmpty else { return 0 }
         
@@ -838,7 +881,7 @@ public class MemoryManager {
         }
         
         removeOrphanedVectorEntries(validMemoryIDs: memoryIDs)
-        let missingMemories = memoriesMissingEmbeddings(validMemoryIDs: memoryIDs)
+        let missingMemories = memoriesMissingEmbeddings(validMemoryIDs: memoryIDs).filter { shouldAttemptAutoReconcile(for: $0.id) }
         guard !missingMemories.isEmpty else { return 0 }
         
         logger.info("检测到 \(missingMemories.count) 条记忆缺少嵌入，尝试自动补偿。")
@@ -935,8 +978,101 @@ public class MemoryManager {
         } catch {
             logger.error("补写记忆嵌入失败：\(error.localizedDescription)")
             notifyEmbeddingErrorIfNeeded(error)
-            scheduleConsistencyCheck(after: max(consistencyCheckDefaultDelay, embeddingRetryPolicy.initialDelay))
+            if shouldScheduleAutoRetry(for: memory.id, error: error) {
+                scheduleConsistencyCheck(after: max(consistencyCheckDefaultDelay, embeddingRetryPolicy.initialDelay))
+            }
             return false
+        }
+    }
+
+    private func refreshAutoReconcileStateIfModelChanged() {
+        let currentIdentifier = preferredEmbeddingModelIdentifier() ?? ""
+        let didReset = autoRetryStateQueue.sync { () -> Bool in
+            if autoReconcileModelIdentifierSnapshot == currentIdentifier {
+                return false
+            }
+            autoReconcileModelIdentifierSnapshot = currentIdentifier
+            autoReconcileFailureCounts.removeAll()
+            autoReconcileSuspendedByHardError = false
+            consistencyCheckScheduled = false
+            return true
+        }
+        if didReset {
+            logger.info("嵌入模型已变更，自动补偿重试状态已重置。")
+        }
+    }
+
+    private func shouldAttemptAutoReconcile(for memoryID: UUID) -> Bool {
+        autoRetryStateQueue.sync {
+            (autoReconcileFailureCounts[memoryID] ?? 0) < maxAutoReconcileAttemptsPerMemory
+        }
+    }
+
+    private enum AutoRetryDecision {
+        case schedule
+        case stopByLimit(currentAttempt: Int)
+        case stopByHardError
+        case stopByFuse
+    }
+
+    private func shouldScheduleAutoRetry(for memoryID: UUID, error: Error) -> Bool {
+        refreshAutoReconcileStateIfModelChanged()
+
+        let decision = autoRetryStateQueue.sync { () -> AutoRetryDecision in
+            if autoReconcileSuspendedByHardError {
+                return .stopByFuse
+            }
+
+            if isHardError(error) {
+                autoReconcileSuspendedByHardError = true
+                autoReconcileFailureCounts[memoryID] = maxAutoReconcileAttemptsPerMemory
+                return .stopByHardError
+            }
+
+            let currentAttempt = (autoReconcileFailureCounts[memoryID] ?? 0) + 1
+            autoReconcileFailureCounts[memoryID] = currentAttempt
+
+            if currentAttempt >= maxAutoReconcileAttemptsPerMemory {
+                return .stopByLimit(currentAttempt: currentAttempt)
+            }
+            return .schedule
+        }
+
+        switch decision {
+        case .schedule:
+            return true
+        case .stopByLimit(let currentAttempt):
+            logger.error("记忆 \(memoryID.uuidString) 自动补偿重试次数达到上限（\(currentAttempt) 次），停止自动重试。")
+            return false
+        case .stopByHardError:
+            logger.fault("检测到嵌入硬错误，自动补偿已熔断，停止后续自动重试。")
+            return false
+        case .stopByFuse:
+            logger.warning("自动补偿处于熔断状态，跳过本次重试。")
+            return false
+        }
+    }
+
+    private func resetAutoRetryState(for memoryID: UUID) {
+        autoRetryStateQueue.sync {
+            autoReconcileFailureCounts.removeValue(forKey: memoryID)
+        }
+    }
+
+    private func resetAutoRetryState(for memoryIDs: Set<UUID>) {
+        guard !memoryIDs.isEmpty else { return }
+        autoRetryStateQueue.sync {
+            for memoryID in memoryIDs {
+                autoReconcileFailureCounts.removeValue(forKey: memoryID)
+            }
+        }
+    }
+
+    private func resetAllAutoRetryState() {
+        autoRetryStateQueue.sync {
+            autoReconcileFailureCounts.removeAll()
+            autoReconcileSuspendedByHardError = false
+            consistencyCheckScheduled = false
         }
     }
 

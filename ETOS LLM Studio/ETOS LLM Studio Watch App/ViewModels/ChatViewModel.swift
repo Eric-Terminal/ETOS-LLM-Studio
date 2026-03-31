@@ -165,7 +165,7 @@ class ChatViewModel: ObservableObject {
     }
     
     var embeddingModelOptions: [RunnableModel] {
-        configuredModels
+        configuredModels.filter { $0.model.supportsEmbedding }
     }
 
     var titleGenerationModelOptions: [RunnableModel] {
@@ -219,6 +219,9 @@ class ChatViewModel: ObservableObject {
     private var autoReasoningPreviewMessageIDs: Set<UUID> = []
     private var isPersistingGlobalSystemPrompts = false
     private var lastAutoPlayedAssistantMessageID: UUID?
+    private var lastMemoryEmbeddingErrorSignature: String = ""
+    private var lastMemoryEmbeddingErrorDate: Date = .distantPast
+    private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 6
@@ -433,13 +436,15 @@ class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] error in
                 guard let self else { return }
-                self.memoryEmbeddingErrorMessage = String(
+                let message = String(
                     format: NSLocalizedString(
                         "记忆已保存，但向量嵌入失败：%@",
                         comment: "Message shown when memory text is stored but embedding generation failed."
                     ),
                     error.localizedDescription
                 )
+                guard self.shouldPresentMemoryEmbeddingErrorAlert(message: message) else { return }
+                self.memoryEmbeddingErrorMessage = message
                 self.showMemoryEmbeddingErrorAlert = true
             }
             .store(in: &cancellables)
@@ -1442,11 +1447,28 @@ class ChatViewModel: ObservableObject {
             selectedEmbeddingModel = nil
             return
         }
-        guard !embeddingModelOptions.isEmpty else {
+        guard !configuredModels.isEmpty else {
             return
         }
         selectedEmbeddingModel = nil
         memoryEmbeddingModelIdentifier = ""
+    }
+
+    private func shouldPresentMemoryEmbeddingErrorAlert(message: String) -> Bool {
+        guard !message.isEmpty else { return false }
+
+        let now = Date()
+        if showMemoryEmbeddingErrorAlert && memoryEmbeddingErrorMessage == message {
+            return false
+        }
+        if lastMemoryEmbeddingErrorSignature == message,
+           now.timeIntervalSince(lastMemoryEmbeddingErrorDate) < memoryEmbeddingErrorAlertCooldown {
+            return false
+        }
+
+        lastMemoryEmbeddingErrorSignature = message
+        lastMemoryEmbeddingErrorDate = now
+        return true
     }
 
     private func syncTitleGenerationModelSelection() {
