@@ -1890,7 +1890,7 @@ public enum FontLibrary {
                 return postScriptName
             }
         }
-        return candidates.first
+        return nil
     }
 
     private static func sanitizeBaseName(_ value: String) -> String {
