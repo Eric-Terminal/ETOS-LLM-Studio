@@ -25,7 +25,7 @@ struct ChatExportFormatsView: View {
         List {
             Section {
                 Text(scopeDescription)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -45,7 +45,7 @@ struct ChatExportFormatsView: View {
                             }
                         } else {
                             Text("当前系统暂不支持直接分享导出文件。")
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
@@ -53,7 +53,7 @@ struct ChatExportFormatsView: View {
                             ProgressView()
                                 .controlSize(.mini)
                             Text("正在生成 \(format.displayName) 文件…")
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -63,7 +63,7 @@ struct ChatExportFormatsView: View {
             if let prepareError, !prepareError.isEmpty {
                 Section("导出错误") {
                     Text(prepareError)
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundStyle(.red)
 
                     Button("重新生成") {

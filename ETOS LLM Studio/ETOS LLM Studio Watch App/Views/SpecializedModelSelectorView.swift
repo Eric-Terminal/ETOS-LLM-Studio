@@ -104,7 +104,7 @@ struct SpecializedModelSelectorView: View {
         Section {
             if options.isEmpty {
                 Text("暂无可用模型，请先启用。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 NavigationLink {
@@ -130,7 +130,7 @@ struct SpecializedModelSelectorView: View {
             }
         } footer: {
             Text(footer)
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
     }

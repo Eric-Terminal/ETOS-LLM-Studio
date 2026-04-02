@@ -27,12 +27,12 @@ struct DailyPulseFeedbackHistoryView: View {
                 ForEach(pulseManager.feedbackHistory) { event in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(historyTitle(for: event))
-                            .font(.subheadline.weight(.medium))
+                            .etFont(.subheadline.weight(.medium))
                         Text(event.cardTitle)
-                            .font(.footnote)
+                            .etFont(.footnote)
                         if !event.topicHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text(event.topicHint)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }

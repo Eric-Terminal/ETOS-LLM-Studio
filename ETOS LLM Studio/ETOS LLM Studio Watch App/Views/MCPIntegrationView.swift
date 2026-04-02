@@ -30,14 +30,14 @@ struct MCPIntegrationView: View {
         List {
             Section("关于 MCP") {
                 Text("配置 MCP 工具服务器，让助手调用远程能力。可在手表上查看与调试。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section(
                 header: Text("聊天工具总开关"),
                 footer: Text("关闭后不会向模型暴露任何 MCP 工具，但你仍可继续管理服务器和手动调试。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Toggle(
@@ -52,7 +52,7 @@ struct MCPIntegrationView: View {
             Section("服务器管理") {
                 if manager.servers.isEmpty {
                     Text("尚未添加服务器，点击下方入口新建。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(manager.servers) { server in
@@ -62,12 +62,12 @@ struct MCPIntegrationView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(server.displayName)
-                                        .font(.headline)
+                                        .etFont(.headline)
                                     Text(server.humanReadableEndpoint)
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.secondary)
                                     Text(statusDescription(for: server))
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.tertiary)
                                 }
                                 Spacer()
@@ -101,7 +101,7 @@ struct MCPIntegrationView: View {
                         selected
                     )
                 )
-                    .font(.caption2)
+                    .etFont(.caption2)
                 Button("刷新") {
                     manager.refreshMetadata()
                 }
@@ -115,7 +115,7 @@ struct MCPIntegrationView: View {
             Section(
                 header: Text("审批自动化"),
                 footer: Text("倒计时范围 1-30 秒，超出会自动修正。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Toggle(
@@ -211,14 +211,14 @@ struct MCPIntegrationView: View {
                     ForEach(manager.activeToolCalls.values.sorted(by: { $0.startedAt > $1.startedAt }), id: \.id) { call in
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(call.serverDisplayName) · \(call.toolId)")
-                                .font(.footnote)
+                                .etFont(.footnote)
                             if let progress = call.latestProgress, let total = call.latestTotal, total > 0 {
                                 ProgressView(value: min(max(progress / total, 0), 1))
                             }
                             Button("取消", role: .destructive) {
                                 manager.cancelToolCall(callID: call.id, reason: "用户在手表取消调用")
                             }
-                            .font(.caption2)
+                            .etFont(.caption2)
                         }
                     }
                 }
@@ -292,7 +292,7 @@ private struct MCPServerDetailView: View {
                         LabeledContent("备注", value: notes)
                     }
                     Text(statusDescription(for: server))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 
@@ -349,7 +349,7 @@ private struct MCPServerDetailView: View {
                                         Text(tool.toolId)
                                         Spacer()
                                         Text(manager.isToolEnabled(serverID: server.id, toolId: tool.toolId) ? "已启用" : "已停用")
-                                            .font(.caption2)
+                                            .etFont(.caption2)
                                             .foregroundStyle(
                                                 manager.isToolEnabled(serverID: server.id, toolId: tool.toolId)
                                                     ? Color.green
@@ -358,18 +358,18 @@ private struct MCPServerDetailView: View {
                                     }
                                     if let desc = tool.description, !desc.isEmpty {
                                         Text(desc)
-                                            .font(.caption2)
+                                            .etFont(.caption2)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(2)
                                     }
                                     if let schemaSummary = schemaSummary(for: tool.inputSchema) {
                                         Text("Schema: \(schemaSummary)")
-                                            .font(.caption2)
+                                            .etFont(.caption2)
                                             .foregroundStyle(.tertiary)
                                             .lineLimit(3)
                                     }
                                     Text("点击进入二级菜单配置开关与审批策略")
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.tertiary)
                                 }
                             }
@@ -463,15 +463,15 @@ private struct MCPToolSettingsDetailView: View {
         List {
             Section("工具信息") {
                 Text(tool.toolId)
-                    .font(.headline)
+                    .etFont(.headline)
                 if let desc = tool.description, !desc.isEmpty {
                     Text(desc)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 if let schemaSummary = schemaSummary(for: tool.inputSchema) {
                     Text("Schema: \(schemaSummary)")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(3)
                 }
@@ -484,7 +484,7 @@ private struct MCPToolSettingsDetailView: View {
             Section(
                 header: Text("审批策略"),
                 footer: Text("默认“每次询问”，可按工具单独设置。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Picker("审批策略", selection: toolApprovalPolicyBinding) {
@@ -543,7 +543,7 @@ private struct MCPToolListView: View {
         List {
             if !manager.chatToolsEnabled {
                 Text("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
             if manager.tools.isEmpty {
@@ -553,23 +553,23 @@ private struct MCPToolListView: View {
                 ForEach(manager.tools) { tool in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tool.tool.toolId)
-                            .font(.headline)
+                            .etFont(.headline)
                         Text(tool.server.displayName)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         if let description = tool.tool.description, !description.isEmpty {
                             Text(description)
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                         if let schemaSummary = schemaSummary(for: tool.tool.inputSchema) {
                             Text("Schema: \(schemaSummary)")
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.tertiary)
                                 .lineLimit(3)
                         }
                         Text(tool.internalName)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                     .padding(.vertical, 2)
@@ -611,13 +611,13 @@ private struct MCPResourceListView: View {
                 ForEach(manager.resources) { resource in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(resource.resource.resourceId)
-                            .font(.headline)
+                            .etFont(.headline)
                         Text(resource.server.displayName)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         if let description = resource.resource.description, !description.isEmpty {
                             Text(description)
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -642,15 +642,15 @@ private struct MCPGovernanceLogListView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 4) {
                             Text(entry.serverDisplayName ?? "全局")
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Text(entry.timestamp, style: .time)
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
                         Text(entry.message)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .lineLimit(3)
                     }
                     .padding(.vertical, 2)
@@ -693,7 +693,7 @@ private struct MCPToolDebuggerView: View {
             if let localError {
                 Section {
                     Text(localError)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.red)
                 }
             }
@@ -758,7 +758,7 @@ private struct MCPResourceDebuggerView: View {
             if let localError {
                 Section {
                     Text(localError)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.red)
                 }
             }
@@ -807,7 +807,7 @@ private struct MCPResponseDetailView: View {
             if let output {
                 Section("Result") {
                     Text(output)
-                        .font(.system(.footnote, design: .monospaced))
+                        .etFont(.system(.footnote, design: .monospaced))
                 }
             }
             
@@ -815,7 +815,7 @@ private struct MCPResponseDetailView: View {
                 Section("Error") {
                     Text(error)
                         .foregroundStyle(.red)
-                        .font(.footnote)
+                        .etFont(.footnote)
                 }
             }
         }
@@ -989,7 +989,7 @@ private struct MCPServerEditor: View {
 
                 Section(header: Text("请求头预览")) {
                     Text(headerOverridesPreview.text)
-                        .font(.footnote.monospaced())
+                        .etFont(.footnote.monospaced())
                         .foregroundStyle(headerOverridesPreview.isPlaceholder ? .secondary : .primary)
                 }
             }
@@ -998,7 +998,7 @@ private struct MCPServerEditor: View {
                 Section {
                     Text(validationMessage)
                         .foregroundStyle(.red)
-                        .font(.footnote)
+                        .etFont(.footnote)
                 }
             }
         }
@@ -1290,11 +1290,11 @@ private struct HeaderOverrideRow: View {
             TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.footnote.monospaced())
+                .etFont(.footnote.monospaced())
 
             if let error = entry.error {
                 Text(error)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
             }
         }

@@ -20,7 +20,7 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -32,7 +32,7 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text("通过局域网远程访问和管理 Documents 目录,方便命令行工具操作。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -44,7 +44,7 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text("管理本地模型、文件与缓存占用。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -56,7 +56,7 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text("从 Cherry Studio 等第三方应用导入提供商与会话。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
@@ -79,7 +79,7 @@ struct LongTermMemoryFeatureView: View {
                 Toggle("启用记忆功能", isOn: $enableMemory)
             } footer: {
                 Text("启用后，AI 会在响应前自动检索相关记忆，并可选择写入新的记忆片段。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
@@ -88,7 +88,7 @@ struct LongTermMemoryFeatureView: View {
                     Toggle("允许写入新的记忆", isOn: $enableMemoryWrite)
                 } footer: {
                     Text("关闭后仅读取记忆，不会请求保存新内容。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 

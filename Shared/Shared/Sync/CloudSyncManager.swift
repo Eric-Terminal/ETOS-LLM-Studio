@@ -291,6 +291,7 @@ public final class CloudSyncManager: ObservableObject {
         if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
         if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
         if isSyncOptionEnabled(key: "sync.options.dailyPulse", defaultValue: true) { options.insert(.dailyPulse) }
+        if isSyncOptionEnabled(key: "sync.options.fontFiles", defaultValue: true) { options.insert(.fontFiles) }
         let legacyAppStorageDefault = isSyncOptionEnabled(key: "sync.options.globalPrompt", defaultValue: true)
         if isSyncOptionEnabled(key: "sync.options.appStorage", defaultValue: legacyAppStorageDefault) { options.insert(.appStorage) }
         return normalizedCloudOptions(from: options)
@@ -559,6 +560,10 @@ private extension SyncMergeSummary {
         skippedFeedbackTickets += other.skippedFeedbackTickets
         importedDailyPulseRuns += other.importedDailyPulseRuns
         skippedDailyPulseRuns += other.skippedDailyPulseRuns
+        importedFontFiles += other.importedFontFiles
+        skippedFontFiles += other.skippedFontFiles
+        importedFontRouteConfigurations += other.importedFontRouteConfigurations
+        skippedFontRouteConfigurations += other.skippedFontRouteConfigurations
         importedAppStorageValues += other.importedAppStorageValues
         skippedAppStorageValues += other.skippedAppStorageValues
     }

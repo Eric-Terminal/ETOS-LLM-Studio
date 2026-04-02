@@ -30,7 +30,7 @@ struct SpeechInputSettingsView: View {
                     
                     if !sendSpeechAsAudio && speechModels.isEmpty {
                         Text("暂无可用的模型，请先在模型设置中启用。")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundColor(.secondary)
                     } else if !sendSpeechAsAudio && !speechModels.isEmpty {
                         NavigationLink {
@@ -58,12 +58,12 @@ struct SpeechInputSettingsView: View {
                         }
                         
                         Text(audioRecordingFormat.formatDescription)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundColor(.secondary)
                     }
 
                     Text("也可以在“提供商与模型管理 > 专用模型”中统一设置。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }
             }

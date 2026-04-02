@@ -108,7 +108,7 @@ private struct WatchProviderModelOrderContentView: View {
             ) {
                 if viewModel.configuredModels.isEmpty {
                     Text("暂无可排序模型。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
@@ -152,7 +152,7 @@ private struct WatchProviderModelOrderContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 if !runnable.model.isActivated {
                     Text("未启用")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }

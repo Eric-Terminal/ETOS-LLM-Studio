@@ -23,6 +23,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
     @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
     @AppStorage("sync.options.dailyPulse") private var syncDailyPulse = true
+    @AppStorage("sync.options.fontFiles") private var syncFontFiles = true
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
@@ -42,6 +43,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("世界书", isOn: $syncWorldbooks)
                 Toggle("反馈工单", isOn: $syncFeedbackTickets)
                 Toggle("每日脉冲", isOn: $syncDailyPulse)
+                Toggle("字体文件与字体规则", isOn: $syncFontFiles)
                 Toggle("软件设置（AppStorage）", isOn: $syncAppStorage)
             }
 
@@ -58,7 +60,7 @@ struct DeviceSyncSettingsView: View {
                                 .padding(.trailing, 8)
                         }
                         Label("同步", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.headline)
+                            .etFont(.headline)
                         Spacer()
                     }
                 }
@@ -91,7 +93,7 @@ struct DeviceSyncSettingsView: View {
                                 .padding(.trailing, 8)
                         }
                         Label("同步到 iCloud", systemImage: "icloud")
-                            .font(.headline)
+                            .etFont(.headline)
                         Spacer()
                     }
                 }
@@ -122,6 +124,7 @@ struct DeviceSyncSettingsView: View {
         if syncWorldbooks { option.insert(.worldbooks) }
         if syncFeedbackTickets { option.insert(.feedbackTickets) }
         if syncDailyPulse { option.insert(.dailyPulse) }
+        if syncFontFiles { option.insert(.fontFiles) }
         if syncAppStorage { option.insert(.appStorage) }
         return option
     }
@@ -144,22 +147,22 @@ struct DeviceSyncSettingsView: View {
     private var syncStatusView: some View {
         switch syncManager.state {
         case .idle:
-            Text("未进行同步").font(.footnote).foregroundColor(.secondary)
+            Text("未进行同步").etFont(.footnote).foregroundColor(.secondary)
         case .syncing(let message):
             HStack {
                 ProgressView()
-                Text(message).font(.footnote)
+                Text(message).etFont(.footnote)
             }
         case .success(let summary):
             VStack(alignment: .leading, spacing: 2) {
                 Label("同步成功", systemImage: "checkmark.circle")
                     .foregroundStyle(.green)
                 Text(summaryDescription(summary))
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 if let lastUpdated = syncManager.lastUpdatedAt {
                     Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -168,12 +171,12 @@ struct DeviceSyncSettingsView: View {
                 Label("同步失败", systemImage: "xmark.circle")
                     .foregroundStyle(.red)
                 Text(reason)
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         @unknown default:
             Text("未知状态")
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.secondary)
         }
     }
@@ -182,27 +185,27 @@ struct DeviceSyncSettingsView: View {
     private var cloudSyncStatusView: some View {
         if !cloudSyncEnabled {
             Text("iCloud 同步已关闭")
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundColor(.secondary)
         } else {
             switch cloudSyncManager.state {
             case .idle:
-                Text("未进行同步").font(.footnote).foregroundColor(.secondary)
+                Text("未进行同步").etFont(.footnote).foregroundColor(.secondary)
             case .syncing(let message):
                 HStack {
                     ProgressView()
-                    Text(message).font(.footnote)
+                    Text(message).etFont(.footnote)
                 }
             case .success(let summary):
                 VStack(alignment: .leading, spacing: 2) {
                     Label("同步成功", systemImage: "checkmark.circle")
                         .foregroundStyle(.green)
                     Text(summaryDescription(summary))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     if let lastUpdated = cloudSyncManager.lastUpdatedAt {
                         Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -211,12 +214,12 @@ struct DeviceSyncSettingsView: View {
                     Label("同步失败", systemImage: "xmark.circle")
                         .foregroundStyle(.red)
                     Text(reason)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             @unknown default:
                 Text("未知状态")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -253,6 +256,12 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedDailyPulseRuns > 0 {
             parts.append(String(format: NSLocalizedString("每日脉冲 +%d", comment: ""), summary.importedDailyPulseRuns))
+        }
+        if summary.importedFontFiles > 0 {
+            parts.append(String(format: NSLocalizedString("字体文件 +%d", comment: ""), summary.importedFontFiles))
+        }
+        if summary.importedFontRouteConfigurations > 0 {
+            parts.append(String(format: NSLocalizedString("字体规则 +%d", comment: ""), summary.importedFontRouteConfigurations))
         }
         if summary.importedAppStorageValues > 0 {
             parts.append(String(format: NSLocalizedString("软件设置 +%d", comment: ""), summary.importedAppStorageValues))

@@ -52,12 +52,12 @@ struct SessionListView: View {
                             ProgressView()
                                 .controlSize(.small)
                             Text("正在搜索历史会话…")
-                                .font(.footnote)
+                                .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
                         Text("匹配 \(displayedSessions.count) / \(viewModel.chatSessions.count) 个会话")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -343,15 +343,15 @@ private struct SessionRow: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(session.name)
-                            .font(.headline)
+                            .etFont(.headline)
                         if let searchSummary, !searchSummary.isEmpty {
                             Text(searchSummary)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(nil)
                         } else if let topic = session.topicPrompt, !topic.isEmpty {
                             Text(topic)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -361,7 +361,7 @@ private struct SessionRow: View {
                     
                     if isCurrent {
                         Image(systemName: "checkmark")
-                            .font(.footnote.bold())
+                            .etFont(.footnote.bold())
                             .foregroundColor(.accentColor)
                     }
                 }
@@ -465,7 +465,7 @@ private struct SessionInfoSheet: View {
                 if let topic = payload.session.topicPrompt, !topic.isEmpty {
                     Section("主题提示") {
                         Text(topic)
-                            .font(.callout)
+                            .etFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -473,14 +473,14 @@ private struct SessionInfoSheet: View {
                 if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
                     Section("增强提示词") {
                         Text(enhanced)
-                            .font(.callout)
+                            .etFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
                 
                 Section("唯一标识") {
                     Text(payload.session.id.uuidString)
-                        .font(.footnote.monospaced())
+                        .etFont(.footnote.monospaced())
                         .textSelection(.enabled)
                 }
             }

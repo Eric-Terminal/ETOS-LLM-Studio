@@ -510,12 +510,12 @@ struct ChatView: View {
     private func memoryRetryStoppedNoticeBanner(text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.orange)
                 .padding(.top, 1)
 
             Text(text)
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
@@ -525,7 +525,7 @@ struct ChatView: View {
                 viewModel.memoryRetryStoppedNoticeMessage = nil
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
+                    .etFont(.system(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
                     .padding(6)
                     .background(
@@ -619,7 +619,7 @@ struct ChatView: View {
 
     private var navBarSessionLabel: some View {
         Image(systemName: "list.bullet")
-            .font(.system(size: 17, weight: .semibold))
+            .etFont(.system(size: 17, weight: .semibold))
             .foregroundColor(TelegramColors.navBarText)
             .frame(width: navBarIconSize, height: navBarIconSize)
             .background(
@@ -635,7 +635,7 @@ struct ChatView: View {
 
     private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: 17, weight: .semibold))
+            .etFont(.system(size: 17, weight: .semibold))
             .foregroundColor(TelegramColors.navBarText)
             .frame(width: navBarIconSize, height: navBarIconSize)
             .background(
@@ -680,7 +680,7 @@ struct ChatView: View {
         )
         .overlay(alignment: .trailing) {
             Image(systemName: showModelPickerPanel ? "chevron.up" : "chevron.down")
-                .font(.system(size: 11, weight: .semibold))
+                .etFont(.system(size: 11, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarSubtitle)
                 .padding(.trailing, 10)
         }
@@ -841,10 +841,10 @@ struct ChatView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("选择模型")
-                    .font(.system(size: 16, weight: .semibold))
+                    .etFont(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
                 Text("切换当前对话的模型")
-                    .font(.system(size: 12))
+                    .etFont(.system(size: 12))
                     .foregroundColor(TelegramColors.navBarSubtitle)
             }
 
@@ -864,10 +864,10 @@ struct ChatView: View {
     private var modelPickerEmptyState: some View {
         VStack(spacing: 8) {
             Text("暂无可用模型")
-                .font(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: 14, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarText)
             Text("请先在设置中启用模型")
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -910,7 +910,7 @@ struct ChatView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16, weight: .semibold))
+                    .etFont(.system(size: 16, weight: .semibold))
                     .foregroundColor(isSelected ? TelegramColors.sendButtonColor : TelegramColors.navBarSubtitle.opacity(0.5))
             }
             .padding(.vertical, 10)
@@ -1085,15 +1085,15 @@ struct ChatView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("会话")
-                    .font(.system(size: 16, weight: .semibold))
+                    .etFont(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
                 if queryActive {
                     Text(isSearching ? "正在搜索历史会话…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count)")
-                        .font(.system(size: 12))
+                        .etFont(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
                 } else {
                     Text("快速切换与管理")
-                        .font(.system(size: 12))
+                        .etFont(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
                 }
             }
@@ -1167,7 +1167,7 @@ struct ChatView: View {
         VStack(spacing: 10) {
             ProgressView()
             Text("正在搜索历史会话…")
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -1178,10 +1178,10 @@ struct ChatView: View {
     private func sessionPickerEmptyState(queryActive: Bool) -> some View {
         VStack(spacing: 8) {
             Text(queryActive ? "未找到匹配会话" : "暂无会话")
-                .font(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: 14, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarText)
             Text(queryActive ? "换个关键词试试看" : "创建一个新对话开始吧")
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -1215,7 +1215,7 @@ struct ChatView: View {
             ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话")
             : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
         )
-            .font(.system(size: 12, weight: .medium))
+            .etFont(.system(size: 12, weight: .medium))
             .foregroundColor(TelegramColors.navBarSubtitle)
             .padding(.bottom, 14)
     }
@@ -1268,7 +1268,7 @@ struct ChatView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: 14, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarText)
                 .frame(width: 32, height: 32)
                 .background(
@@ -1445,7 +1445,7 @@ struct ChatView: View {
                     .shadow(color: TelegramColors.scrollButtonShadow, radius: 4, x: 0, y: 2)
                 
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 16, weight: .semibold))
+                    .etFont(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.attachButtonColor)
             }
         }
@@ -1466,9 +1466,9 @@ struct ChatView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.circle")
-                        .font(.system(size: 14))
+                        .etFont(.system(size: 14))
                     Text(String(format: NSLocalizedString("加载更早的 %d 条消息", comment: ""), chunk))
-                        .font(.system(size: 13, weight: .medium))
+                        .etFont(.system(size: 13, weight: .medium))
                 }
                 .foregroundColor(TelegramColors.attachButtonColor)
                 .padding(.vertical, 10)
@@ -1984,22 +1984,22 @@ private struct TelegramPatternView: View {
             }
         } symbols: {
             Image(systemName: "bubble.left.fill")
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundColor(.gray)
                 .tag("bubble.left.fill")
             
             Image(systemName: "heart.fill")
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundColor(.gray)
                 .tag("heart.fill")
             
             Image(systemName: "star.fill")
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundColor(.gray)
                 .tag("star.fill")
             
             Image(systemName: "paperplane.fill")
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundColor(.gray)
                 .tag("paperplane.fill")
         }
@@ -2204,7 +2204,7 @@ private struct TelegramMessageComposer: View {
             }
         } label: {
             Image(systemName: "paperclip")
-                .font(.system(size: max(14, size * 0.45), weight: .semibold))
+                .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
                 .foregroundColor(TelegramColors.attachButtonColor)
                 .frame(width: size, height: size)
                 .background(glassCircleBackground)
@@ -2225,7 +2225,7 @@ private struct TelegramMessageComposer: View {
             }
         } label: {
             Image(systemName: actionIconName)
-                .font(.system(size: max(14, size * 0.45), weight: .semibold))
+                .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
                 .foregroundColor(actionForegroundColor)
                 .frame(width: size, height: size)
                 .background(actionBackground)
@@ -2241,7 +2241,7 @@ private struct TelegramMessageComposer: View {
 
         ZStack(alignment: .topLeading) {
             TextEditor(text: $text)
-                .font(.system(size: inputFont.pointSize))
+                .etFont(.system(size: inputFont.pointSize))
                 .focused(focus)
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(!isExpandedComposer)
@@ -2250,7 +2250,7 @@ private struct TelegramMessageComposer: View {
 
             if text.isEmpty {
                 Text("Message")
-                    .font(.system(size: inputFont.pointSize))
+                    .etFont(.system(size: inputFont.pointSize))
                     .foregroundColor(.secondary)
                     .padding(.top, verticalPadding + textContainerInset)
                     .padding(.leading, textHorizontalPadding + textContainerInset)
@@ -2337,7 +2337,7 @@ private struct TelegramMessageComposer: View {
                                     .fill(Color.black.opacity(0.5))
                                     .frame(width: 22, height: 22)
                                 Image(systemName: "xmark")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .etFont(.system(size: 10, weight: .bold))
                                     .foregroundColor(.white)
                             }
                         }
@@ -2349,14 +2349,14 @@ private struct TelegramMessageComposer: View {
                 if let audio = viewModel.pendingAudioAttachment {
                     HStack(spacing: 8) {
                         Image(systemName: "waveform")
-                            .font(.system(size: 18))
+                            .etFont(.system(size: 18))
                             .foregroundColor(TelegramColors.attachButtonColor)
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text("语音消息")
-                                .font(.system(size: 13, weight: .medium))
+                                .etFont(.system(size: 13, weight: .medium))
                             Text(audio.fileName)
-                                .font(.system(size: 11))
+                                .etFont(.system(size: 11))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                         }
@@ -2365,7 +2365,7 @@ private struct TelegramMessageComposer: View {
                             viewModel.clearPendingAudioAttachment()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 18))
+                                .etFont(.system(size: 18))
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -2381,14 +2381,14 @@ private struct TelegramMessageComposer: View {
                 ForEach(viewModel.pendingFileAttachments) { attachment in
                     HStack(spacing: 8) {
                         Image(systemName: "doc")
-                            .font(.system(size: 18))
+                            .etFont(.system(size: 18))
                             .foregroundColor(TelegramColors.attachButtonColor)
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text("文件")
-                                .font(.system(size: 13, weight: .medium))
+                                .etFont(.system(size: 13, weight: .medium))
                             Text(attachment.fileName)
-                                .font(.system(size: 11))
+                                .etFont(.system(size: 11))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                         }
@@ -2397,7 +2397,7 @@ private struct TelegramMessageComposer: View {
                             viewModel.removePendingFileAttachment(attachment)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 18))
+                                .etFont(.system(size: 18))
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -2732,7 +2732,7 @@ private struct MessageComposerView: View {
                         showAttachmentMenu = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 28))
+                            .etFont(.system(size: 28))
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
                     }
@@ -2753,7 +2753,7 @@ private struct MessageComposerView: View {
                         showAttachmentMenu = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 28))
+                            .etFont(.system(size: 28))
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
                     }
@@ -2806,7 +2806,7 @@ private struct MessageComposerView: View {
                         sendAction()
                     } label: {
                         Image(systemName: isSending ? "stop.circle.fill" : "arrow.up.circle.fill")
-                            .font(.system(size: 28))
+                            .etFont(.system(size: 28))
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
                     }
@@ -2817,7 +2817,7 @@ private struct MessageComposerView: View {
                         sendAction()
                     } label: {
                         Image(systemName: isSending ? "stop.circle.fill" : "arrow.up.circle.fill")
-                            .font(.system(size: 28))
+                            .etFont(.system(size: 28))
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
                     }
@@ -2881,7 +2881,7 @@ private struct MessageComposerView: View {
                             viewModel.removePendingImageAttachment(attachment)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 18))
+                                .etFont(.system(size: 18))
                                 .foregroundStyle(.white, .black.opacity(0.6))
                         }
                         .offset(x: 4, y: -4)
@@ -2892,11 +2892,11 @@ private struct MessageComposerView: View {
                 if let audio = viewModel.pendingAudioAttachment {
                     HStack(spacing: 6) {
                         Image(systemName: "waveform")
-                            .font(.system(size: 16))
+                            .etFont(.system(size: 16))
                             .foregroundStyle(.tint)
                         
                         Text(audio.fileName)
-                            .font(.caption)
+                            .etFont(.caption)
                             .lineLimit(1)
                             .frame(maxWidth: 80)
                         
@@ -2904,7 +2904,7 @@ private struct MessageComposerView: View {
                             viewModel.clearPendingAudioAttachment()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 16))
+                                .etFont(.system(size: 16))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -2918,11 +2918,11 @@ private struct MessageComposerView: View {
                 ForEach(viewModel.pendingFileAttachments) { attachment in
                     HStack(spacing: 6) {
                         Image(systemName: "doc")
-                            .font(.system(size: 16))
+                            .etFont(.system(size: 16))
                             .foregroundStyle(.tint)
                         
                         Text(attachment.fileName)
-                            .font(.caption)
+                            .etFont(.caption)
                             .lineLimit(1)
                             .frame(maxWidth: 120)
                         
@@ -2930,7 +2930,7 @@ private struct MessageComposerView: View {
                             viewModel.removePendingFileAttachment(attachment)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 16))
+                                .etFont(.system(size: 16))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -3038,7 +3038,7 @@ private struct AudioRecorderSheet: View {
                 
                 // 录音时长显示
                 Text(formatDuration(recordingDuration))
-                    .font(.system(size: 48, weight: .light, design: .monospaced))
+                    .etFont(.system(size: 48, weight: .light, design: .monospaced))
                     .foregroundStyle(isRecording ? .red : .primary)
                 
                 // 录音按钮
@@ -3055,18 +3055,18 @@ private struct AudioRecorderSheet: View {
                             .frame(width: 80, height: 80)
                         
                         Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                            .font(.system(size: 30))
+                            .etFont(.system(size: 30))
                             .foregroundStyle(isRecording ? .white : (colorScheme == .dark ? .black : .white))
                     }
                 }
                 
                 if isRecording {
                     Text("正在录音...")
-                        .font(.callout)
+                        .etFont(.callout)
                         .foregroundStyle(.secondary)
                 } else {
                     Text("点击开始录音")
-                        .font(.callout)
+                        .etFont(.callout)
                         .foregroundStyle(.secondary)
                 }
                 
@@ -3224,7 +3224,7 @@ private struct SessionPickerInfoSheet: View {
                 if let topic = payload.session.topicPrompt, !topic.isEmpty {
                     Section("主题提示") {
                         Text(topic)
-                            .font(.callout)
+                            .etFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -3232,14 +3232,14 @@ private struct SessionPickerInfoSheet: View {
                 if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
                     Section("增强提示词") {
                         Text(enhanced)
-                            .font(.callout)
+                            .etFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 Section("唯一标识") {
                     Text(payload.session.id.uuidString)
-                        .font(.footnote.monospaced())
+                        .etFont(.footnote.monospaced())
                         .textSelection(.enabled)
                 }
             }
@@ -3299,15 +3299,15 @@ private struct SessionPickerRow: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(session.name)
-                            .font(.headline)
+                            .etFont(.headline)
                         if let searchSummary, !searchSummary.isEmpty {
                             Text(searchSummary)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(nil)
                         } else if let topic = session.topicPrompt, !topic.isEmpty {
                             Text(topic)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -3317,7 +3317,7 @@ private struct SessionPickerRow: View {
 
                     if isCurrent {
                         Image(systemName: "checkmark")
-                            .font(.footnote.bold())
+                            .etFont(.footnote.bold())
                             .foregroundColor(.accentColor)
                     }
                 }
@@ -3443,7 +3443,7 @@ private struct FullErrorContentSheet: View {
         NavigationStack {
             ScrollView {
                 Text(payload.content)
-                    .font(.system(.body, design: .monospaced))
+                    .etFont(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -3493,7 +3493,7 @@ private struct MessageInfoSheet: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
 
                         TextField(
@@ -3514,7 +3514,7 @@ private struct MessageInfoSheet: View {
 
                         if let jumpError, !jumpError.isEmpty {
                             Text(jumpError)
-                                .font(.footnote)
+                                .etFont(.footnote)
                                 .foregroundStyle(.red)
                         }
                     }
@@ -3522,7 +3522,7 @@ private struct MessageInfoSheet: View {
                 
                 Section("唯一标识") {
                     Text(payload.message.id.uuidString)
-                        .font(.footnote.monospaced())
+                        .etFont(.footnote.monospaced())
                         .textSelection(.enabled)
                 }
 
@@ -3551,7 +3551,7 @@ private struct MessageInfoSheet: View {
                 } else if let metrics = payload.message.responseMetrics, metrics.isTokenPerSecondEstimated {
                     Section(NSLocalizedString("Token 用量", comment: "Token usage section title")) {
                         Text(NSLocalizedString("当前响应未返回官方 token 用量（仅有估算速度）。", comment: "No official token usage returned hint"))
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -3682,11 +3682,11 @@ private struct MessageInfoStreamingSpeedChart: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(String(format: "%.2f %@", currentSpeed, NSLocalizedString("token/s", comment: "Tokens per second unit")))
-                    .font(.caption.monospacedDigit())
+                    .etFont(.caption.monospacedDigit())
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
                 Text(NSLocalizedString("每秒采样", comment: "Per-second speed sampling"))
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
@@ -3725,7 +3725,7 @@ private struct MessageInfoStreamingSpeedChart: View {
 
             if let fluctuation {
                 Text("\(NSLocalizedString("波动", comment: "Speed fluctuation label")) \(String(format: "%.2f %@", fluctuation, NSLocalizedString("token/s", comment: "Tokens per second unit")))")
-                    .font(.caption2.monospacedDigit())
+                    .etFont(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

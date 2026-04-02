@@ -519,7 +519,7 @@ struct ChatBubble: View {
                         )
                     } else {
                         Text(currentThinkingText)
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -626,13 +626,13 @@ struct ChatBubble: View {
                     audioPlayer.togglePlayback(fileName: fileName)
                 } label: {
                     Image(systemName: audioPlayer.isPlaying && isCurrentFile ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 22))
+                        .etFont(.system(size: 22))
                         .foregroundStyle(foregroundColor)
                 }
                 .buttonStyle(.plain)
                 
                 Text(fileName)
-                    .font(.system(size: 9))
+                    .etFont(.system(size: 9))
                     .foregroundStyle(secondaryColor)
                     .lineLimit(1)
             }
@@ -648,7 +648,7 @@ struct ChatBubble: View {
                     Spacer()
                     Text(formatTime(audioPlayer.duration))
                 }
-                .font(.system(size: 9))
+                .etFont(.system(size: 9))
                 .foregroundStyle(secondaryColor)
             }
         }
@@ -699,13 +699,13 @@ struct ChatBubble: View {
                         .lineLimit(1)
                     } else {
                         Text("思考过程")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
                     Spacer()
                     Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -713,7 +713,7 @@ struct ChatBubble: View {
 
             if isReasoningExpanded {
                 Text(reasoning)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
         }
@@ -782,13 +782,13 @@ struct ChatBubble: View {
         private var toolHeader: some View {
             HStack(spacing: 4) {
                 Text("调用：\(label)")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 if !trimmedArguments.isEmpty {
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
@@ -837,7 +837,7 @@ struct ChatBubble: View {
                     .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary.opacity(0.6))
                 }
                 .foregroundColor(.secondary)
@@ -850,16 +850,16 @@ struct ChatBubble: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             Text("结果：\(toolNames.joined(separator: ", "))")
-                                .font(.footnote)
+                                .etFont(.footnote)
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                             Spacer()
                             Image(systemName: expansion.wrappedValue ? "chevron.down" : "chevron.right")
-                                .font(.caption)
+                                .etFont(.caption)
                         }
                         if !summaries.isEmpty {
                             Text(summaries.joined(separator: " · "))
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundColor(.secondary.opacity(0.9))
                                 .lineLimit(3)
                                 .multilineTextAlignment(.leading)
@@ -893,7 +893,7 @@ struct ChatBubble: View {
         let label = toolDisplayLabel(for: toolCall.toolName)
         return VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundColor(.secondary)
             if display.shouldShowRawSection {
                 toolResultSection(
@@ -920,7 +920,7 @@ struct ChatBubble: View {
         let label = toolDisplayLabel(for: toolCall.toolName)
         return VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundColor(.secondary)
             if !result.isEmpty {
                 CappedScrollableText(
@@ -946,7 +946,7 @@ struct ChatBubble: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundColor(.secondary.opacity(0.9))
             CappedScrollableText(
                 text: text,
@@ -971,7 +971,7 @@ struct ChatBubble: View {
 
         var body: some View {
             Text(text)
-                .font(font)
+                .etFont(font)
                 .foregroundStyle(baseColor)
                 .overlay(
                     GeometryReader { proxy in
@@ -1001,7 +1001,7 @@ struct ChatBubble: View {
                     }
                     .mask(
                         Text(text)
-                            .font(font)
+                            .etFont(font)
                     )
                     .allowsHitTesting(false)
                 )
@@ -1024,7 +1024,7 @@ struct ChatBubble: View {
         var body: some View {
             ScrollView {
                 Text(text)
-                    .font(font)
+                    .etFont(font)
                     .foregroundColor(foreground)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
@@ -1182,10 +1182,10 @@ private struct AttachmentImageView: View {
                     .overlay(
                         VStack(spacing: 4) {
                             Image(systemName: "photo")
-                                .font(.system(size: 14))
+                                .etFont(.system(size: 14))
                                 .foregroundStyle(.secondary)
                             Text(NSLocalizedString("图片丢失", comment: ""))
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     )

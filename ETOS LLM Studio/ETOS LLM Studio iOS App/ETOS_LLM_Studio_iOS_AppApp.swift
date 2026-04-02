@@ -26,6 +26,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     init() {
         DailyPulseDeliveryCoordinator.shared.activate()
         DailyPulseBackgroundDeliveryScheduler.shared.activate()
+        FontLibrary.registerAllFontsIfNeeded()
     }
 
     var body: some Scene {

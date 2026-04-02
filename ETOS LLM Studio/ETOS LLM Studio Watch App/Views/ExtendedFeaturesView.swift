@@ -23,12 +23,12 @@ public struct ExtendedFeaturesView: View {
                         .environmentObject(viewModel)
                 } label: {
                     Label(NSLocalizedString("工具中心", comment: "Tool center title"), systemImage: "slider.horizontal.3")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text(NSLocalizedString("统一预览和调整聊天工具启用状态。", comment: "Tool center entry footer"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -38,7 +38,7 @@ public struct ExtendedFeaturesView: View {
                         .environmentObject(viewModel)
                 } label: {
                     Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
 
@@ -52,12 +52,12 @@ public struct ExtendedFeaturesView: View {
                     )
                 } label: {
                     Label("语音输入", systemImage: "mic")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("统一管理语音输入与语音朗读。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -66,12 +66,12 @@ public struct ExtendedFeaturesView: View {
                     FeedbackCenterView()
                 } label: {
                     Label(NSLocalizedString("反馈助手", comment: "反馈入口"), systemImage: "text.bubble")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -81,12 +81,12 @@ public struct ExtendedFeaturesView: View {
                         .environmentObject(viewModel)
                 } label: {
                     Label("长期记忆系统", systemImage: "brain.head.profile")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("让 AI 根据历史偏好与事件持续优化回答。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -95,12 +95,12 @@ public struct ExtendedFeaturesView: View {
                     MCPIntegrationView()
                 } label: {
                     Label("MCP 工具集成", systemImage: "network")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("配置 MCP 工具服务器，让助手调用外部能力。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -109,12 +109,12 @@ public struct ExtendedFeaturesView: View {
                     ShortcutIntegrationView()
                 } label: {
                     Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("导入快捷指令工具并控制 AI 的调用权限。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -123,12 +123,12 @@ public struct ExtendedFeaturesView: View {
                     WorldbookSettingsView(viewModel: viewModel)
                 } label: {
                     Label("世界书", systemImage: "book.pages")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("管理世界书并绑定到当前会话。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -137,12 +137,12 @@ public struct ExtendedFeaturesView: View {
                     LocalDebugView()
                 } label: {
                     Label("远程文件访问", systemImage: "terminal")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("通过局域网远程访问和管理 Documents 目录。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -151,12 +151,12 @@ public struct ExtendedFeaturesView: View {
                     StorageManagementView()
                 } label: {
                     Label("存储管理", systemImage: "internaldrive")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("查看并清理本地模型、文件与缓存。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -165,12 +165,12 @@ public struct ExtendedFeaturesView: View {
                     ThirdPartyImportWatchHintView()
                 } label: {
                     Label("第三方导入", systemImage: "square.and.arrow.down.on.square")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("请在 iPhone 端完成第三方数据导入。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -180,12 +180,12 @@ public struct ExtendedFeaturesView: View {
                         .environmentObject(viewModel)
                 } label: {
                     Label(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), systemImage: "photo.on.rectangle.angled")
-                        .font(.headline)
+                        .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
                 Text("生图在独立页面发起，不影响主聊天输入区。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
         }
@@ -214,7 +214,7 @@ private struct LongTermMemoryFeatureView: View {
                 Toggle("启用记忆功能", isOn: $enableMemory)
             } footer: {
                 Text("启用后，AI 将拥有长期记忆能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
             
@@ -223,7 +223,7 @@ private struct LongTermMemoryFeatureView: View {
                     Toggle("是否记录新的记忆", isOn: $enableMemoryWrite)
                 } footer: {
                     Text("关闭后仅读取记忆，不保存新内容。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }
                 

@@ -27,7 +27,7 @@ struct FeedbackCenterView: View {
             Section(NSLocalizedString("我的反馈", comment: "My feedback list")) {
                 if service.tickets.isEmpty {
                     Text(NSLocalizedString("暂无反馈记录", comment: "No feedback records"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(service.tickets) { ticket in
@@ -64,9 +64,9 @@ private struct FeedbackTicketRow: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(String(format: NSLocalizedString("工单 #%d", comment: "Issue number title"), ticket.issueNumber))
-                    .font(.subheadline.weight(.semibold))
+                    .etFont(.subheadline.weight(.semibold))
                 Text(ticket.title)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -74,7 +74,7 @@ private struct FeedbackTicketRow: View {
             Spacer(minLength: 8)
 
             Text(ticket.lastKnownStatus.localizedTitle)
-                .font(.caption2.weight(.medium))
+                .etFont(.caption2.weight(.medium))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(statusColor.opacity(0.14), in: Capsule())
@@ -311,26 +311,26 @@ private struct FeedbackDetailView: View {
             Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
                 if (snapshot?.comments ?? []).isEmpty {
                     Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(snapshot?.comments ?? []) { comment in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(comment.author)
-                                    .font(.caption.weight(.semibold))
+                                    .etFont(.caption.weight(.semibold))
                                 if comment.isDeveloper {
                                     Image(systemName: "checkmark.seal.fill")
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.green)
                                 }
                                 Spacer()
                                 Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                             }
                             Text(comment.body)
-                                .font(.footnote)
+                                .etFont(.footnote)
                         }
                         .padding(.vertical, 4)
                     }
@@ -341,7 +341,7 @@ private struct FeedbackDetailView: View {
                !moderationMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section {
                     Text(moderationMessage)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.orange)
                 }
             }
@@ -350,12 +350,12 @@ private struct FeedbackDetailView: View {
                 let labels = snapshot?.labels ?? []
                 if labels.isEmpty {
                     Text(NSLocalizedString("暂无标签", comment: "No labels"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(labels, id: \.self) { label in
                         Text(label)
-                            .font(.footnote)
+                            .etFont(.footnote)
                     }
                 }
             }

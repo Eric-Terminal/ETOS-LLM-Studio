@@ -36,7 +36,7 @@ struct ModelSettingsView: View {
             ) {
                 TextField("模型名称", text: $model.displayName.watchKeyboardNewlineBinding())
                 TextField("模型ID", text: $model.modelName.watchKeyboardNewlineBinding())
-                    .font(.caption)
+                    .etFont(.caption)
             }
 
             Section(header: Text("模型能力")) {
@@ -83,7 +83,7 @@ struct ModelSettingsView: View {
                         text: $rawJSONInput.watchKeyboardNewlineBinding(),
                         axis: .vertical
                     )
-                    .font(.footnote.monospaced())
+                    .etFont(.footnote.monospaced())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .lineLimit(6...16)
@@ -92,12 +92,12 @@ struct ModelSettingsView: View {
                     }
 
                     Text("示例：{\"extra_body\":{\"abc\":\"123\"}}")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
 
                     if let rawJSONError {
                         Text(rawJSONError)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.red)
                     }
                 }
@@ -105,7 +105,7 @@ struct ModelSettingsView: View {
 
             Section(header: Text("请求体预览")) {
                 Text(preview.text)
-                    .font(.footnote.monospaced())
+                    .etFont(.footnote.monospaced())
                     .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
             }
         }
@@ -579,7 +579,7 @@ private struct ExpressionRow: View {
             
             if let error = entry.error {
                 Text(error)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
             }
         }

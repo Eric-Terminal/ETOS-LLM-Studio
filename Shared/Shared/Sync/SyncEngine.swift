@@ -36,6 +36,8 @@ public enum SyncEngine {
         var dailyPulsePendingCuration: DailyPulseCurationNote?
         var dailyPulseExternalSignals: [DailyPulseExternalSignal] = []
         var dailyPulseTasks: [DailyPulseTask] = []
+        var fontFiles: [SyncedFontFile] = []
+        var fontRouteConfigurationData: Data?
         var appStorageSnapshot: Data?
         var legacyGlobalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
@@ -106,6 +108,20 @@ public enum SyncEngine {
             dailyPulseTasks = Persistence.loadDailyPulseTasks()
         }
 
+        if options.contains(.fontFiles) {
+            fontFiles = FontLibrary.loadAssets().compactMap { record in
+                guard let data = Persistence.loadFont(fileName: record.fileName) else { return nil }
+                return SyncedFontFile(
+                    assetID: record.id,
+                    displayName: record.displayName,
+                    postScriptName: record.postScriptName,
+                    filename: record.fileName,
+                    data: data
+                )
+            }
+            fontRouteConfigurationData = FontLibrary.loadRouteConfigurationData()
+        }
+
         if options.contains(.appStorage) {
             let snapshot = collectAppStorageSnapshot(userDefaults: userDefaults)
             appStorageSnapshot = encodeAppStorageSnapshot(snapshot)
@@ -166,6 +182,8 @@ public enum SyncEngine {
             dailyPulsePendingCuration: dailyPulsePendingCuration,
             dailyPulseExternalSignals: dailyPulseExternalSignals,
             dailyPulseTasks: dailyPulseTasks,
+            fontFiles: fontFiles,
+            fontRouteConfigurationData: fontRouteConfigurationData,
             appStorageSnapshot: appStorageSnapshot,
             globalSystemPrompt: legacyGlobalSystemPrompt
         )
@@ -264,6 +282,24 @@ public enum SyncEngine {
             let result = mergeImageFiles(package.imageFiles)
             summary.importedImageFiles = result.imported
             summary.skippedImageFiles = result.skipped
+        }
+
+        if package.options.contains(.fontFiles) {
+            let fileResult = mergeFontFiles(package.fontFiles)
+            summary.importedFontFiles = fileResult.imported
+            summary.skippedFontFiles = fileResult.skipped
+
+            let routeResult = mergeFontRouteConfiguration(
+                package.fontRouteConfigurationData,
+                idMapping: fileResult.idMapping
+            )
+            summary.importedFontRouteConfigurations = routeResult.imported
+            summary.skippedFontRouteConfigurations = routeResult.skipped
+
+            if fileResult.imported > 0 || routeResult.imported > 0 {
+                FontLibrary.registerAllFontsIfNeeded()
+                NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+            }
         }
 
         if package.options.contains(.appStorage) {
@@ -879,6 +915,95 @@ public enum SyncEngine {
         }
 
         return (imported, skipped)
+    }
+
+    // MARK: - Font Files
+
+    private static func mergeFontFiles(
+        _ incoming: [SyncedFontFile]
+    ) -> (imported: Int, skipped: Int, idMapping: [UUID: UUID]) {
+        guard !incoming.isEmpty else { return (0, 0, [:]) }
+
+        var imported = 0
+        var skipped = 0
+        var idMapping: [UUID: UUID] = [:]
+        var knownChecksums = Set(FontLibrary.loadAssets().map(\.checksum))
+
+        for fontFile in incoming {
+            do {
+                let existedBefore = knownChecksums.contains(fontFile.checksum)
+                let record = try FontLibrary.importFont(
+                    data: fontFile.data,
+                    fileName: fontFile.filename,
+                    preferredDisplayName: fontFile.displayName
+                )
+                idMapping[fontFile.assetID] = record.id
+                knownChecksums.insert(record.checksum)
+                if existedBefore {
+                    skipped += 1
+                } else {
+                    imported += 1
+                }
+            } catch {
+                skipped += 1
+            }
+        }
+
+        return (imported, skipped, idMapping)
+    }
+
+    private static func mergeFontRouteConfiguration(
+        _ incomingData: Data?,
+        idMapping: [UUID: UUID]
+    ) -> (imported: Int, skipped: Int) {
+        guard let incomingData else { return (0, 0) }
+        guard let incoming = try? JSONDecoder().decode(FontRouteConfiguration.self, from: incomingData) else {
+            return (0, 1)
+        }
+
+        let existingIDs = Set(FontLibrary.loadAssets().map(\.id))
+        var normalized = FontRouteConfiguration(
+            body: normalizeRouteIDs(incoming.body, idMapping: idMapping, validIDs: existingIDs),
+            emphasis: normalizeRouteIDs(incoming.emphasis, idMapping: idMapping, validIDs: existingIDs),
+            strong: normalizeRouteIDs(incoming.strong, idMapping: idMapping, validIDs: existingIDs),
+            code: normalizeRouteIDs(incoming.code, idMapping: idMapping, validIDs: existingIDs),
+            languageBuckets: [:]
+        )
+
+        for (bucketKey, bucketValue) in incoming.languageBuckets {
+            normalized.languageBuckets[bucketKey] = FontRouteConfiguration.LanguageBucketConfiguration(
+                body: normalizeRouteIDs(bucketValue.body, idMapping: idMapping, validIDs: existingIDs),
+                emphasis: normalizeRouteIDs(bucketValue.emphasis, idMapping: idMapping, validIDs: existingIDs),
+                strong: normalizeRouteIDs(bucketValue.strong, idMapping: idMapping, validIDs: existingIDs),
+                code: normalizeRouteIDs(bucketValue.code, idMapping: idMapping, validIDs: existingIDs)
+            )
+        }
+
+        let current = FontLibrary.loadRouteConfiguration()
+        if current == normalized {
+            return (0, 1)
+        }
+
+        _ = FontLibrary.saveRouteConfiguration(normalized)
+        return (1, 0)
+    }
+
+    private static func normalizeRouteIDs(
+        _ ids: [UUID],
+        idMapping: [UUID: UUID],
+        validIDs: Set<UUID>
+    ) -> [UUID] {
+        var seen = Set<UUID>()
+        var normalized: [UUID] = []
+
+        for id in ids {
+            let mapped = idMapping[id] ?? id
+            guard validIDs.contains(mapped) else { continue }
+            guard seen.insert(mapped).inserted else { continue }
+            normalized.append(mapped)
+        }
+
+        return normalized
     }
 
     // MARK: - Shortcut Tools

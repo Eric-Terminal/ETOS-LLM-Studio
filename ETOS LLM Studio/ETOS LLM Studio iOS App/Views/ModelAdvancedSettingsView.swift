@@ -74,7 +74,7 @@ struct ModelAdvancedSettingsView: View {
                 }
 
                 Text("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -110,7 +110,7 @@ struct ModelAdvancedSettingsView: View {
                 Text("系统时间注入")
             } footer: {
                 Text("开启后会在系统提示中注入 <time> 标签，并包含当前设备时间。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -124,7 +124,7 @@ struct ModelAdvancedSettingsView: View {
                 }
             } footer: {
                 Text("开启后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
@@ -147,14 +147,14 @@ struct ModelAdvancedSettingsView: View {
                 Text(
                     "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
                 )
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section("采样参数") {
                 VStack(alignment: .leading) {
                     Text("Temperature \(String(format: "%.2f", aiTemperature))")
-                        .font(.subheadline)
+                        .etFont(.subheadline)
                     Slider(value: $aiTemperature, in: 0...2, step: 0.05)
                         .onChange(of: aiTemperature) { _, value in
                             aiTemperature = (value * 100).rounded() / 100
@@ -163,7 +163,7 @@ struct ModelAdvancedSettingsView: View {
 
                 VStack(alignment: .leading) {
                     Text("Top P \(String(format: "%.2f", aiTopP))")
-                        .font(.subheadline)
+                        .etFont(.subheadline)
                     Slider(value: $aiTopP, in: 0...1, step: 0.05)
                         .onChange(of: aiTopP) { _, value in
                             aiTopP = (value * 100).rounded() / 100
@@ -185,7 +185,7 @@ struct ModelAdvancedSettingsView: View {
                 }
 
                 Text("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
@@ -231,7 +231,7 @@ private struct GlobalSystemPromptPickerView: View {
                                 Text(displayTitle(for: entry))
                                     .lineLimit(1)
                                 Text(displayPreview(for: entry))
-                                    .font(.footnote)
+                                    .etFont(.footnote)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }

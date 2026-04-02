@@ -72,9 +72,9 @@ struct TTSFloatingController: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(playbackStatusText)
-                        .font(.caption.weight(.semibold))
+                        .etFont(.caption.weight(.semibold))
                     Text("\(chunkText) · \(timeText)")
-                        .font(.caption2.monospacedDigit())
+                        .etFont(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -100,11 +100,11 @@ struct TTSFloatingController: View {
     private var finishedPanel: some View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
-                .font(.caption.weight(.semibold))
+                .etFont(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             Text(statusText)
-                .font(.caption.weight(.semibold))
+                .etFont(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 4)
@@ -115,7 +115,7 @@ struct TTSFloatingController: View {
                     keepVisibleAfterFinished = true
                 }
                 .buttonStyle(.plain)
-                .font(.caption.weight(.semibold))
+                .etFont(.caption.weight(.semibold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background {
@@ -135,7 +135,7 @@ struct TTSFloatingController: View {
             cycleSpeed()
         } label: {
             Text(String(format: "x%.1f", settingsStore.playbackSpeed))
-                .font(.caption.monospacedDigit().weight(.semibold))
+                .etFont(.caption.monospacedDigit().weight(.semibold))
                 .frame(minWidth: 44)
                 .padding(.vertical, 6)
         }
@@ -149,7 +149,7 @@ struct TTSFloatingController: View {
     private func circularControlButton(systemName: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
+                .etFont(.system(size: 13, weight: .semibold))
                 .frame(width: 30, height: 30)
                 .foregroundStyle(prominent ? Color.white : Color.primary)
                 .background {

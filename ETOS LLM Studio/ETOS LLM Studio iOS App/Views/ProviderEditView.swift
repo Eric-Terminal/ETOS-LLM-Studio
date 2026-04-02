@@ -77,7 +77,7 @@ struct ProviderEditView: View {
 
             Section(header: Text("请求头预览")) {
                 Text(preview.text)
-                    .font(.footnote.monospaced())
+                    .etFont(.footnote.monospaced())
                     .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
                     .textSelection(.enabled)
             }
@@ -271,11 +271,11 @@ private struct HeaderOverrideRow: View {
             TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.body.monospaced())
+                .etFont(.body.monospaced())
 
             if let error = entry.error {
                 Text(error)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
             }
         }

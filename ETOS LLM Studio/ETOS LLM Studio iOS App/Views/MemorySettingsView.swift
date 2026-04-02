@@ -80,7 +80,7 @@ struct MemorySettingsView: View {
                 let options = viewModel.embeddingModelOptions
                 if options.isEmpty {
                     Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     NavigationLink {
@@ -105,7 +105,7 @@ struct MemorySettingsView: View {
                 Text("嵌入模型")
             } footer: {
                 Text("这里只列出支持嵌入能力的模型，记忆嵌入请求会使用所选模型发送。也可以在“提供商与模型管理 > 专用模型”中统一设置。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -130,14 +130,14 @@ struct MemorySettingsView: View {
                             comment: "Active retrieval toggle description"
                         )
                     )
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 }
             } header: {
                 Text("检索设置")
             } footer: {
                 Text("设置为 0 表示跳过检索，直接把所有记忆原文注入上下文。默认为 3。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
@@ -152,7 +152,7 @@ struct MemorySettingsView: View {
                 if let progress = activeEmbeddingProgress {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(embeddingProgressTitle(for: progress))
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(embeddingProgressColor(for: progress))
                         
                         ProgressView(
@@ -167,7 +167,7 @@ struct MemorySettingsView: View {
                                 progress.totalMemories
                             )
                         )
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         
                         if progress.phase == .running,
@@ -179,7 +179,7 @@ struct MemorySettingsView: View {
                                     preview
                                 )
                             )
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         }
@@ -188,7 +188,7 @@ struct MemorySettingsView: View {
                            let message = progress.errorMessage,
                            !message.isEmpty {
                             Text(message)
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.orange)
                         }
                     }
@@ -197,7 +197,7 @@ struct MemorySettingsView: View {
                 Text("数据维护")
             } footer: {
                 Text("会清理旧的向量数据库并为所有记忆重新生成嵌入。完成后历史检索将使用最新数据。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
@@ -218,7 +218,7 @@ struct MemorySettingsView: View {
                                 Text(memory.content)
                                     .lineLimit(2)
                                 Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
+                                    .etFont(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -250,7 +250,7 @@ struct MemorySettingsView: View {
                 Text(NSLocalizedString("激活的记忆", comment: ""))
             } footer: {
                 Text(NSLocalizedString("这些记忆会参与检索并发送给模型。左滑删除，右滑归档。", comment: ""))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
@@ -259,7 +259,7 @@ struct MemorySettingsView: View {
                 if archivedMemories.isEmpty {
                     Text(NSLocalizedString("没有被归档的记忆。", comment: ""))
                         .foregroundStyle(.secondary)
-                        .font(.footnote)
+                        .etFont(.footnote)
                 } else {
                     ForEach(archivedMemories) { memory in
                         Button {
@@ -270,7 +270,7 @@ struct MemorySettingsView: View {
                                     .lineLimit(2)
                                     .foregroundStyle(.secondary)
                                 Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
+                                    .etFont(.caption)
                                     .foregroundStyle(.tertiary)
                             }
                         }
@@ -302,7 +302,7 @@ struct MemorySettingsView: View {
                 Text(NSLocalizedString("归档的记忆", comment: ""))
             } footer: {
                 Text(NSLocalizedString("这些记忆已被归档，不会参与检索。左滑删除，右滑恢复。", comment: ""))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }

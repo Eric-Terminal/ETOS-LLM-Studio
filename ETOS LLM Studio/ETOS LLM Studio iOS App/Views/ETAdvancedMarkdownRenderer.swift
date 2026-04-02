@@ -115,7 +115,8 @@ struct ETAdvancedMarkdownRenderer: View {
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
                     isOutgoing: isOutgoing,
-                    prefersDarkPalette: colorScheme == .dark
+                    prefersDarkPalette: colorScheme == .dark,
+                    sampleText: text
                 )
         } else {
             Text(text)
@@ -306,6 +307,22 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             let codeBlockBackgroundColor = isOutgoing ? "rgba(255,255,255,0.16)" : "rgba(127,127,127,0.16)"
             let codeHeaderBackgroundColor = isOutgoing ? "rgba(255,255,255,0.2)" : "rgba(127,127,127,0.2)"
             let codeBorderColor = isOutgoing ? "rgba(255,255,255,0.28)" : "rgba(127,127,127,0.3)"
+            let bodyFontFamily = Self.cssFontFamily(
+                role: .body,
+                fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+            )
+            let emphasisFontFamily = Self.cssFontFamily(
+                role: .emphasis,
+                fallback: "var(--font-body)"
+            )
+            let strongFontFamily = Self.cssFontFamily(
+                role: .strong,
+                fallback: "var(--font-body)"
+            )
+            let codeFontFamily = Self.cssFontFamily(
+                role: .code,
+                fallback: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace"
+            )
 
             return """
 <!doctype html>
@@ -333,6 +350,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       --code-punctuation: \(codePunctuationColor);
       --code-copy-bg: \(codeCopyButtonBackground);
       --code-copy-active-bg: \(codeCopyButtonActiveBackground);
+      --font-body: \(bodyFontFamily);
+      --font-emphasis: \(emphasisFontFamily);
+      --font-strong: \(strongFontFamily);
+      --font-code: \(codeFontFamily);
     }
 
     html, body {
@@ -343,6 +364,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       width: 100%;
       overflow: hidden;
       font: -apple-system-body;
+      font-family: var(--font-body);
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
     }
@@ -361,10 +383,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     ul, ol { margin: 0.3em 0; padding-left: 1.25em; }
     li { margin: 0.2em 0; }
     a { color: var(--link); text-decoration: underline; }
-    strong { font-weight: 600; }
-    em { font-style: italic; }
+    strong { font-weight: 600; font-family: var(--font-strong); }
+    em { font-style: italic; font-family: var(--font-emphasis); }
     code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-family: var(--font-code);
       background: rgba(127,127,127,0.16);
       border-radius: 6px;
       padding: 0.08em 0.3em;
@@ -985,6 +1007,21 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 </html>
 """
         }
+
+        nonisolated private static func cssFontFamily(role: FontSemanticRole, fallback: String) -> String {
+            let customFamilies = FontLibrary.fallbackPostScriptNames(for: role).map(cssFamilyLiteral)
+            if customFamilies.isEmpty {
+                return fallback
+            }
+            return (customFamilies + [fallback]).joined(separator: ", ")
+        }
+
+        nonisolated private static func cssFamilyLiteral(_ value: String) -> String {
+            let escaped = value
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+            return "'\(escaped)'"
+        }
     }
 
     struct Payload: Equatable {
@@ -1016,7 +1053,12 @@ window.__etNotifyHeight && window.__etNotifyHeight();
 
 private extension View {
     @ViewBuilder
-    func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool, prefersDarkPalette: Bool) -> some View {
+    func etChatMarkdownBaseStyle(
+        textColor: Color,
+        isOutgoing: Bool,
+        prefersDarkPalette: Bool,
+        sampleText: String
+    ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
             : Color.primary.opacity(0.09)
@@ -1029,6 +1071,10 @@ private extension View {
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
+        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
+        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
+        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
+        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
 
         self
             .markdownSoftBreakMode(.lineBreak)
@@ -1040,13 +1086,37 @@ private extension View {
                 )
             )
             .markdownTextStyle {
+                if let bodyFontName, !bodyFontName.isEmpty {
+                    FontFamily(.custom(bodyFontName))
+                }
+                ForegroundColor(textColor)
+            }
+            .markdownTextStyle(\.emphasis) {
+                if let emphasisFontName, !emphasisFontName.isEmpty {
+                    FontFamily(.custom(emphasisFontName))
+                }
+                FontStyle(.italic)
+                ForegroundColor(textColor)
+            }
+            .markdownTextStyle(\.strong) {
+                if let strongFontName, !strongFontName.isEmpty {
+                    FontFamily(.custom(strongFontName))
+                }
+                ForegroundColor(textColor)
+            }
+            .markdownTextStyle(\.code) {
+                if let codeFontName, !codeFontName.isEmpty {
+                    FontFamily(.custom(codeFontName))
+                } else {
+                    FontFamilyVariant(.monospaced)
+                }
                 ForegroundColor(textColor)
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
                         Text(configuration.language?.isEmpty == false ? (configuration.language ?? "代码") : "代码")
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .etFont(.system(size: 11, weight: .semibold, design: .monospaced))
                             .foregroundStyle(codeHeaderTextColor)
 
                         Spacer(minLength: 8)
@@ -1081,7 +1151,11 @@ private extension View {
                         configuration.label
                             .relativeLineSpacing(.em(0.15))
                             .markdownTextStyle {
-                                FontFamilyVariant(.monospaced)
+                                if let codeFontName, !codeFontName.isEmpty {
+                                    FontFamily(.custom(codeFontName))
+                                } else {
+                                    FontFamilyVariant(.monospaced)
+                                }
                                 FontSize(.em(0.9))
                                 ForegroundColor(textColor)
                             }
@@ -1154,7 +1228,7 @@ private struct ETCodeCopyButton: View {
             }
         } label: {
             Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
-                .font(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12, weight: .semibold))
                 .foregroundStyle(didCopy ? successColor : normalColor)
         }
         .buttonStyle(.plain)
@@ -1312,7 +1386,7 @@ private struct ETCodePreviewButton: View {
             showingPreview = true
         } label: {
             Image(systemName: "safari")
-                .font(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12, weight: .semibold))
                 .foregroundStyle(tintColor)
         }
         .buttonStyle(.plain)

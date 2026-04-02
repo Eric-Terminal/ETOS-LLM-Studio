@@ -41,17 +41,17 @@ struct ToolPermissionBubble: View {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("工具：\(toolName)")
-                        .font(.subheadline.weight(.semibold))
+                        .etFont(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
 
                     if !trimmedArguments.isEmpty {
                         Text("参数：")
-                            .font(.caption.weight(.medium))
+                            .etFont(.caption.weight(.medium))
                             .foregroundStyle(Color.secondary)
 
                         ScrollView {
                             Text(trimmedArguments)
-                                .font(.caption.monospaced())
+                                .etFont(.caption.monospaced())
                                 .foregroundStyle(Color.secondary)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)

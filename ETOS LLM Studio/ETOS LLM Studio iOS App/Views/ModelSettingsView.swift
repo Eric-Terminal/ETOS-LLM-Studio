@@ -37,7 +37,7 @@ struct ModelSettingsView: View {
                 TextField("模型ID", text: $model.modelName)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .font(.footnote.monospaced())
+                    .etFont(.footnote.monospaced())
             }
 
             Section("模型能力") {
@@ -85,7 +85,7 @@ struct ModelSettingsView: View {
                     footer: Text("填写 JSON 对象并与默认请求体合并。示例：{\"extra_body\": {\"abc\": \"123\"}}")
                 ) {
                     TextEditor(text: $rawJSONInput)
-                        .font(.footnote.monospaced())
+                        .etFont(.footnote.monospaced())
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .frame(minHeight: 180)
@@ -95,7 +95,7 @@ struct ModelSettingsView: View {
 
                     if let rawJSONError {
                         Text(rawJSONError)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.red)
                     }
                 }
@@ -103,7 +103,7 @@ struct ModelSettingsView: View {
 
             Section("请求体预览") {
                 Text(preview.text)
-                    .font(.footnote.monospaced())
+                    .etFont(.footnote.monospaced())
                     .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
                     .textSelection(.enabled)
             }
@@ -575,11 +575,11 @@ private struct ExpressionRow: View {
             TextField("参数表达式，比如 temperature = 0.8", text: $entry.text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.body.monospaced())
+                .etFont(.body.monospaced())
             
             if let error = entry.error {
                 Text(error)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
             }
         }

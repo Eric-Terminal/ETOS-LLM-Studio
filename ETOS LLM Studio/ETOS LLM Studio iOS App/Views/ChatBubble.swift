@@ -395,21 +395,21 @@ struct ChatBubble: View {
                 onSwitchToPreviousVersion()
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .bold))
+                    .etFont(.system(size: 14, weight: .bold))
             }
             .buttonStyle(.plain)
             .disabled(message.getCurrentVersionIndex() == 0)
             .opacity(message.getCurrentVersionIndex() > 0 ? 1 : 0.4)
             
             Text("\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count)")
-                .font(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: 14, weight: .semibold))
                 .monospacedDigit()
             
             Button {
                 onSwitchToNextVersion()
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .bold))
+                    .etFont(.system(size: 14, weight: .bold))
             }
             .buttonStyle(.plain)
             .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
@@ -643,7 +643,7 @@ struct ChatBubble: View {
                 audioPlayerView(fileName: audioFileName)
             } else {
                 renderContent(message.content)
-                    .font(.body)
+                    .etFont(.body)
                     .foregroundStyle(isOutgoing ? Color.white : Color.primary)
                     .textSelection(.enabled)
             }
@@ -660,7 +660,7 @@ struct ChatBubble: View {
                 )
             } else {
                 Text("正在思考...")
-                    .font(.subheadline)
+                    .etFont(.subheadline)
                     .foregroundStyle(Color.secondary)
             }
         }
@@ -774,10 +774,10 @@ struct ChatBubble: View {
             ForEach(fileNames, id: \.self) { fileName in
                 HStack(spacing: 8) {
                     Image(systemName: "doc")
-                        .font(.system(size: 16, weight: .semibold))
+                        .etFont(.system(size: 16, weight: .semibold))
                         .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
                     Text(fileName)
-                        .font(.system(size: 13, weight: .medium))
+                        .etFont(.system(size: 13, weight: .medium))
                         .lineLimit(1)
                         .foregroundStyle(isOutgoing ? Color.white : Color.primary)
                 }
@@ -818,7 +818,7 @@ struct ChatBubble: View {
                         .fill(isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
                         .frame(width: 44, height: 44)
                     Image(systemName: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName ? "stop.fill" : "play.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .etFont(.system(size: 16, weight: .semibold))
                         .foregroundStyle(foregroundColor)
                 }
             }
@@ -837,12 +837,12 @@ struct ChatBubble: View {
                 // 时长
                 if audioPlayer.currentFileName == fileName && audioPlayer.duration > 0 {
                     Text(audioPlayer.timeString)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(secondaryColor)
                         .monospacedDigit()
                 } else {
                     Text(fileName)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(secondaryColor)
                         .lineLimit(1)
                 }
@@ -968,10 +968,10 @@ private struct AttachmentImageView: View {
                     .overlay(
                         VStack(spacing: 4) {
                             Image(systemName: "photo")
-                                .font(.system(size: 20))
+                                .etFont(.system(size: 20))
                                 .foregroundStyle(.secondary)
                             Text("图片丢失")
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     )
@@ -1137,7 +1137,7 @@ struct ReasoningDisclosureView: View, Equatable {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "brain.head.profile")
-                        .font(.system(size: 12))
+                        .etFont(.system(size: 12))
                         .foregroundStyle(baseColor)
                     if isShimmering {
                         ShimmeringText(
@@ -1149,13 +1149,13 @@ struct ReasoningDisclosureView: View, Equatable {
                         .lineLimit(1)
                     } else {
                         Text("思考过程")
-                            .font(.subheadline.weight(.medium))
+                            .etFont(.subheadline.weight(.medium))
                             .foregroundStyle(baseColor)
                             .lineLimit(1)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .etFont(.system(size: 12, weight: .semibold))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .foregroundStyle(baseColor)
                 }
@@ -1166,7 +1166,7 @@ struct ReasoningDisclosureView: View, Equatable {
             // 内容区域：只在展开时渲染
             if isExpanded {
                 Text(displayText)
-                    .font(.subheadline)
+                    .etFont(.subheadline)
                     .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1256,14 +1256,14 @@ struct ToolCallsInlineView: View, Equatable {
         private var toolHeader: some View {
             HStack(spacing: 6) {
                 Image(systemName: "wrench.and.screwdriver")
-                    .font(.system(size: 12))
+                    .etFont(.system(size: 12))
                 Text("调用：\(label)")
-                    .font(.subheadline.weight(.medium))
+                    .etFont(.subheadline.weight(.medium))
                     .lineLimit(1)
                 if !trimmedArguments.isEmpty {
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .etFont(.system(size: 12, weight: .semibold))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
             }
@@ -1325,7 +1325,7 @@ private struct ToolPermissionInlineView: View {
 
             if let countdownText {
                 Text(countdownText)
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
@@ -1405,7 +1405,7 @@ struct ToolResultsDisclosureView: View, Equatable {
             if isPending {
                 HStack(spacing: 6) {
                     Image(systemName: "wrench.and.screwdriver")
-                        .font(.system(size: 12))
+                        .etFont(.system(size: 12))
                     ShimmeringText(
                         text: "结果：\(toolNames.joined(separator: ", "))",
                         font: .subheadline.weight(.medium),
@@ -1415,7 +1415,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                     .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .etFont(.system(size: 12, weight: .semibold))
                         .foregroundStyle(isOutgoing ? Color.white.opacity(0.4) : Color.secondary.opacity(0.6))
                 }
                 .foregroundStyle(headerForegroundColor)
@@ -1427,18 +1427,18 @@ struct ToolResultsDisclosureView: View, Equatable {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
                             Image(systemName: "wrench.and.screwdriver")
-                                .font(.system(size: 12))
+                                .etFont(.system(size: 12))
                             Text("结果：\(toolNames.joined(separator: ", "))")
-                                .font(.subheadline.weight(.medium))
+                                .etFont(.subheadline.weight(.medium))
                                 .lineLimit(1)
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
+                                .etFont(.system(size: 12, weight: .semibold))
                                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         }
                         if let disclosureSummaryText {
                             Text(disclosureSummaryText)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(summaryForegroundColor)
                                 .lineLimit(1)
                                 .multilineTextAlignment(.leading)
@@ -1477,7 +1477,7 @@ struct ToolResultsDisclosureView: View, Equatable {
         let label = displayName(for: call.toolName)
         return VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.caption.weight(.semibold))
+                .etFont(.caption.weight(.semibold))
             if let primaryContentText = display.primaryContentText,
                !primaryContentText.isEmpty {
                 toolResultSection(
@@ -1513,7 +1513,7 @@ struct ToolResultsDisclosureView: View, Equatable {
         let label = displayName(for: call.toolName)
         return VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.caption.weight(.semibold))
+                .etFont(.caption.weight(.semibold))
             if !result.isEmpty {
                 CappedScrollableText(
                     text: result,
@@ -1540,7 +1540,7 @@ struct ToolResultsDisclosureView: View, Equatable {
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundStyle(sectionForegroundColor.opacity(0.85))
             CappedScrollableText(
                 text: text,
@@ -1567,7 +1567,7 @@ private struct ShimmeringText: View {
 
     var body: some View {
         Text(text)
-            .font(font)
+            .etFont(font)
             .foregroundStyle(baseColor)
             .overlay(
                 GeometryReader { proxy in
@@ -1597,7 +1597,7 @@ private struct ShimmeringText: View {
                 }
                 .mask(
                     Text(text)
-                        .font(font)
+                        .etFont(font)
                 )
                 .allowsHitTesting(false)
             )
@@ -1640,13 +1640,13 @@ private struct CappedScrollableText: View {
     private var textView: some View {
         if enableSelection {
             Text(text)
-                .font(font)
+                .etFont(font)
                 .foregroundStyle(foreground)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(text)
-                .font(font)
+                .etFont(font)
                 .foregroundStyle(foreground)
                 .textSelection(.disabled)
                 .frame(maxWidth: .infinity, alignment: .leading)

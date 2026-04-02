@@ -62,11 +62,11 @@ struct ProviderDetailView: View {
                     Toggle("按模型家族分组", isOn: $groupByFamilySection)
                     if groupByFamilySection {
                         Text("将按模型家族拆分显示。")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundColor(.secondary)
                     } else {
                         Text("将按已添加/未添加展示。")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -264,7 +264,7 @@ struct ProviderDetailView: View {
         Section(title) {
             if indices.isEmpty {
                 Text(emptyStateText(forActiveSection: isActive))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             } else if isActive {
                 ForEach(indices, id: \.self) { index in

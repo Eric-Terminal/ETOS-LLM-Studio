@@ -30,7 +30,7 @@ struct WorldbookSettingsView: View {
         List {
             Section(NSLocalizedString("世界书说明", comment: "Worldbook description section")) {
                 Text(NSLocalizedString("世界书会在发送消息时按规则自动激活并注入，不会写入长期记忆。", comment: "Worldbook intro"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -71,7 +71,7 @@ struct WorldbookSettingsView: View {
                     HStack(spacing: 8) {
                         ProgressView()
                         Text(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -84,7 +84,7 @@ struct WorldbookSettingsView: View {
                     row(title: NSLocalizedString("失败条目", comment: "Failed entries"), value: "\(report.failedEntries)")
                     if !report.failureReasons.isEmpty {
                         Text(report.failureReasons.joined(separator: "\n"))
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -93,7 +93,7 @@ struct WorldbookSettingsView: View {
             if let importError, !importError.isEmpty {
                 Section(NSLocalizedString("导入错误", comment: "Import error section")) {
                     Text(importError)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.red)
                 }
             }
@@ -101,7 +101,7 @@ struct WorldbookSettingsView: View {
             if let exportError, !exportError.isEmpty {
                 Section(NSLocalizedString("导出错误", comment: "Export error section")) {
                     Text(exportError)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.red)
                 }
             }
@@ -117,26 +117,26 @@ struct WorldbookSettingsView: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(book.name)
-                                    .font(.headline)
+                                    .etFont(.headline)
 
                                 HStack(spacing: 8) {
                                     Text(String(format: NSLocalizedString("条目 %d", comment: "Entry count short"), book.entries.count))
                                     Text(enabledEntrySummary(for: book))
                                     Text(book.updatedAt.formatted(date: .abbreviated, time: .shortened))
                                 }
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
 
                                 if !book.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Text(book.description)
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                 }
 
                                 if isBoundToCurrentSession(book) {
                                     Text(NSLocalizedString("已绑定当前会话", comment: "Bound current session"))
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.tint)
                                 }
                             }
@@ -192,7 +192,7 @@ struct WorldbookSettingsView: View {
 
                     Section {
                         Text(NSLocalizedString("输入可直接访问的 JSON 或 PNG 世界书链接。", comment: "URL import hint"))
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
 
@@ -583,7 +583,7 @@ private struct WorldbookDetailView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(entry.comment.isEmpty ? NSLocalizedString("(无注释)", comment: "No comment") : entry.comment)
-                                        .font(.subheadline)
+                                        .etFont(.subheadline)
                                         .lineLimit(1)
 
                                     Text(
@@ -591,12 +591,12 @@ private struct WorldbookDetailView: View {
                                         ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
                                         : NSLocalizedString("已停用", comment: "Worldbook disabled status")
                                     )
-                                    .font(.caption)
+                                    .etFont(.caption)
                                     .foregroundStyle(entry.isEnabled ? .green : .secondary)
 
                                     if let preview = entryPreview(entry) {
                                         Text(preview)
-                                            .font(.footnote)
+                                            .etFont(.footnote)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(3)
                                     }
@@ -846,24 +846,24 @@ private struct WorldbookEntryDetailView: View {
             Section(NSLocalizedString("内容", comment: "Content field")) {
                 if !entry.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(entry.comment)
-                        .font(.headline)
+                        .etFont(.headline)
                 }
 
                 if !entry.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(entry.content)
-                        .font(.body)
+                        .etFont(.body)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
 
                 if !entry.keys.isEmpty {
                     Text(entry.keys.joined(separator: "，"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 Text(worldbookPositionLabel(entry.position))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
 
                 Text(
@@ -872,7 +872,7 @@ private struct WorldbookEntryDetailView: View {
                         worldbookEntryRoleLabel(entry.role)
                     )
                 )
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
             }
         }
@@ -1366,13 +1366,13 @@ private struct WorldbookSessionBindingView: View {
                 )
 
                 Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送长期记忆、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -1392,7 +1392,7 @@ private struct WorldbookSessionBindingView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(book.name)
                                     Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
-                                        .font(.caption)
+                                        .etFont(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()

@@ -40,7 +40,7 @@ struct ProviderEditView: View {
             Section(header: Text("基础信息"), footer: Text(apiBaseURLHint)) {
                 TextField("提供商名称", text: $provider.name.watchKeyboardNewlineBinding())
                 TextField("API 地址", text: $provider.baseURL.watchKeyboardNewlineBinding())
-                    .font(.caption)
+                    .etFont(.caption)
                 Picker("API 格式", selection: $provider.apiFormat) {
                     Text("OpenAI 兼容").tag("openai-compatible")
                     Text("Gemini").tag("gemini")
@@ -76,7 +76,7 @@ struct ProviderEditView: View {
 
             Section(header: Text("请求头预览")) {
                 Text(preview.text)
-                    .font(.footnote.monospaced())
+                    .etFont(.footnote.monospaced())
                     .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
             }
             
@@ -273,11 +273,11 @@ private struct HeaderOverrideRow: View {
             TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.footnote.monospaced())
+                .etFont(.footnote.monospaced())
 
             if let error = entry.error {
                 Text(error)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
             }
         }

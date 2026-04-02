@@ -167,7 +167,7 @@ private struct ProviderModelOrderContentView: View {
             ) {
                 if viewModel.configuredModels.isEmpty {
                     Text("暂无可排序模型。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.configuredModels, id: \.id) { runnable in
@@ -198,7 +198,7 @@ private struct ProviderModelOrderContentView: View {
 
             if !runnable.model.isActivated {
                 Text("未启用")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }

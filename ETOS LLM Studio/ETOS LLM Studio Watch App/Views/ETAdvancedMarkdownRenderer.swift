@@ -91,7 +91,8 @@ struct ETAdvancedMarkdownRenderer: View {
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
                     isOutgoing: isOutgoing,
-                    prefersDarkPalette: colorScheme == .dark
+                    prefersDarkPalette: colorScheme == .dark,
+                    sampleText: text
                 )
         } else {
             Text(text)
@@ -168,7 +169,8 @@ private struct ETMathAwareMarkdownView: View {
                     .etChatMarkdownBaseStyle(
                         textColor: textColor,
                         isOutgoing: isOutgoing,
-                        prefersDarkPalette: colorScheme == .dark
+                        prefersDarkPalette: colorScheme == .dark,
+                        sampleText: text
                     )
             } else {
                 Text(text)
@@ -180,7 +182,12 @@ private struct ETMathAwareMarkdownView: View {
 
 private extension View {
     @ViewBuilder
-    func etChatMarkdownBaseStyle(textColor: Color, isOutgoing: Bool, prefersDarkPalette: Bool) -> some View {
+    func etChatMarkdownBaseStyle(
+        textColor: Color,
+        isOutgoing: Bool,
+        prefersDarkPalette: Bool,
+        sampleText: String
+    ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
             : Color.primary.opacity(0.09)
@@ -193,6 +200,10 @@ private extension View {
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
+        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
+        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
+        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
+        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
 
         self
             .markdownSoftBreakMode(.lineBreak)
@@ -204,13 +215,37 @@ private extension View {
                 )
             )
             .markdownTextStyle {
+                if let bodyFontName, !bodyFontName.isEmpty {
+                    FontFamily(.custom(bodyFontName))
+                }
+                ForegroundColor(textColor)
+            }
+            .markdownTextStyle(\.emphasis) {
+                if let emphasisFontName, !emphasisFontName.isEmpty {
+                    FontFamily(.custom(emphasisFontName))
+                }
+                FontStyle(.italic)
+                ForegroundColor(textColor)
+            }
+            .markdownTextStyle(\.strong) {
+                if let strongFontName, !strongFontName.isEmpty {
+                    FontFamily(.custom(strongFontName))
+                }
+                ForegroundColor(textColor)
+            }
+            .markdownTextStyle(\.code) {
+                if let codeFontName, !codeFontName.isEmpty {
+                    FontFamily(.custom(codeFontName))
+                } else {
+                    FontFamilyVariant(.monospaced)
+                }
                 ForegroundColor(textColor)
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
                         Text(configuration.language?.isEmpty == false ? (configuration.language ?? "代码") : "代码")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .etFont(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundStyle(codeHeaderTextColor)
 
                         Spacer(minLength: 8)
@@ -237,7 +272,11 @@ private extension View {
                         configuration.label
                             .relativeLineSpacing(.em(0.12))
                             .markdownTextStyle {
-                                FontFamilyVariant(.monospaced)
+                                if let codeFontName, !codeFontName.isEmpty {
+                                    FontFamily(.custom(codeFontName))
+                                } else {
+                                    FontFamilyVariant(.monospaced)
+                                }
                                 FontSize(.em(0.88))
                                 ForegroundColor(textColor)
                             }
@@ -310,7 +349,7 @@ private struct ETCodeCopyButton: View {
             }
         } label: {
             Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
-                .font(.system(size: 10, weight: .semibold))
+                .etFont(.system(size: 10, weight: .semibold))
                 .foregroundStyle(didCopy ? successColor : normalColor)
         }
         .buttonStyle(.plain)

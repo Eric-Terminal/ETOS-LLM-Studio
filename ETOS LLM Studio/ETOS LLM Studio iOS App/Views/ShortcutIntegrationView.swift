@@ -21,13 +21,13 @@ struct ShortcutIntegrationView: View {
         List {
             Section("关于快捷指令工具") {
                 Text("通过剪贴板 + URL 导入快捷指令清单。导入后可像 MCP 一样控制启用、描述和调用权限。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 Text("轻度导入：仅导入名称，描述可手动编辑或稍后让 AI 生成。")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
                 Text("深度导入：包含 iCloud 分享链接，App 会尝试解析流程并生成描述；失败会自动降级为仅链接，不影响导入。")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -40,13 +40,13 @@ struct ShortcutIntegrationView: View {
                     )
                 )
                 Text("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section("官方导入快捷指令") {
                 Text("内置官方快捷指令，可一键下载并触发导入流程。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
 
                 Button {
@@ -82,7 +82,7 @@ struct ShortcutIntegrationView: View {
                         ShortcutToolManager.officialImportShortcutDefaultName
                     )
                 )
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.secondary)
             }
 
@@ -90,7 +90,7 @@ struct ShortcutIntegrationView: View {
                !officialStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("当前官方导入状态") {
                     Text(officialStatus)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle((manager.lastOfficialTemplateRunSucceeded == false) ? .orange : .secondary)
                 }
             }
@@ -114,11 +114,11 @@ struct ShortcutIntegrationView: View {
                 if manager.isImporting {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("导入进行中")
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                         if manager.isCancellingImport {
                             Text(NSLocalizedString("正在取消导入，请稍候…", comment: ""))
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.orange)
                         }
 
@@ -134,7 +134,7 @@ struct ShortcutIntegrationView: View {
                                     manager.importProgressTotal
                                 )
                             )
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         } else {
                             ProgressView()
@@ -147,7 +147,7 @@ struct ShortcutIntegrationView: View {
                                     currentName
                                 )
                             )
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         }
 
@@ -156,7 +156,7 @@ struct ShortcutIntegrationView: View {
                         } label: {
                             Text("取消导入")
                         }
-                        .font(.caption)
+                        .etFont(.caption)
                         .disabled(manager.isCancellingImport)
                     }
                 }
@@ -166,7 +166,7 @@ struct ShortcutIntegrationView: View {
                     .autocorrectionDisabled()
 
                 Text("默认会按“直连 -> 桥接”执行；若工具运行模式设为桥接，则按“桥接 -> 直连”。")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -190,7 +190,7 @@ struct ShortcutIntegrationView: View {
                 .disabled(!toolPermissionCenter.autoApproveEnabled)
                 let disabledCount = toolPermissionCenter.disabledAutoApproveTools.count
                 Text("已禁用自动批准工具：\(disabledCount)")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
                 if disabledCount > 0 {
                     Button("清空禁用列表", role: .destructive) {
@@ -207,9 +207,9 @@ struct ShortcutIntegrationView: View {
                     if !summary.conflictNames.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("重名冲突")
-                                .font(.subheadline)
+                                .etFont(.subheadline)
                             Text(summary.conflictNames.joined(separator: "，"))
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -220,7 +220,7 @@ struct ShortcutIntegrationView: View {
                 Section("错误") {
                     Text(error)
                         .foregroundStyle(.red)
-                        .font(.footnote)
+                        .etFont(.footnote)
                 }
             }
 
@@ -231,7 +231,7 @@ struct ShortcutIntegrationView: View {
                 } else {
                     if !manager.chatToolsEnabled {
                         Text("当前总开关已关闭，以下快捷指令仅用于管理，不会参与聊天调用。")
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                     ForEach(manager.tools) { tool in
@@ -241,28 +241,28 @@ struct ShortcutIntegrationView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(alignment: .firstTextBaseline) {
                                     Text(tool.displayName)
-                                        .font(.headline)
+                                        .etFont(.headline)
                                     Spacer()
                                     Text(
                                         tool.isEnabled
                                         ? NSLocalizedString("已启用", comment: "Shortcut tool enabled status")
                                         : NSLocalizedString("已停用", comment: "Shortcut tool disabled status")
                                     )
-                                    .font(.caption)
+                                    .etFont(.caption)
                                     .foregroundStyle(tool.isEnabled ? .green : .secondary)
                                 }
 
                                 Text(tool.effectiveDescription)
-                                    .font(.footnote)
+                                    .etFont(.footnote)
                                     .foregroundStyle(.secondary)
 
                                 Text("运行模式：\(runModeLabel(for: tool.runModeHint))")
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(.secondary)
 
                                 if let importStatusText = importStatusText(for: tool) {
                                     Text(importStatusText)
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
                             }
@@ -342,13 +342,13 @@ private struct ShortcutToolDetailView: View {
             if let tool {
                 Section("工具信息") {
                     Text(tool.displayName)
-                        .font(.headline)
+                        .etFont(.headline)
                     Text(tool.name)
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundStyle(.secondary)
                     if let importStatusText = importStatusText(for: tool) {
                         Text(importStatusText)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -380,7 +380,7 @@ private struct ShortcutToolDetailView: View {
 
                 Section("工具描述") {
                     Text(tool.effectiveDescription)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
 
                     Button {
@@ -411,7 +411,7 @@ private struct ShortcutToolDetailView: View {
                         Section("工具") {
                             Text(tool.displayName)
                             Text(tool.name)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
 

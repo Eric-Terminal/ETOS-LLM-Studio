@@ -26,7 +26,7 @@ struct TTSSettingsView: View {
                 }
 
                 Text("自动模式会优先使用本地系统 TTS，失败时会自动降级到云端。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -141,7 +141,7 @@ struct TTSSettingsView: View {
                 }
 
                 Text("如果点朗读会卡住，建议保持轻量预处理开启，并下调最大字符。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 

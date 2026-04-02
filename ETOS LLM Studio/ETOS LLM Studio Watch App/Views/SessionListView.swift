@@ -44,7 +44,7 @@ struct SessionListView: View {
         List {
             if sessions.isEmpty {
                 Text("暂无历史会话。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(sessions) { session in
@@ -180,19 +180,19 @@ private struct WatchSessionSearchView: View {
             Section {
                 if normalizedQuery.isEmpty {
                     Text("输入关键词后点完成开始搜索。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else if isSearching {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.mini)
                         Text("正在搜索历史会话…")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 } else {
                     Text("匹配 \(displayedSessions.count) / \(sessions.count) 个会话")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -202,7 +202,7 @@ private struct WatchSessionSearchView: View {
                     EmptyView()
                 } else if displayedSessions.isEmpty {
                     Text("未找到匹配的历史会话。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(displayedSessions) { session in
@@ -233,17 +233,17 @@ private struct WatchSessionSearchView: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(session.name)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .lineLimit(1)
 
                     if let summary, !summary.isEmpty {
                         Text(summary)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(nil)
                     } else if let topic = session.topicPrompt, !topic.isEmpty {
                         Text(topic)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
@@ -253,7 +253,7 @@ private struct WatchSessionSearchView: View {
 
                 if session.id == currentSessionID {
                     Image(systemName: "checkmark")
-                        .font(.caption.bold())
+                        .etFont(.caption.bold())
                 }
             }
             .contentShape(Rectangle())
@@ -397,7 +397,7 @@ private struct SessionRowView: View {
 
                 if let searchSummary, !searchSummary.isEmpty {
                     Text(searchSummary)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(nil)
                 }

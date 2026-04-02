@@ -12,9 +12,9 @@ struct ThirdPartyImportWatchHintView: View {
         List {
             Section {
                 Label("请在 iPhone 上导入", systemImage: "iphone")
-                    .font(.headline)
+                    .etFont(.headline)
                 Text("第三方数据导入需要文件选择器与本地解析，当前请在 iPhone App 的「设置 → 拓展功能 → 第三方导入」完成。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 

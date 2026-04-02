@@ -33,6 +33,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let feedbackTickets = SyncOptions(rawValue: 1 << 9) // 反馈工单同步选项
     public static let appStorage = SyncOptions(rawValue: 1 << 10) // AppStorage（软件设置）同步选项
     public static let dailyPulse = SyncOptions(rawValue: 1 << 11) // 每日脉冲同步选项
+    public static let fontFiles = SyncOptions(rawValue: 1 << 12) // 字体文件与字体路由同步选项
     @available(*, deprecated, message: "请改用 appStorage 选项。")
     public static let globalSystemPrompt = appStorage
     
@@ -99,6 +100,31 @@ public struct SyncedImage: Codable {
     }
 }
 
+/// 字体文件同步载荷
+public struct SyncedFontFile: Codable {
+    public var assetID: UUID
+    public var displayName: String
+    public var postScriptName: String
+    public var filename: String
+    public var data: Data
+    public var checksum: String
+
+    public init(
+        assetID: UUID = UUID(),
+        displayName: String,
+        postScriptName: String,
+        filename: String,
+        data: Data
+    ) {
+        self.assetID = assetID
+        self.displayName = displayName
+        self.postScriptName = postScriptName
+        self.filename = filename
+        self.data = data
+        self.checksum = data.sha256Hex
+    }
+}
+
 /// 同步包，依据选项包含不同的数据集合
 public struct SyncPackage: Codable {
     public var options: SyncOptions
@@ -117,13 +143,15 @@ public struct SyncPackage: Codable {
     public var dailyPulsePendingCuration: DailyPulseCurationNote?
     public var dailyPulseExternalSignals: [DailyPulseExternalSignal]
     public var dailyPulseTasks: [DailyPulseTask]
+    public var fontFiles: [SyncedFontFile]
+    public var fontRouteConfigurationData: Data?
     /// 完整 AppStorage 快照（二进制 Plist），用于同步软件设置
     public var appStorageSnapshot: Data?
     /// 兼容旧版本：仅携带 systemPrompt 时回退使用
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, appStorageSnapshot, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
@@ -143,6 +171,8 @@ public struct SyncPackage: Codable {
         dailyPulsePendingCuration: DailyPulseCurationNote? = nil,
         dailyPulseExternalSignals: [DailyPulseExternalSignal] = [],
         dailyPulseTasks: [DailyPulseTask] = [],
+        fontFiles: [SyncedFontFile] = [],
+        fontRouteConfigurationData: Data? = nil,
         appStorageSnapshot: Data? = nil,
         globalSystemPrompt: String? = nil
     ) {
@@ -162,6 +192,8 @@ public struct SyncPackage: Codable {
         self.dailyPulsePendingCuration = dailyPulsePendingCuration
         self.dailyPulseExternalSignals = dailyPulseExternalSignals
         self.dailyPulseTasks = dailyPulseTasks
+        self.fontFiles = fontFiles
+        self.fontRouteConfigurationData = fontRouteConfigurationData
         self.appStorageSnapshot = appStorageSnapshot
         self.globalSystemPrompt = globalSystemPrompt
     }
@@ -184,6 +216,8 @@ public struct SyncPackage: Codable {
         dailyPulsePendingCuration = try container.decodeIfPresent(DailyPulseCurationNote.self, forKey: .dailyPulsePendingCuration)
         dailyPulseExternalSignals = try container.decodeIfPresent([DailyPulseExternalSignal].self, forKey: .dailyPulseExternalSignals) ?? []
         dailyPulseTasks = try container.decodeIfPresent([DailyPulseTask].self, forKey: .dailyPulseTasks) ?? []
+        fontFiles = try container.decodeIfPresent([SyncedFontFile].self, forKey: .fontFiles) ?? []
+        fontRouteConfigurationData = try container.decodeIfPresent(Data.self, forKey: .fontRouteConfigurationData)
         appStorageSnapshot = try container.decodeIfPresent(Data.self, forKey: .appStorageSnapshot)
         globalSystemPrompt = try container.decodeIfPresent(String.self, forKey: .globalSystemPrompt)
     }
@@ -213,8 +247,72 @@ public struct SyncMergeSummary: Equatable {
     public var skippedFeedbackTickets: Int
     public var importedDailyPulseRuns: Int
     public var skippedDailyPulseRuns: Int
+    public var importedFontFiles: Int
+    public var skippedFontFiles: Int
+    public var importedFontRouteConfigurations: Int
+    public var skippedFontRouteConfigurations: Int
     public var importedAppStorageValues: Int
     public var skippedAppStorageValues: Int
+
+    public init(
+        importedProviders: Int = 0,
+        skippedProviders: Int = 0,
+        importedSessions: Int = 0,
+        skippedSessions: Int = 0,
+        importedBackgrounds: Int = 0,
+        skippedBackgrounds: Int = 0,
+        importedMemories: Int = 0,
+        skippedMemories: Int = 0,
+        importedMCPServers: Int = 0,
+        skippedMCPServers: Int = 0,
+        importedAudioFiles: Int = 0,
+        skippedAudioFiles: Int = 0,
+        importedImageFiles: Int = 0,
+        skippedImageFiles: Int = 0,
+        importedShortcutTools: Int = 0,
+        skippedShortcutTools: Int = 0,
+        importedWorldbooks: Int = 0,
+        skippedWorldbooks: Int = 0,
+        importedFeedbackTickets: Int = 0,
+        skippedFeedbackTickets: Int = 0,
+        importedDailyPulseRuns: Int = 0,
+        skippedDailyPulseRuns: Int = 0,
+        importedFontFiles: Int = 0,
+        skippedFontFiles: Int = 0,
+        importedFontRouteConfigurations: Int = 0,
+        skippedFontRouteConfigurations: Int = 0,
+        importedAppStorageValues: Int = 0,
+        skippedAppStorageValues: Int = 0
+    ) {
+        self.importedProviders = importedProviders
+        self.skippedProviders = skippedProviders
+        self.importedSessions = importedSessions
+        self.skippedSessions = skippedSessions
+        self.importedBackgrounds = importedBackgrounds
+        self.skippedBackgrounds = skippedBackgrounds
+        self.importedMemories = importedMemories
+        self.skippedMemories = skippedMemories
+        self.importedMCPServers = importedMCPServers
+        self.skippedMCPServers = skippedMCPServers
+        self.importedAudioFiles = importedAudioFiles
+        self.skippedAudioFiles = skippedAudioFiles
+        self.importedImageFiles = importedImageFiles
+        self.skippedImageFiles = skippedImageFiles
+        self.importedShortcutTools = importedShortcutTools
+        self.skippedShortcutTools = skippedShortcutTools
+        self.importedWorldbooks = importedWorldbooks
+        self.skippedWorldbooks = skippedWorldbooks
+        self.importedFeedbackTickets = importedFeedbackTickets
+        self.skippedFeedbackTickets = skippedFeedbackTickets
+        self.importedDailyPulseRuns = importedDailyPulseRuns
+        self.skippedDailyPulseRuns = skippedDailyPulseRuns
+        self.importedFontFiles = importedFontFiles
+        self.skippedFontFiles = skippedFontFiles
+        self.importedFontRouteConfigurations = importedFontRouteConfigurations
+        self.skippedFontRouteConfigurations = skippedFontRouteConfigurations
+        self.importedAppStorageValues = importedAppStorageValues
+        self.skippedAppStorageValues = skippedAppStorageValues
+    }
     
     public static let empty = SyncMergeSummary(
         importedProviders: 0,
@@ -239,6 +337,10 @@ public struct SyncMergeSummary: Equatable {
         skippedFeedbackTickets: 0,
         importedDailyPulseRuns: 0,
         skippedDailyPulseRuns: 0,
+        importedFontFiles: 0,
+        skippedFontFiles: 0,
+        importedFontRouteConfigurations: 0,
+        skippedFontRouteConfigurations: 0,
         importedAppStorageValues: 0,
         skippedAppStorageValues: 0
     )
@@ -261,6 +363,8 @@ public struct SyncMergeSummary: Equatable {
 public extension Notification.Name {
     /// 背景图片发生变化时广播，便于各端刷新列表
     static let syncBackgroundsUpdated = Notification.Name("com.ETOS.sync.backgrounds.updated")
+    /// 字体资产或字体路由发生变化时广播，便于各端刷新字体设置与预览
+    static let syncFontsUpdated = Notification.Name("com.ETOS.sync.fonts.updated")
     /// 每日脉冲发生变化时广播，便于当前设备刷新卡片列表
     static let syncDailyPulseUpdated = Notification.Name("com.ETOS.sync.dailyPulse.updated")
 }

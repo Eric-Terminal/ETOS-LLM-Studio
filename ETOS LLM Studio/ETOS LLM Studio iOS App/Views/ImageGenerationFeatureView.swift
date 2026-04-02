@@ -222,7 +222,7 @@ struct ImageGenerationFeatureView: View {
                             generatedImageCount
                         )
                     )
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 }
             } footer: {
@@ -295,7 +295,7 @@ struct ImageGenerationFeatureView: View {
                 HStack(spacing: 10) {
                     ProgressView()
                     Text(NSLocalizedString("正在生成图片…", comment: "Image generation is in progress"))
-                        .font(.headline)
+                        .etFont(.headline)
                 }
 
                 if let startedAt = viewModel.imageGenerationFeedback.startedAt {
@@ -307,14 +307,14 @@ struct ImageGenerationFeatureView: View {
                                 elapsed
                             )
                         )
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                     }
                 }
 
                 if !viewModel.imageGenerationFeedback.prompt.isEmpty {
                     Text(viewModel.imageGenerationFeedback.prompt)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -333,11 +333,11 @@ struct ImageGenerationFeatureView: View {
                         viewModel.imageGenerationFeedback.imageCount
                     )
                 )
-                .font(.headline)
+                .etFont(.headline)
 
                 if !viewModel.imageGenerationFeedback.prompt.isEmpty {
                     Text(viewModel.imageGenerationFeedback.prompt)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -360,12 +360,12 @@ struct ImageGenerationFeatureView: View {
         case .failure:
             VStack(alignment: .leading, spacing: 10) {
                 Text(NSLocalizedString("生成失败", comment: "Image generation failed status"))
-                    .font(.headline)
+                    .etFont(.headline)
                     .foregroundStyle(.red)
 
                 if let reason = viewModel.imageGenerationFeedback.errorMessage, !reason.isEmpty {
                     Text(reason)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
@@ -387,12 +387,12 @@ struct ImageGenerationFeatureView: View {
         case .cancelled:
             VStack(alignment: .leading, spacing: 10) {
                 Text(NSLocalizedString("已取消生成", comment: "Image generation cancelled status"))
-                    .font(.headline)
+                    .etFont(.headline)
                     .foregroundStyle(.secondary)
 
                 if !viewModel.imageGenerationFeedback.prompt.isEmpty {
                     Text(viewModel.imageGenerationFeedback.prompt)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -699,11 +699,11 @@ private struct ImageParameterExpressionRow: View {
             )
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.body.monospaced())
+                .etFont(.body.monospaced())
 
             if let error = entry.error {
                 Text(error)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
             }
         }
@@ -773,7 +773,7 @@ private struct ImageGenerationGalleryView: View {
                         .frame(maxWidth: .infinity)
                     if !payload.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(payload.prompt)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -848,13 +848,13 @@ private struct ImageGenerationGalleryView: View {
             .buttonStyle(.plain)
 
             Text(displayPrompt)
-                .font(.footnote)
+                .etFont(.footnote)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
                 Text(item.fileName)
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)

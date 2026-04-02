@@ -90,7 +90,7 @@ struct ImageGenerationFeatureView: View {
             Section {
                 if availableImageModels.isEmpty {
                     Text(NSLocalizedString("请先在模型管理中启用至少一个生图模型。", comment: "No image generation model is available"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     NavigationLink {
@@ -114,7 +114,7 @@ struct ImageGenerationFeatureView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("生图请求会使用这里单独选择的模型，不影响主聊天模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。", comment: "Image generation uses independent model selection"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -127,7 +127,7 @@ struct ImageGenerationFeatureView: View {
                 .lineLimit(3...6)
             } footer: {
                 Text("输入提示词，独立发起生图请求。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -153,7 +153,7 @@ struct ImageGenerationFeatureView: View {
                         comment: "Image generation runtime parameter expression section footer"
                     )
                 )
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
             }
 
@@ -170,15 +170,15 @@ struct ImageGenerationFeatureView: View {
             } footer: {
                 if selectedImageModel == nil {
                     Text(NSLocalizedString("请先在模型管理中启用至少一个生图模型。", comment: "No image generation model is available"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else if viewModel.supportsImageGeneration(for: selectedImageModel) {
                     Text("生成结果会写入当前会话，返回聊天页即可查看。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     Text("当前模型未启用生图能力，请在模型设置中开启“生图”。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -189,7 +189,7 @@ struct ImageGenerationFeatureView: View {
                 Text(NSLocalizedString("生图状态", comment: "Image generation status section title"))
             } footer: {
                 Text(NSLocalizedString("等待时可取消，完成后可复用提示词。", comment: "Image generation status section footer on watch"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -207,12 +207,12 @@ struct ImageGenerationFeatureView: View {
                             generatedImageCount
                         )
                     )
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 }
             } footer: {
                 Text(NSLocalizedString("打开生成相册可查看、下载或删除已生成图片。", comment: "Gallery entry footer"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
@@ -252,12 +252,12 @@ struct ImageGenerationFeatureView: View {
         switch viewModel.imageGenerationFeedback.phase {
         case .idle:
             Text(NSLocalizedString("尚未开始生图。", comment: "No image generation has been started yet"))
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         case .running:
             VStack(alignment: .leading, spacing: 8) {
                 Label(NSLocalizedString("正在生成图片…", comment: "Image generation is in progress"), systemImage: "hourglass")
-                    .font(.footnote)
+                    .etFont(.footnote)
 
                 if let startedAt = viewModel.imageGenerationFeedback.startedAt {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -268,7 +268,7 @@ struct ImageGenerationFeatureView: View {
                                 elapsed
                             )
                         )
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     }
                 }
@@ -278,7 +278,7 @@ struct ImageGenerationFeatureView: View {
                 } label: {
                     Text(NSLocalizedString("取消生成", comment: "Cancel image generation"))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
             }
         case .success:
             VStack(alignment: .leading, spacing: 8) {
@@ -288,32 +288,32 @@ struct ImageGenerationFeatureView: View {
                         viewModel.imageGenerationFeedback.imageCount
                     )
                 )
-                .font(.footnote)
+                .etFont(.footnote)
 
                 Button {
                     showGalleryFromStatus = true
                 } label: {
                     Text(NSLocalizedString("查看结果", comment: "Open generated image gallery"))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
 
                 Button {
                     prompt = viewModel.imageGenerationFeedback.prompt
                 } label: {
                     Text(NSLocalizedString("复用提示词", comment: "Reuse last image generation prompt"))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
                 .disabled(viewModel.imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         case .failure:
             VStack(alignment: .leading, spacing: 8) {
                 Text(NSLocalizedString("生成失败", comment: "Image generation failed status"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
 
                 if let reason = viewModel.imageGenerationFeedback.errorMessage, !reason.isEmpty {
                     Text(reason)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
@@ -323,20 +323,20 @@ struct ImageGenerationFeatureView: View {
                 } label: {
                     Text(NSLocalizedString("重试生成", comment: "Retry image generation"))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
 
                 Button {
                     prompt = viewModel.imageGenerationFeedback.prompt
                 } label: {
                     Text(NSLocalizedString("复用提示词", comment: "Reuse last image generation prompt"))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
                 .disabled(viewModel.imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         case .cancelled:
             VStack(alignment: .leading, spacing: 8) {
                 Text(NSLocalizedString("已取消生成", comment: "Image generation cancelled status"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
 
                 Button {
@@ -344,14 +344,14 @@ struct ImageGenerationFeatureView: View {
                 } label: {
                     Text(NSLocalizedString("再次生成", comment: "Generate again"))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
 
                 Button {
                     prompt = viewModel.imageGenerationFeedback.prompt
                 } label: {
                     Text(NSLocalizedString("复用提示词", comment: "Reuse last image generation prompt"))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
                 .disabled(viewModel.imageGenerationFeedback.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -637,11 +637,11 @@ private struct WatchImageParameterExpressionRow: View {
             )
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.footnote.monospaced())
+                .etFont(.footnote.monospaced())
 
             if let error = entry.error {
                 Text(error)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.red)
             }
         }
@@ -688,7 +688,7 @@ private struct WatchImageGenerationGalleryView: View {
         ScrollView {
             if generatedImageItems.isEmpty {
                 Text(NSLocalizedString("当前会话暂无生图结果。", comment: "No generated images in current session"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
                     .padding(.horizontal, 10)
@@ -712,7 +712,7 @@ private struct WatchImageGenerationGalleryView: View {
                         .frame(maxWidth: .infinity)
                     if !payload.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(payload.prompt)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -777,7 +777,7 @@ private struct WatchImageGenerationGalleryView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         Text(displayPrompt)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .lineLimit(2)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -786,7 +786,7 @@ private struct WatchImageGenerationGalleryView: View {
 
                 HStack(spacing: 4) {
                     Text(item.fileName)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -841,7 +841,7 @@ private struct WatchImageGenerationGalleryView: View {
             )
         } else {
             Label(NSLocalizedString("图片丢失", comment: "Image missing"), systemImage: "exclamationmark.triangle")
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
     }

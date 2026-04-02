@@ -22,7 +22,7 @@ struct FeedbackCenterView: View {
 
             if service.tickets.isEmpty {
                 Text(NSLocalizedString("暂无反馈记录", comment: "No feedback records"))
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(service.tickets) { ticket in
@@ -31,13 +31,13 @@ struct FeedbackCenterView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(String(format: NSLocalizedString("工单 #%d", comment: "Issue number title"), ticket.issueNumber))
-                                .font(.caption.weight(.semibold))
+                                .etFont(.caption.weight(.semibold))
                             Text(ticket.title)
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                             Text(ticket.lastKnownStatus.localizedTitle)
-                                .font(.system(size: 10, weight: .medium))
+                                .etFont(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.blue)
                         }
                     }
@@ -228,10 +228,10 @@ private struct WatchFeedbackDetailView: View {
             Section {
                 HStack {
                     Text(NSLocalizedString("状态", comment: "Status label"))
-                        .font(.caption2)
+                        .etFont(.caption2)
                     Spacer()
                     Text((snapshot?.status ?? ticket?.lastKnownStatus ?? .unknown).localizedTitle)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
 
@@ -278,25 +278,25 @@ private struct WatchFeedbackDetailView: View {
             Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
                 if (snapshot?.comments ?? []).isEmpty {
                     Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(snapshot?.comments ?? []) { comment in
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: 4) {
                                 Text(comment.author)
-                                    .font(.caption2.weight(.semibold))
+                                    .etFont(.caption2.weight(.semibold))
                                 if comment.isDeveloper {
                                     Image(systemName: "checkmark.seal.fill")
-                                        .font(.system(size: 9))
+                                        .etFont(.system(size: 9))
                                         .foregroundStyle(.green)
                                 }
                             }
                             Text(comment.body)
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .lineLimit(6)
                             Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.system(size: 9))
+                                .etFont(.system(size: 9))
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 2)
@@ -308,7 +308,7 @@ private struct WatchFeedbackDetailView: View {
                !moderationMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section {
                     Text(moderationMessage)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.orange)
                 }
             }
@@ -317,12 +317,12 @@ private struct WatchFeedbackDetailView: View {
                 let labels = snapshot?.labels ?? []
                 if labels.isEmpty {
                     Text(NSLocalizedString("暂无标签", comment: "No labels"))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(labels, id: \.self) { label in
                         Text(label)
-                            .font(.caption2)
+                            .etFont(.caption2)
                     }
                 }
             }
@@ -330,7 +330,7 @@ private struct WatchFeedbackDetailView: View {
             if let errorMessage {
                 Section {
                     Text(errorMessage)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.red)
                 }
             }

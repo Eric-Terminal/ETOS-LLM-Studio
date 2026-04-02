@@ -152,7 +152,7 @@ private struct StorageDirectoryBrowserView: View {
         List(selection: $selectedFiles) {
             Section("当前位置") {
                 Text(relativePath)
-                    .font(.footnote.monospaced())
+                    .etFont(.footnote.monospaced())
                     .foregroundStyle(.secondary)
             }
 
@@ -172,7 +172,7 @@ private struct StorageDirectoryBrowserView: View {
             } footer: {
                 if let footerText {
                     Text(footerText)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -193,7 +193,7 @@ private struct StorageDirectoryBrowserView: View {
                 Image(systemName: "trash")
                 Text(String(format: NSLocalizedString("删除 %d 个项目", comment: ""), selectedFiles.count))
             }
-            .font(.headline)
+            .etFont(.headline)
             .frame(maxWidth: .infinity)
             .padding()
             .background(.red)
@@ -335,7 +335,7 @@ private struct FileRowView: View {
             if isEditing {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? .blue : .secondary)
-                    .font(.title3)
+                    .etFont(.title3)
             }
 
             fileIcon
@@ -352,11 +352,11 @@ private struct FileRowView: View {
 
             if file.isDirectory {
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.tertiary)
             } else if StorageBrowserSupport.isJSONFile(file.url) && !isEditing {
                 Image(systemName: "eye")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -367,7 +367,7 @@ private struct FileRowView: View {
         let (icon, color) = fileIconInfo
 
         return Image(systemName: icon)
-            .font(.system(size: 16))
+            .etFont(.system(size: 16))
             .foregroundStyle(color)
             .frame(width: 28, height: 28)
             .background(color.opacity(0.15))
@@ -418,20 +418,20 @@ private struct FilePreviewSheet: View {
                         VStack(alignment: .leading, spacing: 12) {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("文件名")
-                                    .font(.caption)
+                                    .etFont(.caption)
                                     .foregroundStyle(.secondary)
                                 Text(file.name)
-                                    .font(.footnote.monospaced())
+                                    .etFont(.footnote.monospaced())
 
                                 Text("总行数")
-                                    .font(.caption)
+                                    .etFont(.caption)
                                     .foregroundStyle(.secondary)
                                 Text("\(lineCount)")
-                                    .font(.footnote.monospaced())
+                                    .etFont(.footnote.monospaced())
                             }
 
                             Text(content)
-                                .font(.system(.caption, design: .monospaced))
+                                .etFont(.system(.caption, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
                         }
