@@ -14,6 +14,7 @@ import Shared
 
 struct WatchAppLogsView: View {
     @StateObject private var logCenter = AppLogCenter.shared
+    @State private var showClearAllConfirm = false
 
     var body: some View {
         List {
@@ -34,20 +35,39 @@ struct WatchAppLogsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("删除", role: .destructive) {
+                            logCenter.deleteDayFolder(dayFolder)
+                        }
+                    }
                 }
-            }
-
-            Section {
-                Button("清空全部日志") {
-                    logCenter.clearAll()
-                }
-                .disabled(logCenter.logDayFolders.isEmpty)
-                .foregroundStyle(.red)
             }
         }
         .navigationTitle("应用日志")
         .task {
             await logCenter.refreshLogFolders()
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showClearAllConfirm = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .disabled(logCenter.logDayFolders.isEmpty)
+            }
+        }
+        .confirmationDialog(
+            "确认清空所有日志？",
+            isPresented: $showClearAllConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("清空所有日志", role: .destructive) {
+                logCenter.clearAll()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("该操作不可撤销。")
         }
     }
 }
@@ -74,6 +94,11 @@ private struct WatchAppLogDayRunsView: View {
                             Text("\(formatTime(runFile.createdAt)) · \(runFile.totalEventCount) 条")
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("删除", role: .destructive) {
+                            logCenter.deleteRunFile(runFile)
                         }
                     }
                 }

@@ -382,6 +382,24 @@ public final class AppLogCenter: ObservableObject {
         logDayFolders = folders
     }
 
+    public func deleteDayFolder(_ dayFolder: AppLogDayFolder) {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.fileStore.deleteDayFolder(day: dayFolder.day)
+            await self.reloadPersistedLogsSnapshot()
+            await self.refreshLogFolders()
+        }
+    }
+
+    public func deleteRunFile(_ runFile: AppLogRunFile) {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.fileStore.deleteRunFile(relativePath: runFile.relativePath)
+            await self.reloadPersistedLogsSnapshot()
+            await self.refreshLogFolders()
+        }
+    }
+
     public func loadEvents(for runFile: AppLogRunFile) async -> [AppLogEvent] {
         await fileStore.loadEvents(for: runFile)
     }
@@ -390,14 +408,7 @@ public final class AppLogCenter: ObservableObject {
         guard !didLoadPersistedLogs else { return }
         didLoadPersistedLogs = true
 
-        let loaded = await fileStore.loadRecentEvents()
-        let sorted = loaded.sorted { lhs, rhs in
-            lhs.timestamp < rhs.timestamp
-        }
-
-        for event in sorted {
-            append(event, persist: false)
-        }
+        await reloadPersistedLogsSnapshot()
     }
 
     private func append(_ event: AppLogEvent, persist: Bool) {
@@ -420,6 +431,34 @@ public final class AppLogCenter: ObservableObject {
                 await self.refreshLogFolders()
             }
         }
+    }
+
+    private func reloadPersistedLogsSnapshot() async {
+        let loaded = await fileStore.loadRecentEvents()
+        let sorted = loaded.sorted { lhs, rhs in
+            lhs.timestamp < rhs.timestamp
+        }
+        applySnapshot(sorted)
+    }
+
+    private func applySnapshot(_ sortedEvents: [AppLogEvent]) {
+        mergedBuffer.replace(with: sortedEvents)
+        mergedLogs = mergedBuffer.values
+
+        developerBuffer.removeAll()
+        userBuffer.removeAll()
+
+        for event in mergedBuffer.values {
+            switch event.channel {
+            case .developer:
+                developerBuffer.append(event)
+            case .user:
+                userBuffer.append(event)
+            }
+        }
+
+        developerLogs = developerBuffer.values
+        userLogs = userBuffer.values
     }
 
     private func mirrorToConsole(_ event: AppLogEvent) {
@@ -770,6 +809,35 @@ actor AppLogFileStore {
         } catch {
             logger.error("读取日志文件失败: \(error.localizedDescription, privacy: .public)")
             return []
+        }
+    }
+
+    func deleteDayFolder(day: String) {
+        do {
+            try ensureBaseDirectory()
+            guard dateFromDayFolderName(day) != nil else { return }
+            let dayDirectory = baseDirectory.appendingPathComponent(day, isDirectory: true)
+            guard fileManager.fileExists(atPath: dayDirectory.path) else { return }
+            try fileManager.removeItem(at: dayDirectory)
+        } catch {
+            logger.error("删除日志日期目录失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func deleteRunFile(relativePath: String) {
+        do {
+            try ensureBaseDirectory()
+            guard let fileURL = resolveFileURL(relativePath: relativePath) else {
+                logger.error("日志路径非法，拒绝删除: \(relativePath, privacy: .public)")
+                return
+            }
+            guard fileURL.pathExtension == "jsonl" else { return }
+            guard fileManager.fileExists(atPath: fileURL.path) else { return }
+
+            try fileManager.removeItem(at: fileURL)
+            try purgeEmptyDayDirectories()
+        } catch {
+            logger.error("删除日志文件失败: \(error.localizedDescription, privacy: .public)")
         }
     }
 

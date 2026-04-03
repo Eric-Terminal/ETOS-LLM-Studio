@@ -227,6 +227,71 @@ struct AppLogCenterTests {
         #expect(dayFolders.first?.runs.first?.totalEventCount == 3)
     }
 
+    @Test("可以删除单个运行日志文件")
+    func testDeleteSingleRunFile() async throws {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("app-log-delete-run-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        let store = AppLogFileStore(baseDirectory: tempDirectory, retentionDays: 30)
+        let dayDirectory = tempDirectory.appendingPathComponent("2026-03-07", isDirectory: true)
+        try fileManager.createDirectory(at: dayDirectory, withIntermediateDirectories: true)
+
+        let runA = dayDirectory.appendingPathComponent("run-a.jsonl", isDirectory: false)
+        let runB = dayDirectory.appendingPathComponent("run-b.jsonl", isDirectory: false)
+        try writeEvents([
+            AppLogEvent(channel: .developer, level: .info, category: "测试", action: "A", message: "A", payload: nil)
+        ], to: runA)
+        try writeEvents([
+            AppLogEvent(channel: .user, level: .info, category: "测试", action: "B", message: "[已隐藏]", payload: nil)
+        ], to: runB)
+
+        await store.deleteRunFile(relativePath: "2026-03-07/run-a.jsonl")
+
+        let folders = await store.loadDayFolders()
+        #expect(folders.count == 1)
+        #expect(folders.first?.day == "2026-03-07")
+        #expect(folders.first?.runs.count == 1)
+        #expect(folders.first?.runs.first?.fileName == "run-b.jsonl")
+    }
+
+    @Test("可以删除整个日期日志目录")
+    func testDeleteDayFolder() async throws {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("app-log-delete-day-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        let store = AppLogFileStore(baseDirectory: tempDirectory, retentionDays: 30)
+
+        let dayA = tempDirectory.appendingPathComponent("2026-03-07", isDirectory: true)
+        let dayB = tempDirectory.appendingPathComponent("2026-03-08", isDirectory: true)
+        try fileManager.createDirectory(at: dayA, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: dayB, withIntermediateDirectories: true)
+
+        try writeEvents([
+            AppLogEvent(channel: .developer, level: .info, category: "测试", action: "A", message: "A", payload: nil)
+        ], to: dayA.appendingPathComponent("run-a.jsonl", isDirectory: false))
+        try writeEvents([
+            AppLogEvent(channel: .user, level: .warning, category: "测试", action: "B", message: "[已隐藏]", payload: nil)
+        ], to: dayB.appendingPathComponent("run-b.jsonl", isDirectory: false))
+
+        await store.deleteDayFolder(day: "2026-03-07")
+
+        let folders = await store.loadDayFolders()
+        #expect(folders.count == 1)
+        #expect(folders.first?.day == "2026-03-08")
+    }
+
     private func makeFilterFixtureEvents() -> [AppLogEvent] {
         [
             AppLogEvent(
@@ -254,5 +319,18 @@ struct AppLogCenterTests {
                 payload: ["providerName": "providerB"]
             )
         ]
+    }
+
+    private func writeEvents(_ events: [AppLogEvent], to fileURL: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        var content = Data()
+        for event in events {
+            let data = try encoder.encode(event)
+            content.append(data)
+            content.append(0x0A)
+        }
+        try content.write(to: fileURL, options: .atomic)
     }
 }

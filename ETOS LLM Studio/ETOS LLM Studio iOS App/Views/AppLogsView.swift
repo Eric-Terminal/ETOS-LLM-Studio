@@ -17,6 +17,7 @@ import UIKit
 
 struct AppLogsView: View {
     @StateObject private var logCenter = AppLogCenter.shared
+    @State private var showClearAllConfirm = false
 
     var body: some View {
         List {
@@ -33,6 +34,11 @@ struct AppLogsView: View {
                             AppLogDayRunsView(logCenter: logCenter, dayFolderID: dayFolder.id)
                         } label: {
                             AppLogDayFolderRow(dayFolder: dayFolder)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("删除", role: .destructive) {
+                                logCenter.deleteDayFolder(dayFolder)
+                            }
                         }
                     }
                 }
@@ -55,11 +61,23 @@ struct AppLogsView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("清空全部", role: .destructive) {
-                    logCenter.clearAll()
+                Button("清空全部") {
+                    showClearAllConfirm = true
                 }
                 .disabled(logCenter.logDayFolders.isEmpty)
             }
+        }
+        .confirmationDialog(
+            "确认清空所有日志？",
+            isPresented: $showClearAllConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("清空所有日志", role: .destructive) {
+                logCenter.clearAll()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("该操作不可撤销，会删除全部日期文件夹和运行日志文件。")
         }
     }
 }
@@ -81,6 +99,11 @@ private struct AppLogDayRunsView: View {
                             AppLogRunDetailView(logCenter: logCenter, runFile: runFile)
                         } label: {
                             AppLogRunFileRow(runFile: runFile)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("删除", role: .destructive) {
+                                logCenter.deleteRunFile(runFile)
+                            }
                         }
                     }
                 } header: {
