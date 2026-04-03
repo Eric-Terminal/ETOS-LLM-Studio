@@ -118,7 +118,7 @@
       gap: 10px;
     }
     .split.two { grid-template-columns: 300px 1fr; }
-    .split.files { grid-template-columns: 1fr 1fr; }
+    .split.files { grid-template-columns: 260px 1fr 1fr; }
     .card {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -189,6 +189,47 @@
       width: 100%;
       min-height: 72px;
     }
+    .file-tree {
+      max-height: 460px;
+      overflow: auto;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 6px;
+    }
+    .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tree-row:hover { background: rgba(87, 166, 255, 0.08); }
+    .tree-row.selected { background: rgba(87, 166, 255, 0.16); }
+    .tree-toggle {
+      width: 20px;
+      padding: 0;
+      min-height: 20px;
+      line-height: 18px;
+      text-align: center;
+      border: 0;
+    }
+    .tree-name {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tree-error {
+      color: var(--danger);
+      font-size: 12px;
+      margin: 2px 0 4px 26px;
+    }
+    @media (max-width: 1180px) {
+      .split.files { grid-template-columns: 1fr; }
+    }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -229,12 +270,20 @@
       <input id="filesPath" class="mono" style="min-width: 280px;" value="." />
       <button id="btnFilesList" class="primary">列出目录</button>
       <button id="btnFilesUp">返回上级</button>
+      <button id="btnFilesTreeRefresh">刷新目录树</button>
       <button id="btnFilesMkdir">新建目录</button>
       <input id="fileUploadInput" type="file" />
       <button id="btnUploadFile">上传文件</button>
     </div>
 
     <div class="split files">
+      <div class="card">
+        <div class="muted">目录树</div>
+        <div id="filesTree" class="file-tree">
+          <div class="muted">正在加载目录树...</div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="muted">目录内容</div>
         <div class="list">
@@ -383,6 +432,7 @@
     currentPath: '.',
     selectedFile: null,
     selectedFileBase64: null,
+    dirTreeRoot: null,
     providers: [],
     sessions: [],
     selectedSession: null,
@@ -494,6 +544,158 @@
     })
   }
 
+  function normalizePath(path) {
+    const raw = String(path ?? '.').trim()
+    if (!raw || raw === '/' || raw === '.') return '.'
+    const cleaned = raw
+      .replace(/^\.\/+/, '')
+      .replace(/\/+/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '')
+    return cleaned || '.'
+  }
+
+  function joinPath(base, name) {
+    const parent = normalizePath(base)
+    return parent === '.' ? name : `${parent}/${name}`
+  }
+
+  function createDirTreeNode(path, name) {
+    return {
+      path: normalizePath(path),
+      name: name || path || '.',
+      expanded: false,
+      loaded: false,
+      loading: false,
+      children: [],
+      error: ''
+    }
+  }
+
+  async function loadDirTreeChildren(node) {
+    if (!node || node.loading || node.loaded) return
+    node.loading = true
+    renderFilesTree()
+    try {
+      const data = await api('/api/files/list', 'POST', { path: node.path })
+      const items = Array.isArray(data.items) ? data.items : []
+      const directories = items
+        .filter(item => item?.isDirectory)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+      node.children = directories.map(item => createDirTreeNode(joinPath(node.path, item.name), item.name))
+      node.loaded = true
+      node.error = ''
+    } catch (error) {
+      node.error = error?.message || String(error)
+    } finally {
+      node.loading = false
+      renderFilesTree()
+    }
+  }
+
+  async function ensureDirTreePath(path) {
+    const normalized = normalizePath(path)
+    if (!state.dirTreeRoot) {
+      state.dirTreeRoot = createDirTreeNode('.', 'Documents')
+      state.dirTreeRoot.expanded = true
+    }
+    const root = state.dirTreeRoot
+    if (!root.loaded) {
+      await loadDirTreeChildren(root)
+    }
+    if (normalized === '.') return
+
+    const segments = normalized.split('/').filter(Boolean)
+    let current = root
+    current.expanded = true
+
+    for (const segment of segments) {
+      if (!current.loaded) {
+        await loadDirTreeChildren(current)
+      }
+      let next = (current.children || []).find(child => child.name === segment)
+      if (!next) {
+        next = createDirTreeNode(joinPath(current.path, segment), segment)
+        current.children = [...(current.children || []), next]
+      }
+      next.expanded = true
+      current = next
+    }
+  }
+
+  async function refreshDirTree({ reset = false, focusPath = '.' } = {}) {
+    if (reset || !state.dirTreeRoot) {
+      state.dirTreeRoot = createDirTreeNode('.', 'Documents')
+      state.dirTreeRoot.expanded = true
+    }
+    await ensureDirTreePath(focusPath)
+    renderFilesTree()
+  }
+
+  function renderDirTreeNode(node, depth, container) {
+    const row = document.createElement('div')
+    row.className = 'tree-row'
+    if (normalizePath(state.currentPath) === node.path) {
+      row.classList.add('selected')
+    }
+    row.style.paddingLeft = `${depth * 14 + 4}px`
+
+    const toggle = document.createElement('button')
+    toggle.className = 'tree-toggle'
+    if (node.loading) {
+      toggle.textContent = '…'
+    } else if (node.loaded && !(node.children || []).length) {
+      toggle.textContent = '·'
+    } else {
+      toggle.textContent = node.expanded ? '▾' : '▸'
+    }
+    toggle.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      if (!node.loaded) {
+        node.expanded = true
+        renderFilesTree()
+        await loadDirTreeChildren(node)
+        return
+      }
+      node.expanded = !node.expanded
+      renderFilesTree()
+    })
+
+    const name = document.createElement('span')
+    name.className = 'tree-name'
+    name.textContent = node.path === '.' ? 'Documents' : (node.name || node.path)
+
+    row.appendChild(toggle)
+    row.appendChild(name)
+    row.addEventListener('click', () => {
+      loadFiles(node.path).catch(showError)
+    })
+    container.appendChild(row)
+
+    if (node.error) {
+      const error = document.createElement('div')
+      error.className = 'tree-error'
+      error.textContent = node.error
+      container.appendChild(error)
+    }
+
+    if (node.expanded) {
+      for (const child of (node.children || [])) {
+        renderDirTreeNode(child, depth + 1, container)
+      }
+    }
+  }
+
+  function renderFilesTree() {
+    const container = el('filesTree')
+    container.innerHTML = ''
+    if (!state.dirTreeRoot) {
+      container.innerHTML = '<div class="muted">目录树未初始化</div>'
+      return
+    }
+    renderDirTreeNode(state.dirTreeRoot, 0, container)
+  }
+
   async function loadFiles(path = null) {
     const target = path ?? el('filesPath').value.trim() || '.'
     const data = await api('/api/files/list', 'POST', { path: target })
@@ -507,6 +709,7 @@
     el('filesPath').value = state.currentPath
     el('fileSelected').textContent = '当前未选中文件'
     el('filePreview').textContent = '请选择文件后预览'
+    await refreshDirTree({ reset: true, focusPath: state.currentPath })
     renderFiles()
   }
 
@@ -1021,6 +1224,9 @@
       const target = parts.length ? parts.join('/') : '.'
       loadFiles(target).catch(showError)
     })
+    el('btnFilesTreeRefresh').addEventListener('click', () => {
+      refreshDirTree({ reset: true, focusPath: state.currentPath || '.' }).catch(showError)
+    })
     el('btnFilesMkdir').addEventListener('click', async () => {
       try {
         const name = prompt('请输入新目录名称：', 'NewFolder')
@@ -1060,6 +1266,7 @@
     bindEvents()
     renderSessionMessagesForm()
     updateSessionMessagesModeUI()
+    await refreshDirTree({ reset: true, focusPath: '.' }).catch(() => {})
     await refreshStatus()
     setInterval(refreshStatus, 2000)
     await loadFiles('.').catch(() => {})
