@@ -82,7 +82,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
     @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false
     @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
-    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = false {
+    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = true {
         didSet {
             if !enableAutoReasoningPreview {
                 autoReasoningPreviewMessageIDs.removeAll()
