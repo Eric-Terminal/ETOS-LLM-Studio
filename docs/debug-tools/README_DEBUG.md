@@ -63,6 +63,7 @@ python3 debug_server.py 8765 7654 8080
 
 - Go 版目录：`docs/debug-tools-go`
 - 本地运行：`go run .`
+- Web GUI：启动后访问 `http://127.0.0.1:7654/`
 - CI 发布：推送 tag `debug-tools-go-v*` 后自动生成多平台 Release 产物
 - 详细说明见：`docs/debug-tools-go/README.md`
 
