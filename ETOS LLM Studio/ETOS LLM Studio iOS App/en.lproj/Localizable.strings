@@ -364,8 +364,8 @@
 "表达式有误，无法预览" = "Invalid expression. Preview unavailable.";
 "暂无请求头表达式" = "No header expressions.";
 "显示明文" = "Show API keys";
-"privacy_storage_details_markdown" = "Your device stores the following data:\n• **Chat history** - Your conversations with AI\n• **API configs** - Providers and keys you added\n• **Memory data** - Vectorized RAG memories\n• **App settings** - Your preferences";
-"privacy_storage_details_plain" = "Your device stores the following data:\n• Chat history - Your conversations with AI\n• API configs - Providers and keys you added\n• Memory data - Vectorized RAG memories\n• App settings - Your preferences";
+"privacy_storage_details_markdown" = "Your device stores the following data:\n• **Chat history** - Your conversations with AI\n• **API configs (JSON)** - Providers and keys you added, stored locally in JSON files\n• **Memory data** - Vectorized RAG memories\n• **App settings** - Your preferences";
+"privacy_storage_details_plain" = "Your device stores the following data:\n• Chat history - Your conversations with AI\n• API configs (JSON) - Providers and keys you added, stored locally in JSON files\n• Memory data - Vectorized RAG memories\n• App settings - Your preferences";
 "ViewModel 应该订阅并接收提供商的更新" = "ViewModel should subscribe to provider updates";
 "ViewModel 应该订阅并接收来自 ChatService 的会话更新" = "ViewModel should subscribe to session updates from ChatService";
 "删除后无法恢复这些模型。" = "These models can’t be restored after deletion.";
@@ -402,7 +402,7 @@
 "暂无可用的模型，请先在模型设置中启用。" = "No available models. Enable in model settings first.";
 "暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。" = "No active model for speech recognition. Enable one in the model list.";
 "暂无记忆" = "No memories";
-"最后更新：2025年12月" = "Last updated: Dec 2025";
+"最后更新：2025年12月" = "Last updated: Apr 2026";
 "最大上下文消息数" = "Context window size";
 "最新响应" = "Latest response";
 "服务器信息" = "Server info";

@@ -52,7 +52,7 @@
     </div>
 
     <h1>隐私政策</h1>
-    <p class="last-updated">生效日期：2026年3月22日</p>
+    <p class="last-updated">生效日期：2026年4月4日</p>
 
     <section>
         <h2>1. 前言</h2>
@@ -66,7 +66,7 @@
 
 <ul>
     <li><strong>聊天与会话数据：</strong>聊天记录、会话配置、附件引用、世界书、记忆、Daily Pulse 数据、反馈历史和应用设置会保存在应用沙盒内。</li>
-    <li><strong>API Key：</strong>API Key 通过系统 <strong>Keychain</strong> 保存，而不是写入普通 JSON 配置文件；如果您启用了 Apple 的相关能力，它也可能通过 <strong>iCloud 钥匙串</strong>在您自己的设备之间同步。</li>
+    <li><strong>API Key：</strong>API Key 会随 API 配置一起以 <strong>JSON 文件</strong> 形式保存在应用沙盒内；如果您启用了 iCloud 同步，相关配置可能通过 Apple 的 iCloud / CloudKit 在您自己的设备之间同步。</li>
     <li><strong>本地请求日志：</strong>应用会在本地记录提供商名称、模型标识、请求时间、完成时间、状态、是否流式、Token 用量等元数据。<strong>这些日志不包含聊天正文</strong>，主要用于流量分析、响应测速、Daily Pulse 统计和年度汇总等本地功能。</li>
     <li><strong>反馈工单缓存：</strong>如果您使用反馈助手，应用会在本地保存工单编号、票据令牌、状态、更新时间和公开链接，方便后续追踪处理进度。</li>
 </ul>
@@ -87,7 +87,7 @@
 
 <ul>
     <li><strong>iPhone / Apple Watch 同步：</strong>两端实时同步通过 <strong>WatchConnectivity</strong> 完成，不经过开发者自建服务器。</li>
-    <li><strong>iCloud 同步：</strong>如果您主动开启 iCloud 同步，所选数据会通过 Apple 的 iCloud / CloudKit 体系在您自己的设备之间同步；API Key 不会写入普通同步包，而是依赖 iCloud 钥匙串（如果系统与账户允许）。</li>
+    <li><strong>iCloud 同步：</strong>如果您主动开启 iCloud 同步，所选数据会通过 Apple 的 iCloud / CloudKit 体系在您自己的设备之间同步；其中可能包含保存 API Key 的 JSON 配置。</li>
     <li><strong>本地网络与调试：</strong>本地网络权限仅用于可选的局域网调试 / 远程文件访问功能。如果您主动连接自己的电脑调试工具，相关应用文件或请求流量可能会发送到<strong>您自己控制的本地调试端</strong>。</li>
 </ul>
 
@@ -111,7 +111,7 @@
 
 <ul>
     <li><strong>第三方 AI 提供商：</strong>负责处理您主动发起的聊天、图像、音频等模型请求。</li>
-    <li><strong>Apple 系统服务：</strong>如 WatchConnectivity、iCloud / CloudKit、iCloud 钥匙串等，由 Apple 依其自身政策处理。</li>
+    <li><strong>Apple 系统服务：</strong>如 WatchConnectivity、iCloud / CloudKit 等，由 Apple 依其自身政策处理。</li>
     <li><strong>开发者运营的反馈服务：</strong>仅在您主动提交或查询反馈工单时使用。</li>
     <li><strong>不自动上传的内容：</strong>聊天内容、本地记忆、本地请求日志、年度汇总数据和 API Key 不会默认自动上传到开发者控制的服务器。</li>
     <li><strong>广告与通用埋点：</strong>当前代码中未集成第三方广告 SDK，也未发现通用型开发者侧行为分析 SDK。若未来加入此类能力，我们会先更新隐私政策。</li>

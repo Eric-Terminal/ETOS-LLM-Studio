@@ -366,12 +366,12 @@ Agregar Authorization y other auth headers manually.";
 "显示明文" = "Mostrar API Claves";
 "privacy_storage_details_markdown" = "Tu device stores el following Datos:
 • **Historial de chat** - Tus conversaciones con IA
-• **Configuraciones API** - Proveedores y claves que agregaste
+• **Configuraciones API (JSON)** - Proveedores y claves que agregaste, guardados localmente en archivos JSON
 • **Datos de memoria** - Memorias RAG vectorizadas
 • **Configuración de la app** - Tus preferencias";
 "privacy_storage_details_plain" = "Tu device stores el following Datos:
 • Historial de chat - Tus conversaciones con IA
-• Configuraciones API - Proveedores y claves que agregaste
+• Configuraciones API (JSON) - Proveedores y claves que agregaste, guardados localmente en archivos JSON
 • Datos de memoria - Memorias RAG vectorizadas
 • Configuración de la app - Tus preferencias";
 "ViewModel 应该订阅并接收提供商的更新" = "ViewModel should subscribe a Proveedor updates";
@@ -410,7 +410,7 @@ Agregar Authorization y other auth headers manually.";
 "暂无可用的模型，请先在模型设置中启用。" = "Sin hay modelos disponibles. Activa uno primero en la configuración de modelos.";
 "暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。" = "Sin hay Activo Modelo para Voz recognition. Activar uno en el Modelo Lista.";
 "暂无记忆" = "Sin memorias";
-"最后更新：2025年12月" = "Last Actualizado: Dec 2025";
+"最后更新：2025年12月" = "Última actualización: abril de 2026";
 "最大上下文消息数" = "Context window Tamaño";
 "最新响应" = "Último Respuesta";
 "服务器信息" = "Servidor Info";
