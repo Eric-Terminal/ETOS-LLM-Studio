@@ -44,24 +44,43 @@ struct DisplaySettingsView: View {
             
             Section(header: Text("内容显示")) {
                 Toggle("渲染 Markdown", isOn: $enableMarkdown)
-                if enableMarkdown {
+            }
+
+            if enableMarkdown {
+                Section {
                     Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
+                } footer: {
                     Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section {
                 Toggle("增强工具结果显示（实验性）", isOn: $enableExperimentalToolResultDisplay)
+            } footer: {
                 Text("启用后会优先提取工具结果正文并折叠原始 JSON；关闭后恢复为原始结果文本展示。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Toggle("自动预览思考过程", isOn: $enableAutoReasoningPreview)
+            } footer: {
                 Text("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+            } footer: {
                 Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
                 NavigationLink {
                     WatchFontSettingsView()
                 } label: {
