@@ -18,7 +18,21 @@ struct ExtendedFeaturesView: View {
                 settingsIntroCard(
                     title: "拓展功能",
                     summary: "这里集中放置进阶能力、调试入口与跨平台工具集成。",
-                    details: "适合统一管理实验性能力、数据导入和本地维护工具。常用入口可优先放在上方，按需逐步开启。",
+                    details: """
+                    这个页面适合做什么
+                    • 集中管理非核心聊天流程的进阶能力。
+                    • 快速进入维护、导入、调试等工具入口。
+
+                    各入口怎么选
+                    • 反馈助手：提交问题和追踪处理进度。
+                    • 远程文件访问：在局域网内访问 Documents 做排查或批量处理。
+                    • 存储管理：清理模型、文件、缓存，回收空间。
+                    • 第三方导入：从外部应用迁移配置和会话。
+
+                    使用建议
+                    • 不常用的功能可按需开启，避免主流程过载。
+                    • 涉及导入与清理时，建议先备份关键数据再执行。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -88,25 +102,29 @@ struct ExtendedFeaturesView: View {
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
 }
 
@@ -125,7 +143,24 @@ struct LongTermMemoryFeatureView: View {
                 settingsIntroCard(
                     title: "长期记忆系统",
                     summary: "让 AI 在多轮对话里持续记住你的偏好、背景与目标。",
-                    details: "开启后会在回复前检索相关记忆；你也可以按需控制是否允许写入新记忆，并进入记忆库管理做精细维护。",
+                    details: """
+                    能力说明
+                    • 长期记忆会在每次回复前参与检索，帮助模型关联你过去的偏好与上下文。
+                    • 与“世界书”不同，长期记忆是可持续积累、可读可写的动态知识。
+
+                    关键开关
+                    • 启用记忆功能：总开关。关闭后不会检索、也不会写入新记忆。
+                    • 允许写入新的记忆：仅控制“写入”，关闭后仍可读取已有记忆。
+
+                    推荐用法
+                    1. 先开启总开关观察回答是否更贴合长期习惯。
+                    2. 如果担心噪声记忆，先关闭写入，仅保留读取。
+                    3. 通过“记忆库管理”定期清理低质量或过时记忆。
+
+                    常见问题
+                    • 回答变得重复：可能记忆冗余，建议进入记忆库整理。
+                    • 明明开了但没效果：先确认会话未被世界书隔离策略屏蔽相关工具。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -172,24 +207,28 @@ struct LongTermMemoryFeatureView: View {
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
 }

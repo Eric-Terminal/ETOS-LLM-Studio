@@ -122,7 +122,22 @@ struct ToolCenterView: View {
                 settingsIntroCard(
                     title: "工具中心",
                     summary: "统一查看聊天可用工具，并集中调整启用状态。",
-                    details: "这里会汇总内置记忆、拓展工具、MCP 与快捷指令工具的配置状态，便于你快速排查当前会话可用能力。",
+                    details: """
+                    页面作用
+                    • 快速判断各类工具在“配置层”与“会话层”是否真正可用。
+
+                    指标怎么读
+                    • 配置已启用：你在设置里已经打开。
+                    • 当前会话实际可用：在总开关、审批策略、隔离策略后仍可用。
+
+                    推荐流程
+                    1. 先看汇总数字，确认问题范围。
+                    2. 开启“仅显示已启用”缩小排查范围。
+                    3. 进入具体工具页调整策略与状态。
+
+                    常见情况
+                    • 如果显示世界书隔离生效，记忆、MCP、快捷指令可能被会话策略屏蔽。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -371,25 +386,25 @@ struct ToolCenterView: View {
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 
     private func builtInTitle(for kind: ToolCatalogBuiltInToolKind) -> String {

@@ -27,7 +27,20 @@ struct WorldbookSettingsView: View {
                 settingsIntroCard(
                     title: "世界书",
                     summary: "按关键词规则注入上下文，不会写入长期记忆。",
-                    details: "你可以在手表端查看、绑定和导入世界书；复杂编辑建议在 iPhone 端完成后同步到手表。",
+                    details: """
+                    能力说明
+                    • 世界书会按条目规则注入上下文，帮助模型保持设定一致。
+                    • 它不等于长期记忆，不会自动学习新事实。
+
+                    在手表上怎么用
+                    1. 先确认会话已绑定目标世界书。
+                    2. 需要新增时可用 URL 导入。
+                    3. 查看“启用条目 x/y”判断每本世界书的生效密度。
+
+                    提示
+                    • 手表适合快速查看与基础操作；
+                    • 深度编辑建议在 iPhone 完成后同步。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -207,25 +220,25 @@ struct WorldbookSettingsView: View {
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 
     private func bindingSummary(for session: ChatSession) -> String {

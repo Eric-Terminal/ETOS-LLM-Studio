@@ -33,7 +33,26 @@ struct WorldbookSettingsView: View {
                 settingsIntroCard(
                     title: "世界书",
                     summary: "按规则在发送消息时自动激活并注入，独立于长期记忆。",
-                    details: "你可以在这里导入、管理和绑定世界书；并按会话控制是否启用隔离发送，让上下文更可控。",
+                    details: """
+                    能力说明
+                    • 世界书会根据触发规则在发送消息时自动注入上下文。
+                    • 它是“静态规则知识”，不参与长期记忆写入。
+
+                    怎么用（建议顺序）
+                    1. 先导入世界书（支持 JSON/PNG 或 URL）。
+                    2. 在“当前会话”绑定需要生效的世界书。
+                    3. 按需启用“隔离发送”，让会话只发送提示词与世界书上下文。
+
+                    关键参数与状态
+                    • 绑定数量：显示当前会话已绑定 / 总世界书数。
+                    • 启用条目：显示每本世界书里启用条目占比。
+                    • 已启用隔离发送：会屏蔽记忆、MCP、快捷指令等外部工具上下文。
+
+                    管理建议
+                    • 大型世界书优先维护条目启用状态，避免注入冗余内容。
+                    • 导入后先看“最近导入结果”，及时处理失败条目和冲突。
+                    • 重要世界书建议定期导出备份。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -315,25 +334,29 @@ struct WorldbookSettingsView: View {
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
 
     private func isBoundToCurrentSession(_ worldbook: Worldbook) -> Bool {

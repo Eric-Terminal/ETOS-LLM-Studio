@@ -30,7 +30,26 @@ struct ShortcutIntegrationView: View {
                 settingsIntroCard(
                     title: "快捷指令工具箱",
                     summary: "在手表端查看并管理已同步的快捷指令工具。",
-                    details: "支持轻度导入（仅名称）和深度导入（iCloud 链接解析）；深度解析失败会自动降级为仅链接，不影响导入。",
+                    details: """
+                    快速上手
+                    1. 在 iPhone 端完成导入。
+                    2. 手表端确认工具已同步并按需启用。
+                    3. 打开“向模型暴露快捷指令工具”总开关。
+
+                    导入模式
+                    • 轻度导入：仅名称，配置速度快。
+                    • 深度导入：解析 iCloud 链接并尝试生成描述；失败会降级为仅链接。
+
+                    关键项说明
+                    • 运行模式：
+                      - 直连优先：先直接执行。
+                      - 桥接优先：先经桥接快捷指令。
+                    • 自动批准：审批倒计时（1~30 秒）。
+
+                    提示
+                    • watchOS 不支持直接读剪贴板，建议在 iPhone 完成导入后同步到手表。
+                    • 如果工具不可用，先检查总开关和单项启用状态。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -250,22 +269,13 @@ struct ShortcutIntegrationView: View {
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -273,6 +283,15 @@ struct ShortcutIntegrationView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.gray.opacity(0.14))
         )
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 
     private func importStatusText(for tool: ShortcutToolDefinition) -> String? {

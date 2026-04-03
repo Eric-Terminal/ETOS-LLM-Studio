@@ -22,7 +22,20 @@ public struct ExtendedFeaturesView: View {
                 settingsIntroCard(
                     title: "拓展功能",
                     summary: "集中管理工具集成、语音能力与系统维护入口。",
-                    details: "这里收纳了工具中心、长期记忆、世界书与调试类能力。建议按使用频率开启，保持主流程简洁。",
+                    details: """
+                    这个页面适合做什么
+                    • 统一进入进阶功能，不打断主聊天流程。
+                    • 快速定位语音、工具集成、导入和维护能力。
+
+                    入口建议
+                    • 工具中心：排查工具是否在当前会话可用。
+                    • 长期记忆 / 世界书：管理长期偏好与规则知识。
+                    • MCP / 快捷指令：接入外部能力和自动化流程。
+                    • 存储管理 / 远程文件访问：做维护与清理。
+
+                    使用建议
+                    • 先保证核心入口可用，再逐步开启实验功能。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -215,25 +228,25 @@ public struct ExtendedFeaturesView: View {
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 
     private var speechModelBinding: Binding<RunnableModel?> {
@@ -259,7 +272,16 @@ private struct LongTermMemoryFeatureView: View {
                 settingsIntroCard(
                     title: "长期记忆系统",
                     summary: "让 AI 持续理解你的长期偏好和上下文。",
-                    details: "开启后会先检索相关记忆再回复。你可以继续控制写入开关，并在记忆库里做细化维护。",
+                    details: """
+                    能力说明
+                    • 长期记忆会在回复前检索历史信息，提升连续性。
+                    • 写入开关仅影响“新增记忆”，不影响读取已有记忆。
+
+                    推荐流程
+                    1. 先开启总开关体验效果。
+                    2. 对噪声敏感时可先关闭写入，仅保留读取。
+                    3. 定期到记忆库管理清理低质量记忆。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -309,24 +331,24 @@ private struct LongTermMemoryFeatureView: View {
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 }

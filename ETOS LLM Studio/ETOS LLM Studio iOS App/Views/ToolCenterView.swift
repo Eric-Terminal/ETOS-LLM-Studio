@@ -168,7 +168,30 @@ struct ToolCenterView: View {
                 settingsIntroCard(
                     title: "工具中心",
                     summary: "集中管理内置记忆、拓展工具、MCP 与快捷指令的聊天暴露状态。",
-                    details: "你可以按分类查看“配置已启用 / 当前会话可用”数量，并逐项调整启用状态与审批策略。",
+                    details: """
+                    适用场景
+                    • 你想快速判断“当前会话到底能用哪些工具”。
+                    • 你想统一调整不同类型工具的启用与审批策略。
+
+                    页面怎么看
+                    • 配置已启用：表示你在设置层面已打开。
+                    • 当前会话可用：在“总开关 + 审批策略 + 会话隔离”等条件下，聊天时真的可用。
+                    • 两个数字不一致通常不是 bug，而是被会话条件限制（例如世界书隔离发送）。
+
+                    推荐使用流程
+                    1. 先看概览区，确认四类工具的可用数量。
+                    2. 用“仅显示已启用”快速聚焦当前生效配置。
+                    3. 分别进入内置/拓展/MCP/快捷指令分类做单项微调。
+
+                    关键开关说明
+                    • 启用长期记忆系统：决定记忆相关内置工具是否可参与聊天。
+                    • 各分类“向模型暴露…工具”：控制该类工具是否整体开放给模型。
+                    • 审批策略：决定调用前是否确认、自动通过或拒绝。
+
+                    排查建议
+                    • 工具不生效：优先核对“当前会话可用”而不是“配置已启用”。
+                    • 会话隔离提示为橙色时：记忆、MCP、快捷指令会被会话级策略屏蔽。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -246,25 +269,29 @@ struct ToolCenterView: View {
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
 
     private var appToolSection: some View {

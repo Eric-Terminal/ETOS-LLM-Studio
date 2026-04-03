@@ -24,7 +24,34 @@ struct ShortcutIntegrationView: View {
                 settingsIntroCard(
                     title: "快捷指令工具箱",
                     summary: "统一管理快捷指令工具的导入、启用状态与运行模式。",
-                    details: "支持轻度导入（仅名称）和深度导入（iCloud 链接解析）。深度解析失败会自动降级为仅链接，不影响导入。",
+                    details: """
+                    适用场景
+                    • 你希望让模型调用 iOS 快捷指令完成自动化任务。
+                    • 你需要统一管理导入来源、启用状态和运行模式。
+
+                    怎么用（建议顺序）
+                    1. 先在“官方导入快捷指令”下载并运行导入助手。
+                    2. 再用“从剪贴板导入清单”批量导入工具定义。
+                    3. 打开“向模型暴露快捷指令工具”总开关。
+                    4. 逐个工具检查描述、启用状态和运行模式。
+
+                    导入模式说明
+                    • 轻度导入：只导入名称，适合先快速接入。
+                    • 深度导入：尝试解析 iCloud 分享内容并生成描述；失败会自动降级为仅链接。
+
+                    关键参数说明
+                    • 导入快捷指令名称：用于匹配官方导入助手名称。
+                    • 桥接快捷指令名称：桥接执行链路所用的快捷指令名称。
+                    • 运行模式（单工具）：
+                      - 直连优先：先尝试直接执行，再回退桥接。
+                      - 桥接优先：先走桥接，再回退直连。
+                    • 倒计时自动批准：审批等待秒数，范围 1~30 秒。
+
+                    常见问题
+                    • 工具没被调用：先查总开关是否开启、单项是否启用。
+                    • 导入失败：看“最近导入结果”中的新增/跳过/无效和冲突名称。
+                    • 执行超时：优先确认快捷指令本身可独立运行，再检查桥接名称是否一致。
+                    """,
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -306,25 +333,29 @@ struct ShortcutIntegrationView: View {
                 .etFont(.subheadline)
                 .foregroundStyle(.primary)
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.wrappedValue.toggle()
-                }
+                isExpanded.wrappedValue = true
             } label: {
-                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                Text("进一步了解…")
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
-
-            if isExpanded.wrappedValue {
-                Text(details)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
 
     private func importStatusText(for tool: ShortcutToolDefinition) -> String? {
