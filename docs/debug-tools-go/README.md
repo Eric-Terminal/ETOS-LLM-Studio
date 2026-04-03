@@ -45,6 +45,7 @@ GUI 主要功能：
 - 会话列表、会话元数据编辑、消息表单/JSON 双模式高级编辑
 - 记忆列表编辑与重嵌入触发
 - OpenAI 捕获队列查看与保存/忽略
+- 关键写操作默认二次确认（删除、覆盖保存、会话/记忆保存等）
 - `/api/*` 错误响应统一带 `error_code`（如 `INVALID_ARGS`、`NOT_FOUND`、`TIMEOUT`、`DEVICE_DISCONNECTED`）
 
 连接策略：
@@ -77,6 +78,20 @@ ETOS_DEBUG_MODE=false go run .
 cd docs/debug-tools-go
 go build -o etos-debug-server-go
 ```
+
+## 回归测试
+
+```bash
+cd docs/debug-tools-go
+go test ./...
+```
+
+当前已覆盖：
+
+- 命令发送在无 WebSocket 时自动入队（HTTP 轮询回退路径）
+- `sendCommandWithResponse` 的 request_id 关联、超时清理
+- `/api/*` 错误码推断与 HTTP 状态码映射
+- 典型接口参数校验（如文件读取缺少 path）
 
 ## Release 下载（CI）
 

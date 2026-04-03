@@ -1086,6 +1086,7 @@
       worldbookContextIsolationEnabled: !!state.selectedSession?.worldbookContextIsolationEnabled
     }
 
+    if (!confirm('确认保存会话元数据？')) return
     const data = await api('/api/sessions/update_meta', 'POST', { session })
     alert(data.message || '会话元数据已保存')
     await loadSessions()
@@ -1149,6 +1150,7 @@
     }
     const content = el('memoryContent').value
     const isArchived = el('memoryArchived').value === 'true'
+    if (!confirm('确认保存当前记忆修改？')) return
     const data = await api('/api/memories/update', 'POST', {
       memory_id: id,
       content,
