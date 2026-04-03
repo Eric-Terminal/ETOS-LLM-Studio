@@ -114,11 +114,16 @@ private struct FontSettingsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(assets) { asset in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(asset.displayName)
-                            Text(asset.postScriptName)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(asset.displayName)
+                                Text(asset.postScriptName)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Toggle("启用", isOn: enabledBinding(for: asset))
+                                .labelsHidden()
                         }
                     }
                     .onDelete(perform: deleteAssets)
@@ -139,10 +144,18 @@ private struct FontSettingsView: View {
                     ForEach(chainRecords) { asset in
                         HStack {
                             Text(asset.displayName)
+                                .foregroundStyle(asset.isEnabled ? .primary : .secondary)
                             Spacer()
-                            Text(asset.postScriptName)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                if !asset.isEnabled {
+                                    Text("已停用")
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Text(asset.postScriptName)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .onMove(perform: movePriority)
@@ -214,6 +227,17 @@ private struct FontSettingsView: View {
         routes = FontLibrary.loadRouteConfiguration()
     }
 
+    private func enabledBinding(for asset: FontAssetRecord) -> Binding<Bool> {
+        Binding(
+            get: {
+                assets.first(where: { $0.id == asset.id })?.isEnabled ?? asset.isEnabled
+            },
+            set: { newValue in
+                updateAssetEnabled(assetID: asset.id, isEnabled: newValue)
+            }
+        )
+    }
+
     private func movePriority(from source: IndexSet, to destination: Int) {
         var chain = routes.chain(for: selectedRole)
         chain.move(fromOffsets: source, toOffset: destination)
@@ -231,6 +255,12 @@ private struct FontSettingsView: View {
                 deleteErrorMessage = error.localizedDescription
             }
         }
+        reloadData()
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func updateAssetEnabled(assetID: UUID, isEnabled: Bool) {
+        guard FontLibrary.setAssetEnabled(id: assetID, isEnabled: isEnabled) else { return }
         reloadData()
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
     }

@@ -47,6 +47,7 @@ struct FontRouteSyncTests {
             #expect(syncedFont.filename == fileName)
             #expect(syncedFont.data == fontData)
             #expect(syncedFont.checksum == fontData.sha256Hex)
+            #expect(syncedFont.isEnabled == true)
 
             guard let routeData = package.fontRouteConfigurationData else {
                 Issue.record("同步包中缺少字体路由配置")
@@ -150,6 +151,48 @@ struct FontRouteSyncTests {
             let resolved = FontLibrary.resolvePostScriptName(for: .body, sampleText: unsupportedSample)
             #expect(resolved == nil)
         }
+    }
+
+    @Test("字体启用状态变更会写回清单并参与路由过滤")
+    func testSetAssetEnabledPersistsAndAffectsFallback() async throws {
+        try await withIsolatedFontStore {
+            let assetID = UUID(uuidString: "30000000-0000-0000-0000-000000000001")!
+            #expect(FontLibrary.saveAssets([
+                FontAssetRecord(
+                    id: assetID,
+                    fileName: "disabled.ttf",
+                    checksum: "disabled-checksum",
+                    displayName: "可停用字体",
+                    postScriptName: "DisabledFontPS",
+                    importedAt: Date(timeIntervalSince1970: 1_730_000_200),
+                    isEnabled: true
+                )
+            ]))
+            #expect(FontLibrary.saveRouteConfiguration(.init(body: [assetID], emphasis: [], strong: [], code: [])))
+
+            #expect(FontLibrary.setAssetEnabled(id: assetID, isEnabled: false))
+
+            let reloaded = FontLibrary.loadAssets()
+            #expect(reloaded.first?.isEnabled == false)
+            #expect(FontLibrary.fallbackPostScriptNames(for: .body).isEmpty)
+        }
+    }
+
+    @Test("旧版本同步包缺少 isEnabled 字段时默认按启用处理")
+    func testDecodeLegacySyncedFontFileDefaultsIsEnabled() throws {
+        let assetID = UUID(uuidString: "40000000-0000-0000-0000-000000000001")!
+        let legacyPayload: [String: Any] = [
+            "assetID": assetID.uuidString,
+            "displayName": "Legacy Font",
+            "postScriptName": "LegacyFontPS",
+            "filename": "legacy.ttf",
+            "data": Data([0x01, 0x02]).base64EncodedString(),
+            "checksum": Data([0x01, 0x02]).sha256Hex
+        ]
+
+        let encoded = try JSONSerialization.data(withJSONObject: legacyPayload)
+        let decoded = try JSONDecoder().decode(SyncedFontFile.self, from: encoded)
+        #expect(decoded.isEnabled == true)
     }
 
     private func withIsolatedFontStore(_ body: () async throws -> Void) async throws {

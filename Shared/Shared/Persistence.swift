@@ -1862,6 +1862,15 @@ public enum FontLibrary {
         _ = saveRouteConfiguration(configuration)
     }
 
+    @discardableResult
+    public static func setAssetEnabled(id: UUID, isEnabled: Bool) -> Bool {
+        var assets = loadAssets()
+        guard let index = assets.firstIndex(where: { $0.id == id }) else { return false }
+        guard assets[index].isEnabled != isEnabled else { return true }
+        assets[index].isEnabled = isEnabled
+        return saveAssets(assets)
+    }
+
     public static func registerAllFontsIfNeeded() {
         let assets = loadAssets()
         for asset in assets where asset.isEnabled {

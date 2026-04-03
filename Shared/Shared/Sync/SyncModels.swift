@@ -108,13 +108,19 @@ public struct SyncedFontFile: Codable {
     public var filename: String
     public var data: Data
     public var checksum: String
+    public var isEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case assetID, displayName, postScriptName, filename, data, checksum, isEnabled
+    }
 
     public init(
         assetID: UUID = UUID(),
         displayName: String,
         postScriptName: String,
         filename: String,
-        data: Data
+        data: Data,
+        isEnabled: Bool = true
     ) {
         self.assetID = assetID
         self.displayName = displayName
@@ -122,6 +128,29 @@ public struct SyncedFontFile: Codable {
         self.filename = filename
         self.data = data
         self.checksum = data.sha256Hex
+        self.isEnabled = isEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        assetID = try container.decode(UUID.self, forKey: .assetID)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        postScriptName = try container.decode(String.self, forKey: .postScriptName)
+        filename = try container.decode(String.self, forKey: .filename)
+        data = try container.decode(Data.self, forKey: .data)
+        checksum = try container.decodeIfPresent(String.self, forKey: .checksum) ?? data.sha256Hex
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(assetID, forKey: .assetID)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(postScriptName, forKey: .postScriptName)
+        try container.encode(filename, forKey: .filename)
+        try container.encode(data, forKey: .data)
+        try container.encode(checksum, forKey: .checksum)
+        try container.encode(isEnabled, forKey: .isEnabled)
     }
 }
 

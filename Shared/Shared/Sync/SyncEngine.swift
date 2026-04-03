@@ -116,7 +116,8 @@ public enum SyncEngine {
                     displayName: record.displayName,
                     postScriptName: record.postScriptName,
                     filename: record.fileName,
-                    data: data
+                    data: data,
+                    isEnabled: record.isEnabled
                 )
             }
             fontRouteConfigurationData = FontLibrary.loadRouteConfigurationData()
@@ -927,19 +928,26 @@ public enum SyncEngine {
         var imported = 0
         var skipped = 0
         var idMapping: [UUID: UUID] = [:]
-        var knownChecksums = Set(FontLibrary.loadAssets().map(\.checksum))
+        let existingAssets = FontLibrary.loadAssets()
+        var knownChecksums = Set(existingAssets.map(\.checksum))
+        var knownEnabledStatesByChecksum = Dictionary(uniqueKeysWithValues: existingAssets.map { ($0.checksum, $0.isEnabled) })
 
         for fontFile in incoming {
             do {
                 let existedBefore = knownChecksums.contains(fontFile.checksum)
+                let previousEnabledState = knownEnabledStatesByChecksum[fontFile.checksum]
                 let record = try FontLibrary.importFont(
                     data: fontFile.data,
                     fileName: fontFile.filename,
                     preferredDisplayName: fontFile.displayName
                 )
+
+                _ = FontLibrary.setAssetEnabled(id: record.id, isEnabled: fontFile.isEnabled)
                 idMapping[fontFile.assetID] = record.id
                 knownChecksums.insert(record.checksum)
-                if existedBefore {
+                knownEnabledStatesByChecksum[record.checksum] = fontFile.isEnabled
+
+                if existedBefore, previousEnabledState == fontFile.isEnabled {
                     skipped += 1
                 } else {
                     imported += 1

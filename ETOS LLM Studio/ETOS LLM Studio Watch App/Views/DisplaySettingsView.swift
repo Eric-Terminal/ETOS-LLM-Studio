@@ -118,12 +118,19 @@ private struct WatchFontSettingsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(assets) { asset in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(asset.displayName)
-                                .etFont(.footnote)
-                            Text(asset.postScriptName)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(asset.displayName)
+                                        .etFont(.footnote)
+                                    Text(asset.postScriptName)
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                Toggle("启用", isOn: enabledBinding(for: asset))
+                                    .labelsHidden()
+                            }
                         }
                     }
                 }
@@ -142,7 +149,15 @@ private struct WatchFontSettingsView: View {
                 } else {
                     ForEach(Array(chainRecords.enumerated()), id: \.element.id) { index, asset in
                         HStack(spacing: 8) {
-                            Text(asset.displayName)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(asset.displayName)
+                                    .foregroundStyle(asset.isEnabled ? .primary : .secondary)
+                                if !asset.isEnabled {
+                                    Text("已停用")
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
                             Spacer(minLength: 8)
                             HStack(spacing: 4) {
                                 Button {
@@ -199,6 +214,17 @@ private struct WatchFontSettingsView: View {
         routes = FontLibrary.loadRouteConfiguration()
     }
 
+    private func enabledBinding(for asset: FontAssetRecord) -> Binding<Bool> {
+        Binding(
+            get: {
+                assets.first(where: { $0.id == asset.id })?.isEnabled ?? asset.isEnabled
+            },
+            set: { newValue in
+                updateAssetEnabled(assetID: asset.id, isEnabled: newValue)
+            }
+        )
+    }
+
     private func moveAsset(at index: Int, offset: Int) {
         var chain = routes.chain(for: selectedRole)
         let target = index + offset
@@ -206,6 +232,12 @@ private struct WatchFontSettingsView: View {
         chain.swapAt(index, target)
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func updateAssetEnabled(assetID: UUID, isEnabled: Bool) {
+        guard FontLibrary.setAssetEnabled(id: assetID, isEnabled: isEnabled) else { return }
+        reloadData()
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
     }
 }
