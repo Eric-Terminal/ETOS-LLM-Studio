@@ -17,6 +17,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let onCodeBlockHeaderTap: ((String) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     private var shouldUseMathEngine: Bool {
@@ -31,7 +32,8 @@ struct ETAdvancedMarkdownRenderer: View {
             ETMathAwareMarkdownView(
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
-                isOutgoing: isOutgoing
+                isOutgoing: isOutgoing,
+                onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
         } else {
             baseTextView(normalizedContent)
@@ -92,7 +94,8 @@ struct ETAdvancedMarkdownRenderer: View {
                     textColor: textColor,
                     isOutgoing: isOutgoing,
                     prefersDarkPalette: colorScheme == .dark,
-                    sampleText: text
+                    sampleText: text,
+                    onCodeBlockHeaderTap: onCodeBlockHeaderTap
                 )
         } else {
             Text(text)
@@ -105,6 +108,7 @@ private struct ETMathAwareMarkdownView: View {
     let content: String
     let enableMarkdown: Bool
     let isOutgoing: Bool
+    let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     private var textColor: Color {
@@ -170,7 +174,8 @@ private struct ETMathAwareMarkdownView: View {
                         textColor: textColor,
                         isOutgoing: isOutgoing,
                         prefersDarkPalette: colorScheme == .dark,
-                        sampleText: text
+                        sampleText: text,
+                        onCodeBlockHeaderTap: onCodeBlockHeaderTap
                     )
             } else {
                 Text(text)
@@ -186,7 +191,8 @@ private extension View {
         textColor: Color,
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
-        sampleText: String
+        sampleText: String,
+        onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
@@ -242,19 +248,31 @@ private extension View {
                 ForegroundColor(textColor)
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
+                let codeBlockContent = configuration.content.trimmingCharacters(in: .newlines)
+                let canAppendCodeBlock = !codeBlockContent
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty
+                    && onCodeBlockHeaderTap != nil
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 8) {
-                        Text(configuration.language?.isEmpty == false ? (configuration.language ?? "代码") : "代码")
-                            .etFont(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(codeHeaderTextColor)
-
-                        Spacer(minLength: 8)
-
-                        if ETCodeClipboard.supportsCopy {
-                            ETCodeCopyButton(
+                    Group {
+                        if canAppendCodeBlock {
+                            Button {
+                                onCodeBlockHeaderTap?(codeBlockContent)
+                            } label: {
+                                codeBlockHeaderRow(
+                                    language: configuration.language,
+                                    content: configuration.content,
+                                    headerTextColor: codeHeaderTextColor,
+                                    isOutgoing: isOutgoing
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            codeBlockHeaderRow(
+                                language: configuration.language,
                                 content: configuration.content,
-                                normalColor: codeHeaderTextColor,
-                                successColor: isOutgoing ? Color.white : Color.green
+                                headerTextColor: codeHeaderTextColor,
+                                isOutgoing: isOutgoing
                             )
                         }
                     }
@@ -306,6 +324,31 @@ private extension View {
                 }
                 .markdownMargin(top: .zero, bottom: .em(1))
             }
+    }
+
+    @ViewBuilder
+    private func codeBlockHeaderRow(
+        language: String?,
+        content: String,
+        headerTextColor: Color,
+        isOutgoing: Bool
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(language?.isEmpty == false ? (language ?? "代码") : "代码")
+                .etFont(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(headerTextColor)
+
+            Spacer(minLength: 8)
+
+            if ETCodeClipboard.supportsCopy {
+                ETCodeCopyButton(
+                    content: content,
+                    normalColor: headerTextColor,
+                    successColor: isOutgoing ? Color.white : Color.green
+                )
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 

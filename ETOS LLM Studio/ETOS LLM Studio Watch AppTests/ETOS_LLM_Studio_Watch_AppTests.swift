@@ -89,4 +89,19 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(chunks == ["你好世界。", "今天继续测试", "分片能力！"])
     }
 
+    @Test("代码块内容可按换行策略追加到输入框")
+    func testInputByAppendingCodeBlockContent() {
+        let appended = ChatViewModel.inputByAppendingCodeBlockContent("\nlet value = 42\n", to: "请解释下面代码")
+        #expect(appended == "请解释下面代码\nlet value = 42")
+
+        let appendedAfterNewline = ChatViewModel.inputByAppendingCodeBlockContent("print(value)", to: "请继续\n")
+        #expect(appendedAfterNewline == "请继续\nprint(value)")
+    }
+
+    @Test("空代码块内容不会追加到输入框")
+    func testInputByAppendingCodeBlockContentIgnoresEmptyText() {
+        let appended = ChatViewModel.inputByAppendingCodeBlockContent(" \n\t \n", to: "原始内容")
+        #expect(appended == nil)
+    }
+
 }

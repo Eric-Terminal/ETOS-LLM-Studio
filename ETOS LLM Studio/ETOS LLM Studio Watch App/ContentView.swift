@@ -311,7 +311,10 @@ struct ContentView: View {
             enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
             showsStreamingIndicators: showsStreamingIndicators,
             mergeWithPrevious: mergeWithPrevious,
-            mergeWithNext: mergeWithNext
+            mergeWithNext: mergeWithNext,
+            onCodeBlockHeaderTap: { content in
+                viewModel.appendCodeBlockContentToInput(content)
+            }
         )
         .id(state.id)
         .listRowInsets(EdgeInsets())

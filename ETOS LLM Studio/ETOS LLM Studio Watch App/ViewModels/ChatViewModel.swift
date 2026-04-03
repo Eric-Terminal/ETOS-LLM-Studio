@@ -821,6 +821,11 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    func appendCodeBlockContentToInput(_ content: String) {
+        guard let mergedInput = Self.inputByAppendingCodeBlockContent(content, to: userInput) else { return }
+        userInput = mergedInput
+    }
+
     private func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
         let content = request.text
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -1653,6 +1658,21 @@ class ChatViewModel: ObservableObject {
             return false
         }
         return true
+    }
+
+    nonisolated static func inputByAppendingCodeBlockContent(_ rawCodeBlockContent: String, to currentInput: String) -> String? {
+        let normalizedCodeBlockContent = rawCodeBlockContent.trimmingCharacters(in: .newlines)
+        guard !normalizedCodeBlockContent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty else { return nil }
+
+        if currentInput.isEmpty {
+            return normalizedCodeBlockContent
+        }
+        if currentInput.hasSuffix("\n") || currentInput.last?.isWhitespace == true {
+            return currentInput + normalizedCodeBlockContent
+        }
+        return currentInput + "\n" + normalizedCodeBlockContent
     }
 
 #if canImport(UserNotifications)

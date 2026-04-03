@@ -88,6 +88,7 @@ struct ChatBubble: View {
     let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
+    let onCodeBlockHeaderTap: ((String) -> Void)?
     
     @StateObject private var audioPlayer = WatchAudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
@@ -110,7 +111,8 @@ struct ChatBubble: View {
         enableMathRendering: Bool = false,
         showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
-        mergeWithNext: Bool
+        mergeWithNext: Bool,
+        onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) {
         self.messageState = messageState
         self._isReasoningExpanded = isReasoningExpanded
@@ -125,6 +127,7 @@ struct ChatBubble: View {
         self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
+        self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
     }
     
     private var message: ChatMessage {
@@ -622,7 +625,8 @@ struct ChatBubble: View {
             enableMarkdown: enableMarkdown,
             isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
-            enableMathRendering: enableMathRendering
+            enableMathRendering: enableMathRendering,
+            onCodeBlockHeaderTap: onCodeBlockHeaderTap
         )
     }
     
