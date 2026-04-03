@@ -193,14 +193,6 @@ struct SettingsView: View {
             }
             
             Section("显示与体验") {
-                Toggle("渲染 Markdown", isOn: $viewModel.enableMarkdown)
-                if viewModel.enableMarkdown {
-                    Toggle("使用高级渲染器", isOn: $viewModel.enableAdvancedRenderer)
-                }
-                if #available(iOS 26.0, *) {
-                    Toggle("液态玻璃效果", isOn: $viewModel.enableLiquidGlass)
-                }
-                
                 NavigationLink {
                     DisplaySettingsView(
                         enableMarkdown: $viewModel.enableMarkdown,
