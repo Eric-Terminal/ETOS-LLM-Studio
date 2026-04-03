@@ -614,12 +614,13 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
+        let shouldRenderAsOutgoing = (message.role == .user && !enableNoBubbleUI)
+            || message.role == .error
+            || (message.role == .assistant && message.content.hasPrefix("重试失败"))
         ETAdvancedMarkdownRenderer(
             content: content,
             enableMarkdown: enableMarkdown,
-            isOutgoing: message.role == .user
-                || message.role == .error
-                || (message.role == .assistant && message.content.hasPrefix("重试失败")),
+            isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
             enableMathRendering: enableMathRendering
         )

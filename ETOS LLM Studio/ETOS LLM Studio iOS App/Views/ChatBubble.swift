@@ -825,10 +825,11 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
+        let shouldRenderAsOutgoing = (isOutgoing && !enableNoBubbleUI) || isError
         ETAdvancedMarkdownRenderer(
             content: content,
             enableMarkdown: enableMarkdown,
-            isOutgoing: isOutgoing || isError,
+            isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
             enableMathRendering: enableMathRendering
         )
