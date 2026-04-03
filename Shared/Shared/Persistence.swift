@@ -1687,7 +1687,7 @@ public enum FontLibraryError: LocalizedError {
         case .invalidFontData:
             return "无法识别该字体文件。"
         case .unsupportedFontFileExtension:
-            return "仅支持导入 TTF / OTF / TTC 字体文件。"
+            return "仅支持导入 TTF / OTF / TTC / WOFF / WOFF2 字体文件。"
         case .saveFailed:
             return "保存字体文件失败。"
         case .deleteFailed:
@@ -1699,6 +1699,7 @@ public enum FontLibraryError: LocalizedError {
 public enum FontLibrary {
     private static let manifestFileName = "font-manifest-v1.json"
     private static let routeConfigFileName = "font-routes-v1.json"
+    private static let supportedFontFileExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
 
     private static var manifestURL: URL {
         Persistence.getFontDirectory().appendingPathComponent(manifestFileName)
@@ -1790,7 +1791,7 @@ public enum FontLibrary {
         preferredDisplayName: String? = nil
     ) throws -> FontAssetRecord {
         let normalizedExt = (fileName as NSString).pathExtension.lowercased()
-        guard ["ttf", "otf", "ttc"].contains(normalizedExt) else {
+        guard supportedFontFileExtensions.contains(normalizedExt) else {
             throw FontLibraryError.unsupportedFontFileExtension
         }
 

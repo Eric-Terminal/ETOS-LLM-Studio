@@ -109,7 +109,7 @@ private struct FontSettingsView: View {
                     Label("上传字体文件", systemImage: "square.and.arrow.down")
                 }
                 if assets.isEmpty {
-                    Text("还没有导入字体。支持 TTF / OTF / TTC。")
+                    Text("还没有导入字体。支持 TTF / OTF / TTC / WOFF / WOFF2。")
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -219,7 +219,20 @@ private struct FontSettingsView: View {
     }
 
     private var supportedFontTypes: [UTType] {
-        ["ttf", "otf", "ttc"].compactMap { UTType(filenameExtension: $0) }
+        let candidates: [UTType?] = [
+            UTType(filenameExtension: "ttf"),
+            UTType(filenameExtension: "otf"),
+            UTType(filenameExtension: "ttc"),
+            UTType(filenameExtension: "woff"),
+            UTType(filenameExtension: "woff2"),
+            UTType(mimeType: "font/woff"),
+            UTType(mimeType: "font/woff2")
+        ]
+
+        var seen = Set<String>()
+        return candidates
+            .compactMap { $0 }
+            .filter { seen.insert($0.identifier).inserted }
     }
 
     private func reloadData() {
