@@ -125,6 +125,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
+    @AppStorage("enableNoBubbleUI") var enableNoBubbleUI: Bool = false
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""

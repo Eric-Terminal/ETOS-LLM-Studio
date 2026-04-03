@@ -81,6 +81,7 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    let enableNoBubbleUI: Bool
     let enableAdvancedRenderer: Bool
     let enableExperimentalToolResultDisplay: Bool
     let enableMathRendering: Bool
@@ -103,6 +104,7 @@ struct ChatBubble: View {
         enableMarkdown: Bool,
         enableBackground: Bool,
         enableLiquidGlass: Bool,
+        enableNoBubbleUI: Bool,
         enableAdvancedRenderer: Bool = false,
         enableExperimentalToolResultDisplay: Bool = true,
         enableMathRendering: Bool = false,
@@ -116,6 +118,7 @@ struct ChatBubble: View {
         self.enableMarkdown = enableMarkdown
         self.enableBackground = enableBackground
         self.enableLiquidGlass = enableLiquidGlass
+        self.enableNoBubbleUI = enableNoBubbleUI
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableExperimentalToolResultDisplay = enableExperimentalToolResultDisplay
         self.enableMathRendering = enableMathRendering
@@ -217,7 +220,7 @@ struct ChatBubble: View {
     }
 
     private var shouldShowMergedSeparator: Bool {
-        mergeWithPrevious && message.role != .user && message.role != .error
+        !enableNoBubbleUI && mergeWithPrevious && message.role != .user && message.role != .error
     }
 
     private var separatorThickness: CGFloat {
@@ -236,10 +239,14 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
-        return baseWidth * 0.86
+        let widthRatio = enableNoBubbleUI ? 0.96 : 0.86
+        return baseWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
+        if enableNoBubbleUI {
+            return true
+        }
         message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
     }
     
@@ -320,9 +327,11 @@ struct ChatBubble: View {
     private var errorBubble: some View {
         let content = Text(message.content)
             .padding(10)
-            .foregroundColor(.white)
+            .foregroundColor(enableNoBubbleUI ? .red : .white)
 
-        if enableLiquidGlass {
+        if enableNoBubbleUI {
+            content
+        } else if enableLiquidGlass {
             if #available(watchOS 26.0, *) {
                 content
                     .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
@@ -363,6 +372,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private var userTextBubble: some View {
+        let userTextColor: Color = enableNoBubbleUI ? .primary : .white
         let content = Group {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName, isUser: true)
@@ -371,9 +381,11 @@ struct ChatBubble: View {
             }
         }
         .padding(10)
-        .foregroundColor(.white)
+        .foregroundColor(userTextColor)
 
-        if enableLiquidGlass {
+        if enableNoBubbleUI {
+            content
+        } else if enableLiquidGlass {
             if #available(watchOS 26.0, *) {
                 content
                     .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
@@ -408,7 +420,7 @@ struct ChatBubble: View {
 
                     if message.role != .tool && hasNonPlaceholderText {
                         renderContent(message.content)
-                            .foregroundColor(isErrorVersion ? .white : nil)
+                            .foregroundColor(isErrorVersion ? (enableNoBubbleUI ? .red : .white) : nil)
                     }
                 }
                 .padding(10)
@@ -502,7 +514,7 @@ struct ChatBubble: View {
 
                 if hasNonPlaceholderText {
                     renderContent(message.content)
-                        .foregroundColor(isErrorVersion ? .white : nil)
+                        .foregroundColor(isErrorVersion ? (enableNoBubbleUI ? .red : .white) : nil)
                 }
 
                 if shouldShowToolCallsAfterContent {
@@ -615,8 +627,8 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func audioPlayerView(fileName: String, isUser: Bool) -> some View {
-        let foregroundColor = isUser ? Color.white : Color.primary
-        let secondaryColor = isUser ? Color.white.opacity(0.7) : Color.secondary
+        let foregroundColor = (isUser && !enableNoBubbleUI) ? Color.white : Color.primary
+        let secondaryColor = (isUser && !enableNoBubbleUI) ? Color.white.opacity(0.7) : Color.secondary
         let isCurrentFile = audioPlayer.currentFileName == fileName
         
         VStack(alignment: .leading, spacing: 4) {
@@ -1114,26 +1126,30 @@ struct ChatBubble: View {
         let shouldShowSeparator = showMergedSeparator ?? (!standalone && shouldShowMergedSeparator)
         let sizedContent = content
             .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
-        
-        Group {
-            if enableLiquidGlass {
-                if #available(watchOS 26.0, *) {
-                    sizedContent
-                        .glassEffect(.clear, in: shape)
-                        .background(isError ? Color.red.opacity(0.5) : nil)
+
+        if enableNoBubbleUI {
+            sizedContent
+        } else {
+            Group {
+                if enableLiquidGlass {
+                    if #available(watchOS 26.0, *) {
+                        sizedContent
+                            .glassEffect(.clear, in: shape)
+                            .background(isError ? Color.red.opacity(0.5) : nil)
+                    } else {
+                        assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
+                    }
                 } else {
                     assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
                 }
-            } else {
-                assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
             }
-        }
-        .overlay(alignment: .top) {
-            if shouldShowSeparator {
-                separatorLine
+            .overlay(alignment: .top) {
+                if shouldShowSeparator {
+                    separatorLine
+                }
             }
+            .clipShape(shape)
         }
-        .clipShape(shape)
     }
 }
 

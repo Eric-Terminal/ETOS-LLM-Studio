@@ -199,6 +199,7 @@ struct ChatView: View {
                                     enableMarkdown: viewModel.enableMarkdown,
                                     enableBackground: viewModel.enableBackground,
                                     enableLiquidGlass: isLiquidGlassEnabled,
+                                    enableNoBubbleUI: viewModel.enableNoBubbleUI,
                                     enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
                                     enableExperimentalToolResultDisplay: viewModel.enableExperimentalToolResultDisplay,
                                     enableMathRendering: viewModel.enableAdvancedRenderer,

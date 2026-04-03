@@ -168,6 +168,7 @@ struct SettingsView: View {
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         enableExperimentalToolResultDisplay: $viewModel.enableExperimentalToolResultDisplay,
                         enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+                        enableNoBubbleUI: $viewModel.enableNoBubbleUI,
                         allBackgrounds: viewModel.backgroundImages
                     )) {
                         Label("显示与外观", systemImage: "photo.on.rectangle")

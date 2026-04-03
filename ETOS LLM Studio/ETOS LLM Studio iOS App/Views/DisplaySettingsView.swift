@@ -23,6 +23,7 @@ struct DisplaySettingsView: View {
     @Binding var enableAdvancedRenderer: Bool
     @Binding var enableExperimentalToolResultDisplay: Bool
     @Binding var enableAutoReasoningPreview: Bool
+    @Binding var enableNoBubbleUI: Bool
     
     let allBackgrounds: [String]
     
@@ -42,6 +43,10 @@ struct DisplaySettingsView: View {
                     .foregroundStyle(.secondary)
                 Toggle("自动预览思考过程", isOn: $enableAutoReasoningPreview)
                 Text("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 NavigationLink {

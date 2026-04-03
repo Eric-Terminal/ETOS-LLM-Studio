@@ -93,6 +93,7 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    let enableNoBubbleUI: Bool
     let enableAdvancedRenderer: Bool
     let enableExperimentalToolResultDisplay: Bool
     let enableMathRendering: Bool
@@ -116,6 +117,7 @@ struct ChatBubble: View {
         enableMarkdown: Bool,
         enableBackground: Bool,
         enableLiquidGlass: Bool,
+        enableNoBubbleUI: Bool,
         enableAdvancedRenderer: Bool = false,
         enableExperimentalToolResultDisplay: Bool = true,
         enableMathRendering: Bool = false,
@@ -131,6 +133,7 @@ struct ChatBubble: View {
         self.enableMarkdown = enableMarkdown
         self.enableBackground = enableBackground
         self.enableLiquidGlass = enableLiquidGlass
+        self.enableNoBubbleUI = enableNoBubbleUI
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableExperimentalToolResultDisplay = enableExperimentalToolResultDisplay
         self.enableMathRendering = enableMathRendering
@@ -171,7 +174,7 @@ struct ChatBubble: View {
     }
 
     private var shouldShowMergedSeparator: Bool {
-        mergeWithPrevious && !isOutgoing
+        !enableNoBubbleUI && mergeWithPrevious && !isOutgoing
     }
 
     private var separatorThickness: CGFloat {
@@ -186,6 +189,9 @@ struct ChatBubble: View {
     }
 
     private var bubbleShadow: (color: Color, radius: CGFloat, y: CGFloat) {
+        if enableNoBubbleUI {
+            return (Color.clear, 0, 0)
+        }
         if mergeWithPrevious && mergeWithNext {
             return (Color.black.opacity(0.04), 1, 0)
         }
@@ -194,11 +200,29 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
-        return baseWidth * 0.88
+        let widthRatio = enableNoBubbleUI ? 0.96 : 0.88
+        return baseWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
+        if enableNoBubbleUI {
+            return true
+        }
         !isOutgoing && (mergeWithPrevious || mergeWithNext)
+    }
+
+    private var rowSideSpacerMinLength: CGFloat {
+        enableNoBubbleUI ? 0 : 20
+    }
+
+    private var textForegroundColor: Color {
+        if isError && enableNoBubbleUI {
+            return .red
+        }
+        if enableNoBubbleUI {
+            return .primary
+        }
+        return isOutgoing ? .white : .primary
     }
     
     /// 图片占位符文本（各语言版本）
@@ -306,7 +330,7 @@ struct ChatBubble: View {
         HStack(alignment: .bottom, spacing: 0) {
             // 用户消息靠右：左边放 Spacer
             if isOutgoing {
-                Spacer(minLength: 20)
+                Spacer(minLength: rowSideSpacerMinLength)
             }
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
@@ -351,7 +375,7 @@ struct ChatBubble: View {
             
             // AI 消息靠左：右边放 Spacer
             if !isOutgoing {
-                Spacer(minLength: 20)
+                Spacer(minLength: rowSideSpacerMinLength)
             }
         }
         .padding(.horizontal, 8)
@@ -415,18 +439,21 @@ struct ChatBubble: View {
             .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
             .opacity(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? 1 : 0.4)
         }
-        .foregroundStyle(isOutgoing ? Color.white.opacity(0.8) : Color.secondary)
+        .foregroundStyle(enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.8) : Color.secondary))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
+                .fill(enableNoBubbleUI ? Color.clear : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
         )
     }
     
     // MARK: - 气泡渐变背景
     
     private var bubbleGradient: some ShapeStyle {
+        if enableNoBubbleUI {
+            return AnyShapeStyle(Color.clear)
+        }
         let userOpacity = enableBackground ? 0.85 : 1.0
         let assistantOpacity = enableBackground ? 0.75 : 1.0
         let errorOpacity = enableBackground ? 0.8 : 1.0
@@ -488,7 +515,10 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func bubbleBackground(for shape: BubbleCornerShape) -> some View {
-        if enableLiquidGlass {
+        if enableNoBubbleUI {
+            shape
+                .fill(Color.clear)
+        } else if enableLiquidGlass {
             if #available(iOS 26.0, *) {
                 shape
                     .fill(bubbleGradient)
@@ -525,9 +555,9 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 6) {
             content()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
+        .padding(.horizontal, enableNoBubbleUI ? 2 : 12)
+        .padding(.vertical, enableNoBubbleUI ? 4 : 8)
+        .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
         .background(
             bubbleDecoratedBackground(
                 shape: shape,
@@ -629,6 +659,7 @@ struct ChatBubble: View {
                 reasoning: reasoning,
                 isExpanded: $isReasoningExpanded,
                 isOutgoing: isOutgoing,
+                usesNoBubbleStyle: enableNoBubbleUI,
                 isShimmering: shouldShimmerReasoningHeader
             )
         }
@@ -644,7 +675,7 @@ struct ChatBubble: View {
             } else {
                 renderContent(message.content)
                     .etFont(.body)
-                    .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                    .foregroundStyle(textForegroundColor)
                     .textSelection(.enabled)
             }
         } else if message.role == .assistant,
@@ -775,17 +806,17 @@ struct ChatBubble: View {
                 HStack(spacing: 8) {
                     Image(systemName: "doc")
                         .etFont(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
+                        .foregroundStyle(enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
                     Text(fileName)
                         .etFont(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                        .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                        .foregroundStyle(enableNoBubbleUI ? Color.primary : (isOutgoing ? Color.white : Color.primary))
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground))
+                        .fill(enableNoBubbleUI ? Color.clear : (isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground)))
                 )
             }
         }
@@ -805,8 +836,8 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func audioPlayerView(fileName: String) -> some View {
-        let foregroundColor = isOutgoing ? Color.white : Color.primary
-        let secondaryColor = isOutgoing ? Color.white.opacity(0.7) : Color.secondary
+        let foregroundColor = enableNoBubbleUI ? Color.primary : (isOutgoing ? Color.white : Color.primary)
+        let secondaryColor = enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
         
         HStack(spacing: 12) {
             // 播放按钮
@@ -815,7 +846,7 @@ struct ChatBubble: View {
             } label: {
                 ZStack {
                     Circle()
-                        .fill(isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
+                        .fill(enableNoBubbleUI ? Color.secondary.opacity(0.15) : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
                         .frame(width: 44, height: 44)
                     Image(systemName: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName ? "stop.fill" : "play.fill")
                         .etFont(.system(size: 16, weight: .semibold))
@@ -1108,6 +1139,7 @@ struct ReasoningDisclosureView: View, Equatable {
     let reasoning: String
     @Binding var isExpanded: Bool
     let isOutgoing: Bool
+    let usesNoBubbleStyle: Bool
     let isShimmering: Bool
     
     // 限制显示的最大字符数，超过时截断并提示
@@ -1117,6 +1149,7 @@ struct ReasoningDisclosureView: View, Equatable {
         lhs.reasoning == rhs.reasoning
             && lhs.isExpanded == rhs.isExpanded
             && lhs.isOutgoing == rhs.isOutgoing
+            && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
     }
     
@@ -1129,8 +1162,12 @@ struct ReasoningDisclosureView: View, Equatable {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            let baseColor = isOutgoing ? Color.white.opacity(0.9) : Color.secondary
-            let highlightColor = isOutgoing ? Color.white : Color.primary.opacity(0.85)
+            let baseColor: Color = usesNoBubbleStyle
+                ? .secondary
+                : (isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+            let highlightColor: Color = usesNoBubbleStyle
+                ? .primary.opacity(0.85)
+                : (isOutgoing ? Color.white : Color.primary.opacity(0.85))
             // 点击区域：标题行
             Button {
                 isExpanded.toggle()
@@ -1167,7 +1204,7 @@ struct ReasoningDisclosureView: View, Equatable {
             if isExpanded {
                 Text(displayText)
                     .etFont(.subheadline)
-                    .foregroundStyle(isOutgoing ? Color.white.opacity(0.85) : Color.secondary)
+                    .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
