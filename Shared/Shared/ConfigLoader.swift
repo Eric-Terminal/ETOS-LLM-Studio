@@ -18,6 +18,11 @@ public struct ConfigLoader {
     
     // MARK: - 目录管理
     
+    private struct DownloadOnceFetchResult {
+        let didWriteFiles: Bool
+        let isComplete: Bool
+    }
+
     private struct DownloadOnceEntry: Decodable {
         let path: String
         let url: String
@@ -27,8 +32,15 @@ public struct ConfigLoader {
         let downloads: [DownloadOnceEntry]
     }
 
+    private enum DownloadFileResult {
+        case downloaded
+        case alreadyPresent
+        case failed
+    }
+
     private static let downloadOnceURLString = "https://notify.els.ericterminal.com/download_once.json"
     private static let downloadOnceTimeout: TimeInterval = 8
+    private static let downloadOnceCompletedFlagKey = "com.ETOS.LLM.Studio.download_once.completed"
     private static let downloadOnceStateQueue = DispatchQueue(label: "com.ETOS.LLM.Studio.downloadOnce")
     private static var downloadOnceInProgress = false
 
@@ -67,14 +79,11 @@ public struct ConfigLoader {
         }
     }
     
-    /// 首次启动且无提供商配置时，从远端拉取下载清单并写入本地。
+    /// 当下载一次任务尚未完成时，从远端拉取下载清单并写入本地。
     /// 失败时仅记录日志，不能影响应用启动。
     public static func fetchDownloadOnceConfigsIfNeeded(onDownload: (() -> Void)? = nil) {
+        guard !isDownloadOnceCompleted() else { return }
         guard beginDownloadOnce() else { return }
-        guard !hasAnyJsonConfigs() else {
-            endDownloadOnce()
-            return
-        }
         guard let url = URL(string: downloadOnceURLString) else {
             logger.error("download_once.json URL 无效: \(downloadOnceURLString)")
             endDownloadOnce()
@@ -82,10 +91,13 @@ public struct ConfigLoader {
         }
         
         Task {
-            let didDownload = await fetchAndStoreDownloadOnceConfigs(from: url)
+            let result = await fetchAndStoreDownloadOnceConfigs(from: url)
+            if result.isComplete {
+                setDownloadOnceCompleted(true)
+            }
             endDownloadOnce()
             
-            if didDownload {
+            if result.didWriteFiles {
                 await MainActor.run {
                     onDownload?()
                 }
@@ -449,28 +461,6 @@ public struct ConfigLoader {
     
     // MARK: - Download-once 支持
     
-    private static func hasAnyJsonConfigs() -> Bool {
-        let fileManager = FileManager.default
-        let documentsPath = documentsDirectory.path
-        guard fileManager.fileExists(atPath: documentsPath) else { return false }
-        
-        guard let enumerator = fileManager.enumerator(
-            at: documentsDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return false
-        }
-        
-        for case let url as URL in enumerator {
-            if url.pathExtension.lowercased() == "json" {
-                return true
-            }
-        }
-        
-        return false
-    }
-
     private static func beginDownloadOnce() -> Bool {
         downloadOnceStateQueue.sync {
             if downloadOnceInProgress {
@@ -487,7 +477,24 @@ public struct ConfigLoader {
         }
     }
     
-    private static func fetchAndStoreDownloadOnceConfigs(from url: URL) async -> Bool {
+    static func isDownloadOnceCompleted(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: downloadOnceCompletedFlagKey)
+    }
+
+    static func setDownloadOnceCompleted(_ completed: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(completed, forKey: downloadOnceCompletedFlagKey)
+    }
+
+    static func isDownloadOnceFileReady(at fileURL: URL, fileManager: FileManager = .default) -> Bool {
+        guard fileManager.fileExists(atPath: fileURL.path) else { return false }
+        guard let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
+              let size = attributes[.size] as? NSNumber else {
+            return false
+        }
+        return size.int64Value > 0
+    }
+
+    private static func fetchAndStoreDownloadOnceConfigs(from url: URL) async -> DownloadOnceFetchResult {
         logger.info("正在获取 download_once.json...")
         
         do {
@@ -500,37 +507,48 @@ public struct ConfigLoader {
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
                 logger.error("download_once.json 响应无效")
-                return false
+                return DownloadOnceFetchResult(didWriteFiles: false, isComplete: false)
             }
             
             let entries = parseDownloadOncePayload(data)
             guard !entries.isEmpty else {
                 logger.warning("download_once.json 内容为空或格式不受支持")
-                return false
+                return DownloadOnceFetchResult(didWriteFiles: false, isComplete: false)
             }
             
-            var didDownload = false
+            var didWriteFiles = false
+            var allEntriesReady = true
             
             for entry in entries {
                 guard let remoteURL = URL(string: entry.url) else {
                     logger.error("下载地址无效: \(entry.url)")
+                    allEntriesReady = false
                     continue
                 }
                 
                 guard let destinationDir = resolveDownloadDestination(for: entry.path) else {
                     logger.error("下载路径无效: \(entry.path)")
+                    allEntriesReady = false
                     continue
                 }
                 
-                if await downloadFile(from: remoteURL, to: destinationDir) {
-                    didDownload = true
+                switch await downloadFile(from: remoteURL, to: destinationDir) {
+                case .downloaded:
+                    didWriteFiles = true
+                case .alreadyPresent:
+                    break
+                case .failed:
+                    allEntriesReady = false
                 }
             }
             
-            return didDownload
+            return DownloadOnceFetchResult(
+                didWriteFiles: didWriteFiles,
+                isComplete: allEntriesReady
+            )
         } catch {
             logger.error("下载 download_once.json 失败: \(error.localizedDescription)")
-            return false
+            return DownloadOnceFetchResult(didWriteFiles: false, isComplete: false)
         }
     }
     
@@ -583,11 +601,11 @@ public struct ConfigLoader {
         return documentsDirectory.appendingPathComponent(normalized)
     }
     
-    private static func downloadFile(from remoteURL: URL, to directory: URL) async -> Bool {
+    private static func downloadFile(from remoteURL: URL, to directory: URL) async -> DownloadFileResult {
         let fileName = remoteURL.lastPathComponent
         guard !fileName.isEmpty else {
             logger.error("下载地址缺少文件名: \(remoteURL.absoluteString)")
-            return false
+            return .failed
         }
         
         let fileManager = FileManager.default
@@ -595,13 +613,22 @@ public struct ConfigLoader {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
         } catch {
             logger.error("创建下载目录失败: \(directory.path) - \(error.localizedDescription)")
-            return false
+            return .failed
         }
         
         let destinationURL = directory.appendingPathComponent(fileName)
         if fileManager.fileExists(atPath: destinationURL.path) {
-            logger.info("下载文件已存在，跳过: \(destinationURL.lastPathComponent)")
-            return false
+            if isDownloadOnceFileReady(at: destinationURL, fileManager: fileManager) {
+                logger.info("下载文件已存在且有效，跳过: \(destinationURL.lastPathComponent)")
+                return .alreadyPresent
+            }
+            do {
+                try fileManager.removeItem(at: destinationURL)
+                logger.warning("检测到无效下载文件，已删除并准备重下: \(destinationURL.lastPathComponent)")
+            } catch {
+                logger.error("清理无效下载文件失败: \(destinationURL.path) - \(error.localizedDescription)")
+                return .failed
+            }
         }
         
         do {
@@ -614,15 +641,20 @@ public struct ConfigLoader {
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
                 logger.error("下载文件响应无效: \(remoteURL.absoluteString)")
-                return false
+                return .failed
+            }
+
+            guard !data.isEmpty else {
+                logger.error("下载文件返回空数据: \(remoteURL.absoluteString)")
+                return .failed
             }
             
             try data.write(to: destinationURL, options: [.atomicWrite, .completeFileProtection])
             logger.info("下载完成: \(destinationURL.lastPathComponent)")
-            return true
+            return .downloaded
         } catch {
             logger.error("下载文件失败: \(remoteURL.absoluteString) - \(error.localizedDescription)")
-            return false
+            return .failed
         }
     }
 }
