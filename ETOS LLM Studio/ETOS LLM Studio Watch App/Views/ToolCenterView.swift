@@ -285,10 +285,7 @@ struct ToolCenterView: View {
             }
 
             Section(
-                header: Text(NSLocalizedString("拓展工具", comment: "App tools section title")),
-                footer: Text(NSLocalizedString("这里用于承接后续要给 AI 写的本地工具，可按工具单独设置审批策略与自动同意行为。", comment: "App tools footer"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+                header: Text(NSLocalizedString("拓展工具", comment: "App tools section title"))
             ) {
                 Toggle(
                     NSLocalizedString("向模型暴露拓展工具", comment: "Expose app tools to model"),
@@ -298,33 +295,26 @@ struct ToolCenterView: View {
                     )
                 )
 
-                if !appToolManager.chatToolsEnabled {
-                    Text(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
+                NavigationLink {
+                    WatchAppToolCategoryDetailView(
+                        currentSessionIsolationActive: currentSessionIsolationActive,
+                        showEnabledOnly: showEnabledOnly
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("拓展工具", comment: "App tools section title"))
+                        Text(
+                            String(
+                                format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
+                                configuredAppToolCount,
+                                appToolManager.tools.count
+                            )
+                        )
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
-                }
-
-                if appToolManager.tools.isEmpty {
-                    Text(NSLocalizedString("当前还没有已注册的拓展工具。", comment: "No registered app tools"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(filteredAppTools) { item in
-                        NavigationLink {
-                            WatchAppToolCenterDetailView(
-                                kind: item.kind,
-                                currentSessionIsolationActive: currentSessionIsolationActive
-                            )
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.kind.displayName)
-                                Text(item.kind.summary)
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(appToolStatusText(for: item))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(appToolStatusColor(for: item))
-                            }
-                        }
+                        Text(appToolCategoryStatusText)
+                            .etFont(.caption2)
+                            .foregroundStyle(appToolCategoryStatusColor)
                     }
                 }
             }
@@ -488,26 +478,25 @@ struct ToolCenterView: View {
         return .green
     }
 
-    private func appToolStatusText(for item: AppToolCatalogItem) -> String {
-        let policy = appToolManager.approvalPolicy(for: item.kind)
+    private var appToolCategoryStatusText: String {
+        if appToolManager.tools.isEmpty {
+            return NSLocalizedString("当前还没有已注册的拓展工具。", comment: "No registered app tools")
+        }
         if currentSessionIsolationActive {
             return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
         }
         if !appToolManager.chatToolsEnabled {
-            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+            return NSLocalizedString("拓展工具总开关已关闭。", comment: "App tools group disabled")
         }
-        if !item.isEnabled {
-            return NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
-        }
-        if policy == .alwaysDeny {
-            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
-        }
-        return policy.displayName
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            availableAppToolCount,
+            appToolManager.tools.count
+        )
     }
 
-    private func appToolStatusColor(for item: AppToolCatalogItem) -> Color {
-        let policy = appToolManager.approvalPolicy(for: item.kind)
-        if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || !item.isEnabled || policy == .alwaysDeny {
+    private var appToolCategoryStatusColor: Color {
+        if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || availableAppToolCount == 0 {
             return .secondary
         }
         return .green
@@ -527,6 +516,105 @@ struct ToolCenterView: View {
 
     private func shortcutStatusColor(for tool: ShortcutToolDefinition) -> Color {
         if currentSessionIsolationActive || !shortcutManager.chatToolsEnabled || !tool.isEnabled {
+            return .secondary
+        }
+        return .green
+    }
+}
+
+private struct WatchAppToolCategoryDetailView: View {
+    let currentSessionIsolationActive: Bool
+    let showEnabledOnly: Bool
+
+    @ObservedObject private var manager = AppToolManager.shared
+
+    private var filteredTools: [AppToolCatalogItem] {
+        manager.tools.filter { item in
+            showEnabledOnly ? item.isEnabled : true
+        }
+    }
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
+                Text(NSLocalizedString("这里用于承接后续要给 AI 写的本地工具，默认关闭，开启后才会暴露给模型。", comment: "App tools intro"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(
+                    NSLocalizedString("向模型暴露拓展工具", comment: "Expose app tools to model"),
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+            }
+
+            if !manager.chatToolsEnabled {
+                Section {
+                    Text(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("拓展工具", comment: "App tools section title"))) {
+                if filteredTools.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredTools) { item in
+                        NavigationLink {
+                            WatchAppToolCenterDetailView(
+                                kind: item.kind,
+                                currentSessionIsolationActive: currentSessionIsolationActive
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.kind.displayName)
+                                Text(item.kind.summary)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(appToolStatusText(for: item))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(appToolStatusColor(for: item))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("拓展工具", comment: "App tools section title"))
+    }
+
+    private func appToolStatusText(for item: AppToolCatalogItem) -> String {
+        let policy = manager.approvalPolicy(for: item.kind)
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        if !item.isEnabled {
+            return NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
+        }
+        if policy == .alwaysDeny {
+            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        return policy.displayName
+    }
+
+    private func appToolStatusColor(for item: AppToolCatalogItem) -> Color {
+        let policy = manager.approvalPolicy(for: item.kind)
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !item.isEnabled || policy == .alwaysDeny {
             return .secondary
         }
         return .green
