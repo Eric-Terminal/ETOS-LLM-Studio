@@ -75,6 +75,10 @@ public class LocalDebugServer: ObservableObject {
     private var httpFailureCount: Int = 0 // HTTP 失败计数
     private let maxHTTPFailures: Int = 5 // 最大失败次数
     
+    // 自动回退相关（WS 失败后回退 HTTP）
+    private var wsAutoFallbackEnabled = false
+    private var wsFallbackHTTPPort = "7654"
+    
     private let maxLogEntries = 100 // 最大日志条数
     
     public init() {}
@@ -297,31 +301,66 @@ public class LocalDebugServer: ObservableObject {
         #endif
     }
     
+    private struct ParsedDebugAddress {
+        let host: String
+        let wsPort: String
+        let httpPort: String
+    }
+    
+    /// 解析调试服务器地址
+    /// 支持格式：
+    /// - host
+    /// - host:port（useHTTP=true 时按 HTTP 端口解释；否则按 WS 端口解释）
+    /// - host:wsPort:httpPort（显式声明双端口）
+    private func parseDebugAddress(_ raw: String) -> ParsedDebugAddress {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmed.split(separator: ":").map(String.init).filter { !$0.isEmpty }
+        
+        let host = parts.first ?? trimmed
+        let defaultWSPort = "8765"
+        let defaultHTTPPort = "7654"
+        
+        if parts.count >= 3 {
+            return ParsedDebugAddress(host: host, wsPort: parts[1], httpPort: parts[2])
+        }
+        
+        if parts.count == 2 {
+            let port = parts[1]
+            if useHTTP {
+                return ParsedDebugAddress(host: host, wsPort: defaultWSPort, httpPort: port)
+            }
+            let inferredHTTPPort = (port == defaultWSPort) ? defaultHTTPPort : port
+            return ParsedDebugAddress(host: host, wsPort: port, httpPort: inferredHTTPPort)
+        }
+        
+        return ParsedDebugAddress(host: host, wsPort: defaultWSPort, httpPort: defaultHTTPPort)
+    }
+    
     /// 连接到电脑端服务器
-    /// - Parameter url: 服务器地址，格式: "192.168.1.100:8765" 或 "192.168.1.100" (默认端口8765)
+    /// - Parameter url: 服务器地址，格式: "192.168.1.100:8765"、"192.168.1.100:8765:7654" 或 "192.168.1.100"
     @MainActor
     public func connect(to url: String) {
         guard !isRunning else { return }
-        
-        // 解析URL
-        let components = url.split(separator: ":").map(String.init)
-        let host = components.first ?? url
-        let port = components.count > 1 ? components[1] : (useHTTP ? "7654" : "8765")
-        
-        serverURL = "\(host):\(port)"
+
+        let parsed = parseDebugAddress(url)
+        wsAutoFallbackEnabled = false
+        wsFallbackHTTPPort = parsed.httpPort
         
         if useHTTP {
             // HTTP 轮询模式，直接启动
             logger.info("使用 HTTP 轮询模式")
             connectionStatus = "正在连接..."
-            performHTTPConnection(host: host, port: port)
+            serverURL = "\(parsed.host):\(parsed.httpPort)"
+            performHTTPConnection(host: parsed.host, port: parsed.httpPort)
         } else {
-            // WebSocket 模式，需要权限检查
+            // WebSocket 优先，并在失败时自动回退 HTTP 轮询
+            wsAutoFallbackEnabled = true
+            serverURL = "\(parsed.host):\(parsed.wsPort)"
             connectionStatus = "正在请求权限..."
-            triggerLocalNetworkPermission(host: "\(host):\(port)") { [weak self] in
+            triggerLocalNetworkPermission(host: "\(parsed.host):\(parsed.wsPort)") { [weak self] in
                 guard let self = self else { return }
                 Task { @MainActor in
-                    self.performConnection(host: host, port: port)
+                    self.performConnection(host: parsed.host, port: parsed.wsPort)
                 }
             }
         }
@@ -366,8 +405,20 @@ public class LocalDebugServer: ObservableObject {
                     self.isRunning = true
                     self.connectionStatus = "已连接"
                     self.errorMessage = nil
+                    self.wsAutoFallbackEnabled = false
                     self.logger.info("已连接到 \(host):\(port)")
                 case .failed(let error):
+                    if self.wsAutoFallbackEnabled {
+                        self.wsAutoFallbackEnabled = false
+                        self.useHTTP = true
+                        self.serverURL = "\(host):\(self.wsFallbackHTTPPort)"
+                        self.connectionStatus = "WebSocket 失败，回退到 HTTP 轮询..."
+                        self.errorMessage = "WebSocket 连接失败，已自动切换到 HTTP 轮询"
+                        self.logger.error("WebSocket 连接失败，准备回退 HTTP: \(error.localizedDescription)")
+                        self.performHTTPConnection(host: host, port: self.wsFallbackHTTPPort)
+                        return
+                    }
+
                     self.isRunning = false
                     self.connectionStatus = "连接失败"
                     // 提供更友好的错误信息
@@ -386,6 +437,7 @@ public class LocalDebugServer: ObservableObject {
                     self.isRunning = false
                     self.connectionStatus = "未连接"
                     self.errorMessage = nil
+                    self.wsAutoFallbackEnabled = false
                 case .waiting(let error):
                     self.connectionStatus = "等待连接..."
                     self.logger.info("⏳ 等待连接: \(error.localizedDescription)")
@@ -427,6 +479,7 @@ public class LocalDebugServer: ObservableObject {
         
         isRunning = false
         connectionStatus = "未连接"
+        wsAutoFallbackEnabled = false
         pendingOpenAIRequests.removeAll()
         updatePendingOpenAIState()
     }

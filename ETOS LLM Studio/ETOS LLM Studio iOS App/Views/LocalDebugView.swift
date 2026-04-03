@@ -45,7 +45,7 @@ struct LocalDebugView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
                                 .etFont(.body)
-                            Text(server.useHTTP ? "稳定但较慢，适合真机" : "快速但不稳定")
+                            Text(server.useHTTP ? "稳定但较慢，适合真机" : "快速优先，失败自动回退 HTTP")
                                 .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -66,7 +66,7 @@ struct LocalDebugView: View {
                 } header: {
                     Text("服务器地址")
                 } footer: {
-                    Text(server.useHTTP ? "HTTP 默认端口: 7654" : "WebSocket 默认端口: 8765")
+                    Text(server.useHTTP ? "HTTP 默认端口: 7654" : "WebSocket 默认端口: 8765（可用 host:wsPort:httpPort 显式指定回退端口）")
                 }
             } else {
                 Section("连接信息") {

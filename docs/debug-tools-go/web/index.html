@@ -172,6 +172,24 @@
       font-size: 12px;
       color: var(--muted);
     }
+    .msg-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .msg-row-head {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .msg-row-content {
+      width: 100%;
+      min-height: 72px;
+    }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
@@ -294,8 +312,17 @@
           <button id="btnSessionSaveMeta">保存会话元数据</button>
         </div>
 
-        <div class="muted" style="margin-bottom:6px;">消息编辑（高级 JSON）</div>
-        <textarea id="sessionMessagesJSON" class="mono" style="min-height:220px;" placeholder="[]"></textarea>
+        <div class="muted" style="margin-bottom:6px;">消息编辑（表单 + 高级 JSON）</div>
+        <div class="toolbar">
+          <button id="btnMessagesModeForm" class="primary">表单模式</button>
+          <button id="btnMessagesModeJSON">JSON 模式</button>
+          <button id="btnMessageAdd">新增消息</button>
+          <span id="sessionMessagesCount" class="pill">0 条消息</span>
+        </div>
+        <div id="sessionMessagesFormWrap" class="card" style="margin-bottom:8px; max-height:280px; overflow:auto;">
+          <div id="sessionMessagesFormList"></div>
+        </div>
+        <textarea id="sessionMessagesJSON" class="mono hidden" style="min-height:220px;" placeholder="[]"></textarea>
         <div class="actions" style="margin-top:8px;">
           <button id="btnSessionSaveMessages">保存消息列表</button>
         </div>
@@ -359,6 +386,8 @@
     providers: [],
     sessions: [],
     selectedSession: null,
+    sessionMessages: [],
+    sessionMessageMode: 'form',
     memories: [],
     selectedMemory: null,
     captures: []
@@ -626,6 +655,143 @@
     el('providersJSON').value = JSON.stringify(current, null, 2)
   }
 
+  function normalizeSessionMessageRole(role) {
+    const value = typeof role === 'string' ? role : ''
+    if (['system', 'user', 'assistant', 'tool'].includes(value)) return value
+    return 'user'
+  }
+
+  function syncSessionMessagesToJSON() {
+    el('sessionMessagesJSON').value = JSON.stringify(state.sessionMessages, null, 2)
+    el('sessionMessagesCount').textContent = `${state.sessionMessages.length} 条消息`
+  }
+
+  function syncSessionMessagesFromJSON() {
+    try {
+      const parsed = JSON.parse(el('sessionMessagesJSON').value || '[]')
+      if (!Array.isArray(parsed)) throw new Error('消息 JSON 顶层必须是数组')
+      state.sessionMessages = parsed
+      renderSessionMessagesForm()
+      syncSessionMessagesToJSON()
+      return true
+    } catch (error) {
+      alert(`消息 JSON 格式错误：${error.message}`)
+      return false
+    }
+  }
+
+  function updateSessionMessagesModeUI() {
+    const isFormMode = state.sessionMessageMode === 'form'
+    el('btnMessagesModeForm').classList.toggle('primary', isFormMode)
+    el('btnMessagesModeJSON').classList.toggle('primary', !isFormMode)
+    el('sessionMessagesFormWrap').classList.toggle('hidden', !isFormMode)
+    el('sessionMessagesJSON').classList.toggle('hidden', isFormMode)
+  }
+
+  function setSessionMessagesMode(mode) {
+    if (mode === state.sessionMessageMode) return
+    if (mode === 'json') {
+      syncSessionMessagesToJSON()
+    } else if (!syncSessionMessagesFromJSON()) {
+      return
+    }
+    state.sessionMessageMode = mode
+    updateSessionMessagesModeUI()
+  }
+
+  function renderSessionMessagesForm() {
+    const list = el('sessionMessagesFormList')
+    list.innerHTML = ''
+
+    if (!state.sessionMessages.length) {
+      const empty = document.createElement('div')
+      empty.className = 'muted'
+      empty.textContent = '暂无消息，点击“新增消息”开始编辑。'
+      list.appendChild(empty)
+      syncSessionMessagesToJSON()
+      return
+    }
+
+    state.sessionMessages.forEach((message, index) => {
+      const row = document.createElement('div')
+      row.className = 'msg-row'
+
+      const head = document.createElement('div')
+      head.className = 'msg-row-head'
+
+      const label = document.createElement('span')
+      label.className = 'pill'
+      label.textContent = `#${index + 1}`
+
+      const role = document.createElement('select')
+      ;['system', 'user', 'assistant', 'tool'].forEach(roleName => {
+        const opt = document.createElement('option')
+        opt.value = roleName
+        opt.textContent = roleName
+        role.appendChild(opt)
+      })
+      role.value = normalizeSessionMessageRole(message.role)
+      role.addEventListener('change', () => {
+        state.sessionMessages[index] = { ...state.sessionMessages[index], role: role.value }
+        syncSessionMessagesToJSON()
+      })
+
+      const requestedAt = document.createElement('input')
+      requestedAt.className = 'mono'
+      requestedAt.placeholder = 'requestedAt（ISO8601，可留空）'
+      requestedAt.style.minWidth = '240px'
+      requestedAt.value = typeof message.requestedAt === 'string' ? message.requestedAt : ''
+      requestedAt.addEventListener('change', () => {
+        const value = requestedAt.value.trim()
+        const next = { ...state.sessionMessages[index] }
+        if (value) {
+          next.requestedAt = value
+        } else {
+          delete next.requestedAt
+        }
+        state.sessionMessages[index] = next
+        syncSessionMessagesToJSON()
+      })
+
+      const removeBtn = document.createElement('button')
+      removeBtn.className = 'danger'
+      removeBtn.textContent = '删除'
+      removeBtn.addEventListener('click', () => {
+        state.sessionMessages.splice(index, 1)
+        renderSessionMessagesForm()
+      })
+
+      head.appendChild(label)
+      head.appendChild(role)
+      head.appendChild(requestedAt)
+      head.appendChild(removeBtn)
+
+      const content = document.createElement('textarea')
+      content.className = 'msg-row-content'
+      content.placeholder = '消息内容（content）'
+      content.value = typeof message.content === 'string' ? message.content : ''
+      content.addEventListener('input', () => {
+        state.sessionMessages[index] = { ...state.sessionMessages[index], content: content.value }
+        syncSessionMessagesToJSON()
+      })
+
+      row.appendChild(head)
+      row.appendChild(content)
+      list.appendChild(row)
+    })
+
+    syncSessionMessagesToJSON()
+  }
+
+  function addSessionMessage() {
+    state.sessionMessages.push({
+      role: 'user',
+      content: '',
+      requestedAt: new Date().toISOString()
+    })
+    renderSessionMessagesForm()
+  }
+
   function renderSessions() {
     const tbody = el('sessionsTableBody')
     tbody.innerHTML = ''
@@ -655,7 +821,9 @@
     el('sessionTopic').value = session.topicPrompt || ''
     el('sessionEnhanced').value = session.enhancedPrompt || ''
     el('sessionLorebookIDs').value = JSON.stringify(session.lorebookIDs || [], null, 2)
-    el('sessionMessagesJSON').value = JSON.stringify(data.messages || [], null, 2)
+    state.sessionMessages = Array.isArray(data.messages) ? data.messages : []
+    renderSessionMessagesForm()
+    updateSessionMessagesModeUI()
     renderSessions()
   }
 
@@ -679,12 +847,13 @@
     const data = await api('/api/sessions/delete', 'POST', { session_id: id })
     alert(data.message || '已删除')
     state.selectedSession = null
+    state.sessionMessages = []
     el('sessionID').value = ''
     el('sessionName').value = ''
     el('sessionTopic').value = ''
     el('sessionEnhanced').value = ''
     el('sessionLorebookIDs').value = '[]'
-    el('sessionMessagesJSON').value = '[]'
+    renderSessionMessagesForm()
     await loadSessions()
   }
 
@@ -725,14 +894,16 @@
       alert('请先选择会话')
       return
     }
+
     let messages
-    try {
-      messages = JSON.parse(el('sessionMessagesJSON').value || '[]')
-      if (!Array.isArray(messages)) throw new Error('消息 JSON 顶层必须是数组')
-    } catch (error) {
-      alert(`消息 JSON 格式错误：${error.message}`)
-      return
+    if (state.sessionMessageMode === 'json') {
+      if (!syncSessionMessagesFromJSON()) return
+      messages = state.sessionMessages
+    } else {
+      messages = state.sessionMessages
+      syncSessionMessagesToJSON()
     }
+
     if (!confirm(`确认保存 ${messages.length} 条消息？`)) return
     const data = await api('/api/sessions/update_messages', 'POST', { session_id: id, messages })
     alert(data.message || '消息已保存')
@@ -874,6 +1045,9 @@
     el('btnSessionDelete').addEventListener('click', () => deleteSession().catch(showError))
     el('btnSessionSaveMeta').addEventListener('click', () => saveSessionMeta().catch(showError))
     el('btnSessionSaveMessages').addEventListener('click', () => saveSessionMessages().catch(showError))
+    el('btnMessagesModeForm').addEventListener('click', () => setSessionMessagesMode('form'))
+    el('btnMessagesModeJSON').addEventListener('click', () => setSessionMessagesMode('json'))
+    el('btnMessageAdd').addEventListener('click', addSessionMessage)
 
     el('btnMemoriesLoad').addEventListener('click', () => loadMemories().catch(showError))
     el('btnMemorySave').addEventListener('click', () => saveMemory().catch(showError))
@@ -884,6 +1058,8 @@
 
   async function bootstrap() {
     bindEvents()
+    renderSessionMessagesForm()
+    updateSessionMessagesModeUI()
     await refreshStatus()
     setInterval(refreshStatus, 2000)
     await loadFiles('.').catch(() => {})
