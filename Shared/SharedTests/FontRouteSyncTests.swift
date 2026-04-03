@@ -5,6 +5,7 @@
 // - 验证字体同步打包是否携带字体文件与路由配置
 // - 验证字体路由同步时会过滤无效 ID 并保留优先级
 // - 验证候选字体均不可用时回退到系统字体
+// - 验证重复校验和在同步合并时会去重，启用状态变化可被正确应用
 // ============================================================================
 
 import Testing
@@ -55,6 +56,49 @@ struct FontRouteSyncTests {
             }
             let decoded = try JSONDecoder().decode(FontRouteConfiguration.self, from: routeData)
             #expect(decoded == route)
+        }
+    }
+
+    @Test("同步合并遇到重复校验和时会跳过，启用状态变化时会更新")
+    func testApplySyncPackageSkipsDuplicateChecksumButUpdatesEnabledState() async throws {
+        try await withIsolatedFontStore {
+            let fixture = try loadSystemFontFixture()
+            let localRecord = try FontLibrary.importFont(
+                data: fixture.data,
+                fileName: "local-\(fixture.fileName)"
+            )
+
+            let duplicateEnabled = SyncedFontFile(
+                assetID: UUID(),
+                displayName: localRecord.displayName,
+                postScriptName: localRecord.postScriptName,
+                filename: "incoming-\(fixture.fileName)",
+                data: fixture.data,
+                isEnabled: true
+            )
+            let firstSummary = await SyncEngine.apply(
+                package: SyncPackage(options: [.fontFiles], fontFiles: [duplicateEnabled])
+            )
+            #expect(firstSummary.importedFontFiles == 0)
+            #expect(firstSummary.skippedFontFiles == 1)
+
+            let duplicateDisabled = SyncedFontFile(
+                assetID: UUID(),
+                displayName: localRecord.displayName,
+                postScriptName: localRecord.postScriptName,
+                filename: "incoming-disabled-\(fixture.fileName)",
+                data: fixture.data,
+                isEnabled: false
+            )
+            let secondSummary = await SyncEngine.apply(
+                package: SyncPackage(options: [.fontFiles], fontFiles: [duplicateDisabled])
+            )
+            #expect(secondSummary.importedFontFiles == 1)
+            #expect(secondSummary.skippedFontFiles == 0)
+
+            let assets = FontLibrary.loadAssets()
+            #expect(assets.count == 1)
+            #expect(assets.first?.isEnabled == false)
         }
     }
 
@@ -128,6 +172,37 @@ struct FontRouteSyncTests {
             #expect(zhHans.strong == [secondID])
             #expect(zhHans.code.isEmpty)
         }
+    }
+
+    @Test("字体路由配置编解码会保留顺序与语言桶")
+    func testFontRouteConfigurationCodingPreservesOrderAndLanguageBuckets() throws {
+        let bodyFirst = UUID(uuidString: "50000000-0000-0000-0000-000000000001")!
+        let bodySecond = UUID(uuidString: "50000000-0000-0000-0000-000000000002")!
+        let codeOnly = UUID(uuidString: "50000000-0000-0000-0000-000000000003")!
+        let source = FontRouteConfiguration(
+            body: [bodySecond, bodyFirst],
+            emphasis: [bodyFirst],
+            strong: [bodyFirst, bodySecond],
+            code: [codeOnly, bodySecond],
+            languageBuckets: [
+                "zh-Hans": .init(
+                    body: [bodyFirst, bodySecond],
+                    emphasis: [bodySecond],
+                    strong: [bodyFirst],
+                    code: [codeOnly]
+                ),
+                "ja": .init(
+                    body: [codeOnly],
+                    emphasis: [],
+                    strong: [bodySecond],
+                    code: [codeOnly, bodyFirst]
+                )
+            ]
+        )
+
+        let encoded = try JSONEncoder().encode(source)
+        let decoded = try JSONDecoder().decode(FontRouteConfiguration.self, from: encoded)
+        #expect(decoded == source)
     }
 
     @Test("当候选字体无法覆盖样本文本时返回 nil（系统字体兜底）")
@@ -220,5 +295,48 @@ struct FontRouteSyncTests {
         }
 
         try await body()
+    }
+
+    private func loadSystemFontFixture() throws -> (data: Data, fileName: String) {
+        let directCandidates = [
+            "/System/Library/Fonts/Symbol.ttf",
+            "/System/Library/Fonts/SFNSMono.ttf",
+            "/System/Library/Fonts/HelveticaNeue.ttc",
+            "/Library/Fonts/Arial.ttf"
+        ]
+        let fileManager = FileManager.default
+
+        for path in directCandidates where fileManager.fileExists(atPath: path) {
+            let url = URL(fileURLWithPath: path)
+            if let data = try? Data(contentsOf: url), !data.isEmpty {
+                return (data, url.lastPathComponent)
+            }
+        }
+
+        let searchDirectories = [
+            "/System/Library/Fonts",
+            "/Library/Fonts"
+        ]
+        for directoryPath in searchDirectories where fileManager.fileExists(atPath: directoryPath) {
+            let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
+            guard let enumerator = fileManager.enumerator(
+                at: directoryURL,
+                includingPropertiesForKeys: nil
+            ) else { continue }
+
+            for case let fileURL as URL in enumerator {
+                let ext = fileURL.pathExtension.lowercased()
+                guard ["ttf", "otf", "ttc"].contains(ext) else { continue }
+                if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
+                    return (data, fileURL.lastPathComponent)
+                }
+            }
+        }
+
+        throw NSError(
+            domain: "FontRouteSyncTests",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "测试环境中未找到可用字体样本。"]
+        )
     }
 }
