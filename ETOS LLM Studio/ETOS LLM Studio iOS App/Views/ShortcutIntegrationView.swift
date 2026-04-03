@@ -51,6 +51,7 @@ struct ShortcutIntegrationView: View {
                     • 工具没被调用：先查总开关是否开启、单项是否启用。
                     • 导入失败：看“最近导入结果”中的新增/跳过/无效和冲突名称。
                     • 执行超时：优先确认快捷指令本身可独立运行，再检查桥接名称是否一致。
+                    • urlshim / URL Scheme 跳转失败：回到本页先复制清单到剪贴板，再点“从剪贴板导入清单”即可继续。
                     """,
                     isExpanded: $isShowingIntroDetails
                 )
@@ -138,6 +139,10 @@ struct ShortcutIntegrationView: View {
                     )
                 }
                 .disabled(manager.isImporting)
+
+                Text("常见问题：如果 urlshim / URL Scheme 跳转失败，请先把清单内容复制到剪贴板，再点上面的“从剪贴板导入清单”。")
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
 
                 if manager.isImporting {
                     VStack(alignment: .leading, spacing: 8) {

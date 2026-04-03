@@ -49,6 +49,7 @@ struct ShortcutIntegrationView: View {
                     提示
                     • watchOS 不支持直接读剪贴板，建议在 iPhone 完成导入后同步到手表。
                     • 如果工具不可用，先检查总开关和单项启用状态。
+                    • 如果 urlshim / URL Scheme 在 iPhone 跳转失败，请回到 iPhone 的快捷设定页，复制清单到剪贴板后使用“从剪贴板导入清单”。
                     """,
                     isExpanded: $isShowingIntroDetails
                 )
@@ -104,6 +105,9 @@ struct ShortcutIntegrationView: View {
 
             Section("导入") {
                 Text("watchOS 不支持直接读取剪贴板，请在 iPhone 端导入后通过设备同步同步到手表。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("若 iPhone 端 urlshim / URL Scheme 跳转失败，请在 iPhone 的快捷设定页直接复制清单到剪贴板，再使用“从剪贴板导入清单”。")
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Text("桥接快捷指令：\(bridgeShortcutName)")
