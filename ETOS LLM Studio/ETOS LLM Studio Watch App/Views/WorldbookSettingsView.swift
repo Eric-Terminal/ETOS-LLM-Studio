@@ -19,9 +19,32 @@ struct WorldbookSettingsView: View {
     @State private var isImportingFromURL = false
     @State private var importError: String?
     @State private var importReport: WorldbookImportReport?
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "世界书",
+                    summary: "按关键词规则注入上下文，不会写入长期记忆。",
+                    details: """
+                    能力说明
+                    • 世界书会按条目规则注入上下文，帮助模型保持设定一致。
+                    • 它不等于长期记忆，不会自动学习新事实。
+
+                    在手表上怎么用
+                    1. 先确认会话已绑定目标世界书。
+                    2. 需要新增时可用 URL 导入。
+                    3. 查看“启用条目 x/y”判断每本世界书的生效密度。
+
+                    提示
+                    • 手表适合快速查看与基础操作；
+                    • 深度编辑建议在 iPhone 完成后同步。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             if let session = viewModel.currentSession {
                 Section(NSLocalizedString("当前会话", comment: "Current session section")) {
                     NavigationLink {
@@ -181,6 +204,40 @@ struct WorldbookSettingsView: View {
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         }
     }
 

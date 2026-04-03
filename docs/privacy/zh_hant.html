@@ -47,12 +47,19 @@
     </style>
 </head>
 <body>
-    <div class="lang-switch">
-        <a href="en.html">English</a> | <a href="zh_hans.html">简体中文</a> | <a href="ja.html">日本語</a>
+        <div class="lang-switch">
+        <a href="en.html">English</a> |
+        <a href="zh_hans.html">简体中文</a> |
+        <a href="zh_hant.html">繁體中文</a> |
+        <a href="ja.html">日本語</a> |
+        <a href="es.html">Español</a> |
+        <a href="fr.html">Français</a> |
+        <a href="ru.html">Русский</a> |
+        <a href="ar.html">العربية</a>
     </div>
 
     <h1>隱私政策</h1>
-    <p class="last-updated">生效日期：2026年3月22日</p>
+    <p class="last-updated">最近更新：2026年4月4日</p>
 
     <section>
         <h2>1. 前言</h2>
@@ -66,7 +73,7 @@
 
 <ul>
     <li><strong>聊天與會話資料：</strong>聊天記錄、會話設定、附件引用、世界書、記憶資料、Daily Pulse 資料、反饋歷史與 App 設定會保存在應用沙盒中。</li>
-    <li><strong>API Key：</strong>API Key 透過系統 <strong>Keychain</strong> 儲存，而不是寫入普通 JSON 檔；如果你啟用了 Apple 的相關同步能力，它也可能透過 <strong>iCloud 鑰匙圈</strong>在你自己的裝置間同步。</li>
+    <li><strong>API Key：</strong>API Key 會隨 API 設定一起以 <strong>JSON 檔</strong> 形式儲存在 App 沙盒內；如果你啟用了 iCloud 同步，相關設定可能透過 Apple 的 iCloud / CloudKit 在你自己的裝置間同步。</li>
     <li><strong>本地請求日誌：</strong>App 會在本地記錄提供商名稱、模型標識、請求時間、完成時間、狀態、是否流式、Token 用量等中繼資料。<strong>這些日誌不包含聊天正文</strong>，主要用於流量分析、回應測速、Daily Pulse 統計和年度彙總等本地功能。</li>
     <li><strong>反饋工單快取：</strong>如果你使用反饋助手，App 會在本地保存工單編號、票據令牌、狀態、更新時間與公開連結，方便後續追蹤處理進度。</li>
 </ul>
@@ -87,7 +94,7 @@
 
 <ul>
     <li><strong>iPhone / Apple Watch 同步：</strong>雙端即時同步透過 <strong>WatchConnectivity</strong> 完成，不經過開發者自建伺服器。</li>
-    <li><strong>iCloud 同步：</strong>如果你主動開啟 iCloud 同步，所選資料可能會透過 Apple 的 iCloud / CloudKit 體系在你自己的裝置間同步。API Key 不會放進普通同步包，而是依賴 iCloud 鑰匙圈（如果系統與帳戶允許）。</li>
+    <li><strong>iCloud 同步：</strong>如果你主動開啟 iCloud 同步，所選資料可能會透過 Apple 的 iCloud / CloudKit 體系在你自己的裝置間同步；其中可能包含保存 API Key 的 JSON 設定。</li>
     <li><strong>本地網路與調試：</strong>本地網路權限只用於可選的局域網調試 / 遠端檔案存取功能。如果你主動連接自己的桌面調試工具，相關 App 檔案或請求流量可能會發送到<strong>你自己控制的本地調試端</strong>。</li>
 </ul>
 
@@ -111,7 +118,7 @@
 
 <ul>
     <li><strong>第三方 AI 提供商：</strong>處理由你主動發起的聊天、圖像與音訊模型請求。</li>
-    <li><strong>Apple 系統服務：</strong>如 WatchConnectivity、iCloud / CloudKit、iCloud 鑰匙圈等，依 Apple 自身政策處理。</li>
+    <li><strong>Apple 系統服務：</strong>如 WatchConnectivity、iCloud / CloudKit 等，依 Apple 自身政策處理。</li>
     <li><strong>開發者運營的反饋服務：</strong>只在你主動提交或刷新反饋工單時使用。</li>
     <li><strong>不會預設上傳的內容：</strong>聊天內容、本地記憶、本地請求日誌、年度彙總資料與 API Key 不會自動上傳到開發者控制的伺服器。</li>
     <li><strong>廣告與通用埋點：</strong>目前程式碼中未整合第三方廣告 SDK，也未發現通用型開發者側行為分析 SDK。若未來加入此類能力，我們會先更新隱私政策。</li>

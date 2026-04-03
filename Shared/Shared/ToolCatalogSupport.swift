@@ -110,6 +110,24 @@ public enum ToolCatalogSupport {
         states.filter(\.isAvailableInCurrentSession).count
     }
 
+    public static func mcpCatalogTools(
+        servers: [MCPServerConfiguration],
+        statuses: [UUID: MCPServerStatus]
+    ) -> [MCPAvailableTool] {
+        servers
+            .filter(\.isSelectedForChat)
+            .flatMap { server in
+                let tools = statuses[server.id]?.tools ?? []
+                return tools.enumerated().map { index, tool in
+                    MCPAvailableTool(
+                        server: server,
+                        tool: tool,
+                        internalName: "mcp://catalog/\(server.id.uuidString)/\(tool.toolId)/\(index)"
+                    )
+                }
+            }
+    }
+
     public static func schemaSummary(for schema: JSONValue?, fieldLimit: Int = 4) -> String? {
         guard let schema else { return nil }
         guard case .dictionary(let schemaDict) = schema else {

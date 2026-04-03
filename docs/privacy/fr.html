@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Politique de confidentialité - ETOS LLM Studio</title>
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --text-color: #1d1d1f;
+            --bg-color: #ffffff;
+            --secondary-text: #86868b;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #000000;
+                --text-color: #f5f5f7;
+                --secondary-text: #a1a1a6;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+        h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        h3 { font-size: 1rem; margin: 1rem 0 0.35rem; }
+        .last-updated { color: var(--secondary-text); margin-bottom: 2rem; font-size: 0.9rem; }
+        section { margin-bottom: 2rem; }
+        ul { padding-left: 1.2rem; }
+        li { margin-bottom: 0.6rem; }
+        strong { color: var(--primary-color); }
+        .contact-info { background: #f5f5f710; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        @media (prefers-color-scheme: light) {
+            .contact-info { background: #f5f5f7; border: none; }
+        }
+        footer { margin-top: 4rem; font-size: 0.8rem; color: var(--secondary-text); text-align: center; }
+        a { color: var(--primary-color); text-decoration: none; }
+        .lang-switch { text-align: right; margin-bottom: 20px; font-size: 0.9rem; }
+        p, li { word-break: break-word; }
+    </style>
+</head>
+<body>
+    <div class="lang-switch">
+        <a href="en.html">English</a> |
+        <a href="zh_hans.html">简体中文</a> |
+        <a href="zh_hant.html">繁體中文</a> |
+        <a href="ja.html">日本語</a> |
+        <a href="es.html">Español</a> |
+        <a href="fr.html">Français</a> |
+        <a href="ru.html">Русский</a> |
+        <a href="ar.html">العربية</a>
+    </div>
+
+    <h1>Politique de confidentialité</h1>
+    <p class="last-updated">Dernière mise à jour : 4 avril 2026</p>
+
+    <section>
+        <h2>1. Introduction</h2>
+
+<p>ETOS LLM Studio suit une philosophie de conception <strong>« Local-first »</strong>. La plupart des données principales restent sur votre appareil et sous votre contrôle.</p>
+<p>Nous ne stockons <strong>pas</strong> automatiquement le contenu de vos chats, vos enregistrements vocaux, vos pièces jointes d’image ni vos clés API sur des serveurs contrôlés par le développeur. En revanche, l’application stocke localement les chats, la configuration, la mémoire et les journaux de requêtes pour fournir la synchronisation, les statistiques, Daily Pulse, le récapitulatif annuel et des fonctions similaires.</p>
+
+    </section>
+    <section>
+        <h2>2. Stockage local et traitement sur l’appareil</h2>
+
+<ul>
+    <li><strong>Données de chat et de session :</strong> historique des chats, paramètres de session, références de pièces jointes, worldbooks, données mémoire, données Daily Pulse, historique de feedback et paramètres de l’app sont stockés dans le sandbox de l’application.</li>
+    <li><strong>Clés API :</strong> les clés API sont stockées localement sous forme de <strong>fichiers JSON</strong> avec votre configuration API dans le sandbox de l’app. Si vous activez la synchronisation iCloud, la configuration associée peut être synchronisée entre vos appareils via iCloud / CloudKit d’Apple.</li>
+    <li><strong>Journaux locaux de requêtes :</strong> l’app enregistre des métadonnées comme le fournisseur, l’identifiant du modèle, l’heure de début, l’heure de fin, l’état, le mode streaming et l’usage de tokens. <strong>Ces journaux n’incluent pas le contenu des messages</strong>. Ils servent à l’analyse locale du trafic, aux mesures de vitesse, aux statistiques Daily Pulse, au récapitulatif annuel et à d’autres fonctions locales.</li>
+    <li><strong>Cache des tickets de feedback :</strong> si vous utilisez l’assistant de feedback, l’app stocke localement les numéros de ticket, tokens de ticket, statut, date de mise à jour et URL publique pour suivre l’avancement.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>3. Requêtes IA, audio et images</h2>
+
+<ul>
+    <li><strong>Chat texte :</strong> vos messages sont envoyés directement aux fournisseurs d’IA tiers que vous configurez vous-même (OpenAI, Anthropic, Google, services compatibles OpenAI ou modèles auto-hébergés). Nous ne relayons ni ne stockons ce contenu sur des serveurs du développeur.</li>
+    <li><strong>Voix et audio :</strong> l’accès au micro est utilisé uniquement lorsque vous enregistrez ou déclenchez la saisie vocale. L’audio est envoyé uniquement au fournisseur du modèle actuel ou au service de voix/transcription que vous choisissez.</li>
+    <li><strong>Images et fichiers :</strong> l’app n’accède aux images et fichiers que lorsque vous les sélectionnez. Les pièces jointes sont envoyées à votre fournisseur de modèle actuel ou à un endpoint local de débogage que vous connectez volontairement.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>4. Synchronisation, réseau local et services Apple</h2>
+
+<ul>
+    <li><strong>Synchronisation iPhone / Apple Watch :</strong> la synchronisation en temps réel entre iPhone et Apple Watch utilise <strong>WatchConnectivity</strong> et ne passe pas par des serveurs opérés par le développeur.</li>
+    <li><strong>Synchronisation iCloud :</strong> si vous activez explicitement iCloud, les données sélectionnées peuvent se synchroniser entre vos appareils via iCloud / CloudKit d’Apple, y compris la configuration JSON contenant les clés API.</li>
+    <li><strong>Réseau local et débogage :</strong> l’autorisation réseau local est utilisée uniquement pour les fonctions optionnelles de débogage LAN / accès distant aux fichiers. Si vous connectez votre propre outil de débogage de bureau, certains fichiers de l’app ou le trafic de requêtes peuvent être envoyés vers un <strong>endpoint local que vous contrôlez</strong>.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>5. Assistant de feedback</h2>
+
+<p>Les données sont envoyées au service de feedback <strong>uniquement lorsque vous choisissez activement d’envoyer un feedback</strong>.</p>
+<ul>
+    <li><strong>Contenu saisi par l’utilisateur :</strong> type de feedback, titre, description détaillée, étapes de reproduction, comportement attendu, comportement observé et contexte supplémentaire.</li>
+    <li><strong>Instantané d’environnement :</strong> plateforme, version de l’app, numéro de build, version du système, identifiant du modèle d’appareil, langue/région et fuseau horaire.</li>
+    <li><strong>Diagnostic minimal :</strong> horodatage, nombre de fournisseurs, nombre de sessions non temporaires, plateforme et version de l’app.</li>
+    <li><strong>Vérification anti-abus :</strong> les requêtes de feedback incluent aussi challenge, horodatage, signature et champs liés au PoW afin de limiter le spam.</li>
+    <li><strong>Actualisation d’état :</strong> lorsque vous actualisez ensuite l’état d’un ticket, l’app utilise le numéro de ticket et le token stockés localement pour interroger le service de feedback.</li>
+</ul>
+<p>Avant l’envoi, le texte du feedback passe par un masquage de base qui tente de cacher les tokens Bearer courants, les libellés de clé API et quelques formats de secrets fréquents. Cela <strong>n’est pas</strong> un système complet de prévention des fuites de données. <strong>N’incluez pas de secrets, pièces d’identité, adresses, données de santé ni autres informations sensibles dans vos retours.</strong></p>
+
+    </section>
+    <section>
+        <h2>6. Services tiers, analytique et limites côté serveur</h2>
+
+<ul>
+    <li><strong>Fournisseurs d’IA tiers :</strong> traitent les requêtes de chat, image et audio que vous envoyez volontairement.</li>
+    <li><strong>Services système Apple :</strong> comme WatchConnectivity et iCloud / CloudKit, sont régis par les politiques d’Apple.</li>
+    <li><strong>Service de feedback opéré par le développeur :</strong> utilisé uniquement lorsque vous soumettez ou consultez des tickets de feedback.</li>
+    <li><strong>Non téléversé par défaut :</strong> contenu des chats, mémoire locale, journaux locaux, données du récapitulatif annuel et clés API ne sont pas téléversés automatiquement vers des serveurs contrôlés par le développeur.</li>
+    <li><strong>Publicité et SDK d’analytique générique :</strong> le code actuel n’inclut pas de SDK publicitaire tiers, et nous n’avons pas trouvé de SDK générique d’analyse comportementale côté développeur. Si cela change, nous mettrons à jour cette politique au préalable.</li>
+    <li><strong>Partage d’analyses Apple :</strong> si vous activez le partage d’analyses avec les développeurs au niveau système, Apple peut collecter des logs de crash anonymes ou des informations de diagnostic selon ses propres règles.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. Clause de non-responsabilité</h2>
+
+<ul>
+    <li><strong>Outil neutre :</strong> cette app est un client LLM généraliste. Elle peut préremplir certains endpoints ou adresses de feedback, mais n’intègre pas d’identifiants commerciaux prêts à l’emploi.</li>
+    <li><strong>Responsabilité du contenu :</strong> tout contenu généré par IA provient de services tiers que vous configurez vous-même. Nous ne pouvons pas garantir son exactitude, sa légalité ni sa pertinence.</li>
+    <li><strong>Choix des services :</strong> tout service API, capacité de synchronisation ou service de feedback que vous utilisez doit être évalué par vous selon sa propre politique de confidentialité, ses conditions, ses coûts et ses risques.</li>
+</ul>
+
+    </section>
+
+    <section>
+        <div class="contact-info">
+            <h2>8. Contact</h2>
+            <p>Si vous avez des questions sur cette politique de confidentialité, veuillez nous contacter :</p>
+            <p><strong>Eric Terminal</strong><br>
+            Email: <a href="mailto:contact@ericterminal.com">contact@ericterminal.com</a><br>
+            GitHub: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio">https://github.com/Eric-Terminal/ETOS-LLM-Studio</a></p>
+        </div>
+    </section>
+
+    <footer>
+        &copy; 2026 Eric Terminal. Tous droits réservés.
+    </footer>
+</body>
+</html>

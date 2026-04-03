@@ -47,12 +47,19 @@
     </style>
 </head>
 <body>
-    <div class="lang-switch">
-        <a href="en.html">English</a> | <a href="zh_hans.html">简体中文</a> | <a href="zh_hant.html">繁體中文</a>
+        <div class="lang-switch">
+        <a href="en.html">English</a> |
+        <a href="zh_hans.html">简体中文</a> |
+        <a href="zh_hant.html">繁體中文</a> |
+        <a href="ja.html">日本語</a> |
+        <a href="es.html">Español</a> |
+        <a href="fr.html">Français</a> |
+        <a href="ru.html">Русский</a> |
+        <a href="ar.html">العربية</a>
     </div>
 
     <h1>プライバシーポリシー</h1>
-    <p class="last-updated">施行日：2026年3月22日</p>
+    <p class="last-updated">最終更新：2026年4月4日</p>
 
     <section>
         <h2>1. はじめに</h2>
@@ -66,7 +73,7 @@
 
 <ul>
     <li><strong>チャットとセッション情報：</strong>チャット履歴、セッション設定、添付ファイル参照、Worldbook、記憶データ、Daily Pulse データ、フィードバック履歴、アプリ設定は端末内のアプリサンドボックスに保存されます。</li>
-    <li><strong>API Key：</strong>API Key は通常の JSON ファイルではなく、システムの <strong>Keychain</strong> に保存されます。Apple の関連同期機能を有効にしている場合、<strong>iCloud キーチェーン</strong>を通じて自分の端末間で同期されることがあります。</li>
+    <li><strong>API Key：</strong>API Key は API 設定と一緒に、アプリサンドボックス内の <strong>JSON ファイル</strong> として端末内に保存されます。iCloud 同期を有効にした場合、関連設定は Apple の iCloud / CloudKit を通じて自分の端末間で同期されることがあります。</li>
     <li><strong>ローカルリクエストログ：</strong>アプリはプロバイダ名、モデル識別子、開始時刻、終了時刻、状態、ストリーミング有無、Token 使用量などのメタデータを端末内に記録します。<strong>これらのログにチャット本文は含まれません</strong>。主にトラフィック分析、応答速度計測、Daily Pulse 集計、年間サマリーなどのローカル機能のために使われます。</li>
     <li><strong>フィードバックチケットのキャッシュ：</strong>フィードバックアシスタントを使う場合、チケット番号、トークン、状態、更新日時、公開 URL を端末内に保存し、後から進捗を確認できるようにします。</li>
 </ul>
@@ -87,7 +94,7 @@
 
 <ul>
     <li><strong>iPhone / Apple Watch 同期：</strong>リアルタイム同期は <strong>WatchConnectivity</strong> を通じて行われ、開発者が管理するサーバーは経由しません。</li>
-    <li><strong>iCloud 同期：</strong>あなたが明示的に iCloud 同期を有効にした場合、選択されたデータは Apple の iCloud / CloudKit を通じて自分の端末間で同期されます。API Key は通常の同期パッケージには入らず、対応環境では iCloud キーチェーンに依存します。</li>
+    <li><strong>iCloud 同期：</strong>あなたが明示的に iCloud 同期を有効にした場合、選択されたデータは Apple の iCloud / CloudKit を通じて自分の端末間で同期されます。そこには API Key を含む JSON 設定が含まれる場合があります。</li>
     <li><strong>ローカルネットワークとデバッグ：</strong>ローカルネットワーク権限は、任意機能である LAN デバッグ / リモートファイルアクセスのためだけに使われます。あなたが自分のデスクトップデバッグツールを接続した場合、関連するアプリファイルやリクエスト通信が、<strong>あなた自身が管理するローカルエンドポイント</strong>に送られることがあります。</li>
 </ul>
 
@@ -111,7 +118,7 @@
 
 <ul>
     <li><strong>第三者 AI プロバイダ：</strong>あなたが明示的に送信したチャット、画像、音声リクエストを処理します。</li>
-    <li><strong>Apple のシステムサービス：</strong>WatchConnectivity、iCloud / CloudKit、iCloud キーチェーンなどは Apple 自身のポリシーに従います。</li>
+    <li><strong>Apple のシステムサービス：</strong>WatchConnectivity や iCloud / CloudKit などは Apple 自身のポリシーに従います。</li>
     <li><strong>開発者運営のフィードバックサービス：</strong>あなたがフィードバックを送信または更新した時だけ使われます。</li>
     <li><strong>既定でアップロードされないもの：</strong>チャット内容、ローカル記憶、ローカルリクエストログ、年間サマリー用データ、API Key は、自動的に開発者サーバーへアップロードされません。</li>
     <li><strong>広告と汎用分析 SDK：</strong>現行コードベースには第三者広告 SDK は含まれておらず、汎用的な開発者側行動分析 SDK も確認されていません。将来これが変わる場合は、先に本ポリシーを更新します。</li>

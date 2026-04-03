@@ -53,6 +53,7 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
     case echoText = "echo_text"
     case fillUserInput = "fill_user_input"
     case editMemory = "edit_memory"
+    case submitFeedbackTicket = "submit_feedback_ticket"
     case listSandboxDirectory = "list_sandbox_directory"
     case readSandboxFile = "read_sandbox_file"
     case writeSandboxFile = "write_sandbox_file"
@@ -78,6 +79,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "app_fill_user_input"
         case .editMemory:
             return "app_edit_memory"
+        case .submitFeedbackTicket:
+            return "app_submit_feedback_ticket"
         case .listSandboxDirectory:
             return "app_list_sandbox_directory"
         case .readSandboxFile:
@@ -117,6 +120,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("填充输入框", comment: "Fill user input tool name")
         case .editMemory:
             return NSLocalizedString("记忆编辑", comment: "Memory edit tool name")
+        case .submitFeedbackTicket:
+            return NSLocalizedString("提交反馈工单", comment: "Submit feedback ticket tool name")
         case .listSandboxDirectory:
             return NSLocalizedString("列出沙盒目录", comment: "List sandbox directory tool name")
         case .readSandboxFile:
@@ -156,6 +161,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("把文本放进聊天输入框，支持覆盖或追加。", comment: "Fill user input tool summary")
         case .editMemory:
             return NSLocalizedString("按记忆 ID 编辑既有记忆内容，并在需要时自动重新嵌入。", comment: "Memory edit tool summary")
+        case .submitFeedbackTicket:
+            return NSLocalizedString("向反馈助手提交问题或建议工单，并返回工单编号与状态。", comment: "Submit feedback ticket tool summary")
         case .listSandboxDirectory:
             return NSLocalizedString("查看应用沙盒 Documents 目录下的文件和子目录。", comment: "List sandbox directory tool summary")
         case .readSandboxFile:
@@ -195,6 +202,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("工具详情：填充输入框", comment: "Fill user input tool detail description")
         case .editMemory:
             return NSLocalizedString("工具详情：记忆编辑", comment: "Memory edit tool detail description")
+        case .submitFeedbackTicket:
+            return NSLocalizedString("工具详情：提交反馈工单", comment: "Submit feedback ticket tool detail description")
         case .listSandboxDirectory:
             return NSLocalizedString("工具详情：列出沙盒目录", comment: "List sandbox directory tool detail description")
         case .readSandboxFile:
@@ -273,6 +282,42 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                     ])
                 ]),
                 "required": .array([.string("memory_id")])
+            ])
+        case .submitFeedbackTicket:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "category": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("反馈类型，可选 bug 或 suggestion，默认 bug。", comment: "Submit feedback ticket category parameter description")),
+                        "enum": .array([.string("bug"), .string("suggestion")])
+                    ]),
+                    "title": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("反馈标题。", comment: "Submit feedback ticket title parameter description"))
+                    ]),
+                    "detail": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("反馈详细描述。", comment: "Submit feedback ticket detail parameter description"))
+                    ]),
+                    "reproduction_steps": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("可复现步骤（可选）。", comment: "Submit feedback ticket reproduction steps parameter description"))
+                    ]),
+                    "expected_behavior": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("预期行为（可选）。", comment: "Submit feedback ticket expected behavior parameter description"))
+                    ]),
+                    "actual_behavior": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("实际行为（可选）。", comment: "Submit feedback ticket actual behavior parameter description"))
+                    ]),
+                    "extra_context": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("补充信息（可选）。", comment: "Submit feedback ticket extra context parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("title"), .string("detail")])
             ])
         case .listSandboxDirectory:
             return JSONValue.dictionary([
@@ -560,6 +605,11 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString(
                 "编辑既有长期记忆。可按 memory_id 修改 content，也可切换归档状态。修改 content 后会自动重新生成这条记忆的嵌入。",
                 comment: "Memory edit tool description sent to model"
+            )
+        case .submitFeedbackTicket:
+            return NSLocalizedString(
+                "向反馈助手提交一条问题或建议工单。title 和 detail 必填；category 可选 bug 或 suggestion（默认 bug）；可附带复现步骤、预期行为、实际行为、补充信息。",
+                comment: "Submit feedback ticket tool description sent to model"
             )
         case .listSandboxDirectory:
             return NSLocalizedString(
@@ -958,6 +1008,67 @@ public final class AppToolManager: ObservableObject {
             }
 
             return prettyPrintedJSONString(from: resultPayload)
+        case .submitFeedbackTicket:
+            struct SubmitFeedbackArgs: Decodable {
+                let category: String?
+                let title: String
+                let detail: String
+                let reproduction_steps: String?
+                let expected_behavior: String?
+                let actual_behavior: String?
+                let extra_context: String?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(SubmitFeedbackArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 submit_feedback_ticket 的参数，请至少提供 title 和 detail。", comment: "Submit feedback ticket invalid arguments")
+                )
+            }
+
+            let normalizedCategoryRaw = args.category?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let category: FeedbackCategory
+            if let normalizedCategoryRaw, !normalizedCategoryRaw.isEmpty {
+                guard let parsedCategory = FeedbackCategory(rawValue: normalizedCategoryRaw) else {
+                    throw AppToolExecutionError.invalidArguments(
+                        NSLocalizedString("错误：submit_feedback_ticket 的 category 仅支持 bug 或 suggestion。", comment: "Submit feedback ticket invalid category")
+                    )
+                }
+                category = parsedCategory
+            } else {
+                category = .bug
+            }
+
+            let title = args.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let detail = args.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty, !detail.isEmpty else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：submit_feedback_ticket 的 title 和 detail 不能为空。", comment: "Submit feedback ticket empty title or detail")
+                )
+            }
+
+            let draft = FeedbackDraft(
+                category: category,
+                title: args.title,
+                detail: args.detail,
+                reproductionSteps: args.reproduction_steps,
+                expectedBehavior: args.expected_behavior,
+                actualBehavior: args.actual_behavior,
+                extraContext: args.extra_context
+            )
+            let ticket = try await FeedbackService.shared.submit(draft: draft)
+            let formatter = ISO8601DateFormatter()
+            let payload: [String: Any] = [
+                "issueNumber": ticket.issueNumber,
+                "category": ticket.category.rawValue,
+                "title": ticket.title,
+                "status": ticket.lastKnownStatus.rawValue,
+                "createdAt": formatter.string(from: ticket.createdAt),
+                "publicURL": ticket.publicURL?.absoluteString as Any,
+                "moderationBlocked": ticket.moderationBlocked as Any,
+                "moderationMessage": ticket.moderationMessage as Any
+            ]
+            return prettyPrintedJSONString(from: payload)
         case .listSandboxDirectory:
             struct ListDirectoryArgs: Decodable {
                 let path: String?

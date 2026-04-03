@@ -18,6 +18,7 @@ import Shared
 struct MCPIntegrationView: View {
     @StateObject private var manager = MCPManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @State private var isShowingIntroDetails = false
     
     private var countdownNumberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -28,10 +29,29 @@ struct MCPIntegrationView: View {
     
     var body: some View {
         List {
-            Section("关于 MCP") {
-                Text("配置 MCP 工具服务器，让助手调用远程能力。可在手表上查看与调试。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "MCP 工具箱",
+                    summary: "在手表端查看服务器状态，并快速进入 MCP 调试。",
+                    details: """
+                    快速上手
+                    1. 在“服务器管理”确认至少一台服务器已连接。
+                    2. 打开“向模型暴露 MCP 工具”总开关。
+                    3. 在“能力概览”检查工具与资源是否已发布。
+                    4. 用“调试面板”验证调用是否正常。
+
+                    关键项说明
+                    • 连接状态：已连接 / 聊天使用 / 重连中 / 失败。
+                    • 自动批准：审批倒计时（1~30 秒）。
+                    • 调用工具：手动测试工具执行链路。
+                    • 读取资源：手动验证资源读取能力。
+
+                    提示
+                    • watch 端主要用于查看与快速排查；
+                    • 复杂配置建议在 iPhone 端完成后同步到手表。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
             Section(
@@ -225,6 +245,44 @@ struct MCPIntegrationView: View {
             }
         }
         .navigationTitle("MCP")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+        )
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
     
     private func statusDescription(for server: MCPServerConfiguration) -> String {

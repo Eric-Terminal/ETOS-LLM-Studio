@@ -101,7 +101,7 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text("iCloud 同步")
             } footer: {
-                Text("默认关闭。开启后，iCloud 同步会先上传当前设备快照，再拉取其他设备快照并合并。API Key 通过 iCloud 钥匙串同步，不会写入普通同步包。")
+                Text("默认关闭。开启后，iCloud 同步会先上传当前设备快照，再拉取其他设备快照并合并。包含 API Key 的 JSON 配置可能会随同步包在您的设备间同步。")
             }
 
             Section("iCloud 状态") {

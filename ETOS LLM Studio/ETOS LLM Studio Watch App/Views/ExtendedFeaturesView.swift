@@ -12,11 +12,34 @@ import Shared
 
 public struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel
+    @State private var isShowingIntroDetails = false
     
     public init() {}
     
     public var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "拓展功能",
+                    summary: "集中管理工具集成、语音能力与系统维护入口。",
+                    details: """
+                    这个页面适合做什么
+                    • 统一进入进阶功能，不打断主聊天流程。
+                    • 快速定位语音、工具集成、导入和维护能力。
+
+                    入口建议
+                    • 工具中心：排查工具是否在当前会话可用。
+                    • 长期记忆 / 世界书：管理长期偏好与规则知识。
+                    • MCP / 快捷指令：接入外部能力和自动化流程。
+                    • 存储管理 / 远程文件访问：做维护与清理。
+
+                    使用建议
+                    • 先保证核心入口可用，再逐步开启实验功能。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 NavigationLink {
                     ToolCenterView()
@@ -192,6 +215,40 @@ public struct ExtendedFeaturesView: View {
         .navigationTitle("拓展功能")
     }
 
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
+    }
+
     private var speechModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.selectedSpeechModel },
@@ -207,9 +264,28 @@ private struct LongTermMemoryFeatureView: View {
     
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    @State private var isShowingIntroDetails = false
     
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "长期记忆系统",
+                    summary: "让 AI 持续理解你的长期偏好和上下文。",
+                    details: """
+                    能力说明
+                    • 长期记忆会在回复前检索历史信息，提升连续性。
+                    • 写入开关仅影响“新增记忆”，不影响读取已有记忆。
+
+                    推荐流程
+                    1. 先开启总开关体验效果。
+                    2. 对噪声敏感时可先关闭写入，仅保留读取。
+                    3. 定期到记忆库管理清理低质量记忆。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 Toggle("启用记忆功能", isOn: $enableMemory)
             } footer: {
@@ -240,5 +316,39 @@ private struct LongTermMemoryFeatureView: View {
             }
         }
         .navigationTitle("长期记忆系统")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 }

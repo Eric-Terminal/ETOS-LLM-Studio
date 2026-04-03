@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ETOS 调试控制台</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b0f17;
+      --card: #121826;
+      --text: #e8edf7;
+      --muted: #9aa5bd;
+      --accent: #57a6ff;
+      --border: #263048;
+      --danger: #ff6b6b;
+      --ok: #38d49c;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f8fc;
+        --card: #ffffff;
+        --text: #1f2a3d;
+        --muted: #5f6c86;
+        --accent: #1f73ff;
+        --border: #d7dfef;
+        --danger: #e53935;
+        --ok: #0b9d6f;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .title { font-size: 20px; font-weight: 700; }
+    .status {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      background: #777;
+    }
+    .dot.ok { background: var(--ok); }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .tab-btn {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .tab-btn.active { border-color: var(--accent); color: var(--accent); }
+    .panel {
+      display: none;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      padding: 14px;
+      min-height: 520px;
+    }
+    .panel.active { display: block; }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    input, textarea, select, button {
+      font: inherit;
+      color: inherit;
+    }
+    input, textarea, select {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 8px;
+    }
+    textarea { width: 100%; min-height: 120px; resize: vertical; }
+    button {
+      border: 1px solid var(--border);
+      background: transparent;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.danger { border-color: var(--danger); color: var(--danger); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .split {
+      display: grid;
+      gap: 10px;
+    }
+    .split.two { grid-template-columns: 300px 1fr; }
+    .split.files { grid-template-columns: 260px 1fr 1fr; }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.05);
+    }
+    .muted { color: var(--muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    tr:hover { background: rgba(87, 166, 255, 0.08); }
+    tr.selected { background: rgba(87, 166, 255, 0.16); }
+    .list {
+      max-height: 460px;
+      overflow: auto;
+    }
+    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .kv {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .preview {
+      min-height: 260px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      overflow: auto;
+    }
+    .preview img { max-width: 100%; border-radius: 8px; }
+    .footer-note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .msg-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .msg-row-head {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .msg-row-content {
+      width: 100%;
+      min-height: 72px;
+    }
+    .file-tree {
+      max-height: 460px;
+      overflow: auto;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 6px;
+    }
+    .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tree-row:hover { background: rgba(87, 166, 255, 0.08); }
+    .tree-row.selected { background: rgba(87, 166, 255, 0.16); }
+    .tree-toggle {
+      width: 20px;
+      padding: 0;
+      min-height: 20px;
+      line-height: 18px;
+      text-align: center;
+      border: 0;
+    }
+    .tree-name {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tree-error {
+      color: var(--danger);
+      font-size: 12px;
+      margin: 2px 0 4px 26px;
+    }
+    @media (max-width: 1180px) {
+      .split.files { grid-template-columns: 1fr; }
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="title">ETOS 调试控制台（Web GUI）</div>
+    <div class="status">
+      <span id="connDot" class="dot"></span>
+      <span id="connText">正在检查连接...</span>
+      <span id="deviceName" class="pill">设备: -</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="overview">总览</button>
+    <button class="tab-btn" data-tab="files">文件管理</button>
+    <button class="tab-btn" data-tab="providers">提供商</button>
+    <button class="tab-btn" data-tab="sessions">会话</button>
+    <button class="tab-btn" data-tab="memories">记忆</button>
+    <button class="tab-btn" data-tab="captures">OpenAI 捕获</button>
+  </div>
+
+  <section id="panel-overview" class="panel active">
+    <div class="card">
+      <div class="kv">
+        <div>连接状态</div><div id="ovConnected">-</div>
+        <div>连接模式</div><div id="ovMode">-</div>
+        <div>命令队列</div><div id="ovQueue">-</div>
+        <div>挂起请求</div><div id="ovPending">-</div>
+      </div>
+      <div class="footer-note">提示：设备需先在 App 的“高级诊断”中连接当前电脑（WebSocket 或 HTTP 轮询）。</div>
+    </div>
+  </section>
+
+  <section id="panel-files" class="panel">
+    <div class="toolbar">
+      <input id="filesPath" class="mono" style="min-width: 280px;" value="." />
+      <button id="btnFilesList" class="primary">列出目录</button>
+      <button id="btnFilesUp">返回上级</button>
+      <button id="btnFilesTreeRefresh">刷新目录树</button>
+      <button id="btnFilesMkdir">新建目录</button>
+      <input id="fileUploadInput" type="file" />
+      <button id="btnUploadFile">上传文件</button>
+    </div>
+
+    <div class="split files">
+      <div class="card">
+        <div class="muted">目录树</div>
+        <div id="filesTree" class="file-tree">
+          <div class="muted">正在加载目录树...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="muted">目录内容</div>
+        <div class="list">
+          <table>
+            <thead>
+            <tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th></tr>
+            </thead>
+            <tbody id="filesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="actions" style="margin-bottom:8px;">
+          <button id="btnFilePreview">预览</button>
+          <button id="btnFileDownload">下载到本机</button>
+          <button id="btnFileSave">保存编辑</button>
+          <button id="btnFileDelete" class="danger">删除</button>
+        </div>
+        <div id="fileSelected" class="muted">当前未选中文件</div>
+        <div id="filePreview" class="preview mono" style="margin-top:8px;">请选择文件后预览</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-providers" class="panel">
+    <div class="toolbar">
+      <button id="btnProvidersLoad" class="primary">读取提供商配置</button>
+      <button id="btnProvidersSave">保存提供商配置</button>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <div class="muted">快捷添加（会追加到下方 JSON）</div>
+      <div class="toolbar">
+        <input id="quickProviderName" placeholder="提供商名称" />
+        <input id="quickProviderBaseURL" placeholder="Base URL" style="min-width:260px;" />
+        <input id="quickProviderKey" placeholder="API Key" style="min-width:260px;" />
+        <select id="quickProviderFormat">
+          <option value="openai-compatible">openai-compatible</option>
+          <option value="anthropic">anthropic</option>
+          <option value="gemini">gemini</option>
+        </select>
+        <button id="btnQuickAddProvider">添加到 JSON</button>
+      </div>
+    </div>
+
+    <textarea id="providersJSON" class="mono" style="min-height:420px;" placeholder="[]"></textarea>
+  </section>
+
+  <section id="panel-sessions" class="panel">
+    <div class="toolbar">
+      <button id="btnSessionsLoad" class="primary">加载会话列表</button>
+      <button id="btnSessionCreate">新建会话</button>
+      <button id="btnSessionDelete" class="danger">删除当前会话</button>
+    </div>
+    <div class="split two">
+      <div class="card">
+        <div class="muted">会话列表</div>
+        <div class="list">
+          <table>
+            <thead><tr><th>名称</th><th>ID</th></tr></thead>
+            <tbody id="sessionsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="kv" style="margin-bottom:8px;">
+          <div>会话ID</div><input id="sessionID" class="mono" readonly />
+          <div>会话名称</div><input id="sessionName" />
+          <div>Topic Prompt</div><textarea id="sessionTopic" style="min-height:80px;"></textarea>
+          <div>Enhanced Prompt</div><textarea id="sessionEnhanced" style="min-height:80px;"></textarea>
+          <div>世界书 IDs(JSON)</div><textarea id="sessionLorebookIDs" class="mono" style="min-height:70px;" placeholder="[]"></textarea>
+        </div>
+        <div class="actions" style="margin-bottom:8px;">
+          <button id="btnSessionSaveMeta">保存会话元数据</button>
+        </div>
+
+        <div class="muted" style="margin-bottom:6px;">消息编辑（表单 + 高级 JSON）</div>
+        <div class="toolbar">
+          <button id="btnMessagesModeForm" class="primary">表单模式</button>
+          <button id="btnMessagesModeJSON">JSON 模式</button>
+          <button id="btnMessageAdd">新增消息</button>
+          <span id="sessionMessagesCount" class="pill">0 条消息</span>
+        </div>
+        <div id="sessionMessagesFormWrap" class="card" style="margin-bottom:8px; max-height:280px; overflow:auto;">
+          <div id="sessionMessagesFormList"></div>
+        </div>
+        <textarea id="sessionMessagesJSON" class="mono hidden" style="min-height:220px;" placeholder="[]"></textarea>
+        <div class="actions" style="margin-top:8px;">
+          <button id="btnSessionSaveMessages">保存消息列表</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-memories" class="panel">
+    <div class="toolbar">
+      <button id="btnMemoriesLoad" class="primary">加载记忆</button>
+      <button id="btnReembedAll">重嵌入全部记忆</button>
+    </div>
+    <div class="split two">
+      <div class="card">
+        <div class="muted">记忆列表</div>
+        <div class="list">
+          <table>
+            <thead><tr><th>内容预览</th><th>归档</th><th>ID</th></tr></thead>
+            <tbody id="memoriesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="kv">
+          <div>记忆ID</div><input id="memoryID" class="mono" readonly />
+          <div>是否归档</div>
+          <select id="memoryArchived">
+            <option value="false">否（参与检索）</option>
+            <option value="true">是（已归档）</option>
+          </select>
+          <div>内容</div><textarea id="memoryContent" style="min-height:260px;"></textarea>
+        </div>
+        <div class="actions" style="margin-top:8px;">
+          <button id="btnMemorySave">保存记忆</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-captures" class="panel">
+    <div class="toolbar">
+      <button id="btnCapturesLoad" class="primary">刷新捕获队列</button>
+    </div>
+    <div class="card">
+      <div class="list">
+        <table>
+          <thead><tr><th>模型</th><th>消息数</th><th>接收时间</th><th>ID</th><th>操作</th></tr></thead>
+          <tbody id="capturesTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const state = {
+    files: [],
+    currentPath: '.',
+    selectedFile: null,
+    selectedFileBase64: null,
+    dirTreeRoot: null,
+    providers: [],
+    sessions: [],
+    selectedSession: null,
+    sessionMessages: [],
+    sessionMessageMode: 'form',
+    memories: [],
+    selectedMemory: null,
+    captures: []
+  }
+
+  const el = (id) => document.getElementById(id)
+
+  async function api(url, method = 'GET', body) {
+    const options = { method, headers: { 'Content-Type': 'application/json' } }
+    if (body !== undefined) options.body = JSON.stringify(body)
+    const resp = await fetch(url, options)
+    const data = await resp.json().catch(() => ({ status: 'error', message: '接口返回非 JSON' }))
+    if (!resp.ok || data.status === 'error') {
+      throw new Error(data.message || `请求失败: ${resp.status}`)
+    }
+    return data
+  }
+
+  function showError(error) {
+    alert(error?.message || String(error))
+  }
+
+  function base64ToBytes(base64) {
+    const binary = atob(base64)
+    const len = binary.length
+    const bytes = new Uint8Array(len)
+    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i)
+    return bytes
+  }
+
+  function bytesToBase64(bytes) {
+    const chunk = 0x8000
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += chunk) {
+      const sub = bytes.subarray(i, i + chunk)
+      binary += String.fromCharCode(...sub)
+    }
+    return btoa(binary)
+  }
+
+  function toISODate(ts) {
+    if (!ts) return '-'
+    try {
+      const date = new Date(Number(ts) * 1000)
+      if (!Number.isNaN(date.getTime())) return date.toLocaleString()
+    } catch (_) {}
+    return String(ts)
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tab)
+    })
+    document.querySelectorAll('.panel').forEach(panel => {
+      panel.classList.toggle('active', panel.id === `panel-${tab}`)
+    })
+  }
+
+  async function refreshStatus() {
+    try {
+      const status = await api('/api/status')
+      const connected = !!status.connected
+      el('connDot').classList.toggle('ok', connected)
+      el('connText').textContent = connected ? `已连接（${status.mode}）` : '未连接设备'
+      el('deviceName').textContent = `设备: ${status.device_name || '-'}`
+
+      el('ovConnected').textContent = connected ? '已连接' : '未连接'
+      el('ovMode').textContent = status.mode || '-'
+      el('ovQueue').textContent = String(status.queue_size ?? '-')
+      el('ovPending').textContent = String(status.pending_requests ?? '-')
+    } catch (error) {
+      el('connDot').classList.remove('ok')
+      el('connText').textContent = `状态查询失败：${error.message}`
+    }
+  }
+
+  function renderFiles() {
+    const tbody = el('filesTableBody')
+    tbody.innerHTML = ''
+    state.files.forEach(item => {
+      const tr = document.createElement('tr')
+      if (state.selectedFile?.name === item.name) tr.classList.add('selected')
+      tr.innerHTML = `
+        <td>${item.name}</td>
+        <td>${item.isDirectory ? '目录' : '文件'}</td>
+        <td>${item.isDirectory ? '-' : (item.size ?? 0)}</td>
+        <td>${toISODate(item.modificationDate)}</td>
+      `
+      tr.addEventListener('click', () => {
+        state.selectedFile = item
+        state.selectedFileBase64 = null
+        el('fileSelected').textContent = `${item.isDirectory ? '目录' : '文件'}：${state.currentPath === '.' ? item.name : `${state.currentPath}/${item.name}`}`
+        renderFiles()
+      })
+      tr.addEventListener('dblclick', async () => {
+        if (item.isDirectory) {
+          const path = state.currentPath === '.' ? item.name : `${state.currentPath}/${item.name}`
+          await loadFiles(path)
+        } else {
+          await previewSelectedFile()
+        }
+      })
+      tbody.appendChild(tr)
+    })
+  }
+
+  function normalizePath(path) {
+    const raw = String(path ?? '.').trim()
+    if (!raw || raw === '/' || raw === '.') return '.'
+    const cleaned = raw
+      .replace(/^\.\/+/, '')
+      .replace(/\/+/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '')
+    return cleaned || '.'
+  }
+
+  function joinPath(base, name) {
+    const parent = normalizePath(base)
+    return parent === '.' ? name : `${parent}/${name}`
+  }
+
+  function createDirTreeNode(path, name) {
+    return {
+      path: normalizePath(path),
+      name: name || path || '.',
+      expanded: false,
+      loaded: false,
+      loading: false,
+      children: [],
+      error: ''
+    }
+  }
+
+  async function loadDirTreeChildren(node) {
+    if (!node || node.loading || node.loaded) return
+    node.loading = true
+    renderFilesTree()
+    try {
+      const data = await api('/api/files/list', 'POST', { path: node.path })
+      const items = Array.isArray(data.items) ? data.items : []
+      const directories = items
+        .filter(item => item?.isDirectory)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+      node.children = directories.map(item => createDirTreeNode(joinPath(node.path, item.name), item.name))
+      node.loaded = true
+      node.error = ''
+    } catch (error) {
+      node.error = error?.message || String(error)
+    } finally {
+      node.loading = false
+      renderFilesTree()
+    }
+  }
+
+  async function ensureDirTreePath(path) {
+    const normalized = normalizePath(path)
+    if (!state.dirTreeRoot) {
+      state.dirTreeRoot = createDirTreeNode('.', 'Documents')
+      state.dirTreeRoot.expanded = true
+    }
+    const root = state.dirTreeRoot
+    if (!root.loaded) {
+      await loadDirTreeChildren(root)
+    }
+    if (normalized === '.') return
+
+    const segments = normalized.split('/').filter(Boolean)
+    let current = root
+    current.expanded = true
+
+    for (const segment of segments) {
+      if (!current.loaded) {
+        await loadDirTreeChildren(current)
+      }
+      let next = (current.children || []).find(child => child.name === segment)
+      if (!next) {
+        next = createDirTreeNode(joinPath(current.path, segment), segment)
+        current.children = [...(current.children || []), next]
+      }
+      next.expanded = true
+      current = next
+    }
+  }
+
+  async function refreshDirTree({ reset = false, focusPath = '.' } = {}) {
+    if (reset || !state.dirTreeRoot) {
+      state.dirTreeRoot = createDirTreeNode('.', 'Documents')
+      state.dirTreeRoot.expanded = true
+    }
+    await ensureDirTreePath(focusPath)
+    renderFilesTree()
+  }
+
+  function renderDirTreeNode(node, depth, container) {
+    const row = document.createElement('div')
+    row.className = 'tree-row'
+    if (normalizePath(state.currentPath) === node.path) {
+      row.classList.add('selected')
+    }
+    row.style.paddingLeft = `${depth * 14 + 4}px`
+
+    const toggle = document.createElement('button')
+    toggle.className = 'tree-toggle'
+    if (node.loading) {
+      toggle.textContent = '…'
+    } else if (node.loaded && !(node.children || []).length) {
+      toggle.textContent = '·'
+    } else {
+      toggle.textContent = node.expanded ? '▾' : '▸'
+    }
+    toggle.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      if (!node.loaded) {
+        node.expanded = true
+        renderFilesTree()
+        await loadDirTreeChildren(node)
+        return
+      }
+      node.expanded = !node.expanded
+      renderFilesTree()
+    })
+
+    const name = document.createElement('span')
+    name.className = 'tree-name'
+    name.textContent = node.path === '.' ? 'Documents' : (node.name || node.path)
+
+    row.appendChild(toggle)
+    row.appendChild(name)
+    row.addEventListener('click', () => {
+      loadFiles(node.path).catch(showError)
+    })
+    container.appendChild(row)
+
+    if (node.error) {
+      const error = document.createElement('div')
+      error.className = 'tree-error'
+      error.textContent = node.error
+      container.appendChild(error)
+    }
+
+    if (node.expanded) {
+      for (const child of (node.children || [])) {
+        renderDirTreeNode(child, depth + 1, container)
+      }
+    }
+  }
+
+  function renderFilesTree() {
+    const container = el('filesTree')
+    container.innerHTML = ''
+    if (!state.dirTreeRoot) {
+      container.innerHTML = '<div class="muted">目录树未初始化</div>'
+      return
+    }
+    renderDirTreeNode(state.dirTreeRoot, 0, container)
+  }
+
+  async function loadFiles(path = null) {
+    const target = path ?? el('filesPath').value.trim() || '.'
+    const data = await api('/api/files/list', 'POST', { path: target })
+    state.currentPath = data.path || target
+    state.files = Array.isArray(data.items) ? data.items.sort((a,b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+      return a.name.localeCompare(b.name)
+    }) : []
+    state.selectedFile = null
+    state.selectedFileBase64 = null
+    el('filesPath').value = state.currentPath
+    el('fileSelected').textContent = '当前未选中文件'
+    el('filePreview').textContent = '请选择文件后预览'
+    await refreshDirTree({ reset: true, focusPath: state.currentPath })
+    renderFiles()
+  }
+
+  function selectedFilePath() {
+    if (!state.selectedFile) return null
+    return state.currentPath === '.' ? state.selectedFile.name : `${state.currentPath}/${state.selectedFile.name}`
+  }
+
+  async function previewSelectedFile() {
+    if (!state.selectedFile || state.selectedFile.isDirectory) {
+      alert('请先选择文件')
+      return
+    }
+    const path = selectedFilePath()
+    const data = await api('/api/files/read', 'POST', { path })
+    const b64 = data.data || ''
+    state.selectedFileBase64 = b64
+
+    const lower = state.selectedFile.name.toLowerCase()
+    const preview = el('filePreview')
+
+    if (/(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.heic)$/.test(lower)) {
+      preview.innerHTML = `<img src="data:image/*;base64,${b64}" alt="preview">`
+      return
+    }
+
+    try {
+      const text = new TextDecoder().decode(base64ToBytes(b64))
+      if (lower.endsWith('.json')) {
+        try {
+          const parsed = JSON.parse(text)
+          preview.innerHTML = `<textarea id="fileEditor" class="mono" style="min-height:320px;">${JSON.stringify(parsed, null, 2)}</textarea>`
+          return
+        } catch (_) {}
+      }
+      preview.innerHTML = `<textarea id="fileEditor" class="mono" style="min-height:320px;">${text.replace(/</g, '&lt;')}</textarea>`
+    } catch (_) {
+      preview.textContent = '该文件不是可预览文本，请使用“下载到本机”。'
+    }
+  }
+
+  async function saveSelectedFileEdit() {
+    const editor = el('fileEditor')
+    if (!editor) {
+      alert('当前预览区没有可编辑文本')
+      return
+    }
+    const path = selectedFilePath()
+    if (!path) return
+    const content = editor.value
+    if (!confirm(`确认覆盖保存文件？\n${path}`)) return
+    await api('/api/files/write', 'POST', { path, content })
+    alert('保存成功')
+  }
+
+  function downloadSelectedFile() {
+    if (!state.selectedFile || state.selectedFile.isDirectory || !state.selectedFileBase64) {
+      alert('请先预览文件后再下载')
+      return
+    }
+    const bytes = base64ToBytes(state.selectedFileBase64)
+    const blob = new Blob([bytes])
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = state.selectedFile.name
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  async function deleteSelectedFile() {
+    const path = selectedFilePath()
+    if (!path) {
+      alert('请先选择文件或目录')
+      return
+    }
+    if (!confirm(`确认删除？\n${path}`)) return
+    await api('/api/files/delete', 'POST', { path })
+    await loadFiles(state.currentPath)
+  }
+
+  async function uploadSelectedLocalFile() {
+    const input = el('fileUploadInput')
+    const file = input.files?.[0]
+    if (!file) {
+      alert('请先选择一个本地文件')
+      return
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const data = bytesToBase64(bytes)
+    const path = state.currentPath === '.' ? file.name : `${state.currentPath}/${file.name}`
+    await api('/api/files/write', 'POST', { path, data })
+    alert('上传成功')
+    await loadFiles(state.currentPath)
+  }
+
+  function renderProviders() {
+    el('providersJSON').value = JSON.stringify(state.providers, null, 2)
+  }
+
+  async function loadProviders() {
+    const data = await api('/api/providers')
+    state.providers = Array.isArray(data.providers) ? data.providers : []
+    renderProviders()
+  }
+
+  async function saveProviders() {
+    let parsed
+    try {
+      parsed = JSON.parse(el('providersJSON').value || '[]')
+      if (!Array.isArray(parsed)) throw new Error('顶层必须是数组')
+    } catch (error) {
+      alert(`JSON 格式错误：${error.message}`)
+      return
+    }
+    if (!confirm('确认保存提供商配置？')) return
+    const data = await api('/api/providers/save', 'POST', { providers: parsed })
+    alert(data.message || '保存成功')
+    state.providers = parsed
+  }
+
+  function quickAddProvider() {
+    const name = el('quickProviderName').value.trim()
+    const baseURL = el('quickProviderBaseURL').value.trim()
+    const apiKey = el('quickProviderKey').value.trim()
+    const apiFormat = el('quickProviderFormat').value
+    if (!name || !baseURL) {
+      alert('请填写提供商名称和 Base URL')
+      return
+    }
+    let current = []
+    try {
+      current = JSON.parse(el('providersJSON').value || '[]')
+      if (!Array.isArray(current)) current = []
+    } catch (_) {
+      current = []
+    }
+    current.push({
+      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+      name,
+      baseURL,
+      apiKeys: apiKey ? [apiKey] : [],
+      apiFormat,
+      models: [],
+      headerOverrides: {}
+    })
+    el('providersJSON').value = JSON.stringify(current, null, 2)
+  }
+
+  function normalizeSessionMessageRole(role) {
+    const value = typeof role === 'string' ? role : ''
+    if (['system', 'user', 'assistant', 'tool'].includes(value)) return value
+    return 'user'
+  }
+
+  function syncSessionMessagesToJSON() {
+    el('sessionMessagesJSON').value = JSON.stringify(state.sessionMessages, null, 2)
+    el('sessionMessagesCount').textContent = `${state.sessionMessages.length} 条消息`
+  }
+
+  function syncSessionMessagesFromJSON() {
+    try {
+      const parsed = JSON.parse(el('sessionMessagesJSON').value || '[]')
+      if (!Array.isArray(parsed)) throw new Error('消息 JSON 顶层必须是数组')
+      state.sessionMessages = parsed
+      renderSessionMessagesForm()
+      syncSessionMessagesToJSON()
+      return true
+    } catch (error) {
+      alert(`消息 JSON 格式错误：${error.message}`)
+      return false
+    }
+  }
+
+  function updateSessionMessagesModeUI() {
+    const isFormMode = state.sessionMessageMode === 'form'
+    el('btnMessagesModeForm').classList.toggle('primary', isFormMode)
+    el('btnMessagesModeJSON').classList.toggle('primary', !isFormMode)
+    el('sessionMessagesFormWrap').classList.toggle('hidden', !isFormMode)
+    el('sessionMessagesJSON').classList.toggle('hidden', isFormMode)
+  }
+
+  function setSessionMessagesMode(mode) {
+    if (mode === state.sessionMessageMode) return
+    if (mode === 'json') {
+      syncSessionMessagesToJSON()
+    } else if (!syncSessionMessagesFromJSON()) {
+      return
+    }
+    state.sessionMessageMode = mode
+    updateSessionMessagesModeUI()
+  }
+
+  function renderSessionMessagesForm() {
+    const list = el('sessionMessagesFormList')
+    list.innerHTML = ''
+
+    if (!state.sessionMessages.length) {
+      const empty = document.createElement('div')
+      empty.className = 'muted'
+      empty.textContent = '暂无消息，点击“新增消息”开始编辑。'
+      list.appendChild(empty)
+      syncSessionMessagesToJSON()
+      return
+    }
+
+    state.sessionMessages.forEach((message, index) => {
+      const row = document.createElement('div')
+      row.className = 'msg-row'
+
+      const head = document.createElement('div')
+      head.className = 'msg-row-head'
+
+      const label = document.createElement('span')
+      label.className = 'pill'
+      label.textContent = `#${index + 1}`
+
+      const role = document.createElement('select')
+      ;['system', 'user', 'assistant', 'tool'].forEach(roleName => {
+        const opt = document.createElement('option')
+        opt.value = roleName
+        opt.textContent = roleName
+        role.appendChild(opt)
+      })
+      role.value = normalizeSessionMessageRole(message.role)
+      role.addEventListener('change', () => {
+        state.sessionMessages[index] = { ...state.sessionMessages[index], role: role.value }
+        syncSessionMessagesToJSON()
+      })
+
+      const requestedAt = document.createElement('input')
+      requestedAt.className = 'mono'
+      requestedAt.placeholder = 'requestedAt（ISO8601，可留空）'
+      requestedAt.style.minWidth = '240px'
+      requestedAt.value = typeof message.requestedAt === 'string' ? message.requestedAt : ''
+      requestedAt.addEventListener('change', () => {
+        const value = requestedAt.value.trim()
+        const next = { ...state.sessionMessages[index] }
+        if (value) {
+          next.requestedAt = value
+        } else {
+          delete next.requestedAt
+        }
+        state.sessionMessages[index] = next
+        syncSessionMessagesToJSON()
+      })
+
+      const removeBtn = document.createElement('button')
+      removeBtn.className = 'danger'
+      removeBtn.textContent = '删除'
+      removeBtn.addEventListener('click', () => {
+        state.sessionMessages.splice(index, 1)
+        renderSessionMessagesForm()
+      })
+
+      head.appendChild(label)
+      head.appendChild(role)
+      head.appendChild(requestedAt)
+      head.appendChild(removeBtn)
+
+      const content = document.createElement('textarea')
+      content.className = 'msg-row-content'
+      content.placeholder = '消息内容（content）'
+      content.value = typeof message.content === 'string' ? message.content : ''
+      content.addEventListener('input', () => {
+        state.sessionMessages[index] = { ...state.sessionMessages[index], content: content.value }
+        syncSessionMessagesToJSON()
+      })
+
+      row.appendChild(head)
+      row.appendChild(content)
+      list.appendChild(row)
+    })
+
+    syncSessionMessagesToJSON()
+  }
+
+  function addSessionMessage() {
+    state.sessionMessages.push({
+      role: 'user',
+      content: '',
+      requestedAt: new Date().toISOString()
+    })
+    renderSessionMessagesForm()
+  }
+
+  function renderSessions() {
+    const tbody = el('sessionsTableBody')
+    tbody.innerHTML = ''
+    state.sessions.forEach(session => {
+      const tr = document.createElement('tr')
+      if (state.selectedSession?.id === session.id) tr.classList.add('selected')
+      tr.innerHTML = `<td>${session.name || '-'}</td><td class="mono">${session.id}</td>`
+      tr.addEventListener('click', async () => {
+        await loadSessionDetail(session.id)
+      })
+      tbody.appendChild(tr)
+    })
+  }
+
+  async function loadSessions() {
+    const data = await api('/api/sessions')
+    state.sessions = Array.isArray(data.sessions) ? data.sessions : []
+    renderSessions()
+  }
+
+  async function loadSessionDetail(sessionID) {
+    const data = await api('/api/sessions/get', 'POST', { session_id: sessionID })
+    const session = data.session || {}
+    state.selectedSession = session
+    el('sessionID').value = session.id || ''
+    el('sessionName').value = session.name || ''
+    el('sessionTopic').value = session.topicPrompt || ''
+    el('sessionEnhanced').value = session.enhancedPrompt || ''
+    el('sessionLorebookIDs').value = JSON.stringify(session.lorebookIDs || [], null, 2)
+    state.sessionMessages = Array.isArray(data.messages) ? data.messages : []
+    renderSessionMessagesForm()
+    updateSessionMessagesModeUI()
+    renderSessions()
+  }
+
+  async function createSession() {
+    const name = prompt('输入新会话名称（可留空）：', '新的对话') || ''
+    const data = await api('/api/sessions/create', 'POST', { name })
+    alert(data.message || '已创建')
+    await loadSessions()
+    if (data.session?.id) {
+      await loadSessionDetail(data.session.id)
+    }
+  }
+
+  async function deleteSession() {
+    const id = el('sessionID').value.trim()
+    if (!id) {
+      alert('请先选择会话')
+      return
+    }
+    if (!confirm('确认删除该会话？此操作不可撤销。')) return
+    const data = await api('/api/sessions/delete', 'POST', { session_id: id })
+    alert(data.message || '已删除')
+    state.selectedSession = null
+    state.sessionMessages = []
+    el('sessionID').value = ''
+    el('sessionName').value = ''
+    el('sessionTopic').value = ''
+    el('sessionEnhanced').value = ''
+    el('sessionLorebookIDs').value = '[]'
+    renderSessionMessagesForm()
+    await loadSessions()
+  }
+
+  async function saveSessionMeta() {
+    const id = el('sessionID').value.trim()
+    if (!id) {
+      alert('请先选择会话')
+      return
+    }
+    let lorebookIDs = []
+    try {
+      const parsed = JSON.parse(el('sessionLorebookIDs').value || '[]')
+      lorebookIDs = Array.isArray(parsed) ? parsed : []
+    } catch (error) {
+      alert(`世界书 IDs JSON 格式错误：${error.message}`)
+      return
+    }
+
+    const session = {
+      ...(state.selectedSession || {}),
+      id,
+      name: el('sessionName').value,
+      topicPrompt: el('sessionTopic').value || null,
+      enhancedPrompt: el('sessionEnhanced').value || null,
+      lorebookIDs,
+      worldbookIDs: lorebookIDs,
+      worldbookContextIsolationEnabled: !!state.selectedSession?.worldbookContextIsolationEnabled
+    }
+
+    if (!confirm('确认保存会话元数据？')) return
+    const data = await api('/api/sessions/update_meta', 'POST', { session })
+    alert(data.message || '会话元数据已保存')
+    await loadSessions()
+  }
+
+  async function saveSessionMessages() {
+    const id = el('sessionID').value.trim()
+    if (!id) {
+      alert('请先选择会话')
+      return
+    }
+
+    let messages
+    if (state.sessionMessageMode === 'json') {
+      if (!syncSessionMessagesFromJSON()) return
+      messages = state.sessionMessages
+    } else {
+      messages = state.sessionMessages
+      syncSessionMessagesToJSON()
+    }
+
+    if (!confirm(`确认保存 ${messages.length} 条消息？`)) return
+    const data = await api('/api/sessions/update_messages', 'POST', { session_id: id, messages })
+    alert(data.message || '消息已保存')
+  }
+
+  function renderMemories() {
+    const tbody = el('memoriesTableBody')
+    tbody.innerHTML = ''
+    state.memories.forEach(memory => {
+      const tr = document.createElement('tr')
+      if (state.selectedMemory?.id === memory.id) tr.classList.add('selected')
+      const preview = (memory.content || '').slice(0, 36).replace(/</g, '&lt;')
+      tr.innerHTML = `
+        <td>${preview}</td>
+        <td>${memory.isArchived ? '是' : '否'}</td>
+        <td class="mono">${memory.id}</td>
+      `
+      tr.addEventListener('click', () => {
+        state.selectedMemory = memory
+        el('memoryID').value = memory.id || ''
+        el('memoryArchived').value = String(!!memory.isArchived)
+        el('memoryContent').value = memory.content || ''
+        renderMemories()
+      })
+      tbody.appendChild(tr)
+    })
+  }
+
+  async function loadMemories() {
+    const data = await api('/api/memories')
+    state.memories = Array.isArray(data.memories) ? data.memories : []
+    renderMemories()
+  }
+
+  async function saveMemory() {
+    const id = el('memoryID').value.trim()
+    if (!id) {
+      alert('请先选择记忆')
+      return
+    }
+    const content = el('memoryContent').value
+    const isArchived = el('memoryArchived').value === 'true'
+    if (!confirm('确认保存当前记忆修改？')) return
+    const data = await api('/api/memories/update', 'POST', {
+      memory_id: id,
+      content,
+      is_archived: isArchived
+    })
+    alert(data.message || '记忆已保存')
+    await loadMemories()
+  }
+
+  async function reembedAllMemories() {
+    if (!confirm('确认重新嵌入全部记忆？该操作可能耗时较长。')) return
+    const data = await api('/api/memories/reembed_all', 'POST', {})
+    alert(data.message || '已完成')
+    await loadMemories()
+  }
+
+  function renderCaptures() {
+    const tbody = el('capturesTableBody')
+    tbody.innerHTML = ''
+    state.captures.forEach(item => {
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td>${item.model || '-'}</td>
+        <td>${item.message_count ?? '-'}</td>
+        <td>${item.received_at || '-'}</td>
+        <td class="mono">${item.id || '-'}</td>
+        <td>
+          <button data-action="save">保存</button>
+          <button data-action="ignore" class="danger">忽略</button>
+        </td>
+      `
+      tr.querySelector('[data-action="save"]').addEventListener('click', async () => {
+        try {
+          const data = await api('/api/openai-captures/resolve', 'POST', { id: item.id, save: true })
+          alert(data.message || '已保存')
+          await loadCaptures()
+        } catch (error) {
+          showError(error)
+        }
+      })
+      tr.querySelector('[data-action="ignore"]').addEventListener('click', async () => {
+        try {
+          const data = await api('/api/openai-captures/resolve', 'POST', { id: item.id, save: false })
+          alert(data.message || '已忽略')
+          await loadCaptures()
+        } catch (error) {
+          showError(error)
+        }
+      })
+      tbody.appendChild(tr)
+    })
+  }
+
+  async function loadCaptures() {
+    const data = await api('/api/openai-captures')
+    state.captures = Array.isArray(data.queue) ? data.queue : []
+    renderCaptures()
+  }
+
+  function bindEvents() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+    })
+
+    el('btnFilesList').addEventListener('click', () => loadFiles().catch(showError))
+    el('btnFilesUp').addEventListener('click', () => {
+      if (state.currentPath === '.' || !state.currentPath) {
+        loadFiles('.').catch(showError)
+        return
+      }
+      const parts = state.currentPath.split('/').filter(Boolean)
+      parts.pop()
+      const target = parts.length ? parts.join('/') : '.'
+      loadFiles(target).catch(showError)
+    })
+    el('btnFilesTreeRefresh').addEventListener('click', () => {
+      refreshDirTree({ reset: true, focusPath: state.currentPath || '.' }).catch(showError)
+    })
+    el('btnFilesMkdir').addEventListener('click', async () => {
+      try {
+        const name = prompt('请输入新目录名称：', 'NewFolder')
+        if (!name) return
+        const path = state.currentPath === '.' ? name : `${state.currentPath}/${name}`
+        await api('/api/files/mkdir', 'POST', { path })
+        await loadFiles(state.currentPath)
+      } catch (error) { showError(error) }
+    })
+    el('btnUploadFile').addEventListener('click', () => uploadSelectedLocalFile().catch(showError))
+    el('btnFilePreview').addEventListener('click', () => previewSelectedFile().catch(showError))
+    el('btnFileDownload').addEventListener('click', downloadSelectedFile)
+    el('btnFileSave').addEventListener('click', () => saveSelectedFileEdit().catch(showError))
+    el('btnFileDelete').addEventListener('click', () => deleteSelectedFile().catch(showError))
+
+    el('btnProvidersLoad').addEventListener('click', () => loadProviders().catch(showError))
+    el('btnProvidersSave').addEventListener('click', () => saveProviders().catch(showError))
+    el('btnQuickAddProvider').addEventListener('click', quickAddProvider)
+
+    el('btnSessionsLoad').addEventListener('click', () => loadSessions().catch(showError))
+    el('btnSessionCreate').addEventListener('click', () => createSession().catch(showError))
+    el('btnSessionDelete').addEventListener('click', () => deleteSession().catch(showError))
+    el('btnSessionSaveMeta').addEventListener('click', () => saveSessionMeta().catch(showError))
+    el('btnSessionSaveMessages').addEventListener('click', () => saveSessionMessages().catch(showError))
+    el('btnMessagesModeForm').addEventListener('click', () => setSessionMessagesMode('form'))
+    el('btnMessagesModeJSON').addEventListener('click', () => setSessionMessagesMode('json'))
+    el('btnMessageAdd').addEventListener('click', addSessionMessage)
+
+    el('btnMemoriesLoad').addEventListener('click', () => loadMemories().catch(showError))
+    el('btnMemorySave').addEventListener('click', () => saveMemory().catch(showError))
+    el('btnReembedAll').addEventListener('click', () => reembedAllMemories().catch(showError))
+
+    el('btnCapturesLoad').addEventListener('click', () => loadCaptures().catch(showError))
+  }
+
+  async function bootstrap() {
+    bindEvents()
+    renderSessionMessagesForm()
+    updateSessionMessagesModeUI()
+    await refreshDirTree({ reset: true, focusPath: '.' }).catch(() => {})
+    await refreshStatus()
+    setInterval(refreshStatus, 2000)
+    await loadFiles('.').catch(() => {})
+  }
+
+  bootstrap().catch(showError)
+</script>
+</body>
+</html>

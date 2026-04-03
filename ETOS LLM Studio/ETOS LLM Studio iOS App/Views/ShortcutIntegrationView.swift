@@ -15,23 +15,49 @@ struct ShortcutIntegrationView: View {
     @StateObject private var manager = ShortcutToolManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var localError: String?
+    @State private var isShowingIntroDetails = false
     @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
     var body: some View {
         List {
-            Section("关于快捷指令工具") {
-                Text("通过剪贴板 + URL 导入快捷指令清单。导入后可像 MCP 一样控制启用、描述和调用权限。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("轻度导入：仅导入名称，描述可手动编辑或稍后让 AI 生成。")
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
-                Text("深度导入：包含 iCloud 分享链接，App 会尝试解析流程并生成描述；失败会自动降级为仅链接，不影响导入。")
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "快捷指令工具箱",
+                    summary: "统一管理快捷指令工具的导入、启用状态与运行模式。",
+                    details: """
+                    适用场景
+                    • 你希望让模型调用 iOS 快捷指令完成自动化任务。
+                    • 你需要统一管理导入来源、启用状态和运行模式。
+
+                    怎么用（建议顺序）
+                    1. 先在“官方导入快捷指令”下载并运行导入助手。
+                    2. 再用“从剪贴板导入清单”批量导入工具定义。
+                    3. 打开“向模型暴露快捷指令工具”总开关。
+                    4. 逐个工具检查描述、启用状态和运行模式。
+
+                    导入模式说明
+                    • 轻度导入：只导入名称，适合先快速接入。
+                    • 深度导入：尝试解析 iCloud 分享内容并生成描述；失败会自动降级为仅链接。
+
+                    关键参数说明
+                    • 导入快捷指令名称：用于匹配官方导入助手名称。
+                    • 桥接快捷指令名称：桥接执行链路所用的快捷指令名称。
+                    • 运行模式（单工具）：
+                      - 直连优先：先尝试直接执行，再回退桥接。
+                      - 桥接优先：先走桥接，再回退直连。
+                    • 倒计时自动批准：审批等待秒数，范围 1~30 秒。
+
+                    常见问题
+                    • 工具没被调用：先查总开关是否开启、单项是否启用。
+                    • 导入失败：看“最近导入结果”中的新增/跳过/无效和冲突名称。
+                    • 执行超时：优先确认快捷指令本身可独立运行，再检查桥接名称是否一致。
+                    • urlshim / URL Scheme 跳转失败：回到本页先复制清单到剪贴板，再点“从剪贴板导入清单”即可继续。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
-            Section("聊天工具总开关") {
+            Section {
                 Toggle(
                     "向模型暴露快捷指令工具",
                     isOn: Binding(
@@ -39,6 +65,9 @@ struct ShortcutIntegrationView: View {
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
+            } header: {
+                Text("聊天工具总开关")
+            } footer: {
                 Text("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
@@ -110,6 +139,10 @@ struct ShortcutIntegrationView: View {
                     )
                 }
                 .disabled(manager.isImporting)
+
+                Text("常见问题：如果 urlshim / URL Scheme 跳转失败，请先把清单内容复制到剪贴板，再点上面的“从剪贴板导入清单”。")
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
 
                 if manager.isImporting {
                     VStack(alignment: .leading, spacing: 8) {
@@ -288,6 +321,45 @@ struct ShortcutIntegrationView: View {
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.primary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 

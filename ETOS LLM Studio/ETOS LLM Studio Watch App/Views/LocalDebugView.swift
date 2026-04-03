@@ -46,7 +46,7 @@ public struct LocalDebugView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
                                 .etFont(.caption)
-                            Text(server.useHTTP ? "稳定但较慢" : "快速但不稳定")
+                            Text(server.useHTTP ? "稳定但较慢" : "快速优先，失败自动回退 HTTP")
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }

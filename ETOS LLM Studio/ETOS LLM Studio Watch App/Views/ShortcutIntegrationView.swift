@@ -14,6 +14,7 @@ struct ShortcutIntegrationView: View {
     @Environment(\.openURL) private var openURL
     @StateObject private var manager = ShortcutToolManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @State private var isShowingIntroDetails = false
     @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
     private var countdownNumberFormatter: NumberFormatter {
@@ -25,13 +26,33 @@ struct ShortcutIntegrationView: View {
 
     var body: some View {
         List {
-            Section("说明") {
-                Text("在 iPhone 导入快捷指令后，这里可查看并控制启用状态。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("支持轻度导入（仅名称）和深度导入（iCloud 链接解析）；深度解析失败会自动降级为仅链接。")
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "快捷指令工具箱",
+                    summary: "在手表端查看并管理已同步的快捷指令工具。",
+                    details: """
+                    快速上手
+                    1. 在 iPhone 端完成导入。
+                    2. 手表端确认工具已同步并按需启用。
+                    3. 打开“向模型暴露快捷指令工具”总开关。
+
+                    导入模式
+                    • 轻度导入：仅名称，配置速度快。
+                    • 深度导入：解析 iCloud 链接并尝试生成描述；失败会降级为仅链接。
+
+                    关键项说明
+                    • 运行模式：
+                      - 直连优先：先直接执行。
+                      - 桥接优先：先经桥接快捷指令。
+                    • 自动批准：审批倒计时（1~30 秒）。
+
+                    提示
+                    • watchOS 不支持直接读剪贴板，建议在 iPhone 完成导入后同步到手表。
+                    • 如果工具不可用，先检查总开关和单项启用状态。
+                    • 如果 urlshim / URL Scheme 在 iPhone 跳转失败，请回到 iPhone 的快捷设定页，复制清单到剪贴板后使用“从剪贴板导入清单”。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
             Section(
@@ -84,6 +105,9 @@ struct ShortcutIntegrationView: View {
 
             Section("导入") {
                 Text("watchOS 不支持直接读取剪贴板，请在 iPhone 端导入后通过设备同步同步到手表。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("若 iPhone 端 urlshim / URL Scheme 跳转失败，请在 iPhone 的快捷设定页直接复制清单到剪贴板，再使用“从剪贴板导入清单”。")
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Text("桥接快捷指令：\(bridgeShortcutName)")
@@ -234,6 +258,44 @@ struct ShortcutIntegrationView: View {
             }
         }
         .navigationTitle("快捷指令")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+        )
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 
     private func importStatusText(for tool: ShortcutToolDefinition) -> String? {

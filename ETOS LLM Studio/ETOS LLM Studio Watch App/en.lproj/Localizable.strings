@@ -362,8 +362,8 @@
 "表达式有误，无法预览" = "Invalid expression. Preview unavailable.";
 "暂无请求头表达式" = "No header expressions.";
 "显示明文" = "Show API keys";
-"privacy_storage_details_markdown" = "Your device stores the following data:\n• **Chat history** - Your conversations with AI\n• **API configs** - Providers and keys you added\n• **Memory data** - Vectorized RAG memories\n• **App settings** - Your preferences";
-"privacy_storage_details_plain" = "Your device stores the following data:\n• Chat history - Your conversations with AI\n• API configs - Providers and keys you added\n• Memory data - Vectorized RAG memories\n• App settings - Your preferences";
+"privacy_storage_details_markdown" = "Your device stores the following data:\n• **Chat history** - Your conversations with AI\n• **API configs (JSON)** - Providers and keys you added, stored locally in JSON files\n• **Memory data** - Vectorized RAG memories\n• **App settings** - Your preferences";
+"privacy_storage_details_plain" = "Your device stores the following data:\n• Chat history - Your conversations with AI\n• API configs (JSON) - Providers and keys you added, stored locally in JSON files\n• Memory data - Vectorized RAG memories\n• App settings - Your preferences";
 "ViewModel 应该订阅并接收提供商的更新" = "ViewModel should subscribe to provider updates";
 "ViewModel 应该订阅并接收来自 ChatService 的会话更新" = "ViewModel should subscribe to session updates from ChatService";
 "删除后无法恢复这些模型。" = "These models can’t be restored after deletion.";
@@ -400,7 +400,7 @@
 "暂无可用的模型，请先在模型设置中启用。" = "No available models. Enable in model settings first.";
 "暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。" = "No active model for speech recognition. Enable one in the model list.";
 "暂无记忆" = "No memories";
-"最后更新：2025年12月" = "Last updated: Dec 2025";
+"最后更新：2025年12月" = "Last updated: Apr 2026";
 "最大上下文消息数" = "Context window size";
 "最新响应" = "Latest response";
 "服务器信息" = "Server info";
@@ -1166,3 +1166,11 @@
 "👻 发现 %d 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 Found %d ghost sessions roaming around! Their message files are gone, but the records remain.";
 "👻 哇！%d 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 Wow! %d ghost sessions! It's like a session graveyard. Want to exorcise them?";
 "👻👻👻 天呐！发现了 %d 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 Oh no! Found %d ghost sessions! This place is haunted. Recommend cleaning up now.";
+
+"AI 回复已完成" = "AI Reply Completed";
+"会话“%@”已收到新回复：%@" = "Session \"%@\" received a new reply: %@";
+"已收到新回复：%@" = "New reply received: %@";
+"你收到了新的图片回复。" = "You received a new image reply.";
+"你收到了新的语音回复。" = "You received a new audio reply.";
+"你收到了新的文件回复。" = "You received a new file reply.";
+"你收到了新的回复。" = "You received a new reply.";

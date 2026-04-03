@@ -47,12 +47,19 @@
     </style>
 </head>
 <body>
-    <div class="lang-switch">
-        <a href="zh_hans.html">简体中文</a> | <a href="zh_hant.html">繁體中文</a> | <a href="ja.html">日本語</a>
+        <div class="lang-switch">
+        <a href="en.html">English</a> |
+        <a href="zh_hans.html">简体中文</a> |
+        <a href="zh_hant.html">繁體中文</a> |
+        <a href="ja.html">日本語</a> |
+        <a href="es.html">Español</a> |
+        <a href="fr.html">Français</a> |
+        <a href="ru.html">Русский</a> |
+        <a href="ar.html">العربية</a>
     </div>
 
     <h1>Privacy Policy</h1>
-    <p class="last-updated">Effective Date: March 22, 2026</p>
+    <p class="last-updated">Last updated: April 4, 2026</p>
 
     <section>
         <h2>1. Introduction</h2>
@@ -66,7 +73,7 @@
 
 <ul>
     <li><strong>Chats and session data:</strong> chat history, session settings, attachment references, worldbooks, memory data, Daily Pulse data, feedback history, and app settings are stored inside the app sandbox on your device.</li>
-    <li><strong>API keys:</strong> API keys are stored in the system <strong>Keychain</strong> instead of plain JSON files. If you enable Apple’s related sync capabilities, they may also sync across your own devices via <strong>iCloud Keychain</strong>.</li>
+    <li><strong>API keys:</strong> API keys are stored locally as <strong>JSON files</strong> together with your API configuration inside the app sandbox. If you enable iCloud sync, related configuration data may sync between your own devices through Apple’s iCloud / CloudKit.</li>
     <li><strong>Local request logs:</strong> the app records metadata such as provider name, model identifier, start time, finish time, status, streaming flag, and token usage. <strong>These logs do not include message bodies</strong>. They are used for local traffic analysis, response speed metrics, Daily Pulse summaries, annual recap, and other on-device statistics.</li>
     <li><strong>Feedback ticket cache:</strong> if you use the feedback assistant, the app stores ticket numbers, ticket tokens, status, update timestamps, and public URLs locally so you can track progress later.</li>
 </ul>
@@ -87,7 +94,7 @@
 
 <ul>
     <li><strong>iPhone / Apple Watch sync:</strong> live sync between your iPhone and Apple Watch uses <strong>WatchConnectivity</strong> and does not pass through developer-operated servers.</li>
-    <li><strong>iCloud sync:</strong> if you explicitly enable iCloud sync, selected data may sync between your own devices through Apple’s iCloud / CloudKit stack. API keys are not placed into ordinary sync payloads and instead rely on iCloud Keychain when supported.</li>
+    <li><strong>iCloud sync:</strong> if you explicitly enable iCloud sync, selected data may sync between your own devices through Apple’s iCloud / CloudKit stack, including JSON configuration that contains API keys.</li>
     <li><strong>Local network and debugging:</strong> local network permission is only used for optional LAN debugging / remote file access features. If you connect your own desktop debugging tool, related app files or request traffic may be sent to a <strong>local endpoint that you control</strong>.</li>
 </ul>
 
@@ -111,7 +118,7 @@
 
 <ul>
     <li><strong>Third-party AI providers:</strong> process the chat, image, and audio requests that you intentionally send.</li>
-    <li><strong>Apple system services:</strong> such as WatchConnectivity, iCloud / CloudKit, and iCloud Keychain are governed by Apple’s own policies.</li>
+    <li><strong>Apple system services:</strong> such as WatchConnectivity and iCloud / CloudKit are governed by Apple’s own policies.</li>
     <li><strong>Developer-operated feedback service:</strong> used only when you intentionally submit or refresh feedback tickets.</li>
     <li><strong>Not uploaded by default:</strong> chat content, local memory, local request logs, annual recap data, and API keys are not automatically uploaded to developer-controlled servers.</li>
     <li><strong>Ads and general analytics SDKs:</strong> the current codebase does not include third-party ad SDKs, and we did not find a general-purpose developer-side behavioral analytics SDK. If that changes in the future, we will update this policy first.</li>

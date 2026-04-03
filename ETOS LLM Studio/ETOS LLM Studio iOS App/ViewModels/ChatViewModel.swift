@@ -80,9 +80,9 @@ final class ChatViewModel: ObservableObject {
     // MARK: - User Preferences (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
-    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false
+    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = true
     @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
-    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = false {
+    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = true {
         didSet {
             if !enableAutoReasoningPreview {
                 autoReasoningPreviewMessageIDs.removeAll()
@@ -1778,6 +1778,10 @@ final class ChatViewModel: ObservableObject {
         }
         content.sound = .default
         content.threadIdentifier = "chat.reply.finished"
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+            content.relevanceScore = 1.0
+        }
 
         let request = UNNotificationRequest(
             identifier: "chat.reply.finished.\(messageID.uuidString)",

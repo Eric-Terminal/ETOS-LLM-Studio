@@ -51,7 +51,8 @@ type DebugServer struct {
 
 	lastPollTime time.Time
 
-	commandQueue []map[string]any
+	commandQueue     []map[string]any
+	pendingResponses map[string]chan map[string]any
 
 	streamBackupDir       string
 	uploadFileQueue       map[string]string
@@ -71,13 +72,14 @@ type DebugServer struct {
 
 func NewDebugServer(host string, wsPort, httpPort, proxyPort int) *DebugServer {
 	return &DebugServer{
-		host:            host,
-		wsPort:          wsPort,
-		httpPort:        httpPort,
-		proxyPort:       proxyPort,
-		deviceName:      "未知设备",
-		uploadFileQueue: map[string]string{},
-		commandQueue:    make([]map[string]any, 0, 8),
+		host:             host,
+		wsPort:           wsPort,
+		httpPort:         httpPort,
+		proxyPort:        proxyPort,
+		deviceName:       "未知设备",
+		uploadFileQueue:  map[string]string{},
+		commandQueue:     make([]map[string]any, 0, 8),
+		pendingResponses: map[string]chan map[string]any{},
 	}
 }
 
@@ -106,6 +108,7 @@ func (s *DebugServer) run(ctx context.Context) error {
 📡 WebSocket 服务器: ws://%s:%d (推荐)
 🌐 HTTP 轮询服务器: http://%s:%d (备用)
 🌐 HTTP 代理服务器: http://%s:%d
+🧩 Web GUI 控制台: http://%s:%d/
 
 💡 使用说明:
   1. 在设备上输入主机: %s
@@ -118,7 +121,7 @@ func (s *DebugServer) run(ctx context.Context) error {
 🔖 版本: %s
 
 ⏳ 等待设备连接...
-`, localIP, localIP, s.wsPort, localIP, s.httpPort, localIP, s.proxyPort, localIP, s.wsPort, s.httpPort, localIP, s.proxyPort, boolToCN(debugMode), version)
+`, localIP, localIP, s.wsPort, localIP, s.httpPort, localIP, s.proxyPort, localIP, s.httpPort, localIP, s.wsPort, s.httpPort, localIP, s.proxyPort, boolToCN(debugMode), version)
 
 	s.startHTTPServers()
 	s.startWebSocketServer()
@@ -173,7 +176,7 @@ func (s *DebugServer) startHTTPServers() {
 	pollMux.HandleFunc("/poll", s.handleHTTPPoll)
 	pollMux.HandleFunc("/response", s.handleHTTPResponse)
 	pollMux.HandleFunc("/fetch_file", s.handleHTTPFetchFile)
-	pollMux.HandleFunc("/", s.handleHTTPPing)
+	s.registerWebRoutes(pollMux)
 
 	s.pollHTTPServer = &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", s.host, s.httpPort),
@@ -277,6 +280,12 @@ func (s *DebugServer) handleWebSocketUpgrade(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *DebugServer) handleResponse(data map[string]any) {
+	if requestID := asString(data["request_id"]); requestID != "" {
+		if s.resolvePendingResponse(requestID, data) {
+			return
+		}
+	}
+
 	status := asString(data["status"])
 	if debugMode {
 		fmt.Printf("[DEBUG] 响应状态: %s, 键: %v\n", status, mapKeys(data))
@@ -1283,6 +1292,64 @@ func (s *DebugServer) getCommandQueueSize() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.commandQueue)
+}
+
+func (s *DebugServer) registerPendingResponse(requestID string) chan map[string]any {
+	ch := make(chan map[string]any, 1)
+	s.mu.Lock()
+	s.pendingResponses[requestID] = ch
+	s.mu.Unlock()
+	return ch
+}
+
+func (s *DebugServer) removePendingResponse(requestID string) {
+	s.mu.Lock()
+	delete(s.pendingResponses, requestID)
+	s.mu.Unlock()
+}
+
+func (s *DebugServer) resolvePendingResponse(requestID string, payload map[string]any) bool {
+	s.mu.Lock()
+	ch, ok := s.pendingResponses[requestID]
+	if ok {
+		delete(s.pendingResponses, requestID)
+	}
+	s.mu.Unlock()
+
+	if !ok {
+		return false
+	}
+
+	select {
+	case ch <- payload:
+	default:
+	}
+	return true
+}
+
+func (s *DebugServer) sendCommandWithResponse(command map[string]any, timeout time.Duration) (map[string]any, error) {
+	requestID := asString(command["request_id"])
+	if requestID == "" {
+		requestID = fmt.Sprintf("req_%d", time.Now().UnixNano())
+		command["request_id"] = requestID
+	}
+
+	responseCh := s.registerPendingResponse(requestID)
+	if ok := s.sendCommand(command); !ok {
+		s.removePendingResponse(requestID)
+		return nil, errors.New("命令发送失败")
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case response := <-responseCh:
+		return response, nil
+	case <-timer.C:
+		s.removePendingResponse(requestID)
+		return nil, fmt.Errorf("等待命令响应超时（%s）", requestID)
+	}
 }
 
 func (s *DebugServer) markHTTPPoll(remoteAddr string) {

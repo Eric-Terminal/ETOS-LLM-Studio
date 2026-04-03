@@ -25,13 +25,36 @@ struct WorldbookSettingsView: View {
     @State private var isURLImportSheetPresented = false
     @State private var importURLText: String = ""
     @State private var isImportingFromURL = false
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
-            Section(NSLocalizedString("世界书说明", comment: "Worldbook description section")) {
-                Text(NSLocalizedString("世界书会在发送消息时按规则自动激活并注入，不会写入长期记忆。", comment: "Worldbook intro"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "世界书",
+                    summary: "按规则在发送消息时自动激活并注入，独立于长期记忆。",
+                    details: """
+                    能力说明
+                    • 世界书会根据触发规则在发送消息时自动注入上下文。
+                    • 它是“静态规则知识”，不参与长期记忆写入。
+
+                    怎么用（建议顺序）
+                    1. 先导入世界书（支持 JSON/PNG 或 URL）。
+                    2. 在“当前会话”绑定需要生效的世界书。
+                    3. 按需启用“隔离发送”，让会话只发送提示词与世界书上下文。
+
+                    关键参数与状态
+                    • 绑定数量：显示当前会话已绑定 / 总世界书数。
+                    • 启用条目：显示每本世界书里启用条目占比。
+                    • 已启用隔离发送：会屏蔽记忆、MCP、快捷指令等外部工具上下文。
+
+                    管理建议
+                    • 大型世界书优先维护条目启用状态，避免注入冗余内容。
+                    • 导入后先看“最近导入结果”，及时处理失败条目和冲突。
+                    • 重要世界书建议定期导出备份。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
             if let session = viewModel.currentSession {
@@ -295,6 +318,44 @@ struct WorldbookSettingsView: View {
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 
