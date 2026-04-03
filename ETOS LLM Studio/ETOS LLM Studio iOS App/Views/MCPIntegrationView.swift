@@ -492,13 +492,8 @@ struct MCPIntegrationView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemGroupedBackground))
-        )
-        .listRowBackground(Color.clear)
+        .padding(.vertical, 4)
     }
     
     private func triggerToolExecution() {
