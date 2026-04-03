@@ -1166,3 +1166,11 @@
 "👻 发现 %d 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 Found %d ghost sessions roaming around! Their message files are gone, but the records remain.";
 "👻 哇！%d 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 Wow! %d ghost sessions! It's like a session graveyard. Want to exorcise them?";
 "👻👻👻 天呐！发现了 %d 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 Oh no! Found %d ghost sessions! This place is haunted. Recommend cleaning up now.";
+
+"AI 回复已完成" = "AI Reply Completed";
+"会话“%@”已收到新回复：%@" = "Session \"%@\" received a new reply: %@";
+"已收到新回复：%@" = "New reply received: %@";
+"你收到了新的图片回复。" = "You received a new image reply.";
+"你收到了新的语音回复。" = "You received a new audio reply.";
+"你收到了新的文件回复。" = "You received a new file reply.";
+"你收到了新的回复。" = "You received a new reply.";

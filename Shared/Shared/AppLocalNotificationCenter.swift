@@ -290,7 +290,11 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
 #if os(iOS)
         completionHandler([.banner, .list, .sound])
 #elseif os(watchOS)
-        completionHandler([.sound])
+        if #available(watchOS 8.0, *) {
+            completionHandler([.banner, .list, .sound])
+        } else {
+            completionHandler([.sound])
+        }
 #else
         completionHandler([.sound])
 #endif

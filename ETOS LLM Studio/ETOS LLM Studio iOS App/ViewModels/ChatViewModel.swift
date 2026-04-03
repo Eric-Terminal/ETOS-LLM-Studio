@@ -1778,6 +1778,10 @@ final class ChatViewModel: ObservableObject {
         }
         content.sound = .default
         content.threadIdentifier = "chat.reply.finished"
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+            content.relevanceScore = 1.0
+        }
 
         let request = UNNotificationRequest(
             identifier: "chat.reply.finished.\(messageID.uuidString)",

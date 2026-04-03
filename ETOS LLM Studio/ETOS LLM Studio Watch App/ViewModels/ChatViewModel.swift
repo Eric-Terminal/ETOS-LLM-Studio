@@ -221,6 +221,8 @@ class ChatViewModel: ObservableObject {
     private var autoReasoningPreviewMessageIDs: Set<UUID> = []
     private var isPersistingGlobalSystemPrompts = false
     private var lastAutoPlayedAssistantMessageID: UUID?
+    private var pendingBackgroundReplyNotificationContext: PendingBackgroundReplyNotificationContext?
+    private var lastNotifiedAssistantMarker: AssistantReplyMarker?
     private var lastMemoryEmbeddingErrorSignature: String = ""
     private var lastMemoryEmbeddingErrorDate: Date = .distantPast
     private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
@@ -263,6 +265,20 @@ class ChatViewModel: ObservableObject {
             errorMessage: nil,
             referenceCount: 0
         )
+    }
+
+    private struct AssistantReplyMarker: Equatable {
+        let id: UUID
+        let versionIndex: Int
+        let normalizedContent: String
+        let imageCount: Int
+        let hasAudio: Bool
+        let fileCount: Int
+    }
+
+    private struct PendingBackgroundReplyNotificationContext {
+        let baselineMarker: AssistantReplyMarker?
+        let sessionName: String?
     }
     
     // MARK: - 初始化
@@ -391,13 +407,17 @@ class ChatViewModel: ObservableObject {
                 case .started:
                     isSendingMessage = true
                     startExtendedSession()
+                    prepareBackgroundReplyNotificationContext()
                     updateAutoReasoningPreviewState(with: allMessagesForSession)
                 case .finished, .error, .cancelled:
                     isSendingMessage = false
                     stopExtendedSession()
                     updateAutoReasoningPreviewState(with: allMessagesForSession)
                     if case .finished = status {
+                        notifyIfAssistantReplyFinishedInBackground()
                         autoPlayLatestAssistantMessageIfNeeded()
+                    } else {
+                        pendingBackgroundReplyNotificationContext = nil
                     }
                 @unknown default:
                     // 为未来可能的状态保留，不做任何操作
@@ -1512,6 +1532,97 @@ class ChatViewModel: ObservableObject {
         titleGenerationModelIdentifier = ""
     }
 
+    private func prepareBackgroundReplyNotificationContext() {
+        let baseline = latestAssistantReplyMarker(from: allMessagesForSession)
+        pendingBackgroundReplyNotificationContext = PendingBackgroundReplyNotificationContext(
+            baselineMarker: baseline,
+            sessionName: currentSession?.name
+        )
+    }
+
+    private func notifyIfAssistantReplyFinishedInBackground() {
+#if canImport(UserNotifications)
+        enforceBackgroundReplyNotificationEnabled()
+#else
+        return
+#endif
+        guard isApplicationInBackground else {
+            pendingBackgroundReplyNotificationContext = nil
+            return
+        }
+        guard let context = pendingBackgroundReplyNotificationContext else { return }
+        pendingBackgroundReplyNotificationContext = nil
+
+        guard let latestMarker = latestAssistantReplyMarker(from: allMessagesForSession) else { return }
+        guard latestMarker != context.baselineMarker else { return }
+        guard latestMarker != lastNotifiedAssistantMarker else { return }
+        lastNotifiedAssistantMarker = latestMarker
+
+        let snippet = notificationSnippet(for: latestMarker)
+#if canImport(UserNotifications)
+        Task {
+            guard await requestBackgroundReplyNotificationAuthorizationIfNeeded() else { return }
+            await postBackgroundReplyLocalNotification(
+                sessionName: context.sessionName,
+                snippet: snippet,
+                messageID: latestMarker.id
+            )
+        }
+#endif
+    }
+
+    private var isApplicationInBackground: Bool {
+        WKExtension.shared().applicationState != .active
+    }
+
+    private func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {
+        for message in messages.reversed() where message.role == .assistant {
+            let normalizedText = normalizedNotificationText(message.content)
+            let imageCount = message.imageFileNames?.count ?? 0
+            let hasAudio = message.audioFileName != nil
+            let fileCount = message.fileFileNames?.count ?? 0
+            if normalizedText.isEmpty && imageCount == 0 && !hasAudio && fileCount == 0 {
+                continue
+            }
+            return AssistantReplyMarker(
+                id: message.id,
+                versionIndex: message.getCurrentVersionIndex(),
+                normalizedContent: normalizedText,
+                imageCount: imageCount,
+                hasAudio: hasAudio,
+                fileCount: fileCount
+            )
+        }
+        return nil
+    }
+
+    private func notificationSnippet(for marker: AssistantReplyMarker) -> String {
+        if !marker.normalizedContent.isEmpty {
+            return truncatedText(marker.normalizedContent, maxLength: 80)
+        }
+        if marker.imageCount > 0 {
+            return NSLocalizedString("你收到了新的图片回复。", comment: "Background reply notification fallback for image response")
+        }
+        if marker.hasAudio {
+            return NSLocalizedString("你收到了新的语音回复。", comment: "Background reply notification fallback for audio response")
+        }
+        if marker.fileCount > 0 {
+            return NSLocalizedString("你收到了新的文件回复。", comment: "Background reply notification fallback for file response")
+        }
+        return NSLocalizedString("你收到了新的回复。", comment: "Background reply notification fallback for generic response")
+    }
+
+    private func normalizedNotificationText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func truncatedText(_ text: String, maxLength: Int) -> String {
+        guard text.count > maxLength else { return text }
+        return String(text.prefix(maxLength - 1)) + "…"
+    }
+
     private func autoPlayLatestAssistantMessageIfNeeded() {
         let settings = TTSSettingsStore.shared.snapshot
         let latest = allMessagesForSession.last(where: { $0.role == .assistant })
@@ -1543,6 +1654,43 @@ class ChatViewModel: ObservableObject {
         }
         return true
     }
+
+#if canImport(UserNotifications)
+    private func postBackgroundReplyLocalNotification(sessionName: String?, snippet: String, messageID: UUID) async {
+        let content = UNMutableNotificationContent()
+        content.title = NSLocalizedString("AI 回复已完成", comment: "Background reply notification title")
+        if let sessionName, !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            content.body = String(
+                format: NSLocalizedString("会话“%@”已收到新回复：%@", comment: "Background reply notification body with session name"),
+                sessionName,
+                snippet
+            )
+        } else {
+            content.body = String(
+                format: NSLocalizedString("已收到新回复：%@", comment: "Background reply notification body without session name"),
+                snippet
+            )
+        }
+        content.sound = .default
+        content.threadIdentifier = "chat.reply.finished"
+        if #available(watchOS 8.0, *) {
+            content.interruptionLevel = .timeSensitive
+            content.relevanceScore = 1.0
+        }
+
+        let request = UNNotificationRequest(
+            identifier: "chat.reply.finished.\(messageID.uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().add(request) { _ in
+                continuation.resume(returning: ())
+            }
+        }
+    }
+#endif
     
     private func startExtendedSession() {
         extendedSession = WKExtendedRuntimeSession()

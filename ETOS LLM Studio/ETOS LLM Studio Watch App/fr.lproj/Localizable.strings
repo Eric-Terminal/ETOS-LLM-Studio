@@ -1264,3 +1264,11 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 "流式附带官方 Token 用量" = "Inclure l’usage officiel des tokens en streaming";
 "“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。" = "Lorsqu’elle est activée, les requêtes de streaming compatibles OpenAI enverront stream_options.include_usage=true. Désactivez cette option si une plateforme ne le prend pas en charge.";
+
+"AI 回复已完成" = "AI Réponse Terminé";
+"会话“%@”已收到新回复：%@" = "Session \"%@\" received a Nouveau Réponse: %@";
+"已收到新回复：%@" = "Nouveau Réponse received: %@";
+"你收到了新的图片回复。" = "Vous received a Nouveau Image Réponse.";
+"你收到了新的语音回复。" = "Vous received a Nouveau Audio Réponse.";
+"你收到了新的文件回复。" = "Vous received a Nouveau Fichier Réponse.";
+"你收到了新的回复。" = "Vous received a Nouveau Réponse.";
