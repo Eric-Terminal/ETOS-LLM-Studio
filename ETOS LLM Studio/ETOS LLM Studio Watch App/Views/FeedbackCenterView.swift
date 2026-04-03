@@ -276,7 +276,7 @@ private struct WatchFeedbackDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(displayedComments) { comment in
-                        WatchFeedbackCommentBubbleRow(comment: comment)
+                        WatchFeedbackCommentTimelineRow(comment: comment)
                     }
                 }
 
@@ -425,63 +425,57 @@ private struct WatchFeedbackDetailView: View {
     }
 }
 
-private struct WatchFeedbackCommentBubbleRow: View {
+private struct WatchFeedbackCommentTimelineRow: View {
     let comment: FeedbackComment
 
-    private var isOutgoing: Bool {
-        !comment.isDeveloper
-    }
-
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            if isOutgoing {
-                Spacer(minLength: 18)
-            }
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Text(comment.author)
+                    .etFont(.system(size: 9, weight: .semibold))
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 3) {
-                    Text(comment.author)
-                        .etFont(.system(size: 9, weight: .semibold))
-                    if comment.isDeveloper {
-                        Image(systemName: "checkmark.seal.fill")
-                            .etFont(.system(size: 8))
-                    }
-                }
-                .foregroundStyle(authorColor)
+                Image(systemName: comment.isDeveloper ? "checkmark.seal.fill" : "person.fill")
+                    .etFont(.system(size: 8, weight: .medium))
+                    .foregroundStyle(roleIconColor)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(roleBadgeBackground, in: Capsule())
 
-                Text(comment.body)
-                    .etFont(.caption2)
-                    .foregroundStyle(bodyColor)
-                    .lineLimit(8)
+                Spacer(minLength: 6)
 
                 Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .etFont(.system(size: 8))
-                    .foregroundStyle(timeColor)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            if !isOutgoing {
-                Spacer(minLength: 18)
-            }
+            Text(comment.body)
+                .etFont(.caption2)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.gray.opacity(0.18), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(roleStripeColor)
+                .frame(width: 3)
+                .padding(.vertical, 5)
+                .padding(.leading, 3)
         }
         .padding(.vertical, 1)
     }
 
-    private var bubbleBackground: Color {
-        isOutgoing ? .blue : .gray.opacity(0.22)
+    private var roleStripeColor: Color {
+        comment.isDeveloper ? .green : .blue
     }
 
-    private var authorColor: Color {
-        isOutgoing ? .white.opacity(0.92) : .secondary
+    private var roleBadgeBackground: Color {
+        comment.isDeveloper ? .green.opacity(0.20) : .blue.opacity(0.20)
     }
 
-    private var bodyColor: Color {
-        isOutgoing ? .white : .primary
-    }
-
-    private var timeColor: Color {
-        isOutgoing ? .white.opacity(0.78) : .secondary
+    private var roleIconColor: Color {
+        comment.isDeveloper ? .green : .blue
     }
 }
