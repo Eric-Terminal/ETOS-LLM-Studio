@@ -29,16 +29,25 @@ struct MCPIntegrationView: View {
     @State private var localError: String?
     @State private var selectedToolServerID: UUID?
     @State private var selectedResourceServerID: UUID?
+    @State private var isShowingIntroDetails = false
     
     var body: some View {
         List {
-            Section("关于 MCP") {
-                Text("配置 MCP 工具服务器，让助手调用远程能力。可在这里管理 Server、查看能力，并用 JSON 调试。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "MCP 工具箱",
+                    summary: "统一管理 MCP Server 的连接、聊天暴露与能力调试。",
+                    details: "你可以在这里查看服务器状态、工具/资源发布情况，并用 JSON 快速验证调用链路。",
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
-            Section("聊天工具总开关") {
+            Section(
+                "聊天工具总开关",
+                footer: Text("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
                 Toggle(
                     "向模型暴露 MCP 工具",
                     isOn: Binding(
@@ -46,9 +55,6 @@ struct MCPIntegrationView: View {
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
-                Text("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
             
             Section("已配置服务器") {
@@ -452,6 +458,46 @@ struct MCPIntegrationView: View {
                 }
             }
         }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.primary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        .listRowBackground(Color.clear)
     }
     
     private func triggerToolExecution() {

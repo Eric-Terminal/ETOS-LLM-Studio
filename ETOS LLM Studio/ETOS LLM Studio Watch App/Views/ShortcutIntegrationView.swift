@@ -14,6 +14,7 @@ struct ShortcutIntegrationView: View {
     @Environment(\.openURL) private var openURL
     @StateObject private var manager = ShortcutToolManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @State private var isShowingIntroDetails = false
     @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
     private var countdownNumberFormatter: NumberFormatter {
@@ -25,13 +26,13 @@ struct ShortcutIntegrationView: View {
 
     var body: some View {
         List {
-            Section("说明") {
-                Text("在 iPhone 导入快捷指令后，这里可查看并控制启用状态。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("支持轻度导入（仅名称）和深度导入（iCloud 链接解析）；深度解析失败会自动降级为仅链接。")
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "快捷指令工具箱",
+                    summary: "在手表端查看并管理已同步的快捷指令工具。",
+                    details: "支持轻度导入（仅名称）和深度导入（iCloud 链接解析）；深度解析失败会自动降级为仅链接，不影响导入。",
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
             Section(
@@ -234,6 +235,44 @@ struct ShortcutIntegrationView: View {
             }
         }
         .navigationTitle("快捷指令")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+        )
     }
 
     private func importStatusText(for tool: ShortcutToolDefinition) -> String? {

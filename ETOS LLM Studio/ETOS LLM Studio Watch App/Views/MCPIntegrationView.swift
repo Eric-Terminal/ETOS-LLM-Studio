@@ -18,6 +18,7 @@ import Shared
 struct MCPIntegrationView: View {
     @StateObject private var manager = MCPManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @State private var isShowingIntroDetails = false
     
     private var countdownNumberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -28,10 +29,13 @@ struct MCPIntegrationView: View {
     
     var body: some View {
         List {
-            Section("关于 MCP") {
-                Text("配置 MCP 工具服务器，让助手调用远程能力。可在手表上查看与调试。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "MCP 工具箱",
+                    summary: "在手表端查看服务器状态，并快速进入 MCP 调试。",
+                    details: "这里会同步 iPhone 的 MCP 配置。你可以查看连接状态、能力列表和最近响应结果。",
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
             Section(
@@ -225,6 +229,44 @@ struct MCPIntegrationView: View {
             }
         }
         .navigationTitle("MCP")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+        )
     }
     
     private func statusDescription(for server: MCPServerConfiguration) -> String {

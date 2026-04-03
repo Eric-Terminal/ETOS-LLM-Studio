@@ -286,11 +286,7 @@ struct DailyPulseView: View {
             Toggle("纳入最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
             Toggle("纳入公告与趋势信号", isOn: $pulseManager.includeTrendContext)
 
-            if pulseManager.externalSignalPreview.isEmpty {
-                Text("还没有积累到可复用的外部信号历史。快捷指令执行、MCP 输出和公告变化会逐步沉淀到这里。")
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-            } else {
+            if !pulseManager.externalSignalPreview.isEmpty {
                 ForEach(pulseManager.externalSignalPreview) { signal in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(externalSignalTitle(for: signal))
@@ -311,8 +307,18 @@ struct DailyPulseView: View {
         } header: {
             Text("外部上下文")
         } footer: {
-            Text("前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令与 MCP 的最近结果；“公告与趋势信号”会纳入应用公告和已积累的趋势片段。")
+            Text(externalSourcesFooterText)
         }
+    }
+
+    private var externalSourcesFooterText: String {
+        var parts: [String] = [
+            "前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令与 MCP 的最近结果；“公告与趋势信号”会纳入应用公告和已积累的趋势片段。"
+        ]
+        if pulseManager.externalSignalPreview.isEmpty {
+            parts.append("还没有积累到可复用的外部信号历史。快捷指令执行、MCP 输出和公告变化会逐步沉淀到这里。")
+        }
+        return parts.joined(separator: "\n")
     }
 
     @ViewBuilder

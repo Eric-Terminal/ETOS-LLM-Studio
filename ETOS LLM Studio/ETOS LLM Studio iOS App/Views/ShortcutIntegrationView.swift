@@ -15,23 +15,26 @@ struct ShortcutIntegrationView: View {
     @StateObject private var manager = ShortcutToolManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var localError: String?
+    @State private var isShowingIntroDetails = false
     @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
     var body: some View {
         List {
-            Section("关于快捷指令工具") {
-                Text("通过剪贴板 + URL 导入快捷指令清单。导入后可像 MCP 一样控制启用、描述和调用权限。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("轻度导入：仅导入名称，描述可手动编辑或稍后让 AI 生成。")
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
-                Text("深度导入：包含 iCloud 分享链接，App 会尝试解析流程并生成描述；失败会自动降级为仅链接，不影响导入。")
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "快捷指令工具箱",
+                    summary: "统一管理快捷指令工具的导入、启用状态与运行模式。",
+                    details: "支持轻度导入（仅名称）和深度导入（iCloud 链接解析）。深度解析失败会自动降级为仅链接，不影响导入。",
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
-            Section("聊天工具总开关") {
+            Section(
+                "聊天工具总开关",
+                footer: Text("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
                 Toggle(
                     "向模型暴露快捷指令工具",
                     isOn: Binding(
@@ -39,9 +42,6 @@ struct ShortcutIntegrationView: View {
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
-                Text("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section("官方导入快捷指令") {
@@ -289,6 +289,46 @@ struct ShortcutIntegrationView: View {
             Text(value)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.primary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        .listRowBackground(Color.clear)
     }
 
     private func importStatusText(for tool: ShortcutToolDefinition) -> String? {
