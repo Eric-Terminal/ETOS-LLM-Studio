@@ -152,10 +152,70 @@ func (s *DebugServer) executeAPICommand(w http.ResponseWriter, command map[strin
 	}
 	response, err := s.sendCommandWithResponse(command, timeout)
 	if err != nil {
-		writeJSON(w, http.StatusGatewayTimeout, map[string]any{"status": "error", "message": err.Error()})
+		statusCode, errorCode := inferAPICommandError(err.Error())
+		writeJSON(w, statusCode, map[string]any{
+			"status":     "error",
+			"error_code": errorCode,
+			"message":    err.Error(),
+		})
 		return
 	}
+
+	if asString(response["status"]) == "error" {
+		message := asString(response["message"])
+		errorCode := asString(response["error_code"])
+		if errorCode == "" {
+			errorCode = inferAPIErrorCode(message)
+			response["error_code"] = errorCode
+		}
+		writeJSON(w, inferAPIHTTPStatus(errorCode), response)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, response)
+}
+
+func inferAPICommandError(message string) (int, string) {
+	msg := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case strings.Contains(msg, "超时"):
+		return http.StatusGatewayTimeout, "TIMEOUT"
+	case strings.Contains(msg, "未连接"), strings.Contains(msg, "发送失败"), strings.Contains(msg, "connection closed"):
+		return http.StatusServiceUnavailable, "DEVICE_DISCONNECTED"
+	default:
+		return http.StatusBadGateway, "DEVICE_COMMAND_FAILED"
+	}
+}
+
+func inferAPIErrorCode(message string) string {
+	msg := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case strings.Contains(msg, "缺少"), strings.Contains(msg, "无效"), strings.Contains(msg, "不能为空"), strings.Contains(msg, "格式错误"), strings.Contains(msg, "顶层必须"):
+		return "INVALID_ARGS"
+	case strings.Contains(msg, "未找到"), strings.Contains(msg, "不存在"):
+		return "NOT_FOUND"
+	case strings.Contains(msg, "超时"):
+		return "TIMEOUT"
+	case strings.Contains(msg, "未连接"), strings.Contains(msg, "断开"):
+		return "DEVICE_DISCONNECTED"
+	default:
+		return "DEVICE_ERROR"
+	}
+}
+
+func inferAPIHTTPStatus(errorCode string) int {
+	switch strings.TrimSpace(strings.ToUpper(errorCode)) {
+	case "INVALID_ARGS":
+		return http.StatusBadRequest
+	case "NOT_FOUND":
+		return http.StatusNotFound
+	case "TIMEOUT":
+		return http.StatusGatewayTimeout
+	case "DEVICE_DISCONNECTED":
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusBadGateway
+	}
 }
 
 func (s *DebugServer) handleAPIFilesList(w http.ResponseWriter, r *http.Request) {

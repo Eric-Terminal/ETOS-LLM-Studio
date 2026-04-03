@@ -45,6 +45,7 @@ GUI 主要功能：
 - 会话列表、会话元数据编辑、消息表单/JSON 双模式高级编辑
 - 记忆列表编辑与重嵌入触发
 - OpenAI 捕获队列查看与保存/忽略
+- `/api/*` 错误响应统一带 `error_code`（如 `INVALID_ARGS`、`NOT_FOUND`、`TIMEOUT`、`DEVICE_DISCONNECTED`）
 
 连接策略：
 
