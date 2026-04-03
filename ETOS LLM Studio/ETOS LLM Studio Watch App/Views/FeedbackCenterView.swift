@@ -253,6 +253,22 @@ private struct WatchFeedbackDetailView: View {
                 }
             }
 
+            if !submittedFields.isEmpty {
+                Section(NSLocalizedString("我的反馈", comment: "My feedback list")) {
+                    ForEach(Array(submittedFields.enumerated()), id: \.offset) { _, field in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(field.label)
+                                .etFont(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Text(field.value)
+                                .etFont(.caption2)
+                                .lineLimit(8)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
             Section {
                 TextField(
                     NSLocalizedString("补充评论（会进入同一工单）", comment: "Feedback comment input"),
@@ -353,6 +369,51 @@ private struct WatchFeedbackDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private var submittedFields: [(label: String, value: String)] {
+        guard let ticket else { return [] }
+
+        func appendIfPresent(_ label: String, value: String?, to result: inout [(label: String, value: String)]) {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                return
+            }
+            result.append((label: label, value: value))
+        }
+
+        var fields: [(label: String, value: String)] = []
+        appendIfPresent(
+            NSLocalizedString("标题", comment: "Feedback title field"),
+            value: ticket.submittedTitle ?? ticket.title,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("详细描述", comment: "Feedback detail field"),
+            value: ticket.submittedDetail,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("可复现步骤（可选）", comment: "Reproduction steps"),
+            value: ticket.submittedReproductionSteps,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("预期行为（可选）", comment: "Expected behavior"),
+            value: ticket.submittedExpectedBehavior,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("实际行为（可选）", comment: "Actual behavior"),
+            value: ticket.submittedActualBehavior,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("补充信息（可选）", comment: "Extra context"),
+            value: ticket.submittedExtraContext,
+            to: &fields
+        )
+        return fields
     }
 
     private func sendComment() async {

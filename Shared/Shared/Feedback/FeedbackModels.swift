@@ -222,6 +222,12 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
     public var moderationBlocked: Bool?
     public var moderationMessage: String?
     public var archiveID: String?
+    public var submittedTitle: String?
+    public var submittedDetail: String?
+    public var submittedReproductionSteps: String?
+    public var submittedExpectedBehavior: String?
+    public var submittedActualBehavior: String?
+    public var submittedExtraContext: String?
 
     public init(
         issueNumber: Int,
@@ -235,7 +241,13 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         publicURL: URL? = nil,
         moderationBlocked: Bool? = nil,
         moderationMessage: String? = nil,
-        archiveID: String? = nil
+        archiveID: String? = nil,
+        submittedTitle: String? = nil,
+        submittedDetail: String? = nil,
+        submittedReproductionSteps: String? = nil,
+        submittedExpectedBehavior: String? = nil,
+        submittedActualBehavior: String? = nil,
+        submittedExtraContext: String? = nil
     ) {
         self.issueNumber = issueNumber
         self.ticketToken = ticketToken
@@ -249,6 +261,12 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         self.moderationBlocked = moderationBlocked
         self.moderationMessage = moderationMessage
         self.archiveID = archiveID
+        self.submittedTitle = submittedTitle
+        self.submittedDetail = submittedDetail
+        self.submittedReproductionSteps = submittedReproductionSteps
+        self.submittedExpectedBehavior = submittedExpectedBehavior
+        self.submittedActualBehavior = submittedActualBehavior
+        self.submittedExtraContext = submittedExtraContext
     }
 
     public func merged(with snapshot: FeedbackStatusSnapshot, checkedAt: Date = Date()) -> FeedbackTicket {

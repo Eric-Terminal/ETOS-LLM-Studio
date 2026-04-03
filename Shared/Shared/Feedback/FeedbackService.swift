@@ -133,8 +133,20 @@ public final class FeedbackService: ObservableObject {
 
     @discardableResult
     public func submit(draft: FeedbackDraft) async throws -> FeedbackTicket {
+        func normalizedOptionalField(_ value: String?) -> String? {
+            guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !trimmed.isEmpty else {
+                return nil
+            }
+            return trimmed
+        }
+
         let sanitizedTitle = draft.sanitizedTitle
         let sanitizedDetail = draft.sanitizedDetail
+        let sanitizedReproductionSteps = normalizedOptionalField(draft.reproductionSteps)
+        let sanitizedExpectedBehavior = normalizedOptionalField(draft.expectedBehavior)
+        let sanitizedActualBehavior = normalizedOptionalField(draft.actualBehavior)
+        let sanitizedExtraContext = normalizedOptionalField(draft.extraContext)
         guard !sanitizedTitle.isEmpty, !sanitizedDetail.isEmpty else {
             throw FeedbackServiceError.invalidInput
         }
@@ -147,10 +159,10 @@ public final class FeedbackService: ObservableObject {
             type: draft.category.rawValue,
             title: FeedbackTextSanitizer.redact(sanitizedTitle),
             detail: FeedbackTextSanitizer.redact(sanitizedDetail),
-            reproductionSteps: FeedbackTextSanitizer.redact(draft.reproductionSteps?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
-            expectedBehavior: FeedbackTextSanitizer.redact(draft.expectedBehavior?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
-            actualBehavior: FeedbackTextSanitizer.redact(draft.actualBehavior?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
-            extraContext: FeedbackTextSanitizer.redact(draft.extraContext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
+            reproductionSteps: FeedbackTextSanitizer.redact(sanitizedReproductionSteps ?? ""),
+            expectedBehavior: FeedbackTextSanitizer.redact(sanitizedExpectedBehavior ?? ""),
+            actualBehavior: FeedbackTextSanitizer.redact(sanitizedActualBehavior ?? ""),
+            extraContext: FeedbackTextSanitizer.redact(sanitizedExtraContext ?? ""),
             environment: FeedbackEnvironmentCollector.collectSnapshot(),
             logs: FeedbackEnvironmentCollector.collectMinimalLogs().map(FeedbackTextSanitizer.redact)
         )
@@ -222,7 +234,13 @@ public final class FeedbackService: ObservableObject {
             publicURL: submitResponse.publicURL,
             moderationBlocked: submitResponse.moderationBlocked,
             moderationMessage: submitResponse.moderationMessage,
-            archiveID: submitResponse.archiveID
+            archiveID: submitResponse.archiveID,
+            submittedTitle: sanitizedTitle,
+            submittedDetail: sanitizedDetail,
+            submittedReproductionSteps: sanitizedReproductionSteps,
+            submittedExpectedBehavior: sanitizedExpectedBehavior,
+            submittedActualBehavior: sanitizedActualBehavior,
+            submittedExtraContext: sanitizedExtraContext
         )
 
         FeedbackStore.upsertTicket(ticket)

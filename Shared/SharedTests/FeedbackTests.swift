@@ -155,7 +155,13 @@ struct FeedbackTicketTests {
             publicURL: URL(string: "https://example.com/issues/100"),
             moderationBlocked: true,
             moderationMessage: "AI 审核暂时隐藏：包含不适合公开内容",
-            archiveID: "archive-123"
+            archiveID: "archive-123",
+            submittedTitle: "测试标题",
+            submittedDetail: "这是我提交的详细描述",
+            submittedReproductionSteps: "步骤 1 -> 步骤 2",
+            submittedExpectedBehavior: "应当展示详情",
+            submittedActualBehavior: "详情页未展示",
+            submittedExtraContext: "仅在预览卡片可见"
         )
 
         let encoder = FeedbackDateCodec.makeJSONEncoder()
@@ -167,6 +173,39 @@ struct FeedbackTicketTests {
         #expect(decoded[0].moderationBlocked == true)
         #expect(decoded[0].moderationMessage == "AI 审核暂时隐藏：包含不适合公开内容")
         #expect(decoded[0].archiveID == "archive-123")
+        #expect(decoded[0].submittedTitle == "测试标题")
+        #expect(decoded[0].submittedDetail == "这是我提交的详细描述")
+        #expect(decoded[0].submittedReproductionSteps == "步骤 1 -> 步骤 2")
+        #expect(decoded[0].submittedExpectedBehavior == "应当展示详情")
+        #expect(decoded[0].submittedActualBehavior == "详情页未展示")
+        #expect(decoded[0].submittedExtraContext == "仅在预览卡片可见")
+    }
+
+    @Test("兼容旧工单数据解码")
+    func decodeLegacyTicketWithoutSubmittedFields() throws {
+        let json = """
+        [
+          {
+            "issueNumber": 42,
+            "ticketToken": "legacy-token",
+            "category": "bug",
+            "title": "旧版本工单",
+            "createdAt": "2026-03-29T00:00:00Z",
+            "lastKnownStatus": "in_progress"
+          }
+        ]
+        """
+
+        let decoder = FeedbackDateCodec.makeJSONDecoder()
+        let decoded = try decoder.decode([FeedbackTicket].self, from: Data(json.utf8))
+
+        #expect(decoded.count == 1)
+        #expect(decoded[0].submittedTitle == nil)
+        #expect(decoded[0].submittedDetail == nil)
+        #expect(decoded[0].submittedReproductionSteps == nil)
+        #expect(decoded[0].submittedExpectedBehavior == nil)
+        #expect(decoded[0].submittedActualBehavior == nil)
+        #expect(decoded[0].submittedExtraContext == nil)
     }
 }
 
