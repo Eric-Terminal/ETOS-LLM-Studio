@@ -17,8 +17,24 @@ struct ETAdvancedMarkdownRenderer: View {
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
-    let onCodeBlockHeaderTap: ((String) -> Void)? = nil
+    let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+
+    init(
+        content: String,
+        enableMarkdown: Bool,
+        isOutgoing: Bool,
+        enableAdvancedRenderer: Bool,
+        enableMathRendering: Bool,
+        onCodeBlockHeaderTap: ((String) -> Void)? = nil
+    ) {
+        self.content = content
+        self.enableMarkdown = enableMarkdown
+        self.isOutgoing = isOutgoing
+        self.enableAdvancedRenderer = enableAdvancedRenderer
+        self.enableMathRendering = enableMathRendering
+        self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
+    }
 
     private var shouldUseMathEngine: Bool {
         enableAdvancedRenderer
