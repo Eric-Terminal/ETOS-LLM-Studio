@@ -208,7 +208,7 @@ struct ChatBubble: View {
         if enableNoBubbleUI {
             return true
         }
-        !isOutgoing && (mergeWithPrevious || mergeWithNext)
+        return !isOutgoing && (mergeWithPrevious || mergeWithNext)
     }
 
     private var rowSideSpacerMinLength: CGFloat {

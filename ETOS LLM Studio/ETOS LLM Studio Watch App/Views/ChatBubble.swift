@@ -247,7 +247,7 @@ struct ChatBubble: View {
         if enableNoBubbleUI {
             return true
         }
-        message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
+        return message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
