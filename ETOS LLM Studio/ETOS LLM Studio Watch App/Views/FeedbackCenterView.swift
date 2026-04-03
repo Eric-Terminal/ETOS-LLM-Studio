@@ -269,7 +269,17 @@ private struct WatchFeedbackDetailView: View {
                 }
             }
 
-            Section {
+            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
+                if displayedComments.isEmpty {
+                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(displayedComments) { comment in
+                        WatchFeedbackCommentBubbleRow(comment: comment)
+                    }
+                }
+
                 TextField(
                     NSLocalizedString("补充评论（会进入同一工单）", comment: "Feedback comment input"),
                     text: $commentDraft.watchKeyboardNewlineBinding(),
@@ -289,35 +299,6 @@ private struct WatchFeedbackDetailView: View {
                     }
                 }
                 .disabled(isSendingComment || ticket == nil || commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
-                if (snapshot?.comments ?? []).isEmpty {
-                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(snapshot?.comments ?? []) { comment in
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 4) {
-                                Text(comment.author)
-                                    .etFont(.caption2.weight(.semibold))
-                                if comment.isDeveloper {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .etFont(.system(size: 9))
-                                        .foregroundStyle(.green)
-                                }
-                            }
-                            Text(comment.body)
-                                .etFont(.caption2)
-                                .lineLimit(6)
-                            Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .etFont(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
             }
 
             if let moderationMessage = ticket?.moderationMessage,
@@ -368,6 +349,15 @@ private struct WatchFeedbackDetailView: View {
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private var displayedComments: [FeedbackComment] {
+        (snapshot?.comments ?? []).sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id < rhs.id
         }
     }
 
@@ -432,5 +422,66 @@ private struct WatchFeedbackDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct WatchFeedbackCommentBubbleRow: View {
+    let comment: FeedbackComment
+
+    private var isOutgoing: Bool {
+        !comment.isDeveloper
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 6) {
+            if isOutgoing {
+                Spacer(minLength: 18)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 3) {
+                    Text(comment.author)
+                        .etFont(.system(size: 9, weight: .semibold))
+                    if comment.isDeveloper {
+                        Image(systemName: "checkmark.seal.fill")
+                            .etFont(.system(size: 8))
+                    }
+                }
+                .foregroundStyle(authorColor)
+
+                Text(comment.body)
+                    .etFont(.caption2)
+                    .foregroundStyle(bodyColor)
+                    .lineLimit(8)
+
+                Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .etFont(.system(size: 8))
+                    .foregroundStyle(timeColor)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            if !isOutgoing {
+                Spacer(minLength: 18)
+            }
+        }
+        .padding(.vertical, 1)
+    }
+
+    private var bubbleBackground: Color {
+        isOutgoing ? .blue : .gray.opacity(0.22)
+    }
+
+    private var authorColor: Color {
+        isOutgoing ? .white.opacity(0.92) : .secondary
+    }
+
+    private var bodyColor: Color {
+        isOutgoing ? .white : .primary
+    }
+
+    private var timeColor: Color {
+        isOutgoing ? .white.opacity(0.78) : .secondary
     }
 }

@@ -306,9 +306,20 @@ private struct FeedbackDetailView: View {
                 }
             }
 
-            Section {
+            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
+                if displayedComments.isEmpty {
+                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(displayedComments) { comment in
+                        FeedbackCommentBubbleRow(comment: comment)
+                    }
+                }
+
                 TextField(NSLocalizedString("补充评论（会进入同一工单）", comment: "Feedback comment input"), text: $commentDraft, axis: .vertical)
                     .lineLimit(2...6)
+
                 Button {
                     Task {
                         await sendComment()
@@ -321,35 +332,6 @@ private struct FeedbackDetailView: View {
                     }
                 }
                 .disabled(isSendingComment || ticket == nil || commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
-                if (snapshot?.comments ?? []).isEmpty {
-                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(snapshot?.comments ?? []) { comment in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(comment.author)
-                                    .etFont(.caption.weight(.semibold))
-                                if comment.isDeveloper {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.green)
-                                }
-                                Spacer()
-                                Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Text(comment.body)
-                                .etFont(.footnote)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
             }
 
             if let moderationMessage = ticket?.moderationMessage,
@@ -405,6 +387,15 @@ private struct FeedbackDetailView: View {
             snapshot = try await service.fetchStatus(ticket: ticket)
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private var displayedComments: [FeedbackComment] {
+        (snapshot?.comments ?? []).sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id < rhs.id
         }
     }
 
@@ -468,5 +459,65 @@ private struct FeedbackDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct FeedbackCommentBubbleRow: View {
+    let comment: FeedbackComment
+
+    private var isOutgoing: Bool {
+        !comment.isDeveloper
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            if isOutgoing {
+                Spacer(minLength: 36)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Text(comment.author)
+                        .etFont(.caption.weight(.semibold))
+                    if comment.isDeveloper {
+                        Image(systemName: "checkmark.seal.fill")
+                            .etFont(.caption2)
+                    }
+                }
+                .foregroundStyle(authorColor)
+
+                Text(comment.body)
+                    .etFont(.footnote)
+                    .foregroundStyle(bodyColor)
+
+                Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .etFont(.caption2)
+                    .foregroundStyle(timeColor)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            if !isOutgoing {
+                Spacer(minLength: 36)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var bubbleBackground: Color {
+        isOutgoing ? .accentColor : .gray.opacity(0.14)
+    }
+
+    private var authorColor: Color {
+        isOutgoing ? .white.opacity(0.9) : .secondary
+    }
+
+    private var bodyColor: Color {
+        isOutgoing ? .white : .primary
+    }
+
+    private var timeColor: Color {
+        isOutgoing ? .white.opacity(0.75) : .secondary
     }
 }
