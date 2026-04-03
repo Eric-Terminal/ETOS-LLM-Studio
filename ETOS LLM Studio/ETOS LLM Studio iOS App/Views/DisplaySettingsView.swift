@@ -59,14 +59,6 @@ struct DisplaySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
-            } footer: {
-                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
             if #available(iOS 26.0, *) {
                 Section {
                     Toggle("液态玻璃效果", isOn: $enableLiquidGlass)
@@ -79,6 +71,14 @@ struct DisplaySettingsView: View {
                 } label: {
                     Label("字体设置", systemImage: "textformat.alt")
                 }
+            }
+
+            Section {
+                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+            } footer: {
+                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
             
             Section("背景") {

@@ -73,19 +73,19 @@ struct DisplaySettingsView: View {
             }
 
             Section {
-                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
-            } footer: {
-                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
                 NavigationLink {
                     WatchFontSettingsView()
                 } label: {
                     Label("字体设置", systemImage: "textformat.alt")
                 }
+            }
+
+            Section {
+                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+            } footer: {
+                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
             
             Section(header: Text("背景")) {

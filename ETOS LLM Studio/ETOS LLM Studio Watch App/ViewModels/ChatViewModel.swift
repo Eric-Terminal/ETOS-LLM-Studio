@@ -85,7 +85,7 @@ class ChatViewModel: ObservableObject {
     // MARK: - 用户偏好设置 (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
-    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false {
+    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = true {
         didSet {
             if !enableAdvancedRenderer {
                 mathRenderOverrides.removeAll()

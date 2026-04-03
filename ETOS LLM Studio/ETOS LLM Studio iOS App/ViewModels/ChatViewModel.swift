@@ -80,7 +80,7 @@ final class ChatViewModel: ObservableObject {
     // MARK: - User Preferences (AppStorage)
     
     @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
-    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = false
+    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = true
     @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
     @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = true {
         didSet {
