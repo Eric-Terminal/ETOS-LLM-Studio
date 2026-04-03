@@ -5,26 +5,48 @@
     <title>Redirecting...</title>
     <script>
         (function() {
-            var lang = navigator.language || navigator.userLanguage; 
-            lang = lang.toLowerCase();
-            
-            if (lang.startsWith('zh-tw') || lang.startsWith('zh-hk')) {
-                window.location.href = 'zh_hant.html';
-            } else if (lang.startsWith('zh')) {
-                window.location.href = 'zh_hans.html';
-            } else if (lang.startsWith('ja')) {
-                window.location.href = 'ja.html';
-            } else if (lang.startsWith('es')) {
-                window.location.href = 'es.html';
-            } else if (lang.startsWith('fr')) {
-                window.location.href = 'fr.html';
-            } else if (lang.startsWith('ru')) {
-                window.location.href = 'ru.html';
-            } else if (lang.startsWith('ar')) {
-                window.location.href = 'ar.html';
+            var preferredLanguages = [];
+            if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
+                preferredLanguages = navigator.languages;
             } else {
-                window.location.href = 'en.html';
+                preferredLanguages = [navigator.language || navigator.userLanguage || ''];
             }
+
+            var normalizedLanguages = preferredLanguages
+                .filter(Boolean)
+                .map(function(lang) { return String(lang).toLowerCase(); });
+
+            function routeForLanguage(lang) {
+                if (!lang) return null;
+
+                if (
+                    lang.startsWith('zh-tw') ||
+                    lang.startsWith('zh-hk') ||
+                    lang.startsWith('zh-mo') ||
+                    lang.startsWith('zh-hant')
+                ) {
+                    return 'zh_hant.html';
+                }
+                if (lang.startsWith('zh')) return 'zh_hans.html';
+                if (lang.startsWith('ja')) return 'ja.html';
+                if (lang.startsWith('es')) return 'es.html';
+                if (lang.startsWith('fr')) return 'fr.html';
+                if (lang.startsWith('ru')) return 'ru.html';
+                if (lang.startsWith('ar')) return 'ar.html';
+                if (lang.startsWith('en')) return 'en.html';
+                return null;
+            }
+
+            var target = 'en.html';
+            for (var i = 0; i < normalizedLanguages.length; i++) {
+                var matched = routeForLanguage(normalizedLanguages[i]);
+                if (matched) {
+                    target = matched;
+                    break;
+                }
+            }
+
+            window.location.replace(target);
         })();
     </script>
 </head>
