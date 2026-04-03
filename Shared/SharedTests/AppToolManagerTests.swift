@@ -39,6 +39,7 @@ struct AppToolManagerTests {
         let kinds = Set(AppToolKind.allCases)
 
         #expect(kinds.contains(.editMemory))
+        #expect(kinds.contains(.submitFeedbackTicket))
         #expect(kinds.contains(.fillUserInput))
         #expect(kinds.contains(.listSandboxDirectory))
         #expect(kinds.contains(.readSandboxFile))
@@ -132,6 +133,34 @@ struct AppToolManagerTests {
             _ = try await manager.executeToolFromChat(
                 toolName: AppToolKind.echoText.toolName,
                 argumentsJSON: #"{"text":"测试文本"}"#
+            )
+        }
+    }
+
+    @MainActor
+    @Test("提交反馈工具在 category 非法时应返回参数错误")
+    func testSubmitFeedbackToolRejectsInvalidCategory() async {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.submitFeedbackTicket]
+        )
+
+        await #expect(throws: AppToolExecutionError.self) {
+            _ = try await manager.executeToolFromChat(
+                toolName: AppToolKind.submitFeedbackTicket.toolName,
+                argumentsJSON: #"{"category":"oops","title":"标题","detail":"详情"}"#
             )
         }
     }
