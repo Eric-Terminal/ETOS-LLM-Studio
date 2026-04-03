@@ -23,6 +23,7 @@ struct ToolCenterView: View {
 
     @State private var searchText: String = ""
     @State private var showEnabledOnly: Bool = false
+    @State private var isShowingIntroDetails = false
 
     private var currentSessionIsolationActive: Bool {
         viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
@@ -163,6 +164,15 @@ struct ToolCenterView: View {
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "工具中心",
+                    summary: "集中管理内置记忆、拓展工具、MCP 与快捷指令的聊天暴露状态。",
+                    details: "你可以按分类查看“配置已启用 / 当前会话可用”数量，并逐项调整启用状态与审批策略。",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             overviewSection
             filterSection
             builtInSection
@@ -187,10 +197,6 @@ struct ToolCenterView: View {
 
     private var overviewSection: some View {
         Section {
-            Text(NSLocalizedString("统一查看聊天可用工具，并在这里集中调整启用状态与关键设置。", comment: "Tool center overview description"))
-                .etFont(.footnote)
-                .foregroundStyle(.secondary)
-
             ToolCenterSummaryRow(
                 title: NSLocalizedString("内置工具", comment: "Built-in tools section title"),
                 configuredEnabled: configuredBuiltInCount,
@@ -225,6 +231,40 @@ struct ToolCenterView: View {
                     .foregroundStyle(.orange)
             }
         }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
     }
 
     private var appToolSection: some View {

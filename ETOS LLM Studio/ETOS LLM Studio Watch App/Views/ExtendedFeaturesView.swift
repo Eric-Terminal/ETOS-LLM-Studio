@@ -12,11 +12,21 @@ import Shared
 
 public struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel
+    @State private var isShowingIntroDetails = false
     
     public init() {}
     
     public var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "拓展功能",
+                    summary: "集中管理工具集成、语音能力与系统维护入口。",
+                    details: "这里收纳了工具中心、长期记忆、世界书与调试类能力。建议按使用频率开启，保持主流程简洁。",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 NavigationLink {
                     ToolCenterView()
@@ -192,6 +202,40 @@ public struct ExtendedFeaturesView: View {
         .navigationTitle("拓展功能")
     }
 
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+
     private var speechModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.selectedSpeechModel },
@@ -207,9 +251,19 @@ private struct LongTermMemoryFeatureView: View {
     
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    @State private var isShowingIntroDetails = false
     
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "长期记忆系统",
+                    summary: "让 AI 持续理解你的长期偏好和上下文。",
+                    details: "开启后会先检索相关记忆再回复。你可以继续控制写入开关，并在记忆库里做细化维护。",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 Toggle("启用记忆功能", isOn: $enableMemory)
             } footer: {
@@ -240,5 +294,39 @@ private struct LongTermMemoryFeatureView: View {
             }
         }
         .navigationTitle("长期记忆系统")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
     }
 }

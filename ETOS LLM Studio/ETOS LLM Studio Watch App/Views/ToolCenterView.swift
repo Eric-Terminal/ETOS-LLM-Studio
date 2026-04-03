@@ -22,6 +22,7 @@ struct ToolCenterView: View {
     @AppStorage("memoryTopK") private var memoryTopK: Int = 3
 
     @State private var showEnabledOnly: Bool = false
+    @State private var isShowingIntroDetails = false
 
     private var currentSessionIsolationActive: Bool {
         viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
@@ -118,9 +119,15 @@ struct ToolCenterView: View {
     var body: some View {
         List {
             Section {
-                Text(NSLocalizedString("统一查看聊天可用工具，并在这里集中调整启用状态与关键设置。", comment: "Tool center overview description"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+                settingsIntroCard(
+                    title: "工具中心",
+                    summary: "统一查看聊天可用工具，并集中调整启用状态。",
+                    details: "这里会汇总内置记忆、拓展工具、MCP 与快捷指令工具的配置状态，便于你快速排查当前会话可用能力。",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
+            Section {
                 Text(
                     String(
                         format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
@@ -349,6 +356,40 @@ struct ToolCenterView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具中心", comment: "Tool center title"))
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
     }
 
     private func builtInTitle(for kind: ToolCatalogBuiltInToolKind) -> String {

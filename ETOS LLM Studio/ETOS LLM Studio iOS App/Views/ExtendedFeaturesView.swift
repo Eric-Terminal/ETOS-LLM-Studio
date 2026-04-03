@@ -10,8 +10,19 @@ import SwiftUI
 import Shared
 
 struct ExtendedFeaturesView: View {
+    @State private var isShowingIntroDetails = false
+
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "拓展功能",
+                    summary: "这里集中放置进阶能力、调试入口与跨平台工具集成。",
+                    details: "适合统一管理实验性能力、数据导入和本地维护工具。常用入口可优先放在上方，按需逐步开启。",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 NavigationLink {
                     FeedbackCenterView()
@@ -63,6 +74,40 @@ struct ExtendedFeaturesView: View {
         .navigationTitle("拓展功能")
         .listStyle(.insetGrouped)
     }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+    }
 }
 
 // MARK: - 长期记忆设置
@@ -72,9 +117,19 @@ struct LongTermMemoryFeatureView: View {
     
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    @State private var isShowingIntroDetails = false
     
     var body: some View {
         Form {
+            Section {
+                settingsIntroCard(
+                    title: "长期记忆系统",
+                    summary: "让 AI 在多轮对话里持续记住你的偏好、背景与目标。",
+                    details: "开启后会在回复前检索相关记忆；你也可以按需控制是否允许写入新记忆，并进入记忆库管理做精细维护。",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 Toggle("启用记忆功能", isOn: $enableMemory)
             } footer: {
@@ -102,5 +157,39 @@ struct LongTermMemoryFeatureView: View {
             }
         }
         .navigationTitle("长期记忆系统")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
     }
 }

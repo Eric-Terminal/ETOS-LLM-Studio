@@ -19,9 +19,19 @@ struct WorldbookSettingsView: View {
     @State private var isImportingFromURL = false
     @State private var importError: String?
     @State private var importReport: WorldbookImportReport?
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "世界书",
+                    summary: "按关键词规则注入上下文，不会写入长期记忆。",
+                    details: "你可以在手表端查看、绑定和导入世界书；复杂编辑建议在 iPhone 端完成后同步到手表。",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             if let session = viewModel.currentSession {
                 Section(NSLocalizedString("当前会话", comment: "Current session section")) {
                     NavigationLink {
@@ -182,6 +192,40 @@ struct WorldbookSettingsView: View {
             Text(value)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
     }
 
     private func bindingSummary(for session: ChatSession) -> String {

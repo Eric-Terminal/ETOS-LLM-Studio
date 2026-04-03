@@ -25,13 +25,17 @@ struct WorldbookSettingsView: View {
     @State private var isURLImportSheetPresented = false
     @State private var importURLText: String = ""
     @State private var isImportingFromURL = false
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
-            Section(NSLocalizedString("世界书说明", comment: "Worldbook description section")) {
-                Text(NSLocalizedString("世界书会在发送消息时按规则自动激活并注入，不会写入长期记忆。", comment: "Worldbook intro"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            Section {
+                settingsIntroCard(
+                    title: "世界书",
+                    summary: "按规则在发送消息时自动激活并注入，独立于长期记忆。",
+                    details: "你可以在这里导入、管理和绑定世界书；并按会话控制是否启用隔离发送，让上下文更可控。",
+                    isExpanded: $isShowingIntroDetails
+                )
             }
 
             if let session = viewModel.currentSession {
@@ -296,6 +300,40 @@ struct WorldbookSettingsView: View {
             Text(value)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                Text(isExpanded.wrappedValue ? "收起介绍" : "进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                Text(details)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
     }
 
     private func isBoundToCurrentSession(_ worldbook: Worldbook) -> Bool {
