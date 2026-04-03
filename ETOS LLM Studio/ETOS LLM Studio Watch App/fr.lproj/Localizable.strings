@@ -753,9 +753,9 @@ AI: %@";
 "错误: 没有选中的可用模型。请在设置中激活一个模型。" = "Erreur : Aucun Actif Modèle Sélectionné. Activer a Modèle dans Réglages.";
 "👻 一切正常！没有发现幽灵会话。" = "👻 Tout est propre ! Aucune session fantôme trouvée.";
 "👻 发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "👻 1 session fantôme trouvée ! On dirait qu’un fichier de messages a été supprimé sans nettoyer l’enregistrement de session...";
-"👻 发现 \(count) 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 \(count) sessions fantômes repérées ! Leurs fichiers de messages ont disparu, mais les enregistrements sont encore là.";
-"👻 哇！\(count) 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 Waouh ! \(count) sessions fantômes ! On dirait un cimetière de sessions. On les nettoie ?";
-"👻👻👻 天呐！发现了 \(count) 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 Oups ! \(count) sessions fantômes détectées ! Cet endroit est hanté. Nettoyage immédiat recommandé.";
+"👻 发现 \\(count) 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 \\(count) sessions fantômes repérées ! Leurs fichiers de messages ont disparu, mais les enregistrements sont encore là.";
+"👻 哇！\\(count) 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 Waouh ! \\(count) sessions fantômes ! On dirait un cimetière de sessions. On les nettoie ?";
+"👻👻👻 天呐！发现了 \\(count) 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 Oups ! \\(count) sessions fantômes détectées ! Cet endroit est hanté. Nettoyage immédiat recommandé.";
 "
 将信息写入长期记忆，仅在「这条信息在后续很多次对话中都可能有用」时调用。
 
@@ -1261,3 +1261,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "👻 发现 %d 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 %d sessions fantômes repérées ! Leurs fichiers de messages ont disparu, mais les enregistrements sont encore là.";
 "👻 哇！%d 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 Waouh ! %d sessions fantômes ! On dirait un cimetière de sessions. On les nettoie ?";
 "👻👻👻 天呐！发现了 %d 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 Oups ! %d sessions fantômes détectées ! Cet endroit est hanté. Nettoyage immédiat recommandé.";
+
+"流式附带官方 Token 用量" = "Inclure l’usage officiel des tokens en streaming";
+"“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。" = "Lorsqu’elle est activée, les requêtes de streaming compatibles OpenAI enverront stream_options.include_usage=true. Désactivez cette option si une plateforme ne le prend pas en charge.";

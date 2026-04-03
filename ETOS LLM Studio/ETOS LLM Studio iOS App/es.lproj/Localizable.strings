@@ -612,7 +612,7 @@ Agregar Authorization y other auth headers manually.";
 "幽灵会话是指会话记录存在但消息文件已丢失的异常情况。" = "Fantasma Sesiones son Sesión records that exist but their Mensaje Archivos son faltante.";
 "一切正常！没有发现幽灵会话。" = "Todo Limpiar! Sin fantasma Sesiones Encontrado.";
 "发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "Encontrado 1 fantasma Sesión! Someone Eliminado el Mensaje Archivo but forgot a clean up el Grabar…";
-"已清理 \(count) 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。" = "Cleaned up \(count) fantasma Sesión(s). Their Mensaje Archivos were faltante y el records have been removed.";
+"已清理 \\(count) 个幽灵会话。这些会话的消息文件已丢失，现在记录也已清理干净。" = "Cleaned up \\(count) fantasma Sesión(s). Their Mensaje Archivos were faltante y el records have been removed.";
 "孤立文件是指不再被任何会话引用的语音和图片文件。清理缓存将删除所有语音和图片文件。" = "Huérfano Archivos son Audio y Imagen Archivos Sin longer referenced by Cualquier Sesión. Clearing Caché removes Todo Audio y Imagen Archivos.";
 "清理缓存" = "Limpiar Caché";
 "将删除所有语音和图片缓存文件。此操作不可撤销。" = "Todos los archivos de caché de audio e imagen serán eliminados. Esta acción no se puede deshacer.";
@@ -834,9 +834,9 @@ AI: %@";
 "错误: 没有选中的可用模型。请在设置中激活一个模型。" = "Error: Sin Activo Modelo Seleccionado. Activar a Modelo en Configuración.";
 "👻 一切正常！没有发现幽灵会话。" = "👻 ¡Todo en orden! No se encontraron sesiones fantasma.";
 "👻 发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "👻 ¡Se encontró 1 sesión fantasma! Parece que alguien borró el archivo de mensajes pero olvidó limpiar el registro de sesión...";
-"👻 发现 \(count) 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 ¡Se encontraron \(count) sesiones fantasma merodeando! Sus archivos de mensajes ya no están, pero los registros siguen ahí.";
-"👻 哇！\(count) 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 ¡Vaya! ¡\(count) sesiones fantasma! Esto parece un cementerio de sesiones. ¿Quieres limpiarlas?";
-"👻👻👻 天呐！发现了 \(count) 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 ¡Dios mío! ¡Se detectaron \(count) sesiones fantasma! Este lugar está embrujado. Se recomienda limpiar de inmediato.";
+"👻 发现 \\(count) 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 ¡Se encontraron \\(count) sesiones fantasma merodeando! Sus archivos de mensajes ya no están, pero los registros siguen ahí.";
+"👻 哇！\\(count) 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 ¡Vaya! ¡\\(count) sesiones fantasma! Esto parece un cementerio de sesiones. ¿Quieres limpiarlas?";
+"👻👻👻 天呐！发现了 \\(count) 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 ¡Dios mío! ¡Se detectaron \\(count) sesiones fantasma! Este lugar está embrujado. Se recomienda limpiar de inmediato.";
 "
 将信息写入长期记忆，仅在「这条信息在后续很多次对话中都可能有用」时调用。
 
@@ -1357,3 +1357,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "👻 发现 %d 个幽灵会话在四处游荡！它们的消息文件已经不在了，但记录还留着呢。" = "👻 ¡Se encontraron %d sesiones fantasma merodeando! Sus archivos de mensajes ya no están, pero los registros siguen ahí.";
 "👻 哇！%d 个幽灵会话！这里简直像是会话墓地。要不要驱个鬼？" = "👻 ¡Vaya! ¡%d sesiones fantasma! Esto parece un cementerio de sesiones. ¿Quieres limpiarlas?";
 "👻👻👻 天呐！发现了 %d 个幽灵会话！这里已经闹鬼了！建议立即清理。" = "👻👻👻 ¡Dios mío! ¡Se detectaron %d sesiones fantasma! Este lugar está embrujado. Se recomienda limpiar de inmediato.";
+
+"流式附带官方 Token 用量" = "Incluir uso oficial de tokens en streaming";
+"“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。" = "Al activarlo, las solicitudes de streaming compatibles con OpenAI enviarán stream_options.include_usage=true. Si alguna plataforma no lo admite, puedes desactivarlo.";
