@@ -66,4 +66,53 @@ struct ToolCatalogSupportTests {
 
         #expect(summary == "type=object · fields=count, query · required=query")
     }
+
+    @Test("MCP 工具目录会保留已选服务器的完整工具清单")
+    func testMCPCatalogToolsIncludesDisabledAndDeniedTools() {
+        let selectedServerID = UUID()
+        let unselectedServerID = UUID()
+
+        let selectedServer = MCPServerConfiguration(
+            id: selectedServerID,
+            displayName: "已选服务器",
+            transport: .http(endpoint: URL(string: "https://example.com/selected")!, apiKey: nil, additionalHeaders: [:]),
+            isSelectedForChat: true,
+            disabledToolIds: ["beta"],
+            toolApprovalPolicies: ["gamma": .alwaysDeny]
+        )
+        let unselectedServer = MCPServerConfiguration(
+            id: unselectedServerID,
+            displayName: "未选服务器",
+            transport: .http(endpoint: URL(string: "https://example.com/unselected")!, apiKey: nil, additionalHeaders: [:]),
+            isSelectedForChat: false
+        )
+
+        let selectedStatus = MCPServerStatus(
+            connectionState: .ready,
+            tools: [
+                MCPToolDescription(toolId: "alpha", description: nil, inputSchema: nil, examples: nil),
+                MCPToolDescription(toolId: "beta", description: nil, inputSchema: nil, examples: nil),
+                MCPToolDescription(toolId: "gamma", description: nil, inputSchema: nil, examples: nil)
+            ],
+            isSelectedForChat: true
+        )
+        let unselectedStatus = MCPServerStatus(
+            connectionState: .ready,
+            tools: [
+                MCPToolDescription(toolId: "hidden", description: nil, inputSchema: nil, examples: nil)
+            ],
+            isSelectedForChat: false
+        )
+
+        let catalog = ToolCatalogSupport.mcpCatalogTools(
+            servers: [selectedServer, unselectedServer],
+            statuses: [
+                selectedServerID: selectedStatus,
+                unselectedServerID: unselectedStatus
+            ]
+        )
+
+        #expect(catalog.count == 3)
+        #expect(catalog.map(\.tool.toolId) == ["alpha", "beta", "gamma"])
+    }
 }

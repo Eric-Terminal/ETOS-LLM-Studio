@@ -43,8 +43,15 @@ struct ToolCenterView: View {
         }
     }
 
+    private var mcpCatalogTools: [MCPAvailableTool] {
+        ToolCatalogSupport.mcpCatalogTools(
+            servers: mcpManager.servers,
+            statuses: mcpManager.serverStatuses
+        )
+    }
+
     private var filteredMCPTools: [MCPAvailableTool] {
-        mcpManager.tools
+        mcpCatalogTools
             .sorted {
                 if $0.server.displayName == $1.server.displayName {
                     return $0.tool.toolId.localizedCaseInsensitiveCompare($1.tool.toolId) == .orderedAscending
@@ -75,7 +82,7 @@ struct ToolCenterView: View {
     }
 
     private var configuredMCPCount: Int {
-        mcpManager.tools.filter {
+        mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
         }.count
     }
@@ -93,7 +100,7 @@ struct ToolCenterView: View {
 
     private var availableMCPCount: Int {
         guard mcpManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
-        return mcpManager.tools.filter {
+        return mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
             && mcpManager.approvalPolicy(serverID: $0.server.id, toolId: $0.tool.toolId) != .alwaysDeny
         }.count
@@ -134,7 +141,7 @@ struct ToolCenterView: View {
                     String(
                         format: NSLocalizedString("MCP 工具：配置已启用 %d / %d", comment: "MCP configured count"),
                         configuredMCPCount,
-                        mcpManager.tools.count
+                        mcpCatalogTools.count
                     )
                 )
                 .etFont(.caption2)
@@ -142,7 +149,7 @@ struct ToolCenterView: View {
                     String(
                         format: NSLocalizedString("MCP 工具：当前会话实际可用 %d / %d", comment: "MCP available count"),
                         availableMCPCount,
-                        mcpManager.tools.count
+                        mcpCatalogTools.count
                     )
                 )
                 .etFont(.caption2)
