@@ -42,12 +42,7 @@ struct MCPIntegrationView: View {
                 )
             }
 
-            Section(
-                "聊天工具总开关",
-                footer: Text("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            ) {
+            Section {
                 Toggle(
                     "向模型暴露 MCP 工具",
                     isOn: Binding(
@@ -55,6 +50,12 @@ struct MCPIntegrationView: View {
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
+            } header: {
+                Text("聊天工具总开关")
+            } footer: {
+                Text("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
             
             Section("已配置服务器") {

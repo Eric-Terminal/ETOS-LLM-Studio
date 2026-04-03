@@ -29,12 +29,7 @@ struct ShortcutIntegrationView: View {
                 )
             }
 
-            Section(
-                "聊天工具总开关",
-                footer: Text("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            ) {
+            Section {
                 Toggle(
                     "向模型暴露快捷指令工具",
                     isOn: Binding(
@@ -42,6 +37,12 @@ struct ShortcutIntegrationView: View {
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
+            } header: {
+                Text("聊天工具总开关")
+            } footer: {
+                Text("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("官方导入快捷指令") {
