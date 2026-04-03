@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سياسة الخصوصية - ETOS LLM Studio</title>
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --text-color: #1d1d1f;
+            --bg-color: #ffffff;
+            --secondary-text: #86868b;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #000000;
+                --text-color: #f5f5f7;
+                --secondary-text: #a1a1a6;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+        h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+        h3 { font-size: 1rem; margin: 1rem 0 0.35rem; }
+        .last-updated { color: var(--secondary-text); margin-bottom: 2rem; font-size: 0.9rem; }
+        section { margin-bottom: 2rem; }
+        ul { padding-right: 1.2rem; }
+        li { margin-bottom: 0.6rem; }
+        strong { color: var(--primary-color); }
+        .contact-info { background: #f5f5f710; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        @media (prefers-color-scheme: light) {
+            .contact-info { background: #f5f5f7; border: none; }
+        }
+        footer { margin-top: 4rem; font-size: 0.8rem; color: var(--secondary-text); text-align: center; }
+        a { color: var(--primary-color); text-decoration: none; }
+        .lang-switch { text-align: left; margin-bottom: 20px; font-size: 0.9rem; direction: ltr; }
+        p, li { word-break: break-word; }
+    </style>
+</head>
+<body>
+    <div class="lang-switch">
+        <a href="en.html">English</a> |
+        <a href="zh_hans.html">简体中文</a> |
+        <a href="zh_hant.html">繁體中文</a> |
+        <a href="ja.html">日本語</a> |
+        <a href="es.html">Español</a> |
+        <a href="fr.html">Français</a> |
+        <a href="ru.html">Русский</a> |
+        <a href="ar.html">العربية</a>
+    </div>
+
+    <h1>سياسة الخصوصية</h1>
+    <p class="last-updated">تاريخ السريان: 4 أبريل 2026</p>
+
+    <section>
+        <h2>1. المقدمة</h2>
+
+<p>يتبع ETOS LLM Studio فلسفة تصميم <strong>"Local-first"</strong>. تبقى معظم البيانات الأساسية على جهازك وتحت سيطرتك.</p>
+<p>نحن <strong>لا</strong> نخزن تلقائيًا محتوى الدردشة أو التسجيلات الصوتية أو مرفقات الصور أو مفاتيح API على خوادم يتحكم بها المطور. ومع ذلك، يقوم التطبيق بتخزين الدردشات والإعدادات والذاكرة وسجلات الطلبات محليًا لتوفير المزامنة والإحصاءات وDaily Pulse والملخص السنوي والميزات المشابهة.</p>
+
+    </section>
+    <section>
+        <h2>2. التخزين المحلي والمعالجة على الجهاز</h2>
+
+<ul>
+    <li><strong>بيانات الدردشة والجلسة:</strong> يتم حفظ سجل الدردشة وإعدادات الجلسة ومراجع المرفقات وworldbooks وبيانات الذاكرة وبيانات Daily Pulse وسجل الملاحظات وإعدادات التطبيق داخل صندوق الحماية الخاص بالتطبيق.</li>
+    <li><strong>مفاتيح API:</strong> تُحفظ مفاتيح API محليًا كـ <strong>ملفات JSON</strong> مع إعدادات API داخل صندوق حماية التطبيق. وإذا فعّلت مزامنة iCloud، فقد تتم مزامنة الإعدادات ذات الصلة بين أجهزتك عبر iCloud / CloudKit من Apple.</li>
+    <li><strong>سجلات الطلبات المحلية:</strong> يسجّل التطبيق بيانات وصفية مثل اسم المزود ومعرف النموذج ووقت البدء ووقت الانتهاء والحالة ووضع البث واستهلاك الرموز. <strong>هذه السجلات لا تتضمن نص الرسائل</strong>. وتُستخدم للتحليل المحلي لحركة البيانات وقياس سرعة الاستجابة وإحصاءات Daily Pulse والملخص السنوي ووظائف محلية أخرى.</li>
+    <li><strong>ذاكرة مؤقتة لتذاكر الملاحظات:</strong> إذا استخدمت مساعد الملاحظات، يحفظ التطبيق محليًا رقم التذكرة ورمزها وحالتها ووقت آخر تحديث والرابط العام لتسهيل متابعة التقدم.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>3. طلبات الذكاء الاصطناعي والصوت والصور</h2>
+
+<ul>
+    <li><strong>الدردشة النصية:</strong> تُرسل رسائلك مباشرة إلى مزودي الذكاء الاصطناعي الخارجيين الذين تضبطهم بنفسك (مثل OpenAI وAnthropic وGoogle أو خدمات متوافقة مع OpenAI أو نماذج مستضافة ذاتيًا). نحن لا نعترض هذا المحتوى ولا نخزّنه على خوادم المطور.</li>
+    <li><strong>الصوت والتسجيل:</strong> لا يتم استخدام إذن الميكروفون إلا عندما تبدأ التسجيل أو الإدخال الصوتي بشكل صريح. ويُرسل الصوت فقط إلى مزود النموذج الحالي أو خدمة الصوت/النسخ التي تختارها.</li>
+    <li><strong>الصور والملفات:</strong> لا يصل التطبيق إلى الصور أو الملفات إلا عند اختيارك لها. وتُرسل هذه المرفقات إلى مزود النموذج الحالي أو إلى نقطة تصحيح محلية تقوم أنت بربطها يدويًا.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>4. المزامنة والشبكة المحلية وخدمات Apple</h2>
+
+<ul>
+    <li><strong>مزامنة iPhone / Apple Watch:</strong> تتم المزامنة الفورية بين iPhone وApple Watch عبر <strong>WatchConnectivity</strong> دون المرور بخوادم يديرها المطور.</li>
+    <li><strong>مزامنة iCloud:</strong> إذا فعّلت مزامنة iCloud بشكل صريح، فقد تتم مزامنة البيانات المحددة بين أجهزتك عبر iCloud / CloudKit من Apple، بما في ذلك إعدادات JSON التي تحتوي على مفاتيح API.</li>
+    <li><strong>الشبكة المحلية والتصحيح:</strong> يُستخدم إذن الشبكة المحلية فقط لميزات اختيارية مثل تصحيح LAN / الوصول البعيد للملفات. وإذا ربطت أداة تصحيح سطح المكتب الخاصة بك، فقد تُرسل بعض ملفات التطبيق أو حركة الطلبات إلى <strong>نقطة محلية تحت سيطرتك</strong>.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>5. مساعد الملاحظات</h2>
+
+<p>لا تُرسل البيانات إلى خدمة الملاحظات <strong>إلا عندما تختار أنت إرسال ملاحظة بشكل فعلي</strong>.</p>
+<ul>
+    <li><strong>المحتوى الذي يدخله المستخدم:</strong> نوع الملاحظة، العنوان، الوصف، خطوات إعادة المشكلة، السلوك المتوقع، السلوك الفعلي، وسياق إضافي.</li>
+    <li><strong>لقطة بيئية:</strong> المنصة، إصدار التطبيق، رقم البناء، إصدار النظام، معرف طراز الجهاز، اللغة/المنطقة، والمنطقة الزمنية.</li>
+    <li><strong>تشخيصات دنيا:</strong> الطابع الزمني، عدد المزودين، عدد الجلسات غير المؤقتة، المنصة، وإصدار التطبيق.</li>
+    <li><strong>التحقق ضد الإساءة:</strong> تتضمن طلبات الملاحظات حقول challenge والطابع الزمني والتوقيع وحقول مرتبطة بـ PoW للحد من الرسائل المزعجة.</li>
+    <li><strong>تحديث الحالة:</strong> عند تحديث حالة التذكرة لاحقًا، يستخدم التطبيق رقم التذكرة والرمز المحفوظين محليًا للاستعلام عن التقدم من خدمة الملاحظات.</li>
+</ul>
+<p>قبل الإرسال، يمر نص الملاحظات بعملية تنقية أساسية تحاول إخفاء Bearer Token الشائعة وتسميات API key وبعض صيغ الأسرار الشائعة. لكن هذا <strong>ليس</strong> نظامًا متكاملًا لمنع تسرب البيانات. <strong>يرجى عدم إدخال مفاتيح سرية أو أرقام هوية أو عناوين أو بيانات صحية أو أي معلومات حساسة في محتوى الملاحظات.</strong></p>
+
+    </section>
+    <section>
+        <h2>6. خدمات الطرف الثالث والتحليلات وحدود الخوادم</h2>
+
+<ul>
+    <li><strong>مزودو الذكاء الاصطناعي من طرف ثالث:</strong> يعالجون طلبات الدردشة والصورة والصوت التي ترسلها بإرادتك.</li>
+    <li><strong>خدمات نظام Apple:</strong> مثل WatchConnectivity وiCloud / CloudKit، تخضع لسياسات Apple.</li>
+    <li><strong>خدمة الملاحظات التي يديرها المطور:</strong> تُستخدم فقط عندما ترسل أو تُحدّث تذاكر الملاحظات بشكل مقصود.</li>
+    <li><strong>لا يتم الرفع تلقائيًا افتراضيًا:</strong> محتوى الدردشة والذاكرة المحلية والسجلات المحلية وبيانات الملخص السنوي ومفاتيح API لا تُرفع تلقائيًا إلى خوادم يتحكم بها المطور.</li>
+    <li><strong>الإعلانات وحِزم التحليلات العامة:</strong> قاعدة الشيفرة الحالية لا تتضمن SDK إعلانات من طرف ثالث، ولم نجد SDK عام لتحليل سلوك المستخدم من جهة المطور. إذا تغيّر ذلك مستقبلاً، سنحدّث هذه السياسة أولاً.</li>
+    <li><strong>مشاركة تحليلات Apple:</strong> إذا اخترت مشاركة التحليلات مع المطورين على مستوى النظام، قد تجمع Apple سجلات أعطال مجهولة أو معلومات تشخيصية وفق قواعدها.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. إخلاء المسؤولية</h2>
+
+<ul>
+    <li><strong>أداة محايدة:</strong> هذا التطبيق عميل LLM عام. قد يتضمن بعض عناوين الخدمات أو خدمة الملاحظات بشكل افتراضي، لكنه لا يحتوي على بيانات اعتماد تجارية جاهزة للاستخدام.</li>
+    <li><strong>مسؤولية المحتوى:</strong> كل المحتوى المُولّد عبر الذكاء الاصطناعي يأتي من خدمات طرف ثالث تقوم أنت بإعدادها. لا يمكننا ضمان دقته أو قانونيته أو ملاءمته.</li>
+    <li><strong>اختيار الخدمات:</strong> أي خدمة API أو ميزة مزامنة أو خدمة ملاحظات تستخدمها يجب أن تقيّمها بنفسك وفق سياسة الخصوصية والشروط والتكلفة والمخاطر الخاصة بها.</li>
+</ul>
+
+    </section>
+
+    <section>
+        <div class="contact-info">
+            <h2>8. تواصل معنا</h2>
+            <p>إذا كانت لديك أي أسئلة حول سياسة الخصوصية هذه، يرجى التواصل معنا:</p>
+            <p><strong>Eric Terminal</strong><br>
+            Email: <a href="mailto:contact@ericterminal.com">contact@ericterminal.com</a><br>
+            GitHub: <a href="https://github.com/Eric-Terminal/ETOS-LLM-Studio">https://github.com/Eric-Terminal/ETOS-LLM-Studio</a></p>
+        </div>
+    </section>
+
+    <footer>
+        &copy; 2026 Eric Terminal. جميع الحقوق محفوظة.
+    </footer>
+</body>
+</html>
