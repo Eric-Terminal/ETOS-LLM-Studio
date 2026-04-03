@@ -65,24 +65,24 @@ struct DailyPulseView: View {
             if let run = pulseManager.latestRun {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(run.headline)
-                        .font(.headline)
+                        .etFont(.headline)
                     Text(summaryText(for: run))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
             } else if pulseManager.isPreparingTodayPulse {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("今天这一期正在准备中", systemImage: "hourglass")
-                        .font(.headline)
+                        .etFont(.headline)
                     Text(preparationStatusText)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
             } else {
                 Text("还没有每日脉冲记录。你可以先手动生成一份今天的主动情报卡片。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -160,7 +160,7 @@ struct DailyPulseView: View {
 
             if let pending = pulseManager.pendingCuration {
                 Label("将优先用于 \(pending.targetDayKey) 的每日脉冲", systemImage: "calendar.badge.clock")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -183,16 +183,16 @@ struct DailyPulseView: View {
         Section {
             if pulseManager.pendingTasks.isEmpty && pulseManager.completedTasksPreview.isEmpty {
                 Text("还没有 Pulse 任务。你可以把下方卡片转成待跟进任务，后续生成时也会参考这些未完成项。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(pulseManager.pendingTasks.prefix(5)) { task in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(task.title)
-                            .font(.subheadline.weight(.medium))
+                            .etFont(.subheadline.weight(.medium))
                         if !task.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text(task.details)
-                                .font(.footnote)
+                                .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                         HStack(spacing: 10) {
@@ -217,7 +217,7 @@ struct DailyPulseView: View {
                 if !pulseManager.completedTasksPreview.isEmpty {
                     ForEach(pulseManager.completedTasksPreview) { task in
                         Label(task.title, systemImage: "checkmark.circle.fill")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
 
@@ -240,15 +240,15 @@ struct DailyPulseView: View {
         Section {
             if pulseManager.feedbackHistoryPreview.isEmpty {
                 Text("还没有反馈历史。你对卡片点赞、降权、隐藏或保存后，这些信号会参与后续每日脉冲生成。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(pulseManager.feedbackHistoryPreview) { event in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(historyTitle(for: event))
-                            .font(.subheadline.weight(.medium))
+                            .etFont(.subheadline.weight(.medium))
                         Text(event.cardTitle)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 2)
@@ -276,15 +276,15 @@ struct DailyPulseView: View {
 
             if pulseManager.externalSignalPreview.isEmpty {
                 Text("还没有积累到可复用的外部信号历史。快捷指令执行、MCP 输出和公告变化会逐步沉淀到这里。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(pulseManager.externalSignalPreview) { signal in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(externalSignalTitle(for: signal))
-                            .font(.subheadline.weight(.medium))
+                            .etFont(.subheadline.weight(.medium))
                         Text(signal.preview)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 2)
@@ -310,7 +310,7 @@ struct DailyPulseView: View {
             Section {
                 if visibleCards.isEmpty {
                     Text("这次生成的卡片都被你隐藏了。你可以重新生成一份新的每日脉冲。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(visibleCards) { card in
@@ -326,9 +326,9 @@ struct DailyPulseView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("正在为你准备今天的每日脉冲", systemImage: "sparkles")
-                        .font(.subheadline.weight(.medium))
+                        .etFont(.subheadline.weight(.medium))
                     Text(preparationStatusText)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                     ProgressView()
                 }
@@ -339,7 +339,7 @@ struct DailyPulseView: View {
         } else {
             Section {
                 Text("今天还没有生成新的每日脉冲。你可以立即生成，或者先写一点“明日想看什么”再回来。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } header: {
                 Text("今天的卡片")
@@ -352,24 +352,25 @@ struct DailyPulseView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top, spacing: 8) {
                     Text(card.title)
-                        .font(.headline)
+                        .etFont(.headline)
                     Spacer()
                     feedbackBadge(for: card)
                 }
 
                 Text(card.summary)
-                    .font(.subheadline)
+                    .etFont(.subheadline)
                     .foregroundStyle(.primary)
 
                 Text(card.whyRecommended)
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
 
             DisclosureGroup(isExpanded: expansionBinding(for: card.id)) {
                 VStack(alignment: .leading, spacing: 12) {
                     Markdown(card.detailsMarkdown)
-                        .font(.subheadline)
+                        .etFont(.subheadline)
+                        .etDailyPulseMarkdownFontStyle(sampleText: card.detailsMarkdown)
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
@@ -422,7 +423,7 @@ struct DailyPulseView: View {
                     expandedCardIDs.contains(card.id) ? "收起更多" : "展开更多",
                     systemImage: expandedCardIDs.contains(card.id) ? "chevron.up.circle" : "ellipsis.circle"
                 )
-                .font(.subheadline)
+                .etFont(.subheadline)
             }
         }
         .padding(.vertical, 6)
@@ -440,20 +441,20 @@ struct DailyPulseView: View {
         switch card.feedback {
         case .liked:
             Label("已喜欢", systemImage: "heart.fill")
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.pink)
         case .disliked:
             Label("已降权", systemImage: "hand.thumbsdown.fill")
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.orange)
         case .hidden:
             Label("已隐藏", systemImage: "eye.slash.fill")
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.secondary)
         case .none:
             if card.savedSessionID != nil {
                 Label("已保存", systemImage: "bookmark.fill")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.blue)
             }
         }
@@ -543,5 +544,40 @@ struct DailyPulseView: View {
                 deliveryCoordinator.reminderMinute = components.minute ?? deliveryCoordinator.reminderMinute
             }
         )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func etDailyPulseMarkdownFontStyle(sampleText: String) -> some View {
+        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
+        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
+        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
+        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
+
+        self
+            .markdownTextStyle {
+                if let bodyFontName, !bodyFontName.isEmpty {
+                    FontFamily(.custom(bodyFontName))
+                }
+            }
+            .markdownTextStyle(\.emphasis) {
+                if let emphasisFontName, !emphasisFontName.isEmpty {
+                    FontFamily(.custom(emphasisFontName))
+                }
+                FontStyle(.italic)
+            }
+            .markdownTextStyle(\.strong) {
+                if let strongFontName, !strongFontName.isEmpty {
+                    FontFamily(.custom(strongFontName))
+                }
+            }
+            .markdownTextStyle(\.code) {
+                if let codeFontName, !codeFontName.isEmpty {
+                    FontFamily(.custom(codeFontName))
+                } else {
+                    FontFamilyVariant(.monospaced)
+                }
+            }
     }
 }

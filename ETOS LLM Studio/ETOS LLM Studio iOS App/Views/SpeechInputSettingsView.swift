@@ -25,7 +25,7 @@ struct SpeechInputSettingsView: View {
                     
                     if sendSpeechAsAudio {
                         Text("语音会直接附带音频给当前模型。")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                         
                         Picker("音频录制格式", selection: $audioRecordingFormat) {
@@ -35,11 +35,11 @@ struct SpeechInputSettingsView: View {
                         }
                         
                         Text(audioRecordingFormat.formatDescription)
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else if speechModels.isEmpty {
                         Text("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
                         NavigationLink {
@@ -61,12 +61,12 @@ struct SpeechInputSettingsView: View {
                         }
                         
                         Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     
                     Text("也可以在“提供商与模型管理 > 专用模型”中统一设置。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }

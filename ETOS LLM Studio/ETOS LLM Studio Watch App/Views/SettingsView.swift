@@ -52,7 +52,7 @@ struct SettingsView: View {
                     let options = viewModel.activatedModels
                     if options.isEmpty {
                         Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
                         NavigationLink {
@@ -146,7 +146,7 @@ struct SettingsView: View {
                             Spacer()
                             if let status = dailyPulseEntryStatusText {
                                 Text(status)
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(pulseManager.hasUnviewedTodayRun ? .blue : .secondary)
                             }
                         }
@@ -168,6 +168,7 @@ struct SettingsView: View {
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         enableExperimentalToolResultDisplay: $viewModel.enableExperimentalToolResultDisplay,
                         enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+                        enableNoBubbleUI: $viewModel.enableNoBubbleUI,
                         allBackgrounds: viewModel.backgroundImages
                     )) {
                         Label("显示与外观", systemImage: "photo.on.rectangle")

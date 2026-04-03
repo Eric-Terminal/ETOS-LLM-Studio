@@ -323,7 +323,7 @@ public class AnnouncementManager: ObservableObject {
     }
     
     /// 从一组同 ID 的公告中选择最佳匹配
-    /// 优先级：精确语言匹配 > 语言前缀匹配 > 无语言限制 > 英文 > 第一个
+    /// 优先级：精确语言匹配 > 脚本匹配(区分 zh-Hans / zh-Hant) > 语言匹配 > 无语言限制 > 英文 > 第一个
     private func selectBestFromGroup(_ group: [Announcement]) -> [Announcement] {
         guard !group.isEmpty else { return [] }
         
@@ -340,23 +340,20 @@ public class AnnouncementManager: ObservableObject {
             return group
         }
 
-        let exactMatches = restricted.filter { announcement in
-            guard let lang = announcement.language, !lang.isEmpty else { return false }
-            return deviceFullLanguage.hasPrefix(lang.replacingOccurrences(of: "-", with: "_")) ||
-                   deviceFullLanguage.hasPrefix(lang)
+        let languageScores = restricted.enumerated().compactMap { index, announcement -> (score: Int, index: Int, announcement: Announcement)? in
+            guard let lang = announcement.language, !lang.isEmpty else { return nil }
+            let score = Self.languageMatchScore(
+                announcementLanguage: lang,
+                deviceLanguageCode: deviceLanguage,
+                deviceLocaleIdentifier: deviceFullLanguage
+            )
+            guard score > 0 else { return nil }
+            return (score, index, announcement)
         }
-        if !exactMatches.isEmpty {
-            logger.info("精确匹配语言: \(exactMatches.first?.language ?? "")")
-            return exactMatches
-        }
-
-        let prefixMatches = restricted.filter { announcement in
-            guard let lang = announcement.language, !lang.isEmpty else { return false }
-            return deviceLanguage.hasPrefix(lang) || lang.hasPrefix(deviceLanguage)
-        }
-        if !prefixMatches.isEmpty {
-            logger.info("前缀匹配语言: \(prefixMatches.first?.language ?? "")")
-            return prefixMatches
+        if let bestScore = languageScores.map(\.score).max(),
+           let best = languageScores.first(where: { $0.score == bestScore }) {
+            logger.info("语言匹配得分=\(best.score), 选择语言: \(best.announcement.language ?? "")")
+            return [best.announcement]
         }
 
         let unrestricted = group.filter { announcement in
@@ -364,17 +361,109 @@ public class AnnouncementManager: ObservableObject {
         }
         if !unrestricted.isEmpty {
             logger.info("使用无语言限制的公告")
-            return unrestricted
+            return [unrestricted[0]]
         }
 
-        let english = restricted.filter { $0.language == "en" }
+        let english = restricted.filter {
+            Self.normalizedLanguageIdentifier($0.language ?? "") == AnnouncementLanguage.en.rawValue
+        }
         if !english.isEmpty {
             logger.info("回退到英文文案")
-            return english
+            return [english[0]]
         }
 
         logger.info("使用第一个公告")
         return [group.first].compactMap { $0 }
+    }
+
+    static func languageMatchScore(
+        announcementLanguage: String,
+        deviceLanguageCode: String,
+        deviceLocaleIdentifier: String
+    ) -> Int {
+        let target = normalizedLanguageIdentifier(announcementLanguage)
+        let deviceBase = normalizedLanguageIdentifier(deviceLanguageCode)
+        let deviceFull = normalizedLanguageIdentifier(deviceLocaleIdentifier)
+        guard !target.isEmpty else { return 0 }
+
+        // 精确匹配：例如设备 zh-hant-hk 命中公告 zh-hant
+        if target.contains("-"),
+           deviceFull == target || deviceFull.hasPrefix("\(target)-") {
+            return 320
+        }
+
+        // 中文脚本严格匹配：避免把 zh-Hans 和 zh-Hant 都当成“zh”命中
+        if target == normalizedLanguageIdentifier(AnnouncementLanguage.zhHans.rawValue) ||
+            target == normalizedLanguageIdentifier(AnnouncementLanguage.zhHant.rawValue) {
+            guard let scriptLanguage = chineseScriptLanguage(
+                deviceLanguageCode: deviceLanguageCode,
+                deviceLocaleIdentifier: deviceLocaleIdentifier
+            ) else {
+                return 0
+            }
+            return scriptLanguage == target ? 310 : 0
+        }
+
+        // 基础语言匹配：例如 en / zh
+        if deviceBase == target {
+            return 200
+        }
+
+        if !target.contains("-"), deviceFull.hasPrefix("\(target)-") {
+            return 180
+        }
+
+        // 兜底前缀匹配（保留原先宽松兼容能力）
+        if target.hasPrefix("\(deviceBase)-") || deviceBase.hasPrefix("\(target)-") {
+            return 150
+        }
+        if deviceBase.hasPrefix(target) || target.hasPrefix(deviceBase) {
+            return 100
+        }
+
+        return 0
+    }
+
+    private static func chineseScriptLanguage(
+        deviceLanguageCode: String,
+        deviceLocaleIdentifier: String
+    ) -> String? {
+        let deviceFull = normalizedLanguageIdentifier(deviceLocaleIdentifier)
+        let deviceBase = normalizedLanguageIdentifier(deviceLanguageCode)
+        let localeCandidates = deviceFull.split(separator: "-").map(String.init)
+
+        if deviceFull.contains("hant") {
+            return normalizedLanguageIdentifier(AnnouncementLanguage.zhHant.rawValue)
+        }
+        if deviceFull.contains("hans") {
+            return normalizedLanguageIdentifier(AnnouncementLanguage.zhHans.rawValue)
+        }
+
+        if localeCandidates.contains("tw") || localeCandidates.contains("hk") || localeCandidates.contains("mo") {
+            return normalizedLanguageIdentifier(AnnouncementLanguage.zhHant.rawValue)
+        }
+        if localeCandidates.contains("cn") || localeCandidates.contains("sg") {
+            return normalizedLanguageIdentifier(AnnouncementLanguage.zhHans.rawValue)
+        }
+
+        if deviceBase == normalizedLanguageIdentifier(AnnouncementLanguage.zhHans.rawValue) {
+            return normalizedLanguageIdentifier(AnnouncementLanguage.zhHans.rawValue)
+        }
+        if deviceBase == normalizedLanguageIdentifier(AnnouncementLanguage.zhHant.rawValue) {
+            return normalizedLanguageIdentifier(AnnouncementLanguage.zhHant.rawValue)
+        }
+        if deviceBase == normalizedLanguageIdentifier(AnnouncementLanguage.zh.rawValue) {
+            return normalizedLanguageIdentifier(AnnouncementLanguage.zhHans.rawValue)
+        }
+
+        return nil
+    }
+
+    private static func normalizedLanguageIdentifier(_ identifier: String) -> String {
+        identifier
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
     }
     
     /// 检查平台兼容性（仅检查平台，不检查语言）

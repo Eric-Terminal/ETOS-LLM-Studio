@@ -83,14 +83,14 @@ public struct StorageManagementView: View {
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "internaldrive")
-                        .font(.title2)
+                        .etFont(.title2)
                         .foregroundStyle(.blue)
 
                     Text(StorageUtility.formatSize(storageBreakdown.totalSize))
-                        .font(.headline)
+                        .etFont(.headline)
 
                     Text("总使用空间")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
@@ -111,12 +111,12 @@ public struct StorageManagementView: View {
                             .frame(width: 20)
 
                         Text(category.displayName)
-                            .font(.footnote)
+                            .etFont(.footnote)
 
                         Spacer()
 
                         Text(StorageUtility.formatSize(storageBreakdown.categorySize[category] ?? 0))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -133,11 +133,11 @@ public struct StorageManagementView: View {
                     Image(systemName: "trash.slash")
                         .foregroundStyle(.orange)
                     Text("清理孤立数据")
-                        .font(.footnote)
+                        .etFont(.footnote)
                     Spacer()
                     if orphanedDataCount.total > 0 {
                         Text(String(format: NSLocalizedString("%d 项", comment: ""), orphanedDataCount.total))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -149,14 +149,14 @@ public struct StorageManagementView: View {
                 HStack {
                     Image(systemName: "trash")
                     Text("清理所有缓存")
-                        .font(.footnote)
+                        .etFont(.footnote)
                 }
             }
         } header: {
             Text("清理工具")
         } footer: {
             Text("孤立数据包括幽灵会话、孤立音频/图片、无效音频引用。")
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
     }
@@ -266,10 +266,10 @@ public struct WatchFileListView: View {
             } else if files.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "folder")
-                        .font(.title2)
+                        .etFont(.title2)
                         .foregroundStyle(.secondary)
                     Text("暂无内容")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             } else {
@@ -302,7 +302,7 @@ public struct WatchFileListView: View {
         List {
             Section("当前位置") {
                 Text(relativePath)
-                    .font(.system(size: 10, design: .monospaced))
+                    .etFont(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
 
@@ -320,7 +320,7 @@ public struct WatchFileListView: View {
                 Text("内容")
             } footer: {
                 Text("点击文件夹继续浏览，点击 JSON 文件打开分页阅读。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
@@ -366,10 +366,10 @@ public struct WatchFileListView: View {
     private func infoRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
-                .font(.footnote)
+                .etFont(.footnote)
             Spacer()
             Text(value)
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
     }
@@ -430,7 +430,7 @@ private struct WatchFileRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(subtitle)
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -496,7 +496,7 @@ private struct WatchJSONPreviewView: View {
                         }
 
                         Text(currentPage.content)
-                            .font(.system(size: 10, design: .monospaced))
+                            .etFont(.system(size: 10, design: .monospaced))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(8)
                             .background(
@@ -514,12 +514,12 @@ private struct WatchJSONPreviewView: View {
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "doc.questionmark")
-                        .font(.title3)
+                        .etFont(.title3)
                         .foregroundStyle(.secondary)
                     Text("无法预览")
-                        .font(.footnote)
+                        .etFont(.footnote)
                     Text("无法读取此 JSON 文件。")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -533,9 +533,9 @@ private struct WatchJSONPreviewView: View {
     private func summaryCard(for page: StorageTextPage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("第 \(page.index + 1) / \(page.totalCount) 页")
-                .font(.footnote.weight(.semibold))
+                .etFont(.footnote.weight(.semibold))
             Text("第 \(page.startLineNumber)-\(page.endLineNumber) 行")
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -558,7 +558,7 @@ private struct WatchJSONPreviewView: View {
             }
             .disabled(selectedPageIndex >= pages.count - 1)
         }
-        .font(.caption2)
+        .etFont(.caption2)
     }
 
     private func loadPages() async {

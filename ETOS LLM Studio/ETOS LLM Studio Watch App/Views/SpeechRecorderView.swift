@@ -22,7 +22,7 @@ struct SpeechRecorderView: View {
                     .progressViewStyle(.circular)
                     .padding(.vertical, 4)
                 Text(processingDescription)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             } else {
                 if viewModel.isRecordingSpeech {
@@ -32,18 +32,18 @@ struct SpeechRecorderView: View {
                         .padding(.top, 2)
                     
                     Text(formattedDuration(viewModel.recordingDuration))
-                        .font(.system(.title3, design: .monospaced))
+                        .etFont(.system(.title3, design: .monospaced))
                         .monospacedDigit()
                     
                     Text("正在录音…")
-                        .font(.headline)
+                        .etFont(.headline)
                 } else {
                     Image(systemName: "mic.slash")
-                        .font(.system(size: 34))
+                        .etFont(.system(size: 34))
                         .foregroundColor(.accentColor)
                         .padding(.top, 6)
                     Text(viewModel.sendSpeechAsAudio ? "录音后将直接发送" : "准备录音")
-                        .font(.headline)
+                        .etFont(.headline)
                 }
             }
             

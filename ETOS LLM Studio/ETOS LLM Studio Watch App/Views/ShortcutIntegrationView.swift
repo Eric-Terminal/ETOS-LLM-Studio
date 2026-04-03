@@ -27,17 +27,17 @@ struct ShortcutIntegrationView: View {
         List {
             Section("说明") {
                 Text("在 iPhone 导入快捷指令后，这里可查看并控制启用状态。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 Text("支持轻度导入（仅名称）和深度导入（iCloud 链接解析）；深度解析失败会自动降级为仅链接。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             Section(
                 header: Text("聊天工具总开关"),
                 footer: Text("关闭后不会向模型暴露任何快捷指令工具，但导入和单项配置仍会保留。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Toggle(
@@ -51,10 +51,10 @@ struct ShortcutIntegrationView: View {
 
             Section("官方导入快捷指令") {
                 Text("内置官方快捷指令，可一键下载并触发导入流程。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Text("在 iPhone 上点击“检测并运行导入快捷指令”，手表端会自动同步结果。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
                 Button {
@@ -69,7 +69,7 @@ struct ShortcutIntegrationView: View {
                         manager.officialImportShortcutName
                     )
                 )
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
             }
 
@@ -77,26 +77,26 @@ struct ShortcutIntegrationView: View {
                !officialStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("当前官方导入状态") {
                     Text(officialStatus)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle((manager.lastOfficialTemplateRunSucceeded == false) ? .orange : .secondary)
                 }
             }
 
             Section("导入") {
                 Text("watchOS 不支持直接读取剪贴板，请在 iPhone 端导入后通过设备同步同步到手表。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Text("桥接快捷指令：\(bridgeShortcutName)")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
                 if manager.isImporting {
                     Text("导入进行中")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     if manager.isCancellingImport {
                         Text(NSLocalizedString("正在取消导入，请稍候…", comment: ""))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.orange)
                     }
 
@@ -112,7 +112,7 @@ struct ShortcutIntegrationView: View {
                                 manager.importProgressTotal
                             )
                         )
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     } else {
                         ProgressView()
@@ -125,7 +125,7 @@ struct ShortcutIntegrationView: View {
                                 currentName
                             )
                         )
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     }
 
@@ -134,7 +134,7 @@ struct ShortcutIntegrationView: View {
                     } label: {
                         Text("取消导入")
                     }
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .disabled(manager.isCancellingImport)
                 }
             }
@@ -142,7 +142,7 @@ struct ShortcutIntegrationView: View {
             Section(
                 header: Text("审批自动化"),
                 footer: Text("倒计时范围 1-30 秒，超出会自动修正。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Toggle(
@@ -175,7 +175,7 @@ struct ShortcutIntegrationView: View {
                     Text("新增 \(summary.importedCount)，跳过 \(summary.skippedCount)")
                     if !summary.conflictNames.isEmpty {
                         Text("冲突：\(summary.conflictNames.joined(separator: "，"))")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -188,7 +188,7 @@ struct ShortcutIntegrationView: View {
                 } else {
                     if !manager.chatToolsEnabled {
                         Text("当前总开关已关闭，以下快捷指令仅用于管理，不会参与聊天调用。")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                     ForEach(manager.tools) { tool in
@@ -204,19 +204,19 @@ struct ShortcutIntegrationView: View {
                                         ? NSLocalizedString("已启用", comment: "Shortcut tool enabled status")
                                         : NSLocalizedString("已停用", comment: "Shortcut tool disabled status")
                                     )
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(tool.isEnabled ? .green : .secondary)
                                 }
                                 Text(tool.effectiveDescription)
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
                                 Text("运行模式：\(runModeLabel(for: tool.runModeHint))")
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                 if let importStatusText = importStatusText(for: tool) {
                                     Text(importStatusText)
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
                             }
@@ -285,13 +285,13 @@ private struct ShortcutToolDetailView: View {
             if let tool {
                 Section("工具信息") {
                     Text(tool.displayName)
-                        .font(.headline)
+                        .etFont(.headline)
                     Text(tool.name)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     if let importStatusText = importStatusText(for: tool) {
                         Text(importStatusText)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -321,7 +321,7 @@ private struct ShortcutToolDetailView: View {
 
                 Section("工具描述") {
                     Text(tool.effectiveDescription)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
 
                     Button {

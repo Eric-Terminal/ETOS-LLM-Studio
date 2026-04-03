@@ -9,6 +9,7 @@
 
 import SwiftUI
 import Foundation
+import Shared
 
 struct DisplaySettingsView: View {
     
@@ -25,6 +26,7 @@ struct DisplaySettingsView: View {
     @Binding var enableAdvancedRenderer: Bool
     @Binding var enableExperimentalToolResultDisplay: Bool
     @Binding var enableAutoReasoningPreview: Bool
+    @Binding var enableNoBubbleUI: Bool
     
     // MARK: - 属性
     
@@ -45,17 +47,26 @@ struct DisplaySettingsView: View {
                 if enableMarkdown {
                     Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
                     Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 Toggle("增强工具结果显示（实验性）", isOn: $enableExperimentalToolResultDisplay)
                 Text("启用后会优先提取工具结果正文并折叠原始 JSON；关闭后恢复为原始结果文本展示。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 Toggle("自动预览思考过程", isOn: $enableAutoReasoningPreview)
                 Text("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
+                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                NavigationLink {
+                    WatchFontSettingsView()
+                } label: {
+                    Label("字体设置", systemImage: "textformat.alt")
+                }
             }
             
             Section(header: Text("背景")) {
@@ -95,5 +106,152 @@ struct DisplaySettingsView: View {
                 enableAdvancedRenderer = false
             }
         }
+    }
+}
+
+private struct WatchFontSettingsView: View {
+    @State private var assets: [FontAssetRecord] = []
+    @State private var routes: FontRouteConfiguration = .init()
+    @State private var selectedRole: FontSemanticRole = .body
+
+    var body: some View {
+        List {
+            Section("字体来源") {
+                if assets.isEmpty {
+                    Text("暂无字体，请先在 iPhone 端导入并同步。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(assets) { asset in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(asset.displayName)
+                                        .etFont(.footnote)
+                                    Text(asset.postScriptName)
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                Toggle("启用", isOn: enabledBinding(for: asset))
+                                    .labelsHidden()
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section("样式优先级") {
+                Picker("样式槽位", selection: $selectedRole) {
+                    ForEach(FontSemanticRole.allCases) { role in
+                        Text(role.title).tag(role)
+                    }
+                }
+                if chainRecords.isEmpty {
+                    Text("当前槽位为空，使用系统字体。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(chainRecords.enumerated()), id: \.element.id) { index, asset in
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(asset.displayName)
+                                    .foregroundStyle(asset.isEnabled ? .primary : .secondary)
+                                if !asset.isEnabled {
+                                    Text("已停用")
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            Spacer(minLength: 8)
+                            HStack(spacing: 4) {
+                                Button {
+                                    moveAsset(at: index, offset: -1)
+                                } label: {
+                                    Image(systemName: "chevron.up")
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(index == 0)
+
+                                Button {
+                                    moveAsset(at: index, offset: 1)
+                                } label: {
+                                    Image(systemName: "chevron.down")
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(index >= chainRecords.count - 1)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section("预览") {
+                Text("风来疏竹，风过而竹不留声。")
+                    .etFont(FontRoutePreview.etFont(for: .body, sample: "风来疏竹，风过而竹不留声。", size: 14))
+                Text("Emphasis")
+                    .etFont(FontRoutePreview.etFont(for: .emphasis, sample: "Emphasis", size: 14))
+                    .italic()
+                Text("Strong")
+                    .etFont(FontRoutePreview.etFont(for: .strong, sample: "Strong", size: 14))
+                    .fontWeight(.bold)
+                Text("let value = 42")
+                    .etFont(FontRoutePreview.etFont(for: .code, sample: "let value = 42", size: 13))
+            }
+        }
+        .navigationTitle("字体设置")
+        .onAppear {
+            FontLibrary.registerAllFontsIfNeeded()
+            reloadData()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
+            reloadData()
+        }
+    }
+
+    private var chainRecords: [FontAssetRecord] {
+        let map = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
+        return routes.chain(for: selectedRole).compactMap { map[$0] }
+    }
+
+    private func reloadData() {
+        assets = FontLibrary.loadAssets()
+        routes = FontLibrary.loadRouteConfiguration()
+    }
+
+    private func enabledBinding(for asset: FontAssetRecord) -> Binding<Bool> {
+        Binding(
+            get: {
+                assets.first(where: { $0.id == asset.id })?.isEnabled ?? asset.isEnabled
+            },
+            set: { newValue in
+                updateAssetEnabled(assetID: asset.id, isEnabled: newValue)
+            }
+        )
+    }
+
+    private func moveAsset(at index: Int, offset: Int) {
+        var chain = routes.chain(for: selectedRole)
+        let target = index + offset
+        guard chain.indices.contains(index), chain.indices.contains(target) else { return }
+        chain.swapAt(index, target)
+        routes.setChain(chain, for: selectedRole)
+        FontLibrary.updateChain(chain, for: selectedRole)
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func updateAssetEnabled(assetID: UUID, isEnabled: Bool) {
+        guard FontLibrary.setAssetEnabled(id: assetID, isEnabled: isEnabled) else { return }
+        reloadData()
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+}
+
+private enum FontRoutePreview {
+    static func etFont(for role: FontSemanticRole, sample: String, size: CGFloat) -> Font {
+        if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) {
+            return .custom(postScriptName, size: size)
+        }
+        return .system(size: size)
     }
 }

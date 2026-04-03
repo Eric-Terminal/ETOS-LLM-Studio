@@ -344,7 +344,7 @@ private struct BackgroundCropEditorView: View {
                 .padding(.horizontal)
                 
                 Text("拖动和缩放以调整取景范围")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 
                 GeometryReader { proxy in

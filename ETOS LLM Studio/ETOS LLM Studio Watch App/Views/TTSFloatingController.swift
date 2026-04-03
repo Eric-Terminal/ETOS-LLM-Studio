@@ -90,7 +90,7 @@ struct TTSFloatingController: View {
                 .tint(.accentColor)
 
             Text("\(chunkText) · \(compactTimeText)")
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .etFont(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -99,11 +99,11 @@ struct TTSFloatingController: View {
     private var finishedPanel: some View {
         HStack(spacing: 6) {
             Image(systemName: statusIcon)
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
 
             Text(statusText)
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 2)
@@ -136,7 +136,7 @@ struct TTSFloatingController: View {
             cycleSpeed()
         } label: {
             Text(String(format: "x%.1f", settingsStore.playbackSpeed))
-                .font(.caption2.monospacedDigit())
+                .etFont(.caption2.monospacedDigit())
                 .frame(minWidth: 36)
         }
         .buttonStyle(.bordered)

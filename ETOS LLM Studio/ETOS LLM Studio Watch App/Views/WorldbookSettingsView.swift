@@ -45,7 +45,7 @@ struct WorldbookSettingsView: View {
             Section(NSLocalizedString("世界书列表", comment: "Worldbook list section")) {
                 if worldbooks.isEmpty {
                     Text(NSLocalizedString("暂无世界书，可在本机通过链接导入，或在 iPhone 导入后同步。", comment: "No worldbooks on watch"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(worldbooks) { book in
@@ -56,19 +56,19 @@ struct WorldbookSettingsView: View {
                                 Text(book.name)
 
                                 Text(enabledEntrySummary(for: book))
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(.secondary)
 
                                 if !book.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Text(book.description)
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                 }
 
                                 if selected.contains(book.id) {
                                     Text(NSLocalizedString("已绑定当前会话", comment: "Bound current session"))
-                                        .font(.caption2)
+                                        .etFont(.caption2)
                                         .foregroundStyle(.tint)
                                 }
                             }
@@ -104,7 +104,7 @@ struct WorldbookSettingsView: View {
                 }
 
                 Text(NSLocalizedString("支持 http/https 的 JSON 或 PNG 链接。", comment: "Supported URL formats"))
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
@@ -115,7 +115,7 @@ struct WorldbookSettingsView: View {
                     row(title: NSLocalizedString("失败条目", comment: "Failed entries"), value: "\(report.failedEntries)")
                     if !report.failureReasons.isEmpty {
                         Text(report.failureReasons.joined(separator: "\n"))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -124,7 +124,7 @@ struct WorldbookSettingsView: View {
             if let importError, !importError.isEmpty {
                 Section(NSLocalizedString("导入错误", comment: "Import error section")) {
                     Text(importError)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.red)
                 }
             }
@@ -343,7 +343,7 @@ private struct WatchWorldbookDetailView: View {
                         saveBasicInfo()
                     }
                     Text(String(format: NSLocalizedString("条目数量：%d", comment: "Entry count"), worldbook.entries.count))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
 
@@ -369,7 +369,7 @@ private struct WatchWorldbookDetailView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(entry.comment.isEmpty ? NSLocalizedString("(无注释)", comment: "No comment") : entry.comment)
-                                        .font(.footnote)
+                                        .etFont(.footnote)
                                         .lineLimit(1)
 
                                     Text(
@@ -377,12 +377,12 @@ private struct WatchWorldbookDetailView: View {
                                         ? NSLocalizedString("已启用", comment: "Worldbook enabled status")
                                         : NSLocalizedString("已停用", comment: "Worldbook disabled status")
                                     )
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(entry.isEnabled ? .green : .secondary)
 
                                     if let preview = entryPreview(entry) {
                                         Text(preview)
-                                            .font(.caption2)
+                                            .etFont(.caption2)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(2)
                                     }
@@ -544,23 +544,23 @@ private struct WatchWorldbookEntryDetailView: View {
             Section(NSLocalizedString("内容", comment: "Content field")) {
                 if !entry.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(entry.comment)
-                        .font(.footnote)
+                        .etFont(.footnote)
                 }
 
                 if !entry.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(entry.content)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
 
                 if !entry.keys.isEmpty {
                     Text(entry.keys.joined(separator: "，"))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
 
                 Text(worldbookPositionLabel(entry.position))
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
                 Text(
@@ -569,7 +569,7 @@ private struct WatchWorldbookEntryDetailView: View {
                         worldbookEntryRoleLabel(entry.role)
                     )
                 )
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
             }
         }
@@ -853,13 +853,13 @@ private struct WatchWorldbookSessionBindingView: View {
                 )
 
                 Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送长期记忆、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -877,9 +877,9 @@ private struct WatchWorldbookSessionBindingView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(book.name)
-                                    .font(.footnote)
+                                    .etFont(.footnote)
                                 Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()

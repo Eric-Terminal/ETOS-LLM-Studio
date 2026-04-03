@@ -27,7 +27,7 @@ struct FeedbackCenterView: View {
             Section(NSLocalizedString("我的反馈", comment: "My feedback list")) {
                 if service.tickets.isEmpty {
                     Text(NSLocalizedString("暂无反馈记录", comment: "No feedback records"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(service.tickets) { ticket in
@@ -64,9 +64,9 @@ private struct FeedbackTicketRow: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(String(format: NSLocalizedString("工单 #%d", comment: "Issue number title"), ticket.issueNumber))
-                    .font(.subheadline.weight(.semibold))
+                    .etFont(.subheadline.weight(.semibold))
                 Text(ticket.title)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -74,7 +74,7 @@ private struct FeedbackTicketRow: View {
             Spacer(minLength: 8)
 
             Text(ticket.lastKnownStatus.localizedTitle)
-                .font(.caption2.weight(.medium))
+                .etFont(.caption2.weight(.medium))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(statusColor.opacity(0.14), in: Capsule())
@@ -291,9 +291,35 @@ private struct FeedbackDetailView: View {
                 }
             }
 
-            Section {
+            if !submittedFields.isEmpty {
+                Section(NSLocalizedString("我的反馈", comment: "My feedback list")) {
+                    ForEach(Array(submittedFields.enumerated()), id: \.offset) { _, field in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(field.label)
+                                .etFont(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(field.value)
+                                .etFont(.footnote)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+
+            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
+                if displayedComments.isEmpty {
+                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(displayedComments) { comment in
+                        FeedbackCommentTimelineRow(comment: comment)
+                    }
+                }
+
                 TextField(NSLocalizedString("补充评论（会进入同一工单）", comment: "Feedback comment input"), text: $commentDraft, axis: .vertical)
                     .lineLimit(2...6)
+
                 Button {
                     Task {
                         await sendComment()
@@ -308,40 +334,11 @@ private struct FeedbackDetailView: View {
                 .disabled(isSendingComment || ticket == nil || commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
-            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
-                if (snapshot?.comments ?? []).isEmpty {
-                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(snapshot?.comments ?? []) { comment in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(comment.author)
-                                    .font(.caption.weight(.semibold))
-                                if comment.isDeveloper {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.green)
-                                }
-                                Spacer()
-                                Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Text(comment.body)
-                                .font(.footnote)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-            }
-
             if let moderationMessage = ticket?.moderationMessage,
                !moderationMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section {
                     Text(moderationMessage)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.orange)
                 }
             }
@@ -350,12 +347,12 @@ private struct FeedbackDetailView: View {
                 let labels = snapshot?.labels ?? []
                 if labels.isEmpty {
                     Text(NSLocalizedString("暂无标签", comment: "No labels"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(labels, id: \.self) { label in
                         Text(label)
-                            .font(.footnote)
+                            .etFont(.footnote)
                     }
                 }
             }
@@ -393,6 +390,60 @@ private struct FeedbackDetailView: View {
         }
     }
 
+    private var displayedComments: [FeedbackComment] {
+        (snapshot?.comments ?? []).sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private var submittedFields: [(label: String, value: String)] {
+        guard let ticket else { return [] }
+
+        func appendIfPresent(_ label: String, value: String?, to result: inout [(label: String, value: String)]) {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                return
+            }
+            result.append((label: label, value: value))
+        }
+
+        var fields: [(label: String, value: String)] = []
+        appendIfPresent(
+            NSLocalizedString("标题", comment: "Feedback title field"),
+            value: ticket.submittedTitle ?? ticket.title,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("详细描述", comment: "Feedback detail field"),
+            value: ticket.submittedDetail,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("可复现步骤（可选）", comment: "Reproduction steps"),
+            value: ticket.submittedReproductionSteps,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("预期行为（可选）", comment: "Expected behavior"),
+            value: ticket.submittedExpectedBehavior,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("实际行为（可选）", comment: "Actual behavior"),
+            value: ticket.submittedActualBehavior,
+            to: &fields
+        )
+        appendIfPresent(
+            NSLocalizedString("补充信息（可选）", comment: "Extra context"),
+            value: ticket.submittedExtraContext,
+            to: &fields
+        )
+        return fields
+    }
+
     private func sendComment() async {
         guard let ticket else { return }
         let pending = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -408,5 +459,59 @@ private struct FeedbackDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct FeedbackCommentTimelineRow: View {
+    let comment: FeedbackComment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(comment.author)
+                    .etFont(.caption.weight(.semibold))
+
+                Image(systemName: comment.isDeveloper ? "checkmark.seal.fill" : "person.fill")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(roleIconColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(roleBadgeBackground, in: Capsule())
+
+                Spacer(minLength: 8)
+
+                Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(comment.body)
+                .etFont(.footnote)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.gray.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(roleStripeColor)
+                .frame(width: 3)
+                .padding(.vertical, 8)
+                .padding(.leading, 4)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var roleStripeColor: Color {
+        comment.isDeveloper ? .green : .blue
+    }
+
+    private var roleBadgeBackground: Color {
+        comment.isDeveloper ? .green.opacity(0.16) : .blue.opacity(0.16)
+    }
+
+    private var roleIconColor: Color {
+        comment.isDeveloper ? .green : .blue
     }
 }

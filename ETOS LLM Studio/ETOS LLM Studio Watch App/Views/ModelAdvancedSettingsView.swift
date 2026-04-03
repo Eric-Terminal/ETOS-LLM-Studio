@@ -88,7 +88,7 @@ struct ModelAdvancedSettingsView: View {
                 }
 
                 Text("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -123,7 +123,7 @@ struct ModelAdvancedSettingsView: View {
             Section(
                 header: Text("系统时间注入"),
                 footer: Text("开启后会在系统提示中插入 <time> 块，提供当前时间线索。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
@@ -131,7 +131,7 @@ struct ModelAdvancedSettingsView: View {
 
             Section(
                 footer: Text("开启后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 Toggle("周期性时间路标", isOn: $enablePeriodicTimeLandmark)
@@ -163,7 +163,7 @@ struct ModelAdvancedSettingsView: View {
                 footer: Text(
                     "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
                 )
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
@@ -214,7 +214,7 @@ struct ModelAdvancedSettingsView: View {
             Section(
                 header: Text("性能设置"),
                 footer: Text("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 HStack {
@@ -268,7 +268,7 @@ private struct GlobalSystemPromptPickerView: View {
                                 Text(displayTitle(for: entry))
                                     .lineLimit(1)
                                 Text(displayPreview(for: entry))
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }

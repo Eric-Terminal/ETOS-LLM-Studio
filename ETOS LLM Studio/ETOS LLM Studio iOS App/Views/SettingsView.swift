@@ -34,7 +34,7 @@ struct SettingsView: View {
                 let options = viewModel.activatedModels
                 if options.isEmpty {
                     Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     NavigationLink {
@@ -132,7 +132,7 @@ struct SettingsView: View {
                         Spacer()
                         if let status = dailyPulseEntryStatusText {
                             Text(status)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(pulseManager.hasUnviewedTodayRun ? .blue : .secondary)
                         }
                     }
@@ -193,14 +193,6 @@ struct SettingsView: View {
             }
             
             Section("显示与体验") {
-                Toggle("渲染 Markdown", isOn: $viewModel.enableMarkdown)
-                if viewModel.enableMarkdown {
-                    Toggle("使用高级渲染器", isOn: $viewModel.enableAdvancedRenderer)
-                }
-                if #available(iOS 26.0, *) {
-                    Toggle("液态玻璃效果", isOn: $viewModel.enableLiquidGlass)
-                }
-                
                 NavigationLink {
                     DisplaySettingsView(
                         enableMarkdown: $viewModel.enableMarkdown,
@@ -214,6 +206,7 @@ struct SettingsView: View {
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         enableExperimentalToolResultDisplay: $viewModel.enableExperimentalToolResultDisplay,
                         enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+                        enableNoBubbleUI: $viewModel.enableNoBubbleUI,
                         allBackgrounds: viewModel.backgroundImages
                     )
                 } label: {

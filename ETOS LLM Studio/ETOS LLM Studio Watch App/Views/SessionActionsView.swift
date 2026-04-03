@@ -95,10 +95,10 @@ struct SessionActionsView: View {
             Section(header: Text("详细信息")) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("会话 ID")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary)
                     Text(session.id.uuidString)
-                        .font(.caption2)
+                        .etFont(.caption2)
                 }
             }
         }

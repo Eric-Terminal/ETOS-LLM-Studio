@@ -125,6 +125,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
         if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
         if isSyncOptionEnabled(key: "sync.options.dailyPulse", defaultValue: true) { options.insert(.dailyPulse) }
+        if isSyncOptionEnabled(key: "sync.options.fontFiles", defaultValue: true) { options.insert(.fontFiles) }
         let legacyAppStorageDefault = isSyncOptionEnabled(key: "sync.options.globalPrompt", defaultValue: true)
         if isSyncOptionEnabled(key: "sync.options.appStorage", defaultValue: legacyAppStorageDefault) { options.insert(.appStorage) }
         return options

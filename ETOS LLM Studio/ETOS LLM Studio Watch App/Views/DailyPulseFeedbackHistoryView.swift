@@ -20,21 +20,21 @@ struct DailyPulseFeedbackHistoryView: View {
             if pulseManager.feedbackHistory.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("还没有反馈历史")
-                        .font(.footnote.weight(.semibold))
+                        .etFont(.footnote.weight(.semibold))
                     Text("你对每日脉冲点过喜欢、降权、隐藏或保存之后，历史会显示在这里。")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             } else {
                 ForEach(pulseManager.feedbackHistory) { event in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(historyTitle(for: event))
-                            .font(.caption.weight(.semibold))
+                            .etFont(.caption.weight(.semibold))
                         Text(event.cardTitle)
-                            .font(.caption2)
+                            .etFont(.caption2)
                         if !event.topicHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text(event.topicHint)
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }

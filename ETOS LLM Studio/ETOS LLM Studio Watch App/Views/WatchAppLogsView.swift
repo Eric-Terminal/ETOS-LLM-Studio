@@ -47,33 +47,33 @@ struct WatchAppLogsView: View {
             Section {
                 if displayedLogs.isEmpty {
                     Text("暂无日志")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(displayedLogs) { entry in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(entry.level.displayName)
-                                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                    .etFont(.system(size: 9, weight: .semibold, design: .monospaced))
                                     .foregroundStyle(levelColor(entry.level))
                                 Spacer()
                                 Text(formatTime(entry.timestamp))
-                                    .font(.system(size: 9, design: .monospaced))
+                                    .etFont(.system(size: 9, design: .monospaced))
                                     .foregroundStyle(.secondary)
                             }
 
                             Text("\(entry.category) · \(entry.action)")
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .lineLimit(2)
 
                             Text(entry.message)
-                                .font(.system(size: 10))
+                                .etFont(.system(size: 10))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
 
                             if let payload = entry.payload, !payload.isEmpty {
                                 Text(formatPayload(payload))
-                                    .font(.system(size: 9, design: .monospaced))
+                                    .etFont(.system(size: 9, design: .monospaced))
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(4)
                             }

@@ -34,7 +34,7 @@ struct MemoryEditView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(memory.isArchived ? NSLocalizedString("已归档", comment: "") : NSLocalizedString("激活中", comment: ""))
                         Text(memory.isArchived ? NSLocalizedString("不参与检索", comment: "") : NSLocalizedString("参与检索", comment: ""))
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }

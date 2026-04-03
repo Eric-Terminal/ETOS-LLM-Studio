@@ -28,13 +28,13 @@ public struct LocalDebugView: View {
                         .fill(server.isRunning ? Color.green : Color.secondary)
                         .frame(width: 8, height: 8)
                     Text(server.connectionStatus)
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundStyle(server.isRunning ? .green : .secondary)
                 }
                 
                 if let error = server.errorMessage {
                     Text(error)
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.red)
                 }
             }
@@ -45,9 +45,9 @@ public struct LocalDebugView: View {
                     Toggle(isOn: $server.useHTTP) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
-                                .font(.caption)
+                                .etFont(.caption)
                             Text(server.useHTTP ? "稳定但较慢" : "快速但不稳定")
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -68,10 +68,10 @@ public struct LocalDebugView: View {
                 Section("连接信息") {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("服务器")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         Text(server.serverURL)
-                            .font(.caption.monospaced())
+                            .etFont(.caption.monospaced())
                     }
                     
                     Button("断开") {
@@ -87,10 +87,10 @@ public struct LocalDebugView: View {
                     } label: {
                         HStack {
                             Text("调试日志")
-                                .font(.caption)
+                                .etFont(.caption)
                             Spacer()
                             Text("\(server.debugLogs.count)")
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -102,25 +102,25 @@ public struct LocalDebugView: View {
                     if let pending = server.pendingOpenAIRequest {
                         let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
                         Text(String(format: NSLocalizedString("请求详情：模型 %@ · 消息 %d", comment: ""), modelName, pending.messageCount))
-                            .font(.caption2)
+                            .etFont(.caption2)
                         Text(formatPendingTime(pending.receivedAt))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         Button("保存日志") {
                             server.resolvePendingOpenAIRequest(save: true)
                         }
-                        .font(.caption)
+                        .etFont(.caption)
                         Button("忽略") {
                             server.resolvePendingOpenAIRequest(save: false)
                         }
-                        .font(.caption)
+                        .etFont(.caption)
                     }
                 } header: {
                     Text("API 流量分析")
                 } footer: {
                     if server.pendingOpenAIQueueCount > 1 {
                         Text(String(format: NSLocalizedString("剩余 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -132,11 +132,11 @@ public struct LocalDebugView: View {
                     showingDocs = true
                 } label: {
                     Label("使用说明", systemImage: "book")
-                        .font(.caption)
+                        .etFont(.caption)
                 }
             } footer: {
                 Text("远程诊断模式 · 主动连接调试端")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
@@ -187,18 +187,18 @@ private struct WatchDocumentationView: View {
             Section("工作原理") {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("WebSocket 模式")
-                        .font(.caption)
+                        .etFont(.caption)
                         .fontWeight(.semibold)
                     Text("设备主动连接电脑端服务器（端口 8765），实时接收命令")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     
                     Text("HTTP 轮询模式")
-                        .font(.caption)
+                        .etFont(.caption)
                         .fontWeight(.semibold)
                         .padding(.top, 4)
                     Text("设备每秒向服务器（端口 7654）请求一次，获取待执行命令")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -207,7 +207,7 @@ private struct WatchDocumentationView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     StepItem(num: 1, text: "电脑端下载并运行:")
                     Text("https://raw.githubusercontent.com/Eric-Terminal/ETOS-LLM-Studio/main/docs/debug-tools/debug_server.py")
-                        .font(.system(size: 9).monospaced())
+                        .etFont(.system(size: 9).monospaced())
                         .foregroundStyle(.secondary)
                         .padding(.leading)
                     
@@ -227,12 +227,12 @@ private struct WatchDocumentationView: View {
             
             Section("API 代理") {
                 Text("设置 API Base URL 为:")
-                    .font(.caption2)
+                    .etFont(.caption2)
                 Text("http://电脑IP:8080")
-                    .font(.system(size: 10).monospaced())
+                    .etFont(.system(size: 10).monospaced())
                     .foregroundStyle(.blue)
                 Text("请求将重定向至调试端进行记录。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
@@ -248,12 +248,12 @@ private struct StepItem: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text("\(num)")
-                .font(.caption2.weight(.bold))
+                .etFont(.caption2.weight(.bold))
                 .foregroundStyle(.white)
                 .frame(width: 16, height: 16)
                 .background(Circle().fill(.blue))
             Text(text)
-                .font(.caption2)
+                .etFont(.caption2)
         }
     }
 }
@@ -266,14 +266,14 @@ private struct FeatureItem: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.title3)
+                .etFont(.title3)
                 .foregroundStyle(.blue)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .font(.caption.weight(.medium))
+                    .etFont(.caption.weight(.medium))
                 Text(desc)
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
@@ -291,7 +291,7 @@ private struct WatchDebugLogsView: View {
         List {
             if server.debugLogs.isEmpty {
                 Text("暂无日志")
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(server.debugLogs) { log in
@@ -299,13 +299,13 @@ private struct WatchDebugLogsView: View {
                         HStack(spacing: 4) {
                             Image(systemName: iconForType(log.type))
                                 .foregroundStyle(colorForType(log.type))
-                                .font(.caption2)
+                                .etFont(.caption2)
                             Text(log.message)
-                                .font(.system(size: 10, design: .monospaced))
+                                .etFont(.system(size: 10, design: .monospaced))
                                 .lineLimit(2)
                         }
                         Text(formatTime(log.timestamp))
-                            .font(.system(size: 8))
+                            .etFont(.system(size: 8))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -317,7 +317,7 @@ private struct WatchDebugLogsView: View {
                 Button("清空") {
                     server.clearLogs()
                 }
-                .font(.caption2)
+                .etFont(.caption2)
             }
         }
     }

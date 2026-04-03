@@ -11,6 +11,9 @@
 
 import Foundation
 import os.log
+#if canImport(CoreText)
+import CoreText
+#endif
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persistence")
 
@@ -1475,5 +1478,522 @@ public enum Persistence {
             logger.warning("Failed to list file attachments: \(error.localizedDescription)")
             return []
         }
+    }
+
+    // MARK: - 字体文件持久化
+
+    /// 获取用于存储字体文件的目录URL
+    /// - Returns: 字体存储目录的URL路径
+    public static func getFontDirectory() -> URL {
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        let fontDirectory = paths[0].appendingPathComponent("FontFiles")
+        if !FileManager.default.fileExists(atPath: fontDirectory.path) {
+            logger.info("Font directory does not exist, creating: \(fontDirectory.path)")
+            try? FileManager.default.createDirectory(at: fontDirectory, withIntermediateDirectories: true)
+        }
+        return fontDirectory
+    }
+
+    /// 保存字体数据到文件
+    /// - Parameters:
+    ///   - data: 字体数据
+    ///   - fileName: 文件名（包含扩展名）
+    /// - Returns: 保存成功返回文件URL，失败返回nil
+    @discardableResult
+    public static func saveFont(_ data: Data, fileName: String) -> URL? {
+        let fileURL = getFontDirectory().appendingPathComponent(fileName)
+        logger.info("Saving font file: \(fileName)")
+
+        do {
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+            logger.info("Font file saved successfully: \(fileName)")
+            return fileURL
+        } catch {
+            logger.error("Failed to save font file \(fileName): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// 加载字体数据
+    /// - Parameter fileName: 文件名（包含扩展名）
+    /// - Returns: 字体数据，如果文件不存在则返回nil
+    public static func loadFont(fileName: String) -> Data? {
+        let fileURL = getFontDirectory().appendingPathComponent(fileName)
+
+        do {
+            return try Data(contentsOf: fileURL)
+        } catch {
+            logger.warning("Failed to load font file \(fileName): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// 删除指定字体文件
+    /// - Parameter fileName: 文件名（包含扩展名）
+    public static func deleteFont(fileName: String) {
+        let fileURL = getFontDirectory().appendingPathComponent(fileName)
+        logger.info("Deleting font file: \(fileName)")
+
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+            logger.info("Font file deleted successfully: \(fileName)")
+        } catch {
+            logger.warning("Failed to delete font file \(fileName): \(error.localizedDescription)")
+        }
+    }
+
+    /// 获取所有字体文件名
+    /// - Returns: 字体文件名数组
+    public static func getAllFontFileNames() -> [String] {
+        let directory = getFontDirectory()
+        do {
+            let fileURLs = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            return fileURLs.map { $0.lastPathComponent }
+        } catch {
+            logger.warning("Failed to list font files: \(error.localizedDescription)")
+            return []
+        }
+    }
+}
+
+// MARK: - 字体资产与路由
+
+public enum FontSemanticRole: String, Codable, CaseIterable, Identifiable {
+    case body
+    case emphasis
+    case strong
+    case code
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .body:
+            return "正文"
+        case .emphasis:
+            return "斜体"
+        case .strong:
+            return "粗体"
+        case .code:
+            return "代码"
+        }
+    }
+}
+
+public struct FontAssetRecord: Codable, Identifiable, Equatable {
+    public var id: UUID
+    public var fileName: String
+    public var checksum: String
+    public var displayName: String
+    public var postScriptName: String
+    public var importedAt: Date
+    public var isEnabled: Bool
+
+    public init(
+        id: UUID = UUID(),
+        fileName: String,
+        checksum: String,
+        displayName: String,
+        postScriptName: String,
+        importedAt: Date = Date(),
+        isEnabled: Bool = true
+    ) {
+        self.id = id
+        self.fileName = fileName
+        self.checksum = checksum
+        self.displayName = displayName
+        self.postScriptName = postScriptName
+        self.importedAt = importedAt
+        self.isEnabled = isEnabled
+    }
+}
+
+public struct FontRouteConfiguration: Codable, Equatable {
+    public struct LanguageBucketConfiguration: Codable, Equatable {
+        public var body: [UUID]
+        public var emphasis: [UUID]
+        public var strong: [UUID]
+        public var code: [UUID]
+
+        public init(
+            body: [UUID] = [],
+            emphasis: [UUID] = [],
+            strong: [UUID] = [],
+            code: [UUID] = []
+        ) {
+            self.body = body
+            self.emphasis = emphasis
+            self.strong = strong
+            self.code = code
+        }
+    }
+
+    public var body: [UUID]
+    public var emphasis: [UUID]
+    public var strong: [UUID]
+    public var code: [UUID]
+    /// 预留字段：后续可扩展为按语言桶优先级配置
+    public var languageBuckets: [String: LanguageBucketConfiguration]
+
+    public init(
+        body: [UUID] = [],
+        emphasis: [UUID] = [],
+        strong: [UUID] = [],
+        code: [UUID] = [],
+        languageBuckets: [String: LanguageBucketConfiguration] = [:]
+    ) {
+        self.body = body
+        self.emphasis = emphasis
+        self.strong = strong
+        self.code = code
+        self.languageBuckets = languageBuckets
+    }
+
+    public func chain(for role: FontSemanticRole) -> [UUID] {
+        switch role {
+        case .body:
+            return body
+        case .emphasis:
+            return emphasis
+        case .strong:
+            return strong
+        case .code:
+            return code
+        }
+    }
+
+    public mutating func setChain(_ ids: [UUID], for role: FontSemanticRole) {
+        switch role {
+        case .body:
+            body = ids
+        case .emphasis:
+            emphasis = ids
+        case .strong:
+            strong = ids
+        case .code:
+            code = ids
+        }
+    }
+}
+
+public enum FontLibraryError: LocalizedError {
+    case invalidFontData
+    case unsupportedFontFileExtension
+    case saveFailed
+    case deleteFailed
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidFontData:
+            return "无法识别该字体文件。"
+        case .unsupportedFontFileExtension:
+            return "仅支持导入 TTF / OTF / TTC / WOFF / WOFF2 字体文件。"
+        case .saveFailed:
+            return "保存字体文件失败。"
+        case .deleteFailed:
+            return "删除字体文件失败。"
+        }
+    }
+}
+
+public enum FontLibrary {
+    private static let manifestFileName = "font-manifest-v1.json"
+    private static let routeConfigFileName = "font-routes-v1.json"
+    private static let supportedFontFileExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
+
+    private static var manifestURL: URL {
+        Persistence.getFontDirectory().appendingPathComponent(manifestFileName)
+    }
+
+    private static var routeConfigURL: URL {
+        Persistence.getFontDirectory().appendingPathComponent(routeConfigFileName)
+    }
+
+    public static func loadAssets() -> [FontAssetRecord] {
+        guard let data = try? Data(contentsOf: manifestURL),
+              let assets = try? JSONDecoder().decode([FontAssetRecord].self, from: data) else {
+            return []
+        }
+        return assets
+    }
+
+    @discardableResult
+    public static func saveAssets(_ assets: [FontAssetRecord]) -> Bool {
+        let sorted = assets.sorted { lhs, rhs in
+            if lhs.importedAt != rhs.importedAt {
+                return lhs.importedAt > rhs.importedAt
+            }
+            return lhs.fileName.localizedCaseInsensitiveCompare(rhs.fileName) == .orderedAscending
+        }
+        guard let data = try? JSONEncoder().encode(sorted) else { return false }
+        do {
+            try data.write(to: manifestURL, options: [.atomic])
+            return true
+        } catch {
+            logger.error("Failed to save font manifest: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    public static func loadRouteConfiguration() -> FontRouteConfiguration {
+        guard let data = try? Data(contentsOf: routeConfigURL),
+              let configuration = try? JSONDecoder().decode(FontRouteConfiguration.self, from: data) else {
+            return FontRouteConfiguration()
+        }
+        return configuration
+    }
+
+    @discardableResult
+    public static func saveRouteConfiguration(_ configuration: FontRouteConfiguration) -> Bool {
+        guard let data = try? JSONEncoder().encode(configuration) else { return false }
+        do {
+            try data.write(to: routeConfigURL, options: [.atomic])
+            return true
+        } catch {
+            logger.error("Failed to save font route configuration: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    public static func loadRouteConfigurationData() -> Data? {
+        try? Data(contentsOf: routeConfigURL)
+    }
+
+    @discardableResult
+    public static func saveRouteConfigurationData(_ data: Data?) -> Bool {
+        let directory = Persistence.getFontDirectory()
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        guard let data else {
+            do {
+                if FileManager.default.fileExists(atPath: routeConfigURL.path) {
+                    try FileManager.default.removeItem(at: routeConfigURL)
+                }
+                return true
+            } catch {
+                logger.error("Failed to remove route config file: \(error.localizedDescription)")
+                return false
+            }
+        }
+        do {
+            try data.write(to: routeConfigURL, options: [.atomic])
+            return true
+        } catch {
+            logger.error("Failed to save route config data: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    public static func importFont(
+        data: Data,
+        fileName: String,
+        preferredDisplayName: String? = nil
+    ) throws -> FontAssetRecord {
+        let normalizedExt = (fileName as NSString).pathExtension.lowercased()
+        guard supportedFontFileExtensions.contains(normalizedExt) else {
+            throw FontLibraryError.unsupportedFontFileExtension
+        }
+
+        guard let postScriptName = extractPostScriptName(from: data), !postScriptName.isEmpty else {
+            throw FontLibraryError.invalidFontData
+        }
+
+        var assets = loadAssets()
+        let checksum = data.sha256Hex
+        if let existing = assets.first(where: { $0.checksum == checksum }) {
+            registerFontFileIfNeeded(fileName: existing.fileName)
+            return existing
+        }
+
+        let safeBaseName = sanitizeBaseName((fileName as NSString).deletingPathExtension)
+        let targetFileName = uniqueFontFileName(
+            baseName: safeBaseName.isEmpty ? "font" : safeBaseName,
+            fileExtension: normalizedExt
+        )
+
+        guard Persistence.saveFont(data, fileName: targetFileName) != nil else {
+            throw FontLibraryError.saveFailed
+        }
+        registerFontFileIfNeeded(fileName: targetFileName)
+
+        let record = FontAssetRecord(
+            fileName: targetFileName,
+            checksum: checksum,
+            displayName: preferredDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+                ?? postScriptName,
+            postScriptName: postScriptName
+        )
+
+        assets.append(record)
+        _ = saveAssets(assets)
+        var routes = loadRouteConfiguration()
+        for role in FontSemanticRole.allCases {
+            var chain = routes.chain(for: role)
+            if !chain.contains(record.id) {
+                chain.append(record.id)
+                routes.setChain(chain, for: role)
+            }
+        }
+        _ = saveRouteConfiguration(routes)
+        return record
+    }
+
+    public static func deleteFontAsset(id: UUID) throws {
+        var assets = loadAssets()
+        guard let target = assets.first(where: { $0.id == id }) else { return }
+        assets.removeAll { $0.id == id }
+        if !saveAssets(assets) {
+            throw FontLibraryError.deleteFailed
+        }
+        Persistence.deleteFont(fileName: target.fileName)
+        var routes = loadRouteConfiguration()
+        for role in FontSemanticRole.allCases {
+            let chain = routes.chain(for: role).filter { $0 != id }
+            routes.setChain(chain, for: role)
+        }
+        _ = saveRouteConfiguration(routes)
+    }
+
+    public static func updateChain(_ chain: [UUID], for role: FontSemanticRole) {
+        var configuration = loadRouteConfiguration()
+        let validIDs = Set(loadAssets().map(\.id))
+        let normalizedChain = chain.filter { validIDs.contains($0) }
+        configuration.setChain(normalizedChain, for: role)
+        _ = saveRouteConfiguration(configuration)
+    }
+
+    @discardableResult
+    public static func setAssetEnabled(id: UUID, isEnabled: Bool) -> Bool {
+        var assets = loadAssets()
+        guard let index = assets.firstIndex(where: { $0.id == id }) else { return false }
+        guard assets[index].isEnabled != isEnabled else { return true }
+        assets[index].isEnabled = isEnabled
+        return saveAssets(assets)
+    }
+
+    public static func registerAllFontsIfNeeded() {
+        let assets = loadAssets()
+        for asset in assets where asset.isEnabled {
+            registerFontFileIfNeeded(fileName: asset.fileName)
+        }
+    }
+
+    public static func fallbackPostScriptNames(for role: FontSemanticRole) -> [String] {
+        let assets = loadAssets()
+        let enabledMap = Dictionary(uniqueKeysWithValues: assets.filter(\.isEnabled).map { ($0.id, $0) })
+        let route = loadRouteConfiguration().chain(for: role)
+        return route.compactMap { enabledMap[$0]?.postScriptName }.filter { !$0.isEmpty }
+    }
+
+    /// 按优先级链路查找可用字体；若无命中则返回 nil 由系统字体兜底。
+    public static func resolvePostScriptName(
+        for role: FontSemanticRole,
+        sampleText: String
+    ) -> String? {
+        let candidates = fallbackPostScriptNames(for: role)
+        guard !candidates.isEmpty else { return nil }
+
+        let normalizedSample = normalizeSampleText(sampleText)
+        for postScriptName in candidates {
+            if fontCanRenderSample(postScriptName: postScriptName, sample: normalizedSample) {
+                return postScriptName
+            }
+        }
+        return nil
+    }
+
+    private static func sanitizeBaseName(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let mapped = trimmed.unicodeScalars.map { scalar -> Character in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        let result = String(mapped).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return result
+    }
+
+    private static func uniqueFontFileName(baseName: String, fileExtension: String) -> String {
+        var candidate = "\(baseName).\(fileExtension)"
+        var counter = 1
+        while FileManager.default.fileExists(atPath: Persistence.getFontDirectory().appendingPathComponent(candidate).path) {
+            candidate = "\(baseName)-\(counter).\(fileExtension)"
+            counter += 1
+        }
+        return candidate
+    }
+
+    private static func normalizeSampleText(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Aa测试あア한ع" }
+        let scalars = trimmed.unicodeScalars
+            .filter { !$0.properties.isWhitespace && $0.properties.generalCategory != .control }
+        let prefix = String(String.UnicodeScalarView(scalars.prefix(96)))
+        return prefix.isEmpty ? "Aa测试あア한ع" : prefix
+    }
+
+    private static func registerFontFileIfNeeded(fileName: String) {
+#if canImport(CoreText)
+        let fileURL = Persistence.getFontDirectory().appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        var error: Unmanaged<CFError>?
+        let registered = CTFontManagerRegisterFontsForURL(fileURL as CFURL, .process, &error)
+        if !registered, let nsError = error?.takeRetainedValue() {
+            // 字体已注册等场景可继续运行，这里仅记录警告日志。
+            logger.warning("Failed to register font file \(fileName): \(nsError)")
+        }
+#else
+        _ = fileName
+#endif
+    }
+
+    private static func extractPostScriptName(from data: Data) -> String? {
+#if canImport(CoreText)
+        guard let descriptors = CTFontManagerCreateFontDescriptorsFromData(data as CFData) as? [CTFontDescriptor],
+              let firstDescriptor = descriptors.first else {
+            return nil
+        }
+        let postScriptName = CTFontDescriptorCopyAttribute(firstDescriptor, kCTFontNameAttribute) as? String
+        if let postScriptName, !postScriptName.isEmpty {
+            return postScriptName
+        }
+        let displayName = CTFontDescriptorCopyAttribute(firstDescriptor, kCTFontDisplayNameAttribute) as? String
+        return displayName?.nonEmpty
+#else
+        _ = data
+        return nil
+#endif
+    }
+
+    private static func fontCanRenderSample(postScriptName: String, sample: String) -> Bool {
+#if canImport(CoreText)
+        guard !sample.isEmpty else { return true }
+        let font = CTFontCreateWithName(postScriptName as CFString, 16, nil)
+        let filteredScalars = sample.unicodeScalars.filter { scalar in
+            !scalar.properties.isWhitespace && scalar.properties.generalCategory != .control
+        }
+        let characters = filteredScalars.prefix(96).map { scalar -> UniChar in
+            if scalar.value <= 0xFFFF {
+                return UniChar(scalar.value)
+            }
+            return UniChar(0xFFFD)
+        }
+        guard !characters.isEmpty else { return true }
+
+        var mutableCharacters = characters
+        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
+        let mapped = CTFontGetGlyphsForCharacters(font, &mutableCharacters, &glyphs, mutableCharacters.count)
+        return mapped && !glyphs.contains(0)
+#else
+        _ = postScriptName
+        _ = sample
+        return true
+#endif
+    }
+}
+
+private extension String {
+    var nonEmpty: String? {
+        isEmpty ? nil : self
     }
 }

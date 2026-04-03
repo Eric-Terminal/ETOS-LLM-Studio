@@ -1055,7 +1055,7 @@ public class MemoryManager {
 
     private func resetAutoRetryState(for memoryID: UUID) {
         autoRetryStateQueue.sync {
-            autoReconcileFailureCounts.removeValue(forKey: memoryID)
+            _ = autoReconcileFailureCounts.removeValue(forKey: memoryID)
         }
     }
 

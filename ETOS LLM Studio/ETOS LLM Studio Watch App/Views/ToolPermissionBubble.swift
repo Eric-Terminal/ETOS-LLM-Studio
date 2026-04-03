@@ -92,14 +92,14 @@ struct ToolPermissionBubble: View {
 
                 if let argumentPreview {
                     Text(argumentPreview)
-                        .font(.caption2.monospaced())
+                        .etFont(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 if let countdownText {
                     Label(countdownText, systemImage: "timer")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
 
@@ -114,7 +114,7 @@ struct ToolPermissionBubble: View {
                     isPresentingDetails = true
                 } label: {
                     Label(argumentPreview == nil ? "更多权限" : "查看详情与更多", systemImage: "ellipsis.circle")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
@@ -143,14 +143,14 @@ struct ToolPermissionBubble: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 5) {
             Image(systemName: "hand.raised.circle")
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
                 Text("工具审批")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Text(toolName)
-                    .font(.footnote.weight(.semibold))
+                    .etFont(.footnote.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }
@@ -211,10 +211,10 @@ private struct ToolPermissionDetailSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 detailSection(title: "工具") {
                     Text(toolName)
-                        .font(.headline)
+                        .etFont(.headline)
                     if let countdownText {
                         Text(countdownText)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -223,7 +223,7 @@ private struct ToolPermissionDetailSheet: View {
                     detailSection(title: "参数") {
                         ScrollView {
                             Text(displayArguments)
-                                .font(.caption2.monospaced())
+                                .etFont(.caption2.monospaced())
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -265,11 +265,11 @@ private struct ToolPermissionDetailSheet: View {
 
                     if !permissionCenter.autoApproveEnabled {
                         Text("全局自动批准当前未开启。")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     } else if permissionCenter.isAutoApproveDisabled(for: request.toolName) {
                         Text("该工具已从自动批准名单中排除。")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -290,7 +290,7 @@ private struct ToolPermissionDetailSheet: View {
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.secondary)
             content()
         }

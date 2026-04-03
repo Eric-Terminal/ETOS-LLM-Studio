@@ -38,9 +38,9 @@ struct AboutView: View {
                     
                     VStack(spacing: 2) {
                         Text("ETOS LLM Studio")
-                            .font(.headline)
+                            .etFont(.headline)
                         Text("原生 AI 聊天客户端")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -52,11 +52,11 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("版本")
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text(appVersion)
-                            .font(.caption)
+                            .etFont(.caption)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -71,7 +71,7 @@ struct AboutView: View {
                 // MARK: - Features
                 VStack(alignment: .leading, spacing: 6) {
                     Text("核心功能")
-                        .font(.caption2.weight(.semibold))
+                        .etFont(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     
                     FeatureRow(icon: "gearshape.2", color: .blue, title: "完全可定制", description: "动态配置 API 提供商和模型")
@@ -89,10 +89,10 @@ struct AboutView: View {
                 } label: {
                     HStack {
                         Text("项目链接")
-                            .font(.caption)
+                            .etFont(.caption)
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -107,10 +107,10 @@ struct AboutView: View {
                     Link(destination: privacyURL) {
                         HStack {
                             Text("隐私政策")
-                                .font(.caption)
+                                .etFont(.caption)
                             Spacer()
                             Image(systemName: "safari")
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -120,10 +120,10 @@ struct AboutView: View {
                 // MARK: - Footer
                 VStack(spacing: 4) {
                     Text("Made with ❤️ in SwiftUI")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     Text("© 2025-2026 Eric-Terminal")
-                        .font(.system(size: 9))
+                        .etFont(.system(size: 9))
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.top, 8)
@@ -163,11 +163,11 @@ private struct InfoRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(.caption)
+                .etFont(.caption)
         }
     }
 }
@@ -183,7 +183,7 @@ private struct FeatureRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 12))
+                .etFont(.system(size: 12))
                 .foregroundStyle(color)
                 .frame(width: 20, height: 20)
                 .background(color.opacity(0.15))
@@ -191,9 +191,9 @@ private struct FeatureRow: View {
             
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.caption2.weight(.medium))
+                    .etFont(.caption2.weight(.medium))
                 Text(description)
-                    .font(.system(size: 9))
+                    .etFont(.system(size: 9))
                     .foregroundStyle(.secondary)
             }
         }
@@ -220,11 +220,11 @@ private struct ProjectLinksView: View {
                         Label("项目主页", systemImage: "house")
                         Spacer()
                         Image(systemName: "safari")
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Text(githubURL.absoluteString)
-                        .font(.system(size: 9))
+                        .etFont(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -237,11 +237,11 @@ private struct ProjectLinksView: View {
                         Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")
                         Spacer()
                         Image(systemName: "safari")
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Text(issuesURL.absoluteString)
-                        .font(.system(size: 9))
+                        .etFont(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }

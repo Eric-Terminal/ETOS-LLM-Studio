@@ -42,9 +42,9 @@ struct AboutView: View {
                     
                     VStack(spacing: 4) {
                         Text("ETOS LLM Studio")
-                            .font(.title2.weight(.bold))
+                            .etFont(.title2.weight(.bold))
                         Text("原生 AI 聊天客户端")
-                            .font(.subheadline)
+                            .etFont(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -87,7 +87,7 @@ struct AboutView: View {
                         Label("GitHub 项目主页", systemImage: "link")
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -99,7 +99,7 @@ struct AboutView: View {
                         Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -115,7 +115,7 @@ struct AboutView: View {
                         Label("隐私政策", systemImage: "shield")
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -125,10 +125,10 @@ struct AboutView: View {
             Section {
                 VStack(spacing: 8) {
                     Text("Made with ❤️ in SwiftUI")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                     Text("© 2025-2026 Eric-Terminal")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -173,7 +173,7 @@ private struct FeatureRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .etFont(.system(size: 18))
                 .foregroundStyle(color)
                 .frame(width: 32, height: 32)
                 .background(color.opacity(0.15))
@@ -181,9 +181,9 @@ private struct FeatureRow: View {
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.subheadline.weight(.medium))
+                    .etFont(.subheadline.weight(.medium))
                 Text(description)
-                    .font(.caption)
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }

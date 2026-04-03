@@ -81,6 +81,7 @@ struct ChatBubble: View {
     let enableMarkdown: Bool
     let enableBackground: Bool
     let enableLiquidGlass: Bool
+    let enableNoBubbleUI: Bool
     let enableAdvancedRenderer: Bool
     let enableExperimentalToolResultDisplay: Bool
     let enableMathRendering: Bool
@@ -103,6 +104,7 @@ struct ChatBubble: View {
         enableMarkdown: Bool,
         enableBackground: Bool,
         enableLiquidGlass: Bool,
+        enableNoBubbleUI: Bool,
         enableAdvancedRenderer: Bool = false,
         enableExperimentalToolResultDisplay: Bool = true,
         enableMathRendering: Bool = false,
@@ -116,6 +118,7 @@ struct ChatBubble: View {
         self.enableMarkdown = enableMarkdown
         self.enableBackground = enableBackground
         self.enableLiquidGlass = enableLiquidGlass
+        self.enableNoBubbleUI = enableNoBubbleUI
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableExperimentalToolResultDisplay = enableExperimentalToolResultDisplay
         self.enableMathRendering = enableMathRendering
@@ -217,7 +220,7 @@ struct ChatBubble: View {
     }
 
     private var shouldShowMergedSeparator: Bool {
-        mergeWithPrevious && message.role != .user && message.role != .error
+        !enableNoBubbleUI && mergeWithPrevious && message.role != .user && message.role != .error
     }
 
     private var separatorThickness: CGFloat {
@@ -236,11 +239,15 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
-        return baseWidth * 0.86
+        let widthRatio = enableNoBubbleUI ? 0.96 : 0.86
+        return baseWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
-        message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
+        if enableNoBubbleUI {
+            return true
+        }
+        return message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
@@ -320,9 +327,11 @@ struct ChatBubble: View {
     private var errorBubble: some View {
         let content = Text(message.content)
             .padding(10)
-            .foregroundColor(.white)
+            .foregroundColor(enableNoBubbleUI ? .red : .white)
 
-        if enableLiquidGlass {
+        if enableNoBubbleUI {
+            content
+        } else if enableLiquidGlass {
             if #available(watchOS 26.0, *) {
                 content
                     .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
@@ -363,6 +372,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private var userTextBubble: some View {
+        let userTextColor: Color = enableNoBubbleUI ? .primary : .white
         let content = Group {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName, isUser: true)
@@ -371,9 +381,11 @@ struct ChatBubble: View {
             }
         }
         .padding(10)
-        .foregroundColor(.white)
+        .foregroundColor(userTextColor)
 
-        if enableLiquidGlass {
+        if enableNoBubbleUI {
+            content
+        } else if enableLiquidGlass {
             if #available(watchOS 26.0, *) {
                 content
                     .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
@@ -408,7 +420,7 @@ struct ChatBubble: View {
 
                     if message.role != .tool && hasNonPlaceholderText {
                         renderContent(message.content)
-                            .foregroundColor(isErrorVersion ? .white : nil)
+                            .foregroundColor(isErrorVersion ? (enableNoBubbleUI ? .red : .white) : nil)
                     }
                 }
                 .padding(10)
@@ -502,7 +514,7 @@ struct ChatBubble: View {
 
                 if hasNonPlaceholderText {
                     renderContent(message.content)
-                        .foregroundColor(isErrorVersion ? .white : nil)
+                        .foregroundColor(isErrorVersion ? (enableNoBubbleUI ? .red : .white) : nil)
                 }
 
                 if shouldShowToolCallsAfterContent {
@@ -519,7 +531,7 @@ struct ChatBubble: View {
                         )
                     } else {
                         Text(currentThinkingText)
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -602,12 +614,13 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
+        let shouldRenderAsOutgoing = (message.role == .user && !enableNoBubbleUI)
+            || message.role == .error
+            || (message.role == .assistant && message.content.hasPrefix("重试失败"))
         ETAdvancedMarkdownRenderer(
             content: content,
             enableMarkdown: enableMarkdown,
-            isOutgoing: message.role == .user
-                || message.role == .error
-                || (message.role == .assistant && message.content.hasPrefix("重试失败")),
+            isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
             enableMathRendering: enableMathRendering
         )
@@ -615,8 +628,8 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func audioPlayerView(fileName: String, isUser: Bool) -> some View {
-        let foregroundColor = isUser ? Color.white : Color.primary
-        let secondaryColor = isUser ? Color.white.opacity(0.7) : Color.secondary
+        let foregroundColor = (isUser && !enableNoBubbleUI) ? Color.white : Color.primary
+        let secondaryColor = (isUser && !enableNoBubbleUI) ? Color.white.opacity(0.7) : Color.secondary
         let isCurrentFile = audioPlayer.currentFileName == fileName
         
         VStack(alignment: .leading, spacing: 4) {
@@ -626,13 +639,13 @@ struct ChatBubble: View {
                     audioPlayer.togglePlayback(fileName: fileName)
                 } label: {
                     Image(systemName: audioPlayer.isPlaying && isCurrentFile ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 22))
+                        .etFont(.system(size: 22))
                         .foregroundStyle(foregroundColor)
                 }
                 .buttonStyle(.plain)
                 
                 Text(fileName)
-                    .font(.system(size: 9))
+                    .etFont(.system(size: 9))
                     .foregroundStyle(secondaryColor)
                     .lineLimit(1)
             }
@@ -648,7 +661,7 @@ struct ChatBubble: View {
                     Spacer()
                     Text(formatTime(audioPlayer.duration))
                 }
-                .font(.system(size: 9))
+                .etFont(.system(size: 9))
                 .foregroundStyle(secondaryColor)
             }
         }
@@ -699,13 +712,13 @@ struct ChatBubble: View {
                         .lineLimit(1)
                     } else {
                         Text("思考过程")
-                            .font(.footnote)
+                            .etFont(.footnote)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
                     Spacer()
                     Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -713,7 +726,7 @@ struct ChatBubble: View {
 
             if isReasoningExpanded {
                 Text(reasoning)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
         }
@@ -782,13 +795,13 @@ struct ChatBubble: View {
         private var toolHeader: some View {
             HStack(spacing: 4) {
                 Text("调用：\(label)")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 if !trimmedArguments.isEmpty {
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
@@ -837,7 +850,7 @@ struct ChatBubble: View {
                     .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary.opacity(0.6))
                 }
                 .foregroundColor(.secondary)
@@ -850,16 +863,16 @@ struct ChatBubble: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             Text("结果：\(toolNames.joined(separator: ", "))")
-                                .font(.footnote)
+                                .etFont(.footnote)
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                             Spacer()
                             Image(systemName: expansion.wrappedValue ? "chevron.down" : "chevron.right")
-                                .font(.caption)
+                                .etFont(.caption)
                         }
                         if !summaries.isEmpty {
                             Text(summaries.joined(separator: " · "))
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundColor(.secondary.opacity(0.9))
                                 .lineLimit(3)
                                 .multilineTextAlignment(.leading)
@@ -893,7 +906,7 @@ struct ChatBubble: View {
         let label = toolDisplayLabel(for: toolCall.toolName)
         return VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundColor(.secondary)
             if display.shouldShowRawSection {
                 toolResultSection(
@@ -920,7 +933,7 @@ struct ChatBubble: View {
         let label = toolDisplayLabel(for: toolCall.toolName)
         return VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundColor(.secondary)
             if !result.isEmpty {
                 CappedScrollableText(
@@ -946,7 +959,7 @@ struct ChatBubble: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .etFont(.caption2.weight(.semibold))
                 .foregroundColor(.secondary.opacity(0.9))
             CappedScrollableText(
                 text: text,
@@ -971,7 +984,7 @@ struct ChatBubble: View {
 
         var body: some View {
             Text(text)
-                .font(font)
+                .etFont(font)
                 .foregroundStyle(baseColor)
                 .overlay(
                     GeometryReader { proxy in
@@ -1001,7 +1014,7 @@ struct ChatBubble: View {
                     }
                     .mask(
                         Text(text)
-                            .font(font)
+                            .etFont(font)
                     )
                     .allowsHitTesting(false)
                 )
@@ -1024,7 +1037,7 @@ struct ChatBubble: View {
         var body: some View {
             ScrollView {
                 Text(text)
-                    .font(font)
+                    .etFont(font)
                     .foregroundColor(foreground)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
@@ -1114,26 +1127,30 @@ struct ChatBubble: View {
         let shouldShowSeparator = showMergedSeparator ?? (!standalone && shouldShowMergedSeparator)
         let sizedContent = content
             .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
-        
-        Group {
-            if enableLiquidGlass {
-                if #available(watchOS 26.0, *) {
-                    sizedContent
-                        .glassEffect(.clear, in: shape)
-                        .background(isError ? Color.red.opacity(0.5) : nil)
+
+        if enableNoBubbleUI {
+            sizedContent
+        } else {
+            Group {
+                if enableLiquidGlass {
+                    if #available(watchOS 26.0, *) {
+                        sizedContent
+                            .glassEffect(.clear, in: shape)
+                            .background(isError ? Color.red.opacity(0.5) : nil)
+                    } else {
+                        assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
+                    }
                 } else {
                     assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
                 }
-            } else {
-                assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
             }
-        }
-        .overlay(alignment: .top) {
-            if shouldShowSeparator {
-                separatorLine
+            .overlay(alignment: .top) {
+                if shouldShowSeparator {
+                    separatorLine
+                }
             }
+            .clipShape(shape)
         }
-        .clipShape(shape)
     }
 }
 
@@ -1182,10 +1199,10 @@ private struct AttachmentImageView: View {
                     .overlay(
                         VStack(spacing: 4) {
                             Image(systemName: "photo")
-                                .font(.system(size: 14))
+                                .etFont(.system(size: 14))
                                 .foregroundStyle(.secondary)
                             Text(NSLocalizedString("图片丢失", comment: ""))
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     )

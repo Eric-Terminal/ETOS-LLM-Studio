@@ -75,15 +75,15 @@ struct StorageManagementView: View {
             } else {
                 VStack(alignment: .center, spacing: 12) {
                     Image(systemName: "internaldrive")
-                        .font(.system(size: 40))
+                        .etFont(.system(size: 40))
                         .foregroundStyle(.blue)
                     
                     VStack(spacing: 4) {
                         Text("总使用空间")
-                            .font(.subheadline)
+                            .etFont(.subheadline)
                             .foregroundStyle(.secondary)
                         Text(StorageUtility.formatSize(storageBreakdown.totalSize))
-                            .font(.title.weight(.bold))
+                            .etFont(.title.weight(.bold))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -116,7 +116,7 @@ struct StorageManagementView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "doc")
-                            .font(.system(size: 18))
+                            .etFont(.system(size: 18))
                             .foregroundStyle(.gray)
                             .frame(width: 32, height: 32)
                             .background(Color.gray.opacity(0.15))
@@ -124,9 +124,9 @@ struct StorageManagementView: View {
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text("其他文件")
-                                .font(.subheadline.weight(.medium))
+                                .etFont(.subheadline.weight(.medium))
                             Text(StorageUtility.formatSize(storageBreakdown.otherSize))
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         
@@ -139,7 +139,7 @@ struct StorageManagementView: View {
             Text("存储分类")
         } footer: {
             Text("点击类别可查看详细文件列表。")
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
@@ -157,7 +157,7 @@ struct StorageManagementView: View {
                     Spacer()
                     if orphanedDataCount.total > 0 {
                         Text(String(format: NSLocalizedString("%d 项", comment: ""), orphanedDataCount.total))
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -173,7 +173,7 @@ struct StorageManagementView: View {
             Text("清理工具")
         } footer: {
             Text("孤立数据包括：幽灵会话（消息文件丢失）、孤立音频/图片文件（无会话引用）、无效音频引用（文件已删除）。")
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
         .confirmationDialog(
@@ -272,7 +272,7 @@ private struct StorageCategoryRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: category.systemImage)
-                .font(.system(size: 18))
+                .etFont(.system(size: 18))
                 .foregroundStyle(category.iconColor)
                 .frame(width: 32, height: 32)
                 .background(category.iconColor.opacity(0.15))
@@ -280,16 +280,16 @@ private struct StorageCategoryRow: View {
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(category.displayName)
-                    .font(.subheadline.weight(.medium))
+                    .etFont(.subheadline.weight(.medium))
                 
                 HStack(spacing: 8) {
                     Text(StorageUtility.formatSize(size))
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundStyle(.secondary)
                     
                     if percentage > 0.01 {
                         Text(String(format: "%.1f%%", percentage * 100))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }

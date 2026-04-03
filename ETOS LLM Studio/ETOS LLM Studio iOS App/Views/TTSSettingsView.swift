@@ -20,14 +20,14 @@ struct TTSSettingsView: View {
                 .tint(.blue)
 
                 Text("自动模式会优先系统 TTS，失败后自动回退云端。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section("专用模型") {
                 if viewModel.ttsModels.isEmpty {
                     Text("暂无可用模型，请先在“提供商与模型管理”中给模型开启“文字转语音”能力。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     NavigationLink {

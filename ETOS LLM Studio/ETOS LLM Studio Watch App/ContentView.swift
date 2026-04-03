@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     @State private var pendingJumpRequest: MessageJumpRequest?
+    @State private var rootBodyFont: Font = .body
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
@@ -111,14 +112,68 @@ struct ContentView: View {
                 }
             }
 
+            if let notice = viewModel.memoryRetryStoppedNoticeMessage {
+                VStack {
+                    memoryRetryStoppedNoticeBanner(text: notice)
+                        .padding(.top, 8)
+                        .padding(.horizontal, 8)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(20)
+            }
+
             VStack {
                 Spacer()
                 TTSFloatingController()
             }
         }
+        .environment(\.font, rootBodyFont)
+        .onAppear {
+            refreshRootBodyFont()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
+            refreshRootBodyFont()
+        }
+        .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
     }
     
     // MARK: - 视图组件
+
+    private func memoryRetryStoppedNoticeBanner(text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .etFont(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+
+            Text(text)
+                .etFont(.footnote)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                viewModel.memoryRetryStoppedNoticeMessage = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .etFont(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("关闭提示")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.black.opacity(0.18))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+    }
     
     @ViewBuilder
     private func sheetView(for item: ActiveSheet) -> some View {
@@ -217,6 +272,15 @@ struct ContentView: View {
             }
         }
     }
+
+    private func refreshRootBodyFont() {
+        let sample = "The quick brown fox 你好こんにちは"
+        if let postScriptName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sample) {
+            rootBodyFont = .custom(postScriptName, size: 15, relativeTo: .body)
+        } else {
+            rootBodyFont = .body
+        }
+    }
     
     /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
     @ViewBuilder
@@ -241,6 +305,7 @@ struct ContentView: View {
             enableMarkdown: viewModel.enableMarkdown,
             enableBackground: viewModel.enableBackground,
             enableLiquidGlass: isLiquidGlassEnabled,
+            enableNoBubbleUI: viewModel.enableNoBubbleUI,
             enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
             enableExperimentalToolResultDisplay: viewModel.enableExperimentalToolResultDisplay,
             enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
@@ -337,7 +402,7 @@ struct ContentView: View {
         
         return Button(action: scrollAction) {
             let icon = Image(systemName: "arrow.down.circle")
-                .font(.system(size: 22, weight: .semibold))
+                .etFont(.system(size: 22, weight: .semibold))
                 .frame(width: 60, height: 60)
                 .opacity(0.4)
                 .contentShape(Circle())
@@ -441,7 +506,7 @@ struct ContentView: View {
                 .opacity(0.01)
                 .accessibilityLabel("输入...")
         }
-        .font(.body)
+        .etFont(.body)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
         .layoutPriority(1)
@@ -457,11 +522,11 @@ struct ContentView: View {
                 if let audio = viewModel.pendingAudioAttachment {
                     HStack(spacing: 6) {
                         Image(systemName: "waveform")
-                            .font(.system(size: 12))
+                            .etFont(.system(size: 12))
                             .foregroundStyle(.blue)
                         
                         Text(audio.fileName)
-                            .font(.system(size: 10))
+                            .etFont(.system(size: 10))
                             .lineLimit(1)
                             .foregroundStyle(.secondary)
                         
@@ -471,7 +536,7 @@ struct ContentView: View {
                             viewModel.clearPendingAudioAttachment()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
+                                .etFont(.system(size: 14))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -490,7 +555,7 @@ struct ContentView: View {
 
                             Button(action: sendOrStopMessage) {
                                 Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
-                                    .font(.system(size: 18, weight: .medium))
+                                    .etFont(.system(size: 18, weight: .medium))
                                     .frame(width: inputControlHeight, height: inputControlHeight)
                             }
                             .buttonStyle(.plain)
@@ -509,7 +574,7 @@ struct ContentView: View {
 
                             Button(action: sendOrStopMessage) {
                                 Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
-                                    .font(.system(size: 18, weight: .medium))
+                                    .etFont(.system(size: 18, weight: .medium))
                             }
                             .buttonStyle(.plain)
                             .frame(width: inputControlHeight, height: inputControlHeight)
@@ -535,7 +600,7 @@ struct ContentView: View {
 
                         Button(action: sendOrStopMessage) {
                             Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
-                                .font(.system(size: 18, weight: .medium))
+                                .etFont(.system(size: 18, weight: .medium))
                         }
                         .buttonStyle(.plain)
                         .frame(width: inputControlHeight, height: inputControlHeight)
@@ -575,7 +640,7 @@ struct ContentView: View {
                         viewModel.clearPendingAudioAttachment()
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 16, weight: .semibold))
+                            .etFont(.system(size: 16, weight: .semibold))
                             .frame(width: inputControlHeight, height: inputControlHeight)
                             .contentShape(Circle())
                     }
@@ -589,7 +654,7 @@ struct ContentView: View {
                         viewModel.beginSpeechInputFlow()
                     } label: {
                         Image(systemName: viewModel.isRecordingSpeech ? "waveform.circle.fill" : "mic.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .etFont(.system(size: 16, weight: .semibold))
                             .frame(width: inputControlHeight, height: inputControlHeight)
                             .contentShape(Circle())
                     }
@@ -728,7 +793,7 @@ private struct FullErrorContentView: View {
         NavigationStack {
             ScrollView {
                 Text(content)
-                    .font(.system(.caption, design: .monospaced))
+                    .etFont(.system(.caption, design: .monospaced))
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -740,5 +805,202 @@ private struct FullErrorContentView: View {
                 }
             }
         }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func etFont(_ font: Font?) -> some View {
+        if let font {
+            self.font(AppFontAdapter.adaptedFont(from: font))
+        } else {
+            self.font(nil)
+        }
+    }
+
+    @ViewBuilder
+    func etFont(_ font: Font) -> some View {
+        self.font(AppFontAdapter.adaptedFont(from: font))
+    }
+}
+
+private enum AppFontAdapter {
+    static func adaptedFont(from original: Font) -> Font {
+        let descriptor = FontDescriptorInfo(font: original)
+        let role = inferredRole(from: descriptor)
+        let sample = sampleText(for: role)
+        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) else {
+            return original
+        }
+
+        var mapped = mappedFont(postScriptName: postScriptName, descriptor: descriptor)
+        if descriptor.isItalic {
+            mapped = mapped.italic()
+        }
+        if let weight = descriptor.weight {
+            mapped = mapped.weight(weight)
+        }
+        return mapped
+    }
+
+    private static func inferredRole(from descriptor: FontDescriptorInfo) -> FontSemanticRole {
+        if descriptor.isMonospaced {
+            return .code
+        }
+        if descriptor.isItalic {
+            return .emphasis
+        }
+        if let weight = descriptor.weight, weightStrength(weight) >= weightStrength(.semibold) {
+            return .strong
+        }
+        return .body
+    }
+
+    private static func mappedFont(postScriptName: String, descriptor: FontDescriptorInfo) -> Font {
+        if let explicitSize = descriptor.explicitSize {
+            return .custom(postScriptName, size: explicitSize)
+        }
+        if let textStyle = descriptor.textStyle {
+            return .custom(
+                postScriptName,
+                size: defaultPointSize(for: textStyle),
+                relativeTo: textStyle
+            )
+        }
+        return .custom(postScriptName, size: 15, relativeTo: .body)
+    }
+
+    private static func sampleText(for role: FontSemanticRole) -> String {
+        switch role {
+        case .body:
+            return "The quick brown fox 你好こんにちは"
+        case .emphasis:
+            return "Emphasis 斜体预览 こんにちは"
+        case .strong:
+            return "Strong 粗体预览 こんにちは"
+        case .code:
+            return "let value = 42 // 代码"
+        }
+    }
+
+    private static func defaultPointSize(for textStyle: Font.TextStyle) -> CGFloat {
+        switch textStyle {
+        case .largeTitle:
+            return 34
+        case .title:
+            return 28
+        case .title2:
+            return 22
+        case .title3:
+            return 20
+        case .headline:
+            return 17
+        case .subheadline:
+            return 15
+        case .body:
+            return 15
+        case .callout:
+            return 16
+        case .footnote:
+            return 13
+        case .caption:
+            return 12
+        case .caption2:
+            return 11
+        @unknown default:
+            return 15
+        }
+    }
+
+    private static func weightStrength(_ weight: Font.Weight) -> Int {
+        switch weight {
+        case .ultraLight:
+            return 1
+        case .thin:
+            return 2
+        case .light:
+            return 3
+        case .regular:
+            return 4
+        case .medium:
+            return 5
+        case .semibold:
+            return 6
+        case .bold:
+            return 7
+        case .heavy:
+            return 8
+        case .black:
+            return 9
+        default:
+            return 4
+        }
+    }
+}
+
+private struct FontDescriptorInfo {
+    let raw: String
+    let lowercasedRaw: String
+
+    init(font: Font) {
+        let description = String(describing: font)
+        self.raw = description
+        self.lowercasedRaw = description.lowercased()
+    }
+
+    var explicitSize: CGFloat? {
+        firstMatchedNumber(pattern: "size:\\s*([0-9]+(?:\\.[0-9]+)?)")
+            ?? firstMatchedNumber(pattern: "size\\s*([0-9]+(?:\\.[0-9]+)?)")
+    }
+
+    var textStyle: Font.TextStyle? {
+        if lowercasedRaw.contains("caption2") { return .caption2 }
+        if lowercasedRaw.contains("caption") { return .caption }
+        if lowercasedRaw.contains("footnote") { return .footnote }
+        if lowercasedRaw.contains("callout") { return .callout }
+        if lowercasedRaw.contains("subheadline") { return .subheadline }
+        if lowercasedRaw.contains("headline") { return .headline }
+        if lowercasedRaw.contains("title3") { return .title3 }
+        if lowercasedRaw.contains("title2") { return .title2 }
+        if lowercasedRaw.contains("largetitle") || lowercasedRaw.contains("large title") { return .largeTitle }
+        if lowercasedRaw.contains("title") { return .title }
+        if lowercasedRaw.contains("body") { return .body }
+        return nil
+    }
+
+    var isItalic: Bool {
+        lowercasedRaw.contains("italic")
+    }
+
+    var isMonospaced: Bool {
+        lowercasedRaw.contains("monospaced") || lowercasedRaw.contains("mono")
+    }
+
+    var weight: Font.Weight? {
+        if lowercasedRaw.contains("black") { return .black }
+        if lowercasedRaw.contains("heavy") { return .heavy }
+        if lowercasedRaw.contains("bold") { return .bold }
+        if lowercasedRaw.contains("semibold") { return .semibold }
+        if lowercasedRaw.contains("medium") { return .medium }
+        if lowercasedRaw.contains("light") { return .light }
+        if lowercasedRaw.contains("thin") { return .thin }
+        if lowercasedRaw.contains("ultralight") || lowercasedRaw.contains("ultra light") { return .ultraLight }
+        return nil
+    }
+
+    private func firstMatchedNumber(pattern: String) -> CGFloat? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            return nil
+        }
+        let nsRange = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+        guard let match = regex.firstMatch(in: raw, options: [], range: nsRange),
+              match.numberOfRanges >= 2,
+              let range = Range(match.range(at: 1), in: raw) else {
+            return nil
+        }
+        guard let value = Double(raw[range]) else {
+            return nil
+        }
+        return CGFloat(value)
     }
 }

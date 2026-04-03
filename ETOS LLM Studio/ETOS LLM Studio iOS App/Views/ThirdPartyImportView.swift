@@ -38,7 +38,7 @@ struct ThirdPartyImportView: View {
                 .pickerStyle(.navigationLink)
 
                 Text(sourceHint(for: selectedSource))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -125,7 +125,7 @@ struct ThirdPartyImportView: View {
                     Text(NSLocalizedString("导入范围", comment: "Import scope section title"))
                 } footer: {
                     Text(NSLocalizedString("冲突预览为本地启发式估算，最终结果以导入完成后的统计为准。", comment: "Import scope footer"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
@@ -133,7 +133,7 @@ struct ThirdPartyImportView: View {
                     Section(NSLocalizedString("解析提示", comment: "Prepared warnings section title")) {
                         ForEach(preparedResult.warnings, id: \.self) { warning in
                             Text("• \(warning)")
-                                .font(.footnote)
+                                .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -172,7 +172,7 @@ struct ThirdPartyImportView: View {
                     Section(NSLocalizedString("导入提示", comment: "Import warnings section title")) {
                         ForEach(importReport.warnings, id: \.self) { warning in
                             Text("• \(warning)")
-                                .font(.footnote)
+                                .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -182,7 +182,7 @@ struct ThirdPartyImportView: View {
             if let importError, !importError.isEmpty {
                 Section(NSLocalizedString("导入错误", comment: "Import error section title")) {
                     Text(importError)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.red)
                 }
             }
@@ -437,7 +437,7 @@ struct ThirdPartyImportView: View {
         HStack(spacing: 8) {
             ProgressView()
             Text(text)
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
     }

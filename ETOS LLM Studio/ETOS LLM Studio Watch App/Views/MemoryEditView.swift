@@ -35,9 +35,9 @@ public struct MemoryEditView: View {
                 Toggle(isOn: $memory.isArchived) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(memory.isArchived ? NSLocalizedString("已归档", comment: "") : NSLocalizedString("激活中", comment: ""))
-                            .font(.footnote)
+                            .etFont(.footnote)
                         Text(memory.isArchived ? NSLocalizedString("不参与检索", comment: "") : NSLocalizedString("参与检索", comment: ""))
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -49,10 +49,10 @@ public struct MemoryEditView: View {
             Section {
                 HStack {
                     Text("更新时间")
-                        .font(.footnote)
+                        .etFont(.footnote)
                     Spacer()
                     Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundColor(.secondary)
                 }
             }

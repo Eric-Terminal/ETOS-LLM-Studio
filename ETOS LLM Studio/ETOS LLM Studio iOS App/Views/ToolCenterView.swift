@@ -181,7 +181,7 @@ struct ToolCenterView: View {
     private var overviewSection: some View {
         Section {
             Text(NSLocalizedString("统一查看聊天可用工具，并在这里集中调整启用状态与关键设置。", comment: "Tool center overview description"))
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
 
             ToolCenterSummaryRow(
@@ -214,7 +214,7 @@ struct ToolCenterView: View {
 
             if currentSessionIsolationActive {
                 Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP 与快捷指令工具。", comment: "Worldbook isolation warning in tool center"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.orange)
             }
         }
@@ -224,7 +224,7 @@ struct ToolCenterView: View {
         Section(
             header: Text(NSLocalizedString("拓展工具", comment: "App tools section title")),
             footer: Text(NSLocalizedString("这里用于承接后续要给 AI 写的本地工具，可按工具单独设置审批策略与自动同意行为。", comment: "App tools footer"))
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         ) {
             Toggle(
@@ -237,7 +237,7 @@ struct ToolCenterView: View {
 
             if !appToolManager.chatToolsEnabled {
                 Text(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -278,7 +278,7 @@ struct ToolCenterView: View {
         Section(
             header: Text(NSLocalizedString("内置工具", comment: "Built-in tools section title")),
             footer: Text(NSLocalizedString("内置工具会直接影响聊天时是否向模型暴露记忆相关能力。", comment: "Built-in tools footer"))
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         ) {
             Toggle(
@@ -308,7 +308,7 @@ struct ToolCenterView: View {
         Section(
             header: Text(NSLocalizedString("MCP 工具", comment: "MCP tools section title")),
             footer: Text(NSLocalizedString("统一查看各个 MCP Server 公布的聊天工具，并集中调整启用状态与审批策略。", comment: "MCP tools footer"))
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         ) {
             Toggle(
@@ -321,7 +321,7 @@ struct ToolCenterView: View {
 
             if !mcpManager.chatToolsEnabled {
                 Text(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -352,7 +352,7 @@ struct ToolCenterView: View {
         Section(
             header: Text(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title")),
             footer: Text(NSLocalizedString("统一查看已导入的快捷指令工具，并集中调整启用状态、运行模式与描述。", comment: "Shortcut tools footer"))
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
         ) {
             Toggle(
@@ -365,7 +365,7 @@ struct ToolCenterView: View {
 
             if !shortcutManager.chatToolsEnabled {
                 Text(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -557,7 +557,7 @@ private struct ToolCenterSummaryRow: View {
                         total
                     )
                 )
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.secondary)
 
                 Text(
@@ -567,7 +567,7 @@ private struct ToolCenterSummaryRow: View {
                         total
                     )
                 )
-                .font(.caption2)
+                .etFont(.caption2)
                 .foregroundStyle(.tertiary)
             }
         }
@@ -584,19 +584,19 @@ private struct ToolCenterStatusRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.headline)
+                .etFont(.headline)
 
             Text(subtitle)
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.secondary)
 
             Text(detail)
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(color)
 
             if let auxiliary, !auxiliary.isEmpty {
                 Text(auxiliary)
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
             }
@@ -640,9 +640,9 @@ private struct BuiltInToolDetailView: View {
         Form {
             Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
                 Text(title)
-                    .font(.headline)
+                    .etFont(.headline)
                 Text(subtitle)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -651,7 +651,7 @@ private struct BuiltInToolDetailView: View {
                     .foregroundStyle(state.isAvailableInCurrentSession ? .green : .secondary)
                 if currentSessionIsolationActive {
                     Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP 与快捷指令工具。", comment: "Worldbook isolation warning in tool center"))
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.orange)
                 }
             }
@@ -777,15 +777,15 @@ private struct MCPToolCenterDetailView: View {
         List {
             Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
                 Text(tool.toolId)
-                    .font(.headline)
+                    .etFont(.headline)
                 if let desc = tool.description, !desc.isEmpty {
                     Text(desc)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 if let schemaSummary = ToolCatalogSupport.schemaSummary(for: tool.inputSchema, fieldLimit: 6) {
                     Text("Schema: \(schemaSummary)")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(4)
                 }
@@ -803,7 +803,7 @@ private struct MCPToolCenterDetailView: View {
             Section(
                 header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
                 footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
@@ -871,13 +871,13 @@ private struct AppToolCenterDetailView: View {
         List {
             Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
                 Text(kind.displayName)
-                    .font(.headline)
+                    .etFont(.headline)
                 Text(kind.summary)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 if let schemaSummary = ToolCatalogSupport.schemaSummary(for: kind.parameters, fieldLimit: 6) {
                     Text("Schema: \(schemaSummary)")
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -900,7 +900,7 @@ private struct AppToolCenterDetailView: View {
             Section(
                 header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
                 footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
@@ -914,7 +914,7 @@ private struct AppToolCenterDetailView: View {
             Section(
                 header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
                 footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Toggle(
@@ -950,7 +950,7 @@ private struct AppToolCenterDetailView: View {
 
             Section(NSLocalizedString("工具描述", comment: "Tool description section")) {
                 Text(kind.detailDescription)
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
@@ -1017,13 +1017,13 @@ private struct ShortcutToolCenterDetailView: View {
             if let tool {
                 Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
                     Text(tool.displayName)
-                        .font(.headline)
+                        .etFont(.headline)
                     Text(tool.name)
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundStyle(.secondary)
                     if let importStatusText = importStatusText(for: tool) {
                         Text(importStatusText)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1062,7 +1062,7 @@ private struct ShortcutToolCenterDetailView: View {
 
                 Section(NSLocalizedString("工具描述", comment: "Tool description section")) {
                     Text(tool.effectiveDescription)
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
 
                     Button {
@@ -1093,7 +1093,7 @@ private struct ShortcutToolCenterDetailView: View {
                         Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
                             Text(tool.displayName)
                             Text(tool.name)
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
 

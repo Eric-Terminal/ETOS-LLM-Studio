@@ -220,17 +220,17 @@ struct MessageActionsView: View {
                 if let index = messageIndex {
                     VStack(alignment: .leading) {
                         Text("会话位置")
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundColor(.secondary)
                         Text(String(format: NSLocalizedString("第 %d / %d 条", comment: ""), index + 1, totalMessages))
-                            .font(.caption2)
+                            .etFont(.caption2)
                     }
                 }
                 
                 if message.hasMultipleVersions {
                     VStack(alignment: .leading) {
                         Text("版本信息")
-                            .font(.caption)
+                            .etFont(.caption)
                             .foregroundColor(.secondary)
                         Text(
                             String(
@@ -239,21 +239,21 @@ struct MessageActionsView: View {
                                 message.getAllVersions().count
                             )
                         )
-                            .font(.caption2)
+                            .etFont(.caption2)
                     }
                 }
                 
                 VStack(alignment: .leading) {
                     Text("消息 ID")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary)
                     Text(message.id.uuidString)
-                        .font(.caption2)
+                        .etFont(.caption2)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundColor(.secondary)
 
                     TextField(
@@ -274,7 +274,7 @@ struct MessageActionsView: View {
 
                     if let jumpError, !jumpError.isEmpty {
                         Text(jumpError)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.red)
                     }
                 }
@@ -424,10 +424,10 @@ private struct MessageActionsStreamingSpeedChart: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(String(format: "%.2f %@", currentSpeed, NSLocalizedString("token/s", comment: "Tokens per second unit")))
-                    .font(.caption2.monospacedDigit())
+                    .etFont(.caption2.monospacedDigit())
                 Spacer(minLength: 0)
                 Text(NSLocalizedString("每秒采样", comment: "Per-second speed sampling"))
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
@@ -466,7 +466,7 @@ private struct MessageActionsStreamingSpeedChart: View {
 
             if let fluctuation {
                 Text("\(NSLocalizedString("波动", comment: "Speed fluctuation label")) \(String(format: "%.2f %@", fluctuation, NSLocalizedString("token/s", comment: "Tokens per second unit")))")
-                    .font(.caption2.monospacedDigit())
+                    .etFont(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

@@ -178,7 +178,7 @@ private struct AppLogRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(entry.level.displayName)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .etFont(.system(size: 10, weight: .semibold, design: .monospaced))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(levelColor.opacity(0.16))
@@ -186,23 +186,23 @@ private struct AppLogRow: View {
                     .clipShape(Capsule())
 
                 Text("\(entry.category) · \(entry.action)")
-                    .font(.subheadline)
+                    .etFont(.subheadline)
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
 
                 Text(formatTime(entry.timestamp))
-                    .font(.system(size: 10, design: .monospaced))
+                    .etFont(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
 
             Text(entry.message)
-                .font(.caption)
+                .etFont(.caption)
                 .foregroundStyle(.secondary)
 
             if let payload = entry.payload, !payload.isEmpty {
                 Text(formatLogPayload(payload))
-                    .font(.system(size: 10, design: .monospaced))
+                    .etFont(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .textSelection(.enabled)
                     .padding(8)

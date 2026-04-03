@@ -29,7 +29,7 @@ struct AnnouncementDetailView: View {
             // MARK: - 公告内容部分
             Section {
                 Text(announcement.body)
-                    .font(.body)
+                    .etFont(.body)
                     .foregroundColor(.primary)
             } header: {
                 announcementTypeLabel
@@ -48,7 +48,7 @@ struct AnnouncementDetailView: View {
                 }
             } footer: {
                 Text("隐藏后，此通知将不会在设置中显示；其他新通知仍会正常显示。")
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundColor(.secondary)
             }
         }
@@ -80,7 +80,7 @@ struct AnnouncementDetailView: View {
                 Text("通知")
             }
         }
-        .font(.caption)
+        .etFont(.caption)
     }
 }
 
@@ -97,17 +97,17 @@ struct AnnouncementAlertView: View {
             VStack(spacing: 16) {
                 // 图标
                 alertIcon
-                    .font(.system(size: 44))
+                    .etFont(.system(size: 44))
                     .padding(.top, 8)
                 
                 // 标题
                 Text(announcement.title)
-                    .font(.headline)
+                    .etFont(.headline)
                     .multilineTextAlignment(.center)
                 
                 // 内容
                 Text(announcement.body)
-                    .font(.body)
+                    .etFont(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)

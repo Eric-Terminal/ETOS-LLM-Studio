@@ -32,7 +32,7 @@ struct LocalDebugView: View {
                 if let error = server.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
-                        .font(.footnote)
+                        .etFont(.footnote)
                 }
             } header: {
                 Text("状态")
@@ -44,9 +44,9 @@ struct LocalDebugView: View {
                     Toggle(isOn: $server.useHTTP) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
-                                .font(.body)
+                                .etFont(.body)
                             Text(server.useHTTP ? "稳定但较慢，适合真机" : "快速但不稳定")
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -57,7 +57,7 @@ struct LocalDebugView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                        .font(.body.monospaced())
+                        .etFont(.body.monospaced())
                     
                     Button("连接") {
                         connectToServer()
@@ -72,7 +72,7 @@ struct LocalDebugView: View {
                 Section("连接信息") {
                     LabeledContent("服务器") {
                         Text(server.serverURL)
-                            .font(.body.monospaced())
+                            .etFont(.body.monospaced())
                             .textSelection(.enabled)
                     }
                     
@@ -109,9 +109,9 @@ struct LocalDebugView: View {
                         let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
                         VStack(alignment: .leading, spacing: 8) {
                             Text(String(format: NSLocalizedString("请求详情：模型 %@ · 消息数 %d", comment: ""), modelName, pending.messageCount))
-                                .font(.subheadline)
+                                .etFont(.subheadline)
                             Text(formatPendingTime(pending.receivedAt))
-                                .font(.caption)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         HStack {
@@ -150,7 +150,7 @@ struct LocalDebugView: View {
                 Label("用完后请及时断开连接", systemImage: "hand.raised")
             }
             .foregroundStyle(.secondary)
-            .font(.footnote)
+            .etFont(.footnote)
         }
         .navigationTitle("高级诊断")
         .navigationBarTitleDisplayMode(.inline)
@@ -210,9 +210,9 @@ private struct DebugLogsView: View {
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text(log.message)
-                                .font(.system(.caption, design: .monospaced))
+                                .etFont(.system(.caption, design: .monospaced))
                             Text(formatTime(log.timestamp))
-                                .font(.caption2)
+                                .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -276,17 +276,17 @@ private struct DocumentationView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
                         Image(systemName: "iphone")
-                            .font(.title2)
+                            .etFont(.title2)
                         Image(systemName: "arrow.right")
                             .foregroundStyle(.secondary)
                         Image(systemName: "desktopcomputer")
-                            .font(.title2)
+                            .etFont(.title2)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     
                     Text("设备主动连接电脑端 WebSocket 服务器，接收命令并执行文件操作。")
-                        .font(.subheadline)
+                        .etFont(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -307,11 +307,11 @@ private struct DocumentationView: View {
             Section("API 代理设置") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("将 API Base URL 设置为：")
-                        .font(.subheadline)
+                        .etFont(.subheadline)
                         .foregroundStyle(.secondary)
                     
                     Text("http://电脑IP:8080")
-                        .font(.body.monospaced())
+                        .etFont(.body.monospaced())
                         .foregroundStyle(.blue)
                         .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -319,7 +319,7 @@ private struct DocumentationView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     
                     Text("请求将被重定向到调试端进行记录和分析。")
-                        .font(.caption)
+                        .etFont(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -353,16 +353,16 @@ private struct StepRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text("\(number)")
-                .font(.headline)
+                .etFont(.headline)
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(.blue))
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.headline)
+                    .etFont(.headline)
                 Text(detail)
-                    .font(.subheadline)
+                    .etFont(.subheadline)
                     .foregroundStyle(.secondary)
             }
         }
@@ -378,15 +378,15 @@ private struct FeatureRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.title2)
+                .etFont(.title2)
                 .foregroundStyle(.blue)
                 .frame(width: 32)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.headline)
+                    .etFont(.headline)
                 Text(description)
-                    .font(.subheadline)
+                    .etFont(.subheadline)
                     .foregroundStyle(.secondary)
             }
         }

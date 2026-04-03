@@ -117,7 +117,7 @@ public struct MemorySettingsView: View {
                 let options = viewModel.embeddingModelOptions
                 if options.isEmpty {
                     Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     NavigationLink {
@@ -142,7 +142,7 @@ public struct MemorySettingsView: View {
                 Text("嵌入模型")
             } footer: {
                 Text("这里只列出支持嵌入能力的模型，记忆嵌入会调用所选模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -168,21 +168,21 @@ public struct MemorySettingsView: View {
                             comment: "Active retrieval toggle description"
                         )
                     )
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 }
             } header: {
                 Text("检索设置")
             } footer: {
                 Text("设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
             Section(
                 header: Text("数据维护"),
                 footer: Text("将清空旧向量数据库，并按当前记忆重算所有嵌入。")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Button(role: .destructive) {
@@ -194,7 +194,7 @@ public struct MemorySettingsView: View {
                 
                 if let progress = activeEmbeddingProgress {
                     Text(embeddingProgressTitle(for: progress))
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(embeddingProgressColor(for: progress))
                     
                     ProgressView(
@@ -209,7 +209,7 @@ public struct MemorySettingsView: View {
                             progress.totalMemories
                         )
                     )
-                    .font(.caption2)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     
                     if progress.phase == .running,
@@ -221,7 +221,7 @@ public struct MemorySettingsView: View {
                                 preview
                             )
                         )
-                        .font(.caption2)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     }
@@ -230,7 +230,7 @@ public struct MemorySettingsView: View {
                        let message = progress.errorMessage,
                        !message.isEmpty {
                         Text(message)
-                            .font(.caption2)
+                            .etFont(.caption2)
                             .foregroundStyle(.orange)
                     }
                 }
@@ -247,9 +247,9 @@ public struct MemorySettingsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(memory.content)
                                     .lineLimit(2)
-                                    .font(.footnote)
+                                    .etFont(.footnote)
                                 Text(memory.displayDate.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundColor(.secondary)
                             }
                         }
@@ -289,10 +289,10 @@ public struct MemorySettingsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(memory.content)
                                     .lineLimit(2)
-                                    .font(.footnote)
+                                    .etFont(.footnote)
                                     .foregroundColor(.secondary)
                                 Text(memory.displayDate.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
-                                    .font(.caption2)
+                                    .etFont(.caption2)
                                     .foregroundColor(.gray)
                             }
                         }
@@ -417,7 +417,7 @@ public struct AddMemorySheet: View {
     public var body: some View {
         VStack {
             Text("添加新记忆")
-                .font(.headline)
+                .etFont(.headline)
                 .padding()
 
             TextField("输入记忆内容...", text: $memoryContent.watchKeyboardNewlineBinding())
