@@ -219,6 +219,11 @@ struct ChatBubble: View {
         usesNoBubbleStyle ? 0 : 20
     }
 
+    private var rowVerticalPadding: CGFloat {
+        let basePadding: CGFloat = 3
+        return enableNoBubbleUI ? basePadding * 1.5 : basePadding
+    }
+
     private var textForegroundColor: Color {
         if isError && usesNoBubbleStyle {
             return .red
@@ -383,8 +388,8 @@ struct ChatBubble: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.top, mergeWithPrevious ? 0 : 3)
-        .padding(.bottom, mergeWithNext ? 0 : 3)
+        .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
+        .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .background(
             GeometryReader { proxy in
                 Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)

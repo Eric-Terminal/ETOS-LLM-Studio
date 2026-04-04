@@ -256,6 +256,11 @@ struct ChatBubble: View {
         }
         return message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
     }
+
+    private var rowVerticalPadding: CGFloat {
+        let basePadding: CGFloat = 4
+        return enableNoBubbleUI ? basePadding * 1.5 : basePadding
+    }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
         guard let toolCalls = message.toolCalls else { return nil }
@@ -284,8 +289,8 @@ struct ChatBubble: View {
             }
         }
         .padding(.horizontal)
-        .padding(.top, mergeWithPrevious ? 0 : 4)
-        .padding(.bottom, mergeWithNext ? 0 : 4)
+        .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
+        .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .background(
             GeometryReader { proxy in
                 Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)
