@@ -366,6 +366,7 @@ private struct WatchFontSettingsView: View {
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
+    @State private var showAddAssetDialog = false
 
     var body: some View {
         List {
@@ -396,7 +397,7 @@ private struct WatchFontSettingsView: View {
 
             Section(
                 header: Text("样式优先级"),
-                footer: Text("使用上下箭头调整顺序，越靠上优先级越高。")
+                footer: Text("使用上下箭头调整顺序；可通过“添加字体到当前槽位”补入未加入的字体，越靠上优先级越高。")
             ) {
                 Picker("样式槽位", selection: $selectedRole) {
                     ForEach(FontSemanticRole.allCases) { role in
@@ -440,6 +441,18 @@ private struct WatchFontSettingsView: View {
                         }
                     }
                 }
+
+                if availableAssetsForSelectedRole.isEmpty {
+                    Text("当前槽位没有可添加字体。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        showAddAssetDialog = true
+                    } label: {
+                        Label("添加字体到当前槽位", systemImage: "plus.circle")
+                    }
+                }
             }
 
             Section("预览") {
@@ -463,11 +476,28 @@ private struct WatchFontSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             reloadData()
         }
+        .confirmationDialog(
+            "添加字体到当前槽位",
+            isPresented: $showAddAssetDialog,
+            titleVisibility: .visible
+        ) {
+            ForEach(availableAssetsForSelectedRole) { asset in
+                Button(asset.isEnabled ? asset.displayName : "\(asset.displayName)（已停用）") {
+                    addAssetToSelectedRole(asset.id)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        }
     }
 
     private var chainRecords: [FontAssetRecord] {
         let map = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
         return routes.chain(for: selectedRole).compactMap { map[$0] }
+    }
+
+    private var availableAssetsForSelectedRole: [FontAssetRecord] {
+        let selectedIDs = Set(routes.chain(for: selectedRole))
+        return assets.filter { !selectedIDs.contains($0.id) }
     }
 
     private func reloadData() {
@@ -491,6 +521,15 @@ private struct WatchFontSettingsView: View {
         let target = index + offset
         guard chain.indices.contains(index), chain.indices.contains(target) else { return }
         chain.swapAt(index, target)
+        routes.setChain(chain, for: selectedRole)
+        FontLibrary.updateChain(chain, for: selectedRole)
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func addAssetToSelectedRole(_ assetID: UUID) {
+        var chain = routes.chain(for: selectedRole)
+        guard !chain.contains(assetID) else { return }
+        chain.append(assetID)
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)

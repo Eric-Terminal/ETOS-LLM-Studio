@@ -209,6 +209,7 @@ struct DisplaySettingsView: View {
 }
 
 private struct FontSettingsView: View {
+    @Environment(\.editMode) private var editMode
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -248,7 +249,7 @@ private struct FontSettingsView: View {
 
             Section(
                 header: Text("样式优先级"),
-                footer: Text("拖拽右侧把手可调整当前样式槽位的字体优先级，越靠上优先级越高。")
+                footer: Text("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。越靠上优先级越高。")
             ) {
                 Picker("样式槽位", selection: $selectedRole) {
                     ForEach(FontSemanticRole.allCases) { role in
@@ -278,7 +279,26 @@ private struct FontSettingsView: View {
                         }
                     }
                     .onMove(perform: movePriority)
-                    .environment(\.editMode, .constant(.active))
+                }
+
+                if isEditing {
+                    if availableAssetsForSelectedRole.isEmpty {
+                        Text("当前槽位没有可添加字体。")
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Menu {
+                            ForEach(availableAssetsForSelectedRole) { asset in
+                                Button {
+                                    addAssetToSelectedRole(asset.id)
+                                } label: {
+                                    Text(asset.isEnabled ? asset.displayName : "\(asset.displayName)（已停用）")
+                                }
+                            }
+                        } label: {
+                            Label("添加字体到当前槽位", systemImage: "plus.circle")
+                        }
+                    }
                 }
             }
 
@@ -338,6 +358,15 @@ private struct FontSettingsView: View {
         return routes.chain(for: selectedRole).compactMap { map[$0] }
     }
 
+    private var availableAssetsForSelectedRole: [FontAssetRecord] {
+        let selectedIDs = Set(routes.chain(for: selectedRole))
+        return assets.filter { !selectedIDs.contains($0.id) }
+    }
+
+    private var isEditing: Bool {
+        editMode?.wrappedValue.isEditing == true
+    }
+
     private var supportedFontTypes: [UTType] {
         let candidates: [UTType?] = [
             UTType(filenameExtension: "ttf"),
@@ -374,6 +403,15 @@ private struct FontSettingsView: View {
     private func movePriority(from source: IndexSet, to destination: Int) {
         var chain = routes.chain(for: selectedRole)
         chain.move(fromOffsets: source, toOffset: destination)
+        routes.setChain(chain, for: selectedRole)
+        FontLibrary.updateChain(chain, for: selectedRole)
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func addAssetToSelectedRole(_ assetID: UUID) {
+        var chain = routes.chain(for: selectedRole)
+        guard !chain.contains(assetID) else { return }
+        chain.append(assetID)
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
