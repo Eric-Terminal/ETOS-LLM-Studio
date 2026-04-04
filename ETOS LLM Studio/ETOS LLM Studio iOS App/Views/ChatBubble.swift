@@ -221,7 +221,7 @@ struct ChatBubble: View {
 
     private var rowVerticalPadding: CGFloat {
         let basePadding: CGFloat = 3
-        return enableNoBubbleUI ? basePadding * 1.5 : basePadding
+        return enableNoBubbleUI ? basePadding * 3 : basePadding
     }
 
     private var textForegroundColor: Color {
