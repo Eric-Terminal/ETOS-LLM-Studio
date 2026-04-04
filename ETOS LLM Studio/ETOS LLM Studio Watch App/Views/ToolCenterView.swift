@@ -15,6 +15,7 @@ struct ToolCenterView: View {
     @StateObject private var appToolManager = AppToolManager.shared
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var shortcutManager = ShortcutToolManager.shared
+    @StateObject private var skillManager = SkillManager.shared
 
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
@@ -34,6 +35,7 @@ struct ToolCenterView: View {
             enableMemoryWrite: enableMemoryWrite,
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             memoryTopK: memoryTopK,
+            enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             isIsolatedSession: currentSessionIsolationActive
         )
     }
@@ -82,6 +84,14 @@ struct ToolCenterView: View {
             }
     }
 
+    private var filteredSkills: [SkillMetadata] {
+        skillManager.skills
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .filter { skill in
+                showEnabledOnly ? skillManager.isSkillEnabled(skill.name) : true
+            }
+    }
+
     private var configuredMCPCount: Int {
         mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
@@ -116,6 +126,15 @@ struct ToolCenterView: View {
         return configuredShortcutCount
     }
 
+    private var configuredSkillCount: Int {
+        skillManager.skills.filter { skillManager.isSkillEnabled($0.name) }.count
+    }
+
+    private var availableSkillCount: Int {
+        guard skillManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
+        return configuredSkillCount
+    }
+
     var body: some View {
         List {
             Section {
@@ -136,7 +155,7 @@ struct ToolCenterView: View {
                     3. 进入具体工具页调整策略与状态。
 
                     常见情况
-                    • 如果显示世界书隔离生效，记忆、MCP、快捷指令可能被会话策略屏蔽。
+                    • 如果显示世界书隔离生效，记忆、MCP、Agent Skills、快捷指令可能被会话策略屏蔽。
                     """,
                     isExpanded: $isShowingIntroDetails
                 )
@@ -193,6 +212,22 @@ struct ToolCenterView: View {
                 .etFont(.caption2)
                 Text(
                     String(
+                        format: NSLocalizedString("Agent Skills：配置已启用 %d / %d", comment: "Skills configured count"),
+                        configuredSkillCount,
+                        skillManager.skills.count
+                    )
+                )
+                .etFont(.caption2)
+                Text(
+                    String(
+                        format: NSLocalizedString("Agent Skills：当前会话实际可用 %d / %d", comment: "Skills available count"),
+                        availableSkillCount,
+                        skillManager.skills.count
+                    )
+                )
+                .etFont(.caption2)
+                Text(
+                    String(
                         format: NSLocalizedString("快捷指令工具：配置已启用 %d / %d", comment: "Shortcut configured count"),
                         configuredShortcutCount,
                         shortcutManager.tools.count
@@ -208,7 +243,7 @@ struct ToolCenterView: View {
                 )
                 .etFont(.caption2)
                 if currentSessionIsolationActive {
-                    Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP 与快捷指令工具。", comment: "Worldbook isolation warning in tool center"))
+                    Text("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。")
                         .etFont(.caption2)
                         .foregroundStyle(.orange)
                 }
@@ -223,7 +258,7 @@ struct ToolCenterView: View {
 
             Section(
                 header: Text(NSLocalizedString("内置工具", comment: "Built-in tools section title")),
-                footer: Text(NSLocalizedString("内置工具会直接影响聊天时是否向模型暴露记忆相关能力。", comment: "Built-in tools footer"))
+                footer: Text(NSLocalizedString("内置工具会直接影响聊天时是否向模型暴露记忆能力与网页卡片渲染能力。", comment: "Built-in tools footer"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
@@ -320,6 +355,55 @@ struct ToolCenterView: View {
             }
 
             Section(
+                header: Text("Agent Skills"),
+                footer: Text("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    "向模型暴露 Agent Skills（use_skill）",
+                    isOn: Binding(
+                        get: { skillManager.chatToolsEnabled },
+                        set: { skillManager.setChatToolsEnabled($0) }
+                    )
+                )
+
+                if !skillManager.chatToolsEnabled {
+                    Text("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if skillManager.skills.isEmpty {
+                    Text("当前还没有已安装技能，可在 Agent Skills 页面添加。")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredSkills) { skill in
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(skill.name)
+                                Text(skill.description)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(skillStatusText(for: skill))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(skillStatusColor(for: skill))
+                            }
+                            Spacer(minLength: 4)
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { skillManager.isSkillEnabled(skill.name) },
+                                    set: { skillManager.setSkillEnabled(name: skill.name, isEnabled: $0) }
+                                )
+                            )
+                            .labelsHidden()
+                        }
+                    }
+                }
+            }
+
+            Section(
                 header: Text(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title")),
                 footer: Text(NSLocalizedString("统一查看已导入的快捷指令工具，并集中调整启用状态、运行模式与描述。", comment: "Shortcut tools footer"))
                     .etFont(.footnote)
@@ -353,7 +437,7 @@ struct ToolCenterView: View {
                 }
             }
 
-            if filteredBuiltInStates.isEmpty && filteredAppTools.isEmpty && filteredMCPTools.isEmpty && filteredShortcutTools.isEmpty {
+            if filteredBuiltInStates.isEmpty && filteredAppTools.isEmpty && filteredMCPTools.isEmpty && filteredSkills.isEmpty && filteredShortcutTools.isEmpty {
                 Section {
                     Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
                         .foregroundStyle(.secondary)
@@ -361,6 +445,9 @@ struct ToolCenterView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具中心", comment: "Tool center title"))
+        .onAppear {
+            skillManager.reloadFromDisk()
+        }
     }
 
     private func settingsIntroCard(
@@ -403,6 +490,8 @@ struct ToolCenterView: View {
             return NSLocalizedString("长期记忆写入", comment: "Memory write tool title")
         case .memorySearch:
             return NSLocalizedString("长期记忆主动检索", comment: "Memory search tool title")
+        case .widgetCard:
+            return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
         @unknown default:
             return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
         }
@@ -420,7 +509,7 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .activeRetrievalDisabled, .zeroTopK:
+            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
@@ -440,10 +529,21 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前 Top K 为 0，聊天时不会暴露检索工具。", comment: "Memory search top k zero")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .memoryWriteDisabled:
+            case .memoryWriteDisabled, .widgetDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
+            }
+        case .widgetCard:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已启用网页卡片渲染能力。", comment: "Built-in widget enabled status")
+            case .widgetDisabled:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status")
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status fallback")
+            @unknown default:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget unknown status fallback")
             }
         @unknown default:
             return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")
@@ -516,6 +616,25 @@ struct ToolCenterView: View {
 
     private func shortcutStatusColor(for tool: ShortcutToolDefinition) -> Color {
         if currentSessionIsolationActive || !shortcutManager.chatToolsEnabled || !tool.isEnabled {
+            return .secondary
+        }
+        return .green
+    }
+
+    private func skillStatusText(for skill: SkillMetadata) -> String {
+        if currentSessionIsolationActive {
+            return "当前会话因世界书隔离发送而不会实际启用该工具。"
+        }
+        if !skillManager.chatToolsEnabled {
+            return "总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。"
+        }
+        return skillManager.isSkillEnabled(skill.name)
+            ? "该技能当前可参与聊天。"
+            : "已停用。"
+    }
+
+    private func skillStatusColor(for skill: SkillMetadata) -> Color {
+        if currentSessionIsolationActive || !skillManager.chatToolsEnabled || !skillManager.isSkillEnabled(skill.name) {
             return .secondary
         }
         return .green
@@ -599,6 +718,9 @@ private struct WatchAppToolCategoryDetailView: View {
         if !item.isEnabled {
             return NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
         }
+        if !item.kind.requiresApproval {
+            return NSLocalizedString("内置免审批，启用后可直接调用。", comment: "No approval required status for built-in-like app tool")
+        }
         if policy == .alwaysDeny {
             return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
         }
@@ -607,7 +729,8 @@ private struct WatchAppToolCategoryDetailView: View {
 
     private func appToolStatusColor(for item: AppToolCatalogItem) -> Color {
         let policy = manager.approvalPolicy(for: item.kind)
-        if currentSessionIsolationActive || !manager.chatToolsEnabled || !item.isEnabled || policy == .alwaysDeny {
+        let isUnavailableByApproval = item.kind.requiresApproval && policy == .alwaysDeny
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !item.isEnabled || isUnavailableByApproval {
             return .secondary
         }
         return .green
@@ -651,54 +774,56 @@ private struct WatchAppToolCenterDetailView: View {
                 )
             }
 
-            Section(
-                header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
-                footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            ) {
-                Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
-                    ForEach(AppToolApprovalPolicy.allCases, id: \.self) { policy in
-                        Text(policy.displayName).tag(policy)
+            if kind.requiresApproval {
+                Section(
+                    header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
+                    footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                ) {
+                    Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
+                        ForEach(AppToolApprovalPolicy.allCases, id: \.self) { policy in
+                            Text(policy.displayName).tag(policy)
+                        }
                     }
                 }
-            }
 
-            Section(
-                header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
-                footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            ) {
-                Toggle(
-                    NSLocalizedString("全局启用倒计时自动同意", comment: "Enable global auto approve"),
-                    isOn: Binding(
-                        get: { permissionCenter.autoApproveEnabled },
-                        set: { permissionCenter.setAutoApproveEnabled($0) }
+                Section(
+                    header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
+                    footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                ) {
+                    Toggle(
+                        NSLocalizedString("全局启用倒计时自动同意", comment: "Enable global auto approve"),
+                        isOn: Binding(
+                            get: { permissionCenter.autoApproveEnabled },
+                            set: { permissionCenter.setAutoApproveEnabled($0) }
+                        )
                     )
-                )
 
-                HStack {
-                    Text(NSLocalizedString("倒计时秒数", comment: "Auto approve countdown label"))
-                    Spacer()
-                    TextField(
-                        "1",
-                        value: Binding(
-                            get: { permissionCenter.autoApproveCountdownSeconds },
-                            set: { permissionCenter.setAutoApproveCountdownSeconds($0) }
-                        ),
-                        formatter: countdownNumberFormatter
+                    HStack {
+                        Text(NSLocalizedString("倒计时秒数", comment: "Auto approve countdown label"))
+                        Spacer()
+                        TextField(
+                            "1",
+                            value: Binding(
+                                get: { permissionCenter.autoApproveCountdownSeconds },
+                                set: { permissionCenter.setAutoApproveCountdownSeconds($0) }
+                            ),
+                            formatter: countdownNumberFormatter
+                        )
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 52)
+                    }
+                    .disabled(!permissionCenter.autoApproveEnabled)
+
+                    Toggle(
+                        NSLocalizedString("允许该工具自动同意", comment: "Allow auto approve for this tool"),
+                        isOn: autoApproveToolBinding
                     )
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 52)
+                    .disabled(!permissionCenter.autoApproveEnabled)
                 }
-                .disabled(!permissionCenter.autoApproveEnabled)
-
-                Toggle(
-                    NSLocalizedString("允许该工具自动同意", comment: "Allow auto approve for this tool"),
-                    isOn: autoApproveToolBinding
-                )
-                .disabled(!permissionCenter.autoApproveEnabled)
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
@@ -714,17 +839,21 @@ private struct WatchAppToolCenterDetailView: View {
         if !manager.isToolEnabled(kind) {
             return NSLocalizedString("已停用。", comment: "Tool disabled status")
         }
-        if manager.approvalPolicy(for: kind) == .alwaysDeny {
+        if kind.requiresApproval && manager.approvalPolicy(for: kind) == .alwaysDeny {
             return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        if !kind.requiresApproval {
+            return NSLocalizedString("该工具为内置免审批工具，启用后可直接参与聊天。", comment: "No approval tool available status")
         }
         return NSLocalizedString("该工具当前可参与聊天。", comment: "Tool available in chat")
     }
 
     private var currentStatusColor: Color {
+        let isUnavailableByApproval = kind.requiresApproval && manager.approvalPolicy(for: kind) == .alwaysDeny
         if currentSessionIsolationActive
             || !manager.chatToolsEnabled
             || !manager.isToolEnabled(kind)
-            || manager.approvalPolicy(for: kind) == .alwaysDeny {
+            || isUnavailableByApproval {
             return .secondary
         }
         return .green
@@ -758,6 +887,7 @@ private struct WatchBuiltInToolDetailView: View {
     let kind: ToolCatalogBuiltInToolKind
     let currentSessionIsolationActive: Bool
 
+    @ObservedObject private var appToolManager = AppToolManager.shared
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
     @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
@@ -776,12 +906,13 @@ private struct WatchBuiltInToolDetailView: View {
             enableMemoryWrite: enableMemoryWrite,
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             memoryTopK: memoryTopK,
+            enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             isIsolatedSession: currentSessionIsolationActive
         ).first(where: { $0.kind == kind }) ?? ToolCatalogBuiltInToolState(
             kind: kind,
             isConfiguredEnabled: false,
             isAvailableInCurrentSession: false,
-            statusReason: .memoryDisabled
+            statusReason: fallbackStatusReason(for: kind)
         )
     }
 
@@ -836,6 +967,16 @@ private struct WatchBuiltInToolDetailView: View {
                         .frame(width: 52)
                     }
                 }
+            case .widgetCard:
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                    Toggle(
+                        NSLocalizedString("启用显示网页卡片工具", comment: "Enable show widget built-in tool"),
+                        isOn: Binding(
+                            get: { appToolManager.isToolEnabled(.showWidget) },
+                            set: { appToolManager.setToolEnabled(kind: .showWidget, isEnabled: $0) }
+                        )
+                    )
+                }
             @unknown default:
                 Section(NSLocalizedString("当前状态", comment: "Current status section")) {
                     Text(NSLocalizedString("该工具类型暂未提供可编辑设置。", comment: "Unknown built-in tool settings fallback"))
@@ -853,6 +994,8 @@ private struct WatchBuiltInToolDetailView: View {
             return NSLocalizedString("长期记忆写入", comment: "Memory write tool title")
         case .memorySearch:
             return NSLocalizedString("长期记忆主动检索", comment: "Memory search tool title")
+        case .widgetCard:
+            return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
         @unknown default:
             return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
         }
@@ -864,8 +1007,21 @@ private struct WatchBuiltInToolDetailView: View {
             return NSLocalizedString("允许模型调用 save_memory，将有长期价值的信息写入记忆。", comment: "Memory write tool subtitle")
         case .memorySearch:
             return NSLocalizedString("允许模型调用 search_memory，在回答前主动检索记忆。", comment: "Memory search tool subtitle")
+        case .widgetCard:
+            return NSLocalizedString("允许模型调用 show_widget，在对话中渲染 HTML 网页卡片。", comment: "Built-in widget tool subtitle")
         @unknown default:
             return NSLocalizedString("该内置工具当前可按配置参与聊天。", comment: "Built-in tool fallback subtitle")
+        }
+    }
+
+    private func fallbackStatusReason(for kind: ToolCatalogBuiltInToolKind) -> ToolCatalogBuiltInToolStatusReason {
+        switch kind {
+        case .widgetCard:
+            return .widgetDisabled
+        case .memoryWrite, .memorySearch:
+            return .memoryDisabled
+        @unknown default:
+            return .memoryDisabled
         }
     }
 
@@ -881,7 +1037,7 @@ private struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .activeRetrievalDisabled, .zeroTopK:
+            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
@@ -901,10 +1057,21 @@ private struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("当前 Top K 为 0，聊天时不会暴露检索工具。", comment: "Memory search top k zero")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .memoryWriteDisabled:
+            case .memoryWriteDisabled, .widgetDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
+            }
+        case .widgetCard:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已启用网页卡片渲染能力。", comment: "Built-in widget enabled status")
+            case .widgetDisabled:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status")
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status fallback")
+            @unknown default:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget unknown status fallback")
             }
         @unknown default:
             return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")

@@ -31,6 +31,104 @@ public struct MCPToolResultDisplayModel: Equatable, Sendable {
     }
 }
 
+/// Widget 工具的可渲染载荷。
+public struct ToolWidgetPayload: Equatable, Sendable {
+    public let title: String?
+    public let widgetCode: String
+    public let loadingMessages: [String]
+
+    public init(title: String?, widgetCode: String, loadingMessages: [String] = []) {
+        self.title = title
+        self.widgetCode = widgetCode
+        self.loadingMessages = loadingMessages
+    }
+}
+
+/// 从工具参数或工具结果中提取 Widget 载荷。
+public enum ToolWidgetPayloadParser {
+    public static func parse(from rawText: String) -> ToolWidgetPayload? {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let data = trimmed.data(using: .utf8),
+              let value = try? JSONDecoder().decode(JSONValue.self, from: data) else {
+            return nil
+        }
+        return parse(from: value)
+    }
+
+    private static func parse(from value: JSONValue) -> ToolWidgetPayload? {
+        guard case .dictionary(let dictionary) = value else {
+            return nil
+        }
+
+        if let payload = payload(from: dictionary) {
+            return payload
+        }
+
+        if case .dictionary(let input)? = dictionary["input"],
+           let payload = payload(from: input) {
+            return payload
+        }
+
+        return nil
+    }
+
+    private static func payload(from dictionary: [String: JSONValue]) -> ToolWidgetPayload? {
+        let widgetCodeKeys = ["widget_code", "widgetCode", "widget_html", "widgetHtml", "html"]
+        guard let widgetCode = firstNonEmptyString(for: widgetCodeKeys, in: dictionary) else {
+            return nil
+        }
+
+        let title = firstNonEmptyString(for: ["title", "name"], in: dictionary)
+        let loadingMessages = stringArray(for: ["loading_messages", "loadingMessages"], in: dictionary)
+
+        return ToolWidgetPayload(
+            title: title,
+            widgetCode: widgetCode,
+            loadingMessages: loadingMessages
+        )
+    }
+
+    private static func firstNonEmptyString(
+        for keys: [String],
+        in dictionary: [String: JSONValue]
+    ) -> String? {
+        for key in keys {
+            guard case .string(let raw)? = dictionary[key] else { continue }
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
+    private static func stringArray(for keys: [String], in dictionary: [String: JSONValue]) -> [String] {
+        for key in keys {
+            guard let value = dictionary[key] else { continue }
+            switch value {
+            case .array(let items):
+                let normalized = items.compactMap { item -> String? in
+                    guard case .string(let raw) = item else { return nil }
+                    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : trimmed
+                }
+                if !normalized.isEmpty {
+                    return normalized
+                }
+            case .string(let raw):
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return [trimmed]
+                }
+            default:
+                continue
+            }
+        }
+        return []
+    }
+}
+
 public enum MCPToolResultFormatter {
     public static func displayModel(from rawResult: String, summaryLimit: Int = 90) -> MCPToolResultDisplayModel {
         let trimmedRaw = rawResult.trimmingCharacters(in: .whitespacesAndNewlines)

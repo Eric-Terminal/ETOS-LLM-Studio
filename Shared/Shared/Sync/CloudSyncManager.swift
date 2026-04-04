@@ -287,6 +287,7 @@ public final class CloudSyncManager: ObservableObject {
         if isSyncOptionEnabled(key: "sync.options.memories", defaultValue: false) { options.insert(.memories) }
         if isSyncOptionEnabled(key: "sync.options.mcpServers", defaultValue: true) { options.insert(.mcpServers) }
         if isSyncOptionEnabled(key: "sync.options.imageFiles", defaultValue: true) { options.insert(.imageFiles) }
+        if isSyncOptionEnabled(key: "sync.options.skills", defaultValue: true) { options.insert(.skills) }
         if isSyncOptionEnabled(key: "sync.options.shortcutTools", defaultValue: true) { options.insert(.shortcutTools) }
         if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
         if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
@@ -552,6 +553,8 @@ private extension SyncMergeSummary {
         skippedAudioFiles += other.skippedAudioFiles
         importedImageFiles += other.importedImageFiles
         skippedImageFiles += other.skippedImageFiles
+        importedSkills += other.importedSkills
+        skippedSkills += other.skippedSkills
         importedShortcutTools += other.importedShortcutTools
         skippedShortcutTools += other.skippedShortcutTools
         importedWorldbooks += other.importedWorldbooks

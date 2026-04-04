@@ -45,6 +45,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
     case backgrounds = "Backgrounds"
     case providers = "Providers"
     case mcpServers = "MCPServers"
+    case skills = "Skills"
     case shortcutTools = "ShortcutTools"
     case worldbooks = "Worldbooks"
     
@@ -59,6 +60,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .backgrounds: return NSLocalizedString("背景图片", comment: "")
         case .providers: return NSLocalizedString("提供商配置", comment: "")
         case .mcpServers: return NSLocalizedString("MCP 服务器", comment: "")
+        case .skills: return NSLocalizedString("Agent Skills", comment: "")
         case .shortcutTools: return NSLocalizedString("快捷指令工具", comment: "")
         case .worldbooks: return NSLocalizedString("世界书", comment: "")
         }
@@ -73,6 +75,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .backgrounds: return "photo.artframe"
         case .providers: return "server.rack"
         case .mcpServers: return "point.3.connected.trianglepath.dotted"
+        case .skills: return "sparkles.square.filled.on.square"
         case .shortcutTools: return "bolt.horizontal.circle"
         case .worldbooks: return "book.pages"
         }
@@ -87,6 +90,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .backgrounds: return .pink
         case .providers: return .indigo
         case .mcpServers: return .teal
+        case .skills: return .cyan
         case .shortcutTools: return .mint
         case .worldbooks: return .brown
         }
@@ -702,11 +706,18 @@ public enum StorageUtility {
 
     private static func invalidateRelatedCaches(for url: URL) {
         let worldbookDirectory = getDirectory(for: .worldbooks).standardizedFileURL.path
+        let skillDirectory = getDirectory(for: .skills).standardizedFileURL.path
         let targetPath = url.standardizedFileURL.path
         let isWorldbookPath = targetPath == worldbookDirectory || targetPath.hasPrefix(worldbookDirectory + "/")
+        let isSkillPath = targetPath == skillDirectory || targetPath.hasPrefix(skillDirectory + "/")
 
         if isWorldbookPath {
             WorldbookStore.shared.invalidateCache()
+        }
+        if isSkillPath {
+            Task { @MainActor in
+                SkillManager.shared.reloadFromDisk()
+            }
         }
     }
 }

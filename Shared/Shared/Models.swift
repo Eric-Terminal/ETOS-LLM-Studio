@@ -12,6 +12,7 @@
 
 import Foundation
 import SwiftUI
+import CoreGraphics
 #if canImport(CryptoKit)
 import CryptoKit
 #endif
@@ -90,6 +91,68 @@ public struct ModelListResponse: Decodable {
     public let data: [ModelData]
 }
 
+public enum NetworkProxyType: String, Codable, Hashable, CaseIterable, Sendable {
+    case http
+    case socks5
+}
+
+public struct NetworkProxyConfiguration: Codable, Hashable, Sendable {
+    public var isEnabled: Bool
+    public var type: NetworkProxyType
+    public var host: String
+    public var port: Int
+    public var username: String
+    public var password: String
+
+    public init(
+        isEnabled: Bool = false,
+        type: NetworkProxyType = .http,
+        host: String = "",
+        port: Int = 8080,
+        username: String = "",
+        password: String = ""
+    ) {
+        self.isEnabled = isEnabled
+        self.type = type
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+    }
+
+    public var trimmedHost: String {
+        host.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var trimmedUsername: String {
+        username.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var trimmedPassword: String {
+        password.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var hasAuthentication: Bool {
+        !trimmedUsername.isEmpty
+    }
+
+    public var normalizedIfEnabled: NetworkProxyConfiguration? {
+        guard isEnabled else { return nil }
+        let normalizedHost = trimmedHost
+        guard !normalizedHost.isEmpty, (1...65535).contains(port) else {
+            return nil
+        }
+        return NetworkProxyConfiguration(
+            isEnabled: true,
+            type: type,
+            host: normalizedHost,
+            port: port,
+            username: trimmedUsername,
+            password: trimmedPassword
+        )
+    }
+}
+
 
 /// 代表一个用户自定义的 API 服务提供商
 public struct Provider: Codable, Identifiable, Hashable {
@@ -101,6 +164,8 @@ public struct Provider: Codable, Identifiable, Hashable {
     public var apiFormat: String // 例如: "openai-compatible"
     public var models: [Model]
     public var headerOverrides: [String: String]
+    /// 提供商独立代理。为 `nil` 时回退到全局代理设置。
+    public var proxyConfiguration: NetworkProxyConfiguration?
 
     public init(
         id: UUID = UUID(),
@@ -109,7 +174,8 @@ public struct Provider: Codable, Identifiable, Hashable {
         apiKeys: [String],
         apiFormat: String,
         models: [Model] = [],
-        headerOverrides: [String: String] = [:]
+        headerOverrides: [String: String] = [:],
+        proxyConfiguration: NetworkProxyConfiguration? = nil
     ) {
         self.id = id
         self.name = name
@@ -118,10 +184,11 @@ public struct Provider: Codable, Identifiable, Hashable {
         self.apiFormat = apiFormat
         self.models = models
         self.headerOverrides = headerOverrides
+        self.proxyConfiguration = proxyConfiguration
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, baseURL, apiKeys, apiFormat, models, headerOverrides
+        case id, name, baseURL, apiKeys, apiFormat, models, headerOverrides, proxyConfiguration
     }
 
     public init(from decoder: Decoder) throws {
@@ -133,6 +200,7 @@ public struct Provider: Codable, Identifiable, Hashable {
         self.apiFormat = try container.decode(String.self, forKey: .apiFormat)
         self.models = try container.decodeIfPresent([Model].self, forKey: .models) ?? []
         self.headerOverrides = try container.decodeIfPresent([String: String].self, forKey: .headerOverrides) ?? [:]
+        self.proxyConfiguration = try container.decodeIfPresent(NetworkProxyConfiguration.self, forKey: .proxyConfiguration)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -148,6 +216,9 @@ public struct Provider: Codable, Identifiable, Hashable {
         if !headerOverrides.isEmpty {
             try container.encode(headerOverrides, forKey: .headerOverrides)
         }
+        if let proxyConfiguration {
+            try container.encode(proxyConfiguration, forKey: .proxyConfiguration)
+        }
     }
 }
 
@@ -155,11 +226,14 @@ public struct Provider: Codable, Identifiable, Hashable {
 public struct Model: Codable, Identifiable, Hashable {
     public enum Capability: String, Codable, Hashable {
         case chat
+        case toolCalling
         case speechToText
         case textToSpeech
         case embedding
         case imageGeneration
     }
+
+    public static let defaultCapabilities: [Capability] = [.chat, .toolCalling]
 
     public enum RequestBodyOverrideMode: String, Codable, Hashable {
         case expression
@@ -181,7 +255,7 @@ public struct Model: Codable, Identifiable, Hashable {
         displayName: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
-        capabilities: [Capability] = [.chat],
+        capabilities: [Capability] = Model.defaultCapabilities,
         requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
         rawRequestBodyJSON: String? = nil
     ) {
@@ -190,7 +264,7 @@ public struct Model: Codable, Identifiable, Hashable {
         self.displayName = displayName ?? modelName
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
-        self.capabilities = capabilities.isEmpty ? [.chat] : capabilities
+        self.capabilities = capabilities.isEmpty ? Self.defaultCapabilities : capabilities
         self.requestBodyOverrideMode = requestBodyOverrideMode
         self.rawRequestBodyJSON = rawRequestBodyJSON
     }
@@ -208,8 +282,8 @@ public struct Model: Codable, Identifiable, Hashable {
         self.displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? modelName
         self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
-        let decodedCapabilities = try container.decodeIfPresent([Capability].self, forKey: .capabilities) ?? [.chat]
-        self.capabilities = decodedCapabilities.isEmpty ? [.chat] : decodedCapabilities
+        let decodedCapabilities = try container.decodeIfPresent([Capability].self, forKey: .capabilities) ?? Self.defaultCapabilities
+        self.capabilities = decodedCapabilities.isEmpty ? Self.defaultCapabilities : decodedCapabilities
         self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .expression
         self.rawRequestBodyJSON = try container.decodeIfPresent(String.self, forKey: .rawRequestBodyJSON)
     }
@@ -225,7 +299,7 @@ public struct Model: Codable, Identifiable, Hashable {
         if !overrideParameters.isEmpty {
             try container.encode(overrideParameters, forKey: .overrideParameters)
         }
-        if !(capabilities.count == 1 && capabilities.first == .chat) {
+        if capabilities != Self.defaultCapabilities {
             try container.encode(capabilities, forKey: .capabilities)
         }
         if requestBodyOverrideMode != .expression {
@@ -327,6 +401,10 @@ private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet,
 }
 
 public extension Model {
+    var supportsToolCalling: Bool {
+        capabilities.contains(.toolCalling)
+    }
+
     var supportsSpeechToText: Bool {
         capabilities.contains(.speechToText)
     }
@@ -1947,5 +2025,109 @@ public enum ActiveSheet: Identifiable, Equatable {
         case .settings: return 1
         case .editMessage: return 2
         }
+    }
+}
+
+// MARK: - 聊天气泡颜色偏好工具
+
+/// 聊天气泡颜色偏好编解码工具。
+/// - 统一处理十六进制 RGBA（RRGGBBAA）与 `Color` 之间的转换。
+public enum ChatAppearanceColorCodec {
+    /// 将十六进制颜色字符串解析为 `Color`。
+    /// - Parameters:
+    ///   - hexRGBA: 支持 `RRGGBB`、`RRGGBBAA`，也支持前缀 `#`。
+    ///   - fallback: 解析失败时的回退颜色。
+    public static func color(from hexRGBA: String, fallback: Color) -> Color {
+        let sanitized = hexRGBA
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+            .uppercased()
+
+        let normalized: String
+        if sanitized.count == 6 {
+            normalized = sanitized + "FF"
+        } else if sanitized.count == 8 {
+            normalized = sanitized
+        } else {
+            return fallback
+        }
+
+        guard let value = UInt64(normalized, radix: 16) else {
+            return fallback
+        }
+
+        let red = Double((value >> 24) & 0xFF) / 255.0
+        let green = Double((value >> 16) & 0xFF) / 255.0
+        let blue = Double((value >> 8) & 0xFF) / 255.0
+        let alpha = Double(value & 0xFF) / 255.0
+
+        return Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
+    }
+
+    /// 将 `Color` 编码为十六进制 RGBA 字符串（`RRGGBBAA`）。
+    public static func hexRGBA(from color: Color) -> String? {
+        guard let rgba = rgbaComponents(from: color) else { return nil }
+        let red = UInt8(clampedToByte(rgba.red * 255.0))
+        let green = UInt8(clampedToByte(rgba.green * 255.0))
+        let blue = UInt8(clampedToByte(rgba.blue * 255.0))
+        let alpha = UInt8(clampedToByte(rgba.alpha * 255.0))
+        return String(format: "%02X%02X%02X%02X", red, green, blue, alpha)
+    }
+
+    /// 将颜色按给定比例变暗（仅处理 RGB，保留 Alpha）。
+    /// - Parameter factor: 取值区间建议 0~1，越小越暗。
+    public static func darkened(_ color: Color, factor: Double) -> Color {
+        guard let rgba = rgbaComponents(from: color) else { return color }
+        let scale = min(max(factor, 0), 1)
+        return Color(
+            .sRGB,
+            red: rgba.red * scale,
+            green: rgba.green * scale,
+            blue: rgba.blue * scale,
+            opacity: rgba.alpha
+        )
+    }
+
+    /// 提取颜色 RGBA 分量（sRGB）。
+    public static func rgbaComponents(from color: Color) -> (red: Double, green: Double, blue: Double, alpha: Double)? {
+        guard let cgColor = color.cgColor else { return nil }
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let converted = cgColor.converted(to: colorSpace, intent: .defaultIntent, options: nil) ?? cgColor
+        guard let components = converted.components, !components.isEmpty else { return nil }
+
+        switch components.count {
+        case 4:
+            return (
+                red: clamp01(components[0]),
+                green: clamp01(components[1]),
+                blue: clamp01(components[2]),
+                alpha: clamp01(components[3])
+            )
+        case 3:
+            return (
+                red: clamp01(components[0]),
+                green: clamp01(components[1]),
+                blue: clamp01(components[2]),
+                alpha: 1
+            )
+        case 2:
+            let gray = clamp01(components[0])
+            return (
+                red: gray,
+                green: gray,
+                blue: gray,
+                alpha: clamp01(components[1])
+            )
+        default:
+            return nil
+        }
+    }
+
+    private static func clamp01(_ value: CGFloat) -> Double {
+        min(max(Double(value), 0), 1)
+    }
+
+    private static func clampedToByte(_ value: Double) -> Int {
+        min(max(Int(value.rounded()), 0), 255)
     }
 }

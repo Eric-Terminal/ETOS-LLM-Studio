@@ -69,6 +69,8 @@ public enum Persistence {
         let name: String
         let lorebookIDs: [UUID]
         let worldbookContextIsolationEnabled: Bool?
+        let conversationSummary: String?
+        let conversationSummaryUpdatedAt: String?
     }
 
     private struct SessionRecordFileV3: Codable {
@@ -558,6 +560,132 @@ public enum Persistence {
         }
     }
 
+    /// 写入（或覆盖）某个会话的跨对话摘要。
+    public static func upsertConversationSessionSummary(_ summary: String, for sessionID: UUID, updatedAt: Date = Date()) {
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            clearConversationSessionSummary(for: sessionID)
+            return
+        }
+        updateConversationSummaryFields(
+            for: sessionID,
+            summary: trimmed,
+            updatedAt: iso8601Timestamp(from: updatedAt)
+        )
+    }
+
+    /// 清空某个会话的跨对话摘要字段。
+    public static func clearConversationSessionSummary(for sessionID: UUID) {
+        updateConversationSummaryFields(for: sessionID, summary: nil, updatedAt: nil)
+    }
+
+    /// 清空所有会话的跨对话摘要，返回实际清理条数。
+    @discardableResult
+    public static func clearAllConversationSessionSummaries() -> Int {
+        let summaries = loadConversationSessionSummaries(limit: nil, excludingSessionID: nil)
+        guard !summaries.isEmpty else { return 0 }
+        summaries.forEach { summary in
+            clearConversationSessionSummary(for: summary.sessionID)
+        }
+        return summaries.count
+    }
+
+    /// 读取某个会话的跨对话摘要。
+    public static func loadConversationSessionSummary(for sessionID: UUID) -> ConversationSessionSummary? {
+        guard let summary = try? loadSessionSummaryV3(for: sessionID),
+              let text = summary.session.conversationSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            return nil
+        }
+
+        let fallbackName = summary.session.name
+        let parsedDate = parseISO8601Date(summary.session.conversationSummaryUpdatedAt) ?? .distantPast
+        return ConversationSessionSummary(
+            sessionID: summary.session.id,
+            sessionName: fallbackName,
+            summary: text,
+            updatedAt: parsedDate
+        )
+    }
+
+    /// 读取会话摘要列表，可选限制返回数量并排除指定会话。
+    public static func loadConversationSessionSummaries(limit: Int?, excludingSessionID: UUID?) -> [ConversationSessionSummary] {
+        guard let index = loadSessionIndexV3() else { return [] }
+
+        var summaries: [ConversationSessionSummary] = []
+        summaries.reserveCapacity(index.sessions.count)
+
+        for item in index.sessions {
+            if let excludingSessionID, item.id == excludingSessionID {
+                continue
+            }
+            guard let recordSummary = try? loadSessionSummaryV3(for: item.id),
+                  let text = recordSummary.session.conversationSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty else {
+                continue
+            }
+
+            let updatedAt = parseISO8601Date(recordSummary.session.conversationSummaryUpdatedAt)
+                ?? parseISO8601Date(item.updatedAt)
+                ?? .distantPast
+            let resolvedName = recordSummary.session.name.isEmpty ? item.name : recordSummary.session.name
+            summaries.append(
+                ConversationSessionSummary(
+                    sessionID: item.id,
+                    sessionName: resolvedName,
+                    summary: text,
+                    updatedAt: updatedAt
+                )
+            )
+        }
+
+        summaries.sort { lhs, rhs in
+            if lhs.updatedAt == rhs.updatedAt {
+                return lhs.sessionID.uuidString < rhs.sessionID.uuidString
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+
+        guard let limit else { return summaries }
+        let safeLimit = max(0, limit)
+        guard safeLimit > 0 else { return [] }
+        return Array(summaries.prefix(safeLimit))
+    }
+
+    private static func updateConversationSummaryFields(for sessionID: UUID, summary: String?, updatedAt: String?) {
+        do {
+            let baseRecord: SessionRecordFileV3
+            if let existing = try loadSessionRecordV3(for: sessionID) {
+                baseRecord = existing
+            } else {
+                let sessionSnapshot = resolveSessionSnapshot(for: sessionID)
+                let messages = try loadMessagesForRecordWrite(sessionID: sessionID)
+                baseRecord = makeSessionRecordV3(session: sessionSnapshot, messages: messages)
+            }
+
+            let normalizedSummary = summary?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalSummary = (normalizedSummary?.isEmpty == false) ? normalizedSummary : nil
+            let finalUpdatedAt = finalSummary == nil ? nil : updatedAt
+            let updatedMeta = SessionMetaV3(
+                id: baseRecord.session.id,
+                name: baseRecord.session.name,
+                lorebookIDs: baseRecord.session.lorebookIDs,
+                worldbookContextIsolationEnabled: baseRecord.session.worldbookContextIsolationEnabled,
+                conversationSummary: finalSummary,
+                conversationSummaryUpdatedAt: finalUpdatedAt
+            )
+            let updatedRecord = SessionRecordFileV3(
+                schemaVersion: sessionStoreSchemaVersion,
+                session: updatedMeta,
+                prompts: baseRecord.prompts,
+                messages: baseRecord.messages
+            )
+            try writeSessionRecordV3(updatedRecord, for: sessionID)
+        } catch {
+            logger.warning("更新会话摘要失败 \(sessionID.uuidString): \(error.localizedDescription)")
+        }
+    }
+
     private static func loadChatSessionsFromV3() -> [ChatSession]? {
         let indexURL = sessionIndexFileURLV3()
         guard FileManager.default.fileExists(atPath: indexURL.path) else {
@@ -745,13 +873,16 @@ public enum Persistence {
     }
 
     private static func makeSessionRecordV3(session: ChatSession, messages: [ChatMessage]) -> SessionRecordFileV3 {
-        SessionRecordFileV3(
+        let preservedSummary = (try? loadSessionSummaryV3(for: session.id))?.session
+        return SessionRecordFileV3(
             schemaVersion: sessionStoreSchemaVersion,
             session: SessionMetaV3(
                 id: session.id,
                 name: session.name,
                 lorebookIDs: session.lorebookIDs,
-                worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil
+                worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil,
+                conversationSummary: preservedSummary?.conversationSummary,
+                conversationSummaryUpdatedAt: preservedSummary?.conversationSummaryUpdatedAt
             ),
             prompts: SessionPromptsV3(
                 topicPrompt: session.topicPrompt,
@@ -1148,9 +1279,28 @@ public enum Persistence {
     }
 
     private static func iso8601Timestamp() -> String {
+        iso8601Timestamp(from: Date())
+    }
+
+    private static func iso8601Timestamp(from date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: Date())
+        return formatter.string(from: date)
+    }
+
+    private static func parseISO8601Date(_ value: String?) -> Date? {
+        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let parsed = formatter.date(from: value) {
+            return parsed
+        }
+
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
     }
 
     private static func inferToolCallsPlacement(from content: String) -> ToolCallsPlacement {

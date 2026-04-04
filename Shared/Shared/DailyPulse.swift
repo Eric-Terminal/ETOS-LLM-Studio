@@ -453,6 +453,7 @@ public final class DailyPulseManager: ObservableObject {
     private static let includeShortcutContextDefaultsKey = "dailyPulse.includeShortcutContext"
     private static let includeRecentExternalResultsDefaultsKey = "dailyPulse.includeRecentExternalResults"
     private static let includeTrendContextDefaultsKey = "dailyPulse.includeTrendContext"
+    private static let dedicatedModelDefaultsKey = "dailyPulseModelIdentifier"
     private static let lastViewedDayKeyDefaultsKey = "dailyPulse.lastViewedDayKey"
     private static let lastDeliveryAttemptDayKeyDefaultsKey = "dailyPulse.lastDeliveryAttemptDayKey"
 #if os(iOS)
@@ -1114,6 +1115,34 @@ public final class DailyPulseManager: ObservableObject {
         return "请继续展开这条每日脉冲，并结合我的现状给出更具体建议。"
     }
 
+    internal nonisolated static func resolveGenerationModel(
+        dedicatedModelIdentifier: String,
+        selectedModel: RunnableModel?,
+        activatedModels: [RunnableModel]
+    ) -> RunnableModel? {
+        let chatCapableModels = activatedModels.filter { $0.model.capabilities.contains(.chat) }
+
+        if !dedicatedModelIdentifier.isEmpty,
+           let dedicatedModel = chatCapableModels.first(where: { $0.id == dedicatedModelIdentifier }) {
+            return dedicatedModel
+        }
+
+        if let selectedModel, selectedModel.model.capabilities.contains(.chat) {
+            return selectedModel
+        }
+
+        return chatCapableModels.first
+    }
+
+    private func resolveGenerationModel() -> RunnableModel? {
+        let dedicatedModelIdentifier = defaults.string(forKey: Self.dedicatedModelDefaultsKey) ?? ""
+        return Self.resolveGenerationModel(
+            dedicatedModelIdentifier: dedicatedModelIdentifier,
+            selectedModel: chatService.selectedModelSubject.value,
+            activatedModels: chatService.activatedRunnableModels
+        )
+    }
+
     private func generate(
         force: Bool,
         trigger: DailyPulseTrigger,
@@ -1138,7 +1167,7 @@ public final class DailyPulseManager: ObservableObject {
             guard input.hasUsableContext else {
                 throw DailyPulseGenerationError.insufficientContext
             }
-            guard chatService.selectedModelSubject.value != nil || !chatService.activatedRunnableModels.isEmpty else {
+            guard let generationModel = resolveGenerationModel() else {
                 throw DailyPulseGenerationError.noModelSelected
             }
 
@@ -1150,7 +1179,8 @@ public final class DailyPulseManager: ObservableObject {
             let raw = try await chatService.generateDetachedChatCompletion(
                 systemPrompt: Self.systemPrompt,
                 userPrompt: userPrompt,
-                temperature: 0.45
+                temperature: 0.45,
+                runnableModel: generationModel
             )
             let parsed = try Self.parseModelResponse(from: raw)
             let cards = Self.makeCards(

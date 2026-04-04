@@ -20,6 +20,7 @@ struct ToolCatalogSupportTests {
             enableMemoryWrite: true,
             enableMemoryActiveRetrieval: true,
             memoryTopK: 5,
+            enableWidgetTool: true,
             isIsolatedSession: true
         )
 
@@ -41,6 +42,7 @@ struct ToolCatalogSupportTests {
             enableMemoryWrite: true,
             enableMemoryActiveRetrieval: true,
             memoryTopK: 0,
+            enableWidgetTool: true,
             isIsolatedSession: false
         )
 
@@ -49,6 +51,23 @@ struct ToolCatalogSupportTests {
         #expect(memorySearch?.isConfiguredEnabled == false)
         #expect(memorySearch?.isAvailableInCurrentSession == false)
         #expect(memorySearch?.statusReason == .zeroTopK)
+    }
+
+    @Test("网页卡片工具关闭时应标记为未启用")
+    func testBuiltInToolStatesReflectWidgetDisabled() {
+        let states = ToolCatalogSupport.builtInToolStates(
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true,
+            memoryTopK: 3,
+            enableWidgetTool: false,
+            isIsolatedSession: false
+        )
+
+        let widgetTool = states.first(where: { $0.kind == .widgetCard })
+        #expect(widgetTool?.isConfiguredEnabled == false)
+        #expect(widgetTool?.isAvailableInCurrentSession == false)
+        #expect(widgetTool?.statusReason == .widgetDisabled)
     }
 
     @Test("Schema 摘要会提取字段与必填项")

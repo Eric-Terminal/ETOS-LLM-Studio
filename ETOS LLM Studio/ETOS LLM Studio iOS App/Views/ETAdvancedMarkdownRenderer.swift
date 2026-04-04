@@ -19,6 +19,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let customTextColor: Color?
     @Environment(\.colorScheme) private var colorScheme
 
     private var shouldUseWebRenderer: Bool {
@@ -39,7 +40,9 @@ struct ETAdvancedMarkdownRenderer: View {
             ETMathWebMarkdownView(
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
-                isOutgoing: isOutgoing
+                isOutgoing: isOutgoing,
+                customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
+                prefersDarkPalette: colorScheme == .dark
             )
         } else {
             baseTextView(normalizedContent)
@@ -109,8 +112,8 @@ struct ETAdvancedMarkdownRenderer: View {
 
     @ViewBuilder
     private func baseTextView(_ text: String) -> some View {
+        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         if enableMarkdown {
-            let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
@@ -120,7 +123,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 )
         } else {
             Text(text)
-                .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                .foregroundStyle(textColor)
         }
     }
 }
@@ -129,6 +132,8 @@ private struct ETMathWebMarkdownView: View {
     let content: String
     let enableMarkdown: Bool
     let isOutgoing: Bool
+    let customTextHex: String?
+    let prefersDarkPalette: Bool
 
     @State private var renderedHeight: CGFloat = 28
 
@@ -138,6 +143,8 @@ private struct ETMathWebMarkdownView: View {
                 content: content,
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing,
+                customTextHex: customTextHex,
+                prefersDarkPalette: prefersDarkPalette,
                 availableWidth: max(1, geometry.size.width),
                 renderedHeight: $renderedHeight
             )
@@ -150,6 +157,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let content: String
     let enableMarkdown: Bool
     let isOutgoing: Bool
+    let customTextHex: String?
+    let prefersDarkPalette: Bool
     let availableWidth: CGFloat
     @Binding var renderedHeight: CGFloat
 
@@ -180,7 +189,9 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         let payload = Payload(content: content, availableWidth: stableWidth)
         let shellConfiguration = ShellConfiguration(
             enableMarkdown: enableMarkdown,
-            isOutgoing: isOutgoing
+            isOutgoing: isOutgoing,
+            customTextHex: customTextHex,
+            prefersDarkPalette: prefersDarkPalette
         )
         context.coordinator.render(
             payload,
@@ -291,10 +302,16 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     struct ShellConfiguration: Equatable {
         let enableMarkdown: Bool
         let isOutgoing: Bool
+        let customTextHex: String?
+        let prefersDarkPalette: Bool
 
         var htmlDocument: String {
-            let textColor = isOutgoing ? "#FFFFFF" : "#1C1C1E"
-            let secondaryTextColor = isOutgoing ? "rgba(255,255,255,0.85)" : "#3C3C43"
+            let defaultTextColor = isOutgoing ? "#FFFFFF" : (prefersDarkPalette ? "#FFFFFF" : "#1C1C1E")
+            let textColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 1) ?? defaultTextColor
+            let defaultSecondaryTextColor = isOutgoing
+                ? "rgba(255,255,255,0.85)"
+                : (prefersDarkPalette ? "rgba(255,255,255,0.82)" : "#3C3C43")
+            let secondaryTextColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 0.85) ?? defaultSecondaryTextColor
             let linkColor = isOutgoing ? "rgba(255,255,255,0.95)" : "#0A84FF"
             let codeKeywordColor = isOutgoing ? "rgba(255,255,255,0.96)" : "#8E44AD"
             let codeStringColor = isOutgoing ? "#D4F5FF" : "#1A9445"
@@ -307,6 +324,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             let codeBlockBackgroundColor = isOutgoing ? "rgba(255,255,255,0.16)" : "rgba(127,127,127,0.16)"
             let codeHeaderBackgroundColor = isOutgoing ? "rgba(255,255,255,0.2)" : "rgba(127,127,127,0.2)"
             let codeBorderColor = isOutgoing ? "rgba(255,255,255,0.28)" : "rgba(127,127,127,0.3)"
+            let quoteBorderColor = isOutgoing ? "rgba(255,255,255,0.56)" : "rgba(120,120,128,0.48)"
             let bodyFontFamily = Self.cssFontFamily(
                 role: .body,
                 fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
@@ -382,6 +400,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     p { margin: 0.25em 0; }
     ul, ol { margin: 0.3em 0; padding-left: 1.25em; }
     li { margin: 0.2em 0; }
+    blockquote {
+      margin: 0.3em 0;
+      padding: 0.05em 0 0.05em 0.82em;
+      border-left: 3px solid \(quoteBorderColor);
+    }
+    blockquote > :first-child { margin-top: 0; }
+    blockquote > :last-child { margin-bottom: 0; }
     a { color: var(--link); text-decoration: underline; }
     strong { font-weight: 600; font-family: var(--font-strong); }
     em { font-style: italic; font-family: var(--font-emphasis); }
@@ -1022,6 +1047,17 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
                 .replacingOccurrences(of: "'", with: "\\'")
             return "'\(escaped)'"
         }
+
+        nonisolated private static func cssRGBA(from hexRGBA: String?, alphaMultiplier: Double) -> String? {
+            guard let hexRGBA else { return nil }
+            let parsedColor = ChatAppearanceColorCodec.color(from: hexRGBA, fallback: .clear)
+            guard let components = ChatAppearanceColorCodec.rgbaComponents(from: parsedColor) else { return nil }
+            let alpha = min(max(components.alpha * alphaMultiplier, 0), 1)
+            let red = Int((components.red * 255).rounded())
+            let green = Int((components.green * 255).rounded())
+            let blue = Int((components.blue * 255).rounded())
+            return "rgba(\(red),\(green),\(blue),\(String(format: "%.3f", alpha)))"
+        }
     }
 
     struct Payload: Equatable {
@@ -1111,6 +1147,17 @@ private extension View {
                     FontFamilyVariant(.monospaced)
                 }
                 ForegroundColor(textColor)
+            }
+            .markdownBlockStyle(\.blockquote) { configuration in
+                configuration.label
+                    .padding(.leading, 12)
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(isOutgoing ? Color.white.opacity(0.56) : Color.secondary.opacity(0.48))
+                            .frame(width: 3)
+                            .padding(.vertical, 2)
+                    }
+                    .markdownMargin(top: .em(0.2), bottom: .em(0.75))
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
                 VStack(alignment: .leading, spacing: 0) {
@@ -1690,8 +1737,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
     func highlightCode(_ code: String, language: String?) -> Text {
         guard !code.isEmpty else { return Text("") }
 
-        let nsCode = code as NSString
-        let length = nsCode.length
+        let length = code.utf16.count
         guard length > 0, length <= 12_000 else {
             return Text(code).foregroundColor(baseColor)
         }
@@ -1775,7 +1821,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
         )
         apply(pattern: #"[{}\[\]();,.:]"#, kind: .punctuation, priority: 56)
 
-        var result = Text("")
+        var attributed = AttributedString(code)
         var segmentStart = 0
         var currentKind = kinds[0]
 
@@ -1783,9 +1829,13 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
             let reachedEnd = index == length
             let kindChanged = !reachedEnd && kinds[index] != currentKind
             if reachedEnd || kindChanged {
-                let range = NSRange(location: segmentStart, length: index - segmentStart)
-                let segment = nsCode.substring(with: range)
-                result = result + Text(segment).foregroundColor(color(for: currentKind, palette: palette))
+                let start = String.Index(utf16Offset: segmentStart, in: code)
+                let end = String.Index(utf16Offset: index, in: code)
+                if let attributedStart = AttributedString.Index(start, within: attributed),
+                   let attributedEnd = AttributedString.Index(end, within: attributed),
+                   attributedStart < attributedEnd {
+                    attributed[attributedStart..<attributedEnd].foregroundColor = color(for: currentKind, palette: palette)
+                }
                 if !reachedEnd {
                     segmentStart = index
                     currentKind = kinds[index]
@@ -1793,7 +1843,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
             }
         }
 
-        return result
+        return Text(attributed)
     }
 
     private func color(for token: TokenKind, palette: ETCodeHighlightPalette) -> Color {

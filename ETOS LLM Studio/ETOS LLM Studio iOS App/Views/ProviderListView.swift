@@ -14,6 +14,7 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
     case provider
     case modelOrder
     case specializedModel
+    case globalProxy
 
     var id: String { rawValue }
 
@@ -25,6 +26,8 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
             return "模型顺序"
         case .specializedModel:
             return "专用模型"
+        case .globalProxy:
+            return "全局代理"
         }
     }
 
@@ -36,6 +39,8 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
             return "arrow.up.arrow.down"
         case .specializedModel:
             return "slider.horizontal.3"
+        case .globalProxy:
+            return "network"
         }
     }
 }
@@ -67,6 +72,12 @@ struct ProviderListView: View {
                     Label(ProviderManagementTab.specializedModel.title, systemImage: ProviderManagementTab.specializedModel.iconName)
                 }
                 .tag(ProviderManagementTab.specializedModel)
+
+            GlobalProxySettingsView()
+                .tabItem {
+                    Label(ProviderManagementTab.globalProxy.title, systemImage: ProviderManagementTab.globalProxy.iconName)
+                }
+                .tag(ProviderManagementTab.globalProxy)
         }
         .navigationTitle("提供商与模型管理")
         .toolbar {

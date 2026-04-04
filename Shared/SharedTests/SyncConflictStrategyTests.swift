@@ -123,8 +123,8 @@ struct SyncConflictStrategyTests {
         }
     }
 
-    @Test("提供商同键不同值时会保留两份")
-    func testProvidersKeepBothCopiesWhenSameKeyHasDifferentValue() async {
+    @Test("提供商同键不同值时会优先保留本地且不生成重复项")
+    func testProvidersPreferLocalWhenSameHeaderKeyHasDifferentValue() async {
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             resetProviders(to: originalProviders)
@@ -156,8 +156,88 @@ struct SyncConflictStrategyTests {
         let mergedProviders = ConfigLoader.loadProviders().filter { $0.baseURL == localProvider.baseURL }
 
         #expect(summary.importedProviders == 1)
-        #expect(mergedProviders.count == 2)
-        #expect(Set(mergedProviders.compactMap { $0.headerOverrides["X-Mode"] }) == Set(["local", "remote"]))
+        #expect(mergedProviders.count == 1)
+        #expect(mergedProviders[0].headerOverrides["X-Mode"] == "local")
+        #expect(mergedProviders[0].apiKeys == ["local-key", "remote-key"])
+    }
+
+    @Test("提供商 API 格式别名冲突时会归一化并合并")
+    func testProvidersNormalizeAliasFormatWithoutDuplication() async {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            resetProviders(to: originalProviders)
+        }
+
+        resetProviders(to: [])
+        let localProvider = Provider(
+            id: UUID(),
+            name: "别名提供商",
+            baseURL: "https://api.minimaxi.com/v1",
+            apiKeys: ["local-key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "abab6.5-chat")],
+            headerOverrides: [:]
+        )
+        ConfigLoader.saveProvider(localProvider)
+
+        let chatService = ChatService()
+        var incomingProvider = localProvider
+        incomingProvider.apiFormat = "minimax"
+        incomingProvider.apiKeys = ["remote-key"]
+
+        let summary = await SyncEngine.apply(
+            package: SyncPackage(options: [.providers], providers: [incomingProvider]),
+            chatService: chatService
+        )
+        let mergedProviders = ConfigLoader.loadProviders().filter {
+            $0.baseURL == localProvider.baseURL && $0.name == localProvider.name
+        }
+
+        #expect(summary.importedProviders == 1)
+        #expect(mergedProviders.count == 1)
+        #expect(mergedProviders[0].apiFormat == "openai-compatible")
+        #expect(mergedProviders[0].apiKeys == ["local-key", "remote-key"])
+    }
+
+    @Test("同步前已有同名同地址重复项时会自动压缩为一份")
+    func testProvidersCompactedBeforeApplyingIncomingPackage() async {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            resetProviders(to: originalProviders)
+        }
+
+        resetProviders(to: [])
+        let providerA = Provider(
+            id: UUID(),
+            name: "重复提供商",
+            baseURL: "https://api.siliconflow.cn/v1",
+            apiKeys: ["a-key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "deepseek-chat")],
+            headerOverrides: [:]
+        )
+        var providerB = providerA
+        providerB.id = UUID()
+        providerB.apiFormat = "openai"
+        providerB.apiKeys = ["b-key"]
+        providerB.models = [Model(modelName: "deepseek-chat"), Model(modelName: "qwen-plus")]
+
+        ConfigLoader.saveProvider(providerA)
+        ConfigLoader.saveProvider(providerB)
+
+        let chatService = ChatService()
+        let summary = await SyncEngine.apply(
+            package: SyncPackage(options: [.providers], providers: [providerA]),
+            chatService: chatService
+        )
+        let mergedProviders = ConfigLoader.loadProviders().filter {
+            $0.baseURL == providerA.baseURL && $0.name == providerA.name
+        }
+
+        #expect(summary.importedProviders == 0)
+        #expect(mergedProviders.count == 1)
+        #expect(mergedProviders[0].apiKeys == ["a-key", "b-key"])
+        #expect(mergedProviders[0].models.count == 2)
     }
 
     private func resetProviders(to providers: [Provider]) {

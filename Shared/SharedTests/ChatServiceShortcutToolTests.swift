@@ -66,6 +66,12 @@ struct ChatServiceShortcutToolTests {
             memoryManager: MemoryManager(),
             urlSession: session
         )
+        service.setSelectedModel(
+            RunnableModel(
+                provider: provider,
+                model: provider.models[0]
+            )
+        )
 
         await service.sendAndProcessMessage(
             content: "hello",
@@ -137,6 +143,12 @@ struct ChatServiceShortcutToolTests {
             memoryManager: MemoryManager(),
             urlSession: session
         )
+        service.setSelectedModel(
+            RunnableModel(
+                provider: provider,
+                model: provider.models[0]
+            )
+        )
 
         await service.sendAndProcessMessage(
             content: "hello",
@@ -153,6 +165,87 @@ struct ChatServiceShortcutToolTests {
 
         let toolNames = adapter.receivedTools?.map(\.name) ?? []
         #expect(!toolNames.contains(where: { $0.hasPrefix(ShortcutToolNaming.toolAliasPrefix) }))
+    }
+
+    @MainActor
+    @Test("模型关闭工具能力时 sendAndProcessMessage 不发送任何工具")
+    func testToolsSkippedWhenModelToolCapabilityDisabled() async {
+        let originalProviders = ConfigLoader.loadProviders()
+        let originalShortcutTools = ShortcutToolStore.loadTools()
+        let originalGlobalSwitch = ShortcutToolManager.shared.chatToolsEnabled
+
+        defer {
+            for provider in ConfigLoader.loadProviders() {
+                ConfigLoader.deleteProvider(provider)
+            }
+            for provider in originalProviders {
+                ConfigLoader.saveProvider(provider)
+            }
+            ShortcutToolStore.saveTools(originalShortcutTools)
+            ShortcutToolManager.shared.setChatToolsEnabled(originalGlobalSwitch)
+            ShortcutToolManager.shared.reloadFromDisk()
+        }
+
+        for provider in ConfigLoader.loadProviders() {
+            ConfigLoader.deleteProvider(provider)
+        }
+
+        let provider = Provider(
+            name: "Test Provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(
+                    modelName: "test-model",
+                    displayName: "Test Model",
+                    isActivated: true,
+                    capabilities: [.chat]
+                )
+            ]
+        )
+        ConfigLoader.saveProvider(provider)
+
+        let shortcutTool = ShortcutToolDefinition(
+            name: "Injected Tool",
+            isEnabled: true,
+            generatedDescription: "for unit test"
+        )
+        ShortcutToolStore.saveTools([shortcutTool])
+        ShortcutToolManager.shared.setChatToolsEnabled(true)
+        ShortcutToolManager.shared.reloadFromDisk()
+
+        let adapter = ShortcutInjectionMockAdapter()
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [ShortcutInjectionURLProtocol.self]
+        let session = URLSession(configuration: sessionConfig)
+
+        let service = ChatService(
+            adapters: ["openai-compatible": adapter],
+            memoryManager: MemoryManager(),
+            urlSession: session
+        )
+        service.setSelectedModel(
+            RunnableModel(
+                provider: provider,
+                model: provider.models[0]
+            )
+        )
+
+        await service.sendAndProcessMessage(
+            content: "hello",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        #expect(adapter.receivedTools == nil)
     }
 }
 

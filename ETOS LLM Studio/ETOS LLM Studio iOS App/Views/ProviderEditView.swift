@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct ProviderEditView: View {
@@ -15,7 +16,10 @@ struct ProviderEditView: View {
     @State private var provider: Provider
     @State private var apiKeysText: String
     @State private var headerOverrideEntries: [HeaderOverrideEntry]
+    @State private var useProviderProxyOverride: Bool
+    @State private var providerProxyConfiguration: NetworkProxyConfiguration
     @State private var showApiKeys: Bool = false
+    @State private var showProxyPassword: Bool = false
     let isNew: Bool
     
     init(provider: Provider, isNew: Bool = false) {
@@ -25,6 +29,8 @@ struct ProviderEditView: View {
         _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
             ? [HeaderOverrideEntry(text: "")]
             : serializedHeaders.map { HeaderOverrideEntry(text: $0) })
+        _useProviderProxyOverride = State(initialValue: provider.proxyConfiguration != nil)
+        _providerProxyConfiguration = State(initialValue: provider.proxyConfiguration ?? NetworkProxyConfiguration())
         self.isNew = isNew
     }
     
@@ -57,6 +63,52 @@ struct ProviderEditView: View {
                 .autocorrectionDisabled()
                 
                 Toggle("显示明文", isOn: $showApiKeys)
+            }
+
+            Section(
+                header: Text("代理（提供商级）"),
+                footer: Text(providerProxyFooterText)
+            ) {
+                Toggle("使用独立代理（优先于全局）", isOn: $useProviderProxyOverride)
+
+                if useProviderProxyOverride {
+                    Toggle("启用代理", isOn: $providerProxyConfiguration.isEnabled)
+
+                    Picker("代理类型", selection: $providerProxyConfiguration.type) {
+                        Text("HTTP / HTTPS").tag(NetworkProxyType.http)
+                        Text("SOCKS5").tag(NetworkProxyType.socks5)
+                    }
+
+                    TextField("代理地址", text: $providerProxyConfiguration.host)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    TextField("端口", value: $providerProxyConfiguration.port, formatter: numberFormatter)
+                        .keyboardType(.numberPad)
+                        .onChange(of: providerProxyConfiguration.port) { _, newValue in
+                            let clamped = max(1, min(65535, newValue))
+                            if clamped != newValue {
+                                providerProxyConfiguration.port = clamped
+                            }
+                        }
+
+                    TextField("用户名（可选）", text: $providerProxyConfiguration.username)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    Group {
+                        if showProxyPassword {
+                            TextField("密码（可选）", text: $providerProxyConfiguration.password)
+                        } else {
+                            SecureField("密码（可选）", text: $providerProxyConfiguration.password)
+                        }
+                    }
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                    Toggle("显示代理密码", isOn: $showProxyPassword)
+                }
             }
 
             Section(header: Text("请求头覆盖"), footer: Text(headerOverridesHint)) {
@@ -101,6 +153,7 @@ struct ProviderEditView: View {
         var updated = provider
         updated.apiKeys = parsedApiKeys
         updated.headerOverrides = headerOverrides
+        updated.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
         ConfigLoader.saveProvider(updated)
         ChatService.shared.reloadProviders()
         dismiss()
@@ -121,6 +174,35 @@ struct ProviderEditView: View {
         NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
     }
 
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var providerProxyFooterText: String {
+        if !useProviderProxyOverride {
+            return NSLocalizedString("未设置独立代理时，将自动使用全局代理配置。", comment: "")
+        }
+        if let validationError = providerProxyValidationError {
+            return validationError
+        }
+        return NSLocalizedString("支持 HTTP / HTTPS 和 SOCKS5。填写用户名后会自动启用代理鉴权。", comment: "")
+    }
+
+    private var providerProxyValidationError: String? {
+        guard useProviderProxyOverride, providerProxyConfiguration.isEnabled else { return nil }
+        let host = providerProxyConfiguration.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else {
+            return NSLocalizedString("已启用独立代理，但代理地址为空。", comment: "")
+        }
+        guard (1...65535).contains(providerProxyConfiguration.port) else {
+            return NSLocalizedString("代理端口必须在 1~65535 之间。", comment: "")
+        }
+        return nil
+    }
+
     private var headerOverridesHint: String {
         NSLocalizedString("使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}", comment: "")
     }
@@ -136,7 +218,19 @@ struct ProviderEditView: View {
         provider.name.isEmpty ||
         provider.baseURL.isEmpty ||
         parsedApiKeys.isEmpty ||
+        providerProxyValidationError != nil ||
         headerOverrideEntries.contains { $0.error != nil }
+    }
+
+    private func normalizedProxyConfiguration(_ configuration: NetworkProxyConfiguration) -> NetworkProxyConfiguration {
+        NetworkProxyConfiguration(
+            isEnabled: configuration.isEnabled,
+            type: configuration.type,
+            host: configuration.host.trimmingCharacters(in: .whitespacesAndNewlines),
+            port: max(1, min(65535, configuration.port)),
+            username: configuration.username.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: configuration.password
+        )
     }
 
     private func addHeaderOverrideEntry() {

@@ -19,6 +19,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.memories") private var syncMemories = false
     @AppStorage("sync.options.mcpServers") private var syncMCPServers = true
     @AppStorage("sync.options.imageFiles") private var syncImageFiles = true
+    @AppStorage("sync.options.skills") private var syncSkills = true
     @AppStorage("sync.options.shortcutTools") private var syncShortcutTools = true
     @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
     @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
@@ -39,6 +40,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("记忆（仅合并文本）", isOn: $syncMemories)
                 Toggle("MCP 服务器", isOn: $syncMCPServers)
                 Toggle("图片文件", isOn: $syncImageFiles)
+                Toggle("Agent Skills", isOn: $syncSkills)
                 Toggle("快捷指令工具", isOn: $syncShortcutTools)
                 Toggle("世界书", isOn: $syncWorldbooks)
                 Toggle("反馈工单", isOn: $syncFeedbackTickets)
@@ -120,6 +122,7 @@ struct DeviceSyncSettingsView: View {
         if syncMemories { option.insert(.memories) }
         if syncMCPServers { option.insert(.mcpServers) }
         if syncImageFiles { option.insert(.imageFiles) }
+        if syncSkills { option.insert(.skills) }
         if syncShortcutTools { option.insert(.shortcutTools) }
         if syncWorldbooks { option.insert(.worldbooks) }
         if syncFeedbackTickets { option.insert(.feedbackTickets) }
@@ -244,6 +247,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedImageFiles > 0 {
             parts.append(String(format: NSLocalizedString("图片 +%d", comment: ""), summary.importedImageFiles))
+        }
+        if summary.importedSkills > 0 {
+            parts.append(String(format: NSLocalizedString("Skills +%d", comment: ""), summary.importedSkills))
         }
         if summary.importedShortcutTools > 0 {
             parts.append(String(format: NSLocalizedString("快捷指令工具 +%d", comment: ""), summary.importedShortcutTools))

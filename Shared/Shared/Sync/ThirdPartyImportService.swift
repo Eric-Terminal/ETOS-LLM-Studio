@@ -382,7 +382,7 @@ private extension ThirdPartyImportService {
                     modelName: modelID,
                     displayName: displayName,
                     isActivated: true,
-                    capabilities: [.chat]
+                    capabilities: Model.defaultCapabilities
                 )
             }
 
@@ -510,7 +510,7 @@ private extension ThirdPartyImportService {
                         modelName: modelName,
                         displayName: modelName,
                         isActivated: enabled,
-                        capabilities: [.chat]
+                        capabilities: Model.defaultCapabilities
                     )
                 }
 
@@ -525,7 +525,7 @@ private extension ThirdPartyImportService {
                     modelName: modelID,
                     displayName: displayName,
                     isActivated: enabled,
-                    capabilities: [.chat]
+                    capabilities: Model.defaultCapabilities
                 )
             }
 
@@ -635,7 +635,7 @@ private extension ThirdPartyImportService {
                     modelName: $0,
                     displayName: $0,
                     isActivated: enabled,
-                    capabilities: [.chat]
+                    capabilities: Model.defaultCapabilities
                 )
             }
 

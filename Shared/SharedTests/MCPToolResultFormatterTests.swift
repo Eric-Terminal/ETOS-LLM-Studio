@@ -72,4 +72,25 @@ struct MCPToolResultFormatterTests {
 
         #expect(display.summaryText == "0123456789...")
     }
+
+    @Test("Widget 载荷可从工具参数中提取")
+    func testWidgetPayloadCanBeParsedFromArguments() {
+        let raw = #"{"title":"conversation_summary_system_plan","widget_code":"<style>.card{}</style><div>demo</div>","loading_messages":["规划中..."]}"#
+
+        let payload = ToolWidgetPayloadParser.parse(from: raw)
+
+        #expect(payload?.title == "conversation_summary_system_plan")
+        #expect(payload?.widgetCode.contains("<div>demo</div>") == true)
+        #expect(payload?.loadingMessages == ["规划中..."])
+    }
+
+    @Test("Widget 载荷支持 input 包裹结构")
+    func testWidgetPayloadCanBeParsedFromInputWrapper() {
+        let raw = #"{"input":{"title":"wrapped_widget","widget_code":"<div>wrapped</div>"}}"#
+
+        let payload = ToolWidgetPayloadParser.parse(from: raw)
+
+        #expect(payload?.title == "wrapped_widget")
+        #expect(payload?.widgetCode == "<div>wrapped</div>")
+    }
 }

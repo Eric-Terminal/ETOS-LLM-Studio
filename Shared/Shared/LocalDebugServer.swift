@@ -1477,23 +1477,21 @@ public class LocalDebugServer: ObservableObject {
 
     // MARK: - 业务命令（提供商 / 会话 / 记忆）
 
-    private static let webConsoleISO8601WithFractionalSeconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let webConsoleISO8601Default: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static func parseWebConsoleDate(_ value: String) -> Date? {
-        if let precise = webConsoleISO8601WithFractionalSeconds.date(from: value) {
+    nonisolated private static func parseWebConsoleDate(_ value: String) -> Date? {
+        let preciseFormatter = ISO8601DateFormatter()
+        preciseFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let precise = preciseFormatter.date(from: value) {
             return precise
         }
-        return webConsoleISO8601Default.date(from: value)
+        let defaultFormatter = ISO8601DateFormatter()
+        defaultFormatter.formatOptions = [.withInternetDateTime]
+        return defaultFormatter.date(from: value)
+    }
+
+    nonisolated private static func formatWebConsoleDate(_ value: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: value)
     }
 
     private func makeWebConsoleJSONEncoder() -> JSONEncoder {
@@ -1798,7 +1796,7 @@ public class LocalDebugServer: ObservableObject {
                 "id": item.id.uuidString,
                 "model": item.model ?? "",
                 "message_count": item.originalMessageCount,
-                "received_at": Self.webConsoleISO8601WithFractionalSeconds.string(from: item.receivedAt)
+                "received_at": Self.formatWebConsoleDate(item.receivedAt)
             ] as [String: Any]
         }
         return [

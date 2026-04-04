@@ -27,6 +27,15 @@ struct DisplaySettingsView: View {
     @Binding var enableExperimentalToolResultDisplay: Bool
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
+
+    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
+    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
+    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
+    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
+    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
+    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
+    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
+    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
     
     // MARK: - 属性
     
@@ -36,58 +45,6 @@ struct DisplaySettingsView: View {
     
     var body: some View {
         Form {
-            if #available(watchOS 26.0, *) {
-                Section(header: Text("特效")) {
-                    Toggle("启用液态玻璃", isOn: $enableLiquidGlass)
-                }
-            }
-            
-            Section(header: Text("内容显示")) {
-                Toggle("渲染 Markdown", isOn: $enableMarkdown)
-            }
-
-            if enableMarkdown {
-                Section {
-                    Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
-                } footer: {
-                    Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section {
-                Toggle("增强工具结果显示（实验性）", isOn: $enableExperimentalToolResultDisplay)
-            } footer: {
-                Text("启用后会优先提取工具结果正文并折叠原始 JSON；关闭后恢复为原始结果文本展示。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("自动预览思考过程", isOn: $enableAutoReasoningPreview)
-            } footer: {
-                Text("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                NavigationLink {
-                    WatchFontSettingsView()
-                } label: {
-                    Label("字体设置", systemImage: "textformat.alt")
-                }
-            }
-
-            Section {
-                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
-            } footer: {
-                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            
             Section(header: Text("背景")) {
                 Toggle("显示背景", isOn: $enableBackground)
                 
@@ -118,6 +75,113 @@ struct DisplaySettingsView: View {
                     }
                 }
             }
+
+            Section {
+                Toggle("渲染 Markdown", isOn: $enableMarkdown)
+                if enableMarkdown {
+                    Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
+                }
+            } header: {
+                Text("内容显示")
+            } footer: {
+                if enableMarkdown {
+                    Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    WatchFontSettingsView()
+                } label: {
+                    Label("字体设置", systemImage: "textformat.alt")
+                }
+            }
+
+            Section {
+                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+            } footer: {
+                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("增强工具结果显示（实验性）", isOn: $enableExperimentalToolResultDisplay)
+            } footer: {
+                Text("启用后会优先提取工具结果正文并折叠原始 JSON；关闭后恢复为原始结果文本展示。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("自动预览思考过程", isOn: $enableAutoReasoningPreview)
+            } footer: {
+                Text("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if #available(watchOS 26.0, *) {
+                Section(header: Text("特效")) {
+                    Toggle("启用液态玻璃", isOn: $enableLiquidGlass)
+                }
+            }
+
+            Section {
+                Toggle("自定义用户气泡颜色", isOn: $enableCustomUserBubbleColor)
+                if enableCustomUserBubbleColor {
+                    colorEditorLink(
+                        title: "用户气泡颜色",
+                        hex: $customUserBubbleColorHex,
+                        fallback: defaultUserBubbleColor,
+                        description: "影响你发送消息的气泡背景颜色。"
+                    )
+                }
+
+                Toggle("自定义助手气泡颜色（含 Tool）", isOn: $enableCustomAssistantBubbleColor)
+                if enableCustomAssistantBubbleColor {
+                    colorEditorLink(
+                        title: "助手气泡颜色",
+                        hex: $customAssistantBubbleColorHex,
+                        fallback: defaultAssistantBubbleColor,
+                        description: "影响助手消息与 Tool 消息的气泡背景颜色。"
+                    )
+                }
+
+                Toggle("自定义白天文字颜色", isOn: $enableCustomLightTextColor)
+                if enableCustomLightTextColor {
+                    colorEditorLink(
+                        title: "白天文字颜色",
+                        hex: $customLightTextColorHex,
+                        fallback: defaultLightTextColor,
+                        description: "在浅色模式下覆盖聊天文本颜色。"
+                    )
+                }
+
+                Toggle("自定义夜览文字颜色", isOn: $enableCustomDarkTextColor)
+                if enableCustomDarkTextColor {
+                    colorEditorLink(
+                        title: "夜览文字颜色",
+                        hex: $customDarkTextColorHex,
+                        fallback: defaultDarkTextColor,
+                        description: "在深色模式下覆盖聊天文本颜色。"
+                    )
+                }
+
+                if hasAnyCustomColorOverride {
+                    Button("恢复默认聊天颜色") {
+                        resetCustomChatColors()
+                    }
+                }
+            } header: {
+                Text("聊天颜色自定义")
+            } footer: {
+                Text("默认全部关闭时，聊天配色与当前版本完全一致。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .navigationTitle("显示设置")
         .onChange(of: enableMarkdown) { _, isEnabled in
@@ -126,15 +190,208 @@ struct DisplaySettingsView: View {
             }
         }
     }
+
+    private var hasAnyCustomColorOverride: Bool {
+        enableCustomUserBubbleColor
+            || enableCustomAssistantBubbleColor
+            || enableCustomLightTextColor
+            || enableCustomDarkTextColor
+    }
+
+    private var defaultUserBubbleColor: Color {
+        .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1)
+    }
+
+    private var defaultAssistantBubbleColor: Color {
+        .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
+    }
+
+    private var defaultLightTextColor: Color {
+        .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1)
+    }
+
+    private var defaultDarkTextColor: Color {
+        .white
+    }
+
+    @ViewBuilder
+    private func colorEditorLink(
+        title: String,
+        hex: Binding<String>,
+        fallback: Color,
+        description: String
+    ) -> some View {
+        NavigationLink {
+            WatchColorEditorView(
+                title: title,
+                hexValue: hex,
+                fallback: fallback,
+                description: description
+            )
+        } label: {
+            HStack(spacing: 8) {
+                Text("设置\(title)")
+                Spacer(minLength: 8)
+                Circle()
+                    .fill(ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback))
+                    .frame(width: 14, height: 14)
+            }
+        }
+    }
+
+    private func resetCustomChatColors() {
+        enableCustomUserBubbleColor = false
+        enableCustomAssistantBubbleColor = false
+        enableCustomLightTextColor = false
+        enableCustomDarkTextColor = false
+        customUserBubbleColorHex = "3D8FF2FF"
+        customAssistantBubbleColorHex = "F2F2F7FF"
+        customLightTextColorHex = "1C1C1EFF"
+        customDarkTextColorHex = "FFFFFFFF"
+    }
+}
+
+private struct WatchColorEditorView: View {
+    let title: String
+    @Binding var hexValue: String
+    let fallback: Color
+    let description: String
+
+    @State private var red: Double = 0
+    @State private var green: Double = 0
+    @State private var blue: Double = 0
+
+    private var previewColor: Color {
+        Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
+    }
+
+    private var previewHex: String {
+        ChatAppearanceColorCodec.hexRGBA(from: previewColor) ?? hexValue
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Text(description)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(previewColor)
+                    .frame(height: 36)
+                Text(previewHex)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            } header: {
+                Text("预览")
+            }
+
+            Section {
+                channelSlider(title: "红", value: $red, tint: .red)
+                channelSlider(title: "绿", value: $green, tint: .green)
+                channelSlider(title: "蓝", value: $blue, tint: .blue)
+            } header: {
+                Text("RGB")
+            }
+
+            Section {
+                Button("恢复默认") {
+                    applyFallbackColor()
+                }
+            }
+        }
+        .navigationTitle(title)
+        .onAppear {
+            loadFromHex()
+        }
+        .onChange(of: red) { _, _ in
+            persistColor()
+        }
+        .onChange(of: green) { _, _ in
+            persistColor()
+        }
+        .onChange(of: blue) { _, _ in
+            persistColor()
+        }
+    }
+
+    @ViewBuilder
+    private func channelSlider(title: String, value: Binding<Double>, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                Spacer(minLength: 8)
+                Text("\(Int((value.wrappedValue * 255).rounded()))")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: value, in: 0...1, step: 1.0 / 255.0)
+                .tint(tint)
+        }
+    }
+
+    private func loadFromHex() {
+        let color = ChatAppearanceColorCodec.color(from: hexValue, fallback: fallback)
+        guard let rgba = ChatAppearanceColorCodec.rgbaComponents(from: color) else {
+            applyFallbackColor()
+            return
+        }
+        red = rgba.red
+        green = rgba.green
+        blue = rgba.blue
+        persistColor()
+    }
+
+    private func persistColor() {
+        if let encoded = ChatAppearanceColorCodec.hexRGBA(from: previewColor) {
+            hexValue = encoded
+        }
+    }
+
+    private func applyFallbackColor() {
+        if let rgba = ChatAppearanceColorCodec.rgbaComponents(from: fallback) {
+            red = rgba.red
+            green = rgba.green
+            blue = rgba.blue
+            persistColor()
+        }
+    }
 }
 
 private struct WatchFontSettingsView: View {
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
+    @State private var isShowingIntroDetails = false
+    @State private var showAddAssetDialog = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "字体样式优先级",
+                    summary: "按槽位管理字体顺序，越靠上优先级越高。",
+                    details: """
+                    快速上手
+                    1. 先在 iPhone 端导入字体并同步到手表。
+                    2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
+                    3. 用上下箭头调整顺序。
+                    4. 点击“添加字体到当前槽位”补入缺失字体。
+                    5. 对槽位内字体右滑可“移除”，仅移出当前槽位。
+
+                    规则说明
+                    • 每个槽位互相独立。
+                    • 同一字体可加入多个槽位。
+                    • 当前槽位无可用字体时自动回退系统字体。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section("字体来源") {
                 if assets.isEmpty {
                     Text("暂无字体，请先在 iPhone 端导入并同步。")
@@ -142,25 +399,21 @@ private struct WatchFontSettingsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(assets) { asset in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(asset.displayName)
-                                        .etFont(.footnote)
-                                    Text(asset.postScriptName)
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 8)
-                                Toggle("启用", isOn: enabledBinding(for: asset))
-                                    .labelsHidden()
-                            }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(asset.displayName)
+                                .etFont(.footnote)
+                            Text(asset.postScriptName)
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
             }
 
-            Section("样式优先级") {
+            Section(
+                header: Text("样式优先级"),
+                footer: Text("使用上下箭头调整顺序；可通过“添加字体到当前槽位”补入未加入的字体；对槽位内字体右滑可移除。越靠上优先级越高。")
+            ) {
                 Picker("样式槽位", selection: $selectedRole) {
                     ForEach(FontSemanticRole.allCases) { role in
                         Text(role.title).tag(role)
@@ -175,12 +428,7 @@ private struct WatchFontSettingsView: View {
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(asset.displayName)
-                                    .foregroundStyle(asset.isEnabled ? .primary : .secondary)
-                                if !asset.isEnabled {
-                                    Text("已停用")
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
+                                    .foregroundStyle(.primary)
                             }
                             Spacer(minLength: 8)
                             HStack(spacing: 4) {
@@ -201,6 +449,25 @@ private struct WatchFontSettingsView: View {
                                 .disabled(index >= chainRecords.count - 1)
                             }
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                removeAssetFromSelectedRole(asset.id)
+                            } label: {
+                                Label("移除", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+
+                if availableAssetsForSelectedRole.isEmpty {
+                    Text("当前槽位没有可添加字体。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        showAddAssetDialog = true
+                    } label: {
+                        Label("添加字体到当前槽位", systemImage: "plus.circle")
                     }
                 }
             }
@@ -226,6 +493,56 @@ private struct WatchFontSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             reloadData()
         }
+        .confirmationDialog(
+            "添加字体到当前槽位",
+            isPresented: $showAddAssetDialog,
+            titleVisibility: .visible
+        ) {
+            ForEach(availableAssetsForSelectedRole) { asset in
+                Button(asset.displayName) {
+                    addAssetToSelectedRole(asset.id)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+        )
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+        }
     }
 
     private var chainRecords: [FontAssetRecord] {
@@ -233,20 +550,25 @@ private struct WatchFontSettingsView: View {
         return routes.chain(for: selectedRole).compactMap { map[$0] }
     }
 
-    private func reloadData() {
-        assets = FontLibrary.loadAssets()
-        routes = FontLibrary.loadRouteConfiguration()
+    private var availableAssetsForSelectedRole: [FontAssetRecord] {
+        let selectedIDs = Set(routes.chain(for: selectedRole))
+        return assets.filter { !selectedIDs.contains($0.id) }
     }
 
-    private func enabledBinding(for asset: FontAssetRecord) -> Binding<Bool> {
-        Binding(
-            get: {
-                assets.first(where: { $0.id == asset.id })?.isEnabled ?? asset.isEnabled
-            },
-            set: { newValue in
-                updateAssetEnabled(assetID: asset.id, isEnabled: newValue)
+    private func reloadData() {
+        let loadedAssets = FontLibrary.loadAssets()
+        if loadedAssets.contains(where: { !$0.isEnabled }) {
+            let normalizedAssets = loadedAssets.map { asset in
+                var mutable = asset
+                mutable.isEnabled = true
+                return mutable
             }
-        )
+            _ = FontLibrary.saveAssets(normalizedAssets)
+            assets = normalizedAssets
+        } else {
+            assets = loadedAssets
+        }
+        routes = FontLibrary.loadRouteConfiguration()
     }
 
     private func moveAsset(at index: Int, offset: Int) {
@@ -259,9 +581,21 @@ private struct WatchFontSettingsView: View {
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
     }
 
-    private func updateAssetEnabled(assetID: UUID, isEnabled: Bool) {
-        guard FontLibrary.setAssetEnabled(id: assetID, isEnabled: isEnabled) else { return }
-        reloadData()
+    private func addAssetToSelectedRole(_ assetID: UUID) {
+        var chain = routes.chain(for: selectedRole)
+        guard !chain.contains(assetID) else { return }
+        chain.append(assetID)
+        routes.setChain(chain, for: selectedRole)
+        FontLibrary.updateChain(chain, for: selectedRole)
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func removeAssetFromSelectedRole(_ assetID: UUID) {
+        var chain = routes.chain(for: selectedRole)
+        guard chain.contains(assetID) else { return }
+        chain.removeAll { $0 == assetID }
+        routes.setChain(chain, for: selectedRole)
+        FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
     }
 }

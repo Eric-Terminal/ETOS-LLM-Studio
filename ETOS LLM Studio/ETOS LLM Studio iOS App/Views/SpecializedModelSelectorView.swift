@@ -44,6 +44,13 @@ struct SpecializedModelSelectorView: View {
             )
 
             modelPickerSection(
+                title: "每日脉冲模型",
+                options: viewModel.dailyPulseModelOptions,
+                selectionID: dailyPulseModelIdentifierBinding,
+                footer: "用于每日脉冲生成；留空时跟随当前对话模型。"
+            )
+
+            modelPickerSection(
                 title: "生图模型",
                 options: viewModel.imageGenerationModelOptions,
                 selectionID: imageGenerationModelIdentifierBinding,
@@ -110,6 +117,20 @@ struct SpecializedModelSelectorView: View {
                 }
                 let selected = viewModel.titleGenerationModelOptions.first(where: { $0.id == newIdentifier })
                 viewModel.setSelectedTitleGenerationModel(selected)
+            }
+        )
+    }
+
+    private var dailyPulseModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedDailyPulseModel?.id ?? "" },
+            set: { newIdentifier in
+                guard !newIdentifier.isEmpty else {
+                    viewModel.setSelectedDailyPulseModel(nil)
+                    return
+                }
+                let selected = viewModel.dailyPulseModelOptions.first(where: { $0.id == newIdentifier })
+                viewModel.setSelectedDailyPulseModel(selected)
             }
         )
     }

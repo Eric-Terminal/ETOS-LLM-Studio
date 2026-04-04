@@ -34,6 +34,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let appStorage = SyncOptions(rawValue: 1 << 10) // AppStorage（软件设置）同步选项
     public static let dailyPulse = SyncOptions(rawValue: 1 << 11) // 每日脉冲同步选项
     public static let fontFiles = SyncOptions(rawValue: 1 << 12) // 字体文件与字体路由同步选项
+    public static let skills = SyncOptions(rawValue: 1 << 13) // Agent Skills 同步选项
     @available(*, deprecated, message: "请改用 appStorage 选项。")
     public static let globalSystemPrompt = appStorage
     
@@ -97,6 +98,60 @@ public struct SyncedImage: Codable {
         self.filename = filename
         self.data = data
         self.checksum = data.sha256Hex
+    }
+}
+
+/// Agent Skill 单文件同步载荷
+public struct SyncedSkillFile: Codable, Hashable, Sendable {
+    public var relativePath: String
+    public var content: String
+
+    public init(relativePath: String, content: String) {
+        self.relativePath = relativePath
+        self.content = content
+    }
+}
+
+/// Agent Skill 同步载荷
+public struct SyncedSkillBundle: Codable, Hashable, Sendable {
+    public var name: String
+    public var files: [SyncedSkillFile]
+    public var checksum: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case files
+        case checksum
+    }
+
+    public init(name: String, files: [SyncedSkillFile]) {
+        self.name = name
+        self.files = files
+        self.checksum = Self.computeChecksum(files: files)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        files = try container.decodeIfPresent([SyncedSkillFile].self, forKey: .files) ?? []
+        checksum = try container.decodeIfPresent(String.self, forKey: .checksum) ?? Self.computeChecksum(files: files)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(files, forKey: .files)
+        try container.encode(checksum, forKey: .checksum)
+    }
+
+    private static func computeChecksum(files: [SyncedSkillFile]) -> String {
+        let normalized = files.sorted { lhs, rhs in
+            lhs.relativePath.localizedCaseInsensitiveCompare(rhs.relativePath) == .orderedAscending
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = (try? encoder.encode(normalized)) ?? Data()
+        return data.sha256Hex
     }
 }
 
@@ -164,6 +219,7 @@ public struct SyncPackage: Codable {
     public var mcpServers: [MCPServerConfiguration]
     public var audioFiles: [SyncedAudio]
     public var imageFiles: [SyncedImage]
+    public var skills: [SyncedSkillBundle]
     public var shortcutTools: [ShortcutToolDefinition]
     public var worldbooks: [Worldbook]
     public var feedbackTickets: [FeedbackTicket]
@@ -180,7 +236,7 @@ public struct SyncPackage: Codable {
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
@@ -192,6 +248,7 @@ public struct SyncPackage: Codable {
         mcpServers: [MCPServerConfiguration] = [],
         audioFiles: [SyncedAudio] = [],
         imageFiles: [SyncedImage] = [],
+        skills: [SyncedSkillBundle] = [],
         shortcutTools: [ShortcutToolDefinition] = [],
         worldbooks: [Worldbook] = [],
         feedbackTickets: [FeedbackTicket] = [],
@@ -213,6 +270,7 @@ public struct SyncPackage: Codable {
         self.mcpServers = mcpServers
         self.audioFiles = audioFiles
         self.imageFiles = imageFiles
+        self.skills = skills
         self.shortcutTools = shortcutTools
         self.worldbooks = worldbooks
         self.feedbackTickets = feedbackTickets
@@ -237,6 +295,7 @@ public struct SyncPackage: Codable {
         mcpServers = try container.decodeIfPresent([MCPServerConfiguration].self, forKey: .mcpServers) ?? []
         audioFiles = try container.decodeIfPresent([SyncedAudio].self, forKey: .audioFiles) ?? []
         imageFiles = try container.decodeIfPresent([SyncedImage].self, forKey: .imageFiles) ?? []
+        skills = try container.decodeIfPresent([SyncedSkillBundle].self, forKey: .skills) ?? []
         shortcutTools = try container.decodeIfPresent([ShortcutToolDefinition].self, forKey: .shortcutTools) ?? []
         worldbooks = try container.decodeIfPresent([Worldbook].self, forKey: .worldbooks) ?? []
         feedbackTickets = try container.decodeIfPresent([FeedbackTicket].self, forKey: .feedbackTickets) ?? []
@@ -268,6 +327,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedAudioFiles: Int
     public var importedImageFiles: Int
     public var skippedImageFiles: Int
+    public var importedSkills: Int
+    public var skippedSkills: Int
     public var importedShortcutTools: Int
     public var skippedShortcutTools: Int
     public var importedWorldbooks: Int
@@ -298,6 +359,8 @@ public struct SyncMergeSummary: Equatable {
         skippedAudioFiles: Int = 0,
         importedImageFiles: Int = 0,
         skippedImageFiles: Int = 0,
+        importedSkills: Int = 0,
+        skippedSkills: Int = 0,
         importedShortcutTools: Int = 0,
         skippedShortcutTools: Int = 0,
         importedWorldbooks: Int = 0,
@@ -327,6 +390,8 @@ public struct SyncMergeSummary: Equatable {
         self.skippedAudioFiles = skippedAudioFiles
         self.importedImageFiles = importedImageFiles
         self.skippedImageFiles = skippedImageFiles
+        self.importedSkills = importedSkills
+        self.skippedSkills = skippedSkills
         self.importedShortcutTools = importedShortcutTools
         self.skippedShortcutTools = skippedShortcutTools
         self.importedWorldbooks = importedWorldbooks
@@ -358,6 +423,8 @@ public struct SyncMergeSummary: Equatable {
         skippedAudioFiles: 0,
         importedImageFiles: 0,
         skippedImageFiles: 0,
+        importedSkills: 0,
+        skippedSkills: 0,
         importedShortcutTools: 0,
         skippedShortcutTools: 0,
         importedWorldbooks: 0,
@@ -420,6 +487,7 @@ extension Provider {
         baseURL == other.baseURL &&
         apiFormat == other.apiFormat &&
         headerOverrides == other.headerOverrides &&
+        proxyConfiguration == other.proxyConfiguration &&
         models.count == other.models.count &&
         zip(models, other.models).allSatisfy { $0.isEquivalent(to: $1) }
     }

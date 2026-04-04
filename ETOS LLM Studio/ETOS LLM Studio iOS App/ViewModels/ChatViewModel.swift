@@ -45,8 +45,12 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedModel: RunnableModel?
     @Published var activatedModels: [RunnableModel] = []
     @Published var memories: [MemoryItem] = []
+    @Published var conversationSessionSummaries: [ConversationSessionSummary] = []
+    @Published var conversationUserProfile: ConversationUserProfile?
     @Published var selectedEmbeddingModel: RunnableModel?
     @Published var selectedTitleGenerationModel: RunnableModel?
+    @Published var selectedDailyPulseModel: RunnableModel?
+    @Published var selectedConversationSummaryModel: RunnableModel?
     @Published var selectedTTSModel: RunnableModel?
     @Published var ttsModels: [RunnableModel] = []
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
@@ -113,6 +117,11 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
+    @AppStorage("enableConversationMemoryAsync") var enableConversationMemoryAsync: Bool = true
+    @AppStorage("conversationMemoryRecentLimit") var conversationMemoryRecentLimit: Int = 5
+    @AppStorage("conversationMemoryRoundThreshold") var conversationMemoryRoundThreshold: Int = 6
+    @AppStorage("conversationMemorySummaryMinIntervalMinutes") var conversationMemorySummaryMinIntervalMinutes: Int = 120
+    @AppStorage("enableConversationProfileDailyUpdate") var enableConversationProfileDailyUpdate: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     @AppStorage("enableNoBubbleUI") var enableNoBubbleUI: Bool = false
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
@@ -121,6 +130,8 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("ttsModelIdentifier") var ttsModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
+    @AppStorage("dailyPulseModelIdentifier") var dailyPulseModelIdentifier: String = ""
+    @AppStorage("conversationSummaryModelIdentifier") var conversationSummaryModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
     @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
@@ -176,6 +187,14 @@ final class ChatViewModel: ObservableObject {
     }
 
     var titleGenerationModelOptions: [RunnableModel] {
+        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+    }
+
+    var dailyPulseModelOptions: [RunnableModel] {
+        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+    }
+
+    var conversationSummaryModelOptions: [RunnableModel] {
         activatedModels.filter { $0.model.capabilities.contains(.chat) }
     }
     
@@ -426,6 +445,8 @@ final class ChatViewModel: ObservableObject {
                 self.syncTTSModelSelection()
                 self.syncEmbeddingModelSelection()
                 self.syncTitleGenerationModelSelection()
+                self.syncDailyPulseModelSelection()
+                self.syncConversationSummaryModelSelection()
             }
             .store(in: &cancellables)
         
@@ -544,11 +565,21 @@ final class ChatViewModel: ObservableObject {
                 self?.applyToolInputDraftRequest(request)
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .conversationMemoryDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadConversationMemoryState()
+            }
+            .store(in: &cancellables)
         
         syncSpeechModelSelection()
         syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
+        syncDailyPulseModelSelection()
+        syncConversationSummaryModelSelection()
+        reloadConversationMemoryState()
     }
     
     private func rotateBackgroundImageIfNeeded() {
@@ -773,6 +804,22 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func setSelectedDailyPulseModel(_ model: RunnableModel?) {
+        selectedDailyPulseModel = model
+        let newIdentifier = model?.id ?? ""
+        if dailyPulseModelIdentifier != newIdentifier {
+            dailyPulseModelIdentifier = newIdentifier
+        }
+    }
+
+    func setSelectedConversationSummaryModel(_ model: RunnableModel?) {
+        selectedConversationSummaryModel = model
+        let newIdentifier = model?.id ?? ""
+        if conversationSummaryModelIdentifier != newIdentifier {
+            conversationSummaryModelIdentifier = newIdentifier
+        }
+    }
+
     func addGlobalSystemPromptEntry() {
         let entry = GlobalSystemPromptEntry(title: "", content: "", updatedAt: Date())
         globalSystemPromptEntries.insert(entry, at: 0)
@@ -925,6 +972,44 @@ final class ChatViewModel: ObservableObject {
 
         selectedTitleGenerationModel = nil
         titleGenerationModelIdentifier = ""
+    }
+
+    private func syncDailyPulseModelSelection() {
+        if let match = dailyPulseModelOptions.first(where: { $0.id == dailyPulseModelIdentifier }) {
+            if selectedDailyPulseModel?.id != match.id {
+                selectedDailyPulseModel = match
+            }
+            return
+        }
+
+        guard !dailyPulseModelIdentifier.isEmpty else {
+            selectedDailyPulseModel = nil
+            return
+        }
+
+        guard !dailyPulseModelOptions.isEmpty else { return }
+
+        selectedDailyPulseModel = nil
+        dailyPulseModelIdentifier = ""
+    }
+
+    private func syncConversationSummaryModelSelection() {
+        if let match = conversationSummaryModelOptions.first(where: { $0.id == conversationSummaryModelIdentifier }) {
+            if selectedConversationSummaryModel?.id != match.id {
+                selectedConversationSummaryModel = match
+            }
+            return
+        }
+
+        guard !conversationSummaryModelIdentifier.isEmpty else {
+            selectedConversationSummaryModel = nil
+            return
+        }
+
+        guard !conversationSummaryModelOptions.isEmpty else { return }
+
+        selectedConversationSummaryModel = nil
+        conversationSummaryModelIdentifier = ""
     }
 
     func requestBackgroundReplyNotificationPermission() {
@@ -1362,6 +1447,33 @@ final class ChatViewModel: ObservableObject {
     
     func reembedAllMemories() async throws -> MemoryReembeddingSummary {
         try await MemoryManager.shared.reembedAllMemories()
+    }
+
+    func reloadConversationMemoryState() {
+        conversationSessionSummaries = ConversationMemoryManager.loadAllSessionSummaries()
+        conversationUserProfile = ConversationMemoryManager.loadUserProfile()
+    }
+
+    func deleteConversationSummary(for sessionID: UUID) {
+        ConversationMemoryManager.removeSessionSummary(sessionID: sessionID)
+        reloadConversationMemoryState()
+    }
+
+    @discardableResult
+    func clearAllConversationSummaries() -> Int {
+        let removed = ConversationMemoryManager.clearAllSessionSummaries()
+        reloadConversationMemoryState()
+        return removed
+    }
+
+    func saveConversationUserProfile(content: String) throws {
+        try ConversationMemoryManager.saveUserProfile(content: content)
+        reloadConversationMemoryState()
+    }
+
+    func clearConversationUserProfile() throws {
+        try ConversationMemoryManager.clearUserProfile()
+        reloadConversationMemoryState()
     }
     
     // MARK: - Sync Helpers

@@ -17,6 +17,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let customTextColor: Color?
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
@@ -26,6 +27,7 @@ struct ETAdvancedMarkdownRenderer: View {
         isOutgoing: Bool,
         enableAdvancedRenderer: Bool,
         enableMathRendering: Bool,
+        customTextColor: Color? = nil,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) {
         self.content = content
@@ -33,6 +35,7 @@ struct ETAdvancedMarkdownRenderer: View {
         self.isOutgoing = isOutgoing
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
+        self.customTextColor = customTextColor
         self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
     }
 
@@ -49,6 +52,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing,
+                customTextColor: customTextColor,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
         } else {
@@ -103,8 +107,8 @@ struct ETAdvancedMarkdownRenderer: View {
 
     @ViewBuilder
     private func baseTextView(_ text: String) -> some View {
+        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         if enableMarkdown {
-            let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
@@ -115,7 +119,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 )
         } else {
             Text(text)
-                .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                .foregroundStyle(textColor)
         }
     }
 }
@@ -124,11 +128,12 @@ private struct ETMathAwareMarkdownView: View {
     let content: String
     let enableMarkdown: Bool
     let isOutgoing: Bool
+    let customTextColor: Color?
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     private var textColor: Color {
-        isOutgoing ? .white : .primary
+        customTextColor ?? (isOutgoing ? .white : .primary)
     }
 
     private var blocks: [ETMathRenderBlock] {
@@ -262,6 +267,17 @@ private extension View {
                     FontFamilyVariant(.monospaced)
                 }
                 ForegroundColor(textColor)
+            }
+            .markdownBlockStyle(\.blockquote) { configuration in
+                configuration.label
+                    .padding(.leading, 10)
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(isOutgoing ? Color.white.opacity(0.56) : Color.secondary.opacity(0.48))
+                            .frame(width: 3)
+                            .padding(.vertical, 2)
+                    }
+                    .markdownMargin(top: .em(0.2), bottom: .em(0.7))
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
                 let codeBlockContent = configuration.content.trimmingCharacters(in: .newlines)
@@ -644,8 +660,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
     func highlightCode(_ code: String, language: String?) -> Text {
         guard !code.isEmpty else { return Text("") }
 
-        let nsCode = code as NSString
-        let length = nsCode.length
+        let length = code.utf16.count
         guard length > 0, length <= 12_000 else {
             return Text(code).foregroundColor(baseColor)
         }
@@ -729,7 +744,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
         )
         apply(pattern: #"[{}\[\]();,.:]"#, kind: .punctuation, priority: 56)
 
-        var result = Text("")
+        var attributed = AttributedString(code)
         var segmentStart = 0
         var currentKind = kinds[0]
 
@@ -737,9 +752,13 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
             let reachedEnd = index == length
             let kindChanged = !reachedEnd && kinds[index] != currentKind
             if reachedEnd || kindChanged {
-                let range = NSRange(location: segmentStart, length: index - segmentStart)
-                let segment = nsCode.substring(with: range)
-                result = result + Text(segment).foregroundColor(color(for: currentKind, palette: palette))
+                let start = String.Index(utf16Offset: segmentStart, in: code)
+                let end = String.Index(utf16Offset: index, in: code)
+                if let attributedStart = AttributedString.Index(start, within: attributed),
+                   let attributedEnd = AttributedString.Index(end, within: attributed),
+                   attributedStart < attributedEnd {
+                    attributed[attributedStart..<attributedEnd].foregroundColor = color(for: currentKind, palette: palette)
+                }
                 if !reachedEnd {
                     segmentStart = index
                     currentKind = kinds[index]
@@ -747,7 +766,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
             }
         }
 
-        return result
+        return Text(attributed)
     }
 
     private func color(for token: TokenKind, palette: ETCodeHighlightPalette) -> Color {

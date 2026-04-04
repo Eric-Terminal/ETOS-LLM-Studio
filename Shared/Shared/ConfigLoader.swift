@@ -41,6 +41,7 @@ public struct ConfigLoader {
     private static let downloadOnceURLString = "https://notify.els.ericterminal.com/download_once.json"
     private static let downloadOnceTimeout: TimeInterval = 8
     private static let downloadOnceCompletedFlagKey = "com.ETOS.LLM.Studio.download_once.completed"
+    private static let toolCapabilityMigrationFlagKey = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated.v1"
     private static let downloadOnceStateQueue = DispatchQueue(label: "com.ETOS.LLM.Studio.downloadOnce")
     private static var downloadOnceInProgress = false
 
@@ -115,15 +116,24 @@ public struct ConfigLoader {
         var providers: [Provider] = []
         var seenProviderIndexByID: [UUID: Int] = [:]
         var seenProviderSourceByID: [UUID: URL] = [:]
+        let shouldMigrateToolCapability = !UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
+        var didScanProviderDirectory = false
 
         do {
             let fileURLs = try fileManager.contentsOfDirectory(at: providersDirectory, includingPropertiesForKeys: nil)
+            didScanProviderDirectory = true
             for url in fileURLs.filter({ $0.pathExtension == "json" }) {
                 do {
                     let data = try Data(contentsOf: url)
                     var provider = try JSONDecoder().decode(Provider.self, from: data)
                     let fileAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
                     var didRepair = false
+
+                    if shouldMigrateToolCapability,
+                       migrateToolCallingCapabilityIfNeeded(for: &provider) {
+                        didRepair = true
+                        logger.info("  - 已为旧模型补齐“工具”能力默认值: \(url.lastPathComponent)")
+                    }
 
                     // 修复同一个 Provider 内部重复的模型 ID，避免 SwiftUI 列表 diff 异常。
                     if deduplicateModelIDs(for: &provider) {
@@ -195,6 +205,10 @@ public struct ConfigLoader {
         } catch {
             logger.error("无法读取 Providers 目录: \(error.localizedDescription)")
         }
+
+        if shouldMigrateToolCapability, didScanProviderDirectory {
+            UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+        }
         
         logger.info("总共加载了 \(providers.count) 个提供商。")
         return providers
@@ -233,6 +247,20 @@ public struct ConfigLoader {
                 didRepair = true
             }
             seenModelIDs.insert(provider.models[index].id)
+        }
+        return didRepair
+    }
+
+    /// 旧版本没有“工具”能力开关，需要在首次迁移时补齐默认值（开启）。
+    private static func migrateToolCallingCapabilityIfNeeded(for provider: inout Provider) -> Bool {
+        let orderedCapabilities: [Model.Capability] = [.chat, .toolCalling, .speechToText, .textToSpeech, .embedding, .imageGeneration]
+        var didRepair = false
+        for index in provider.models.indices {
+            var capabilitySet = Set(provider.models[index].capabilities)
+            guard !capabilitySet.contains(.toolCalling) else { continue }
+            capabilitySet.insert(.toolCalling)
+            provider.models[index].capabilities = orderedCapabilities.filter { capabilitySet.contains($0) }
+            didRepair = true
         }
         return didRepair
     }
@@ -359,6 +387,9 @@ public struct ConfigLoader {
         if old.headerOverrides != new.headerOverrides {
             fields.append("请求头覆写")
         }
+        if old.proxyConfiguration != new.proxyConfiguration {
+            fields.append("代理配置")
+        }
         if old.apiKeys != new.apiKeys {
             fields.append("API Key 列表")
         }
@@ -371,7 +402,8 @@ public struct ConfigLoader {
         lhs.baseURL == rhs.baseURL &&
         lhs.apiFormat == rhs.apiFormat &&
         lhs.models == rhs.models &&
-        lhs.headerOverrides == rhs.headerOverrides
+        lhs.headerOverrides == rhs.headerOverrides &&
+        lhs.proxyConfiguration == rhs.proxyConfiguration
     }
 
     private static func hydrateProviderCredentials(for provider: Provider) -> CredentialHydrationResult {

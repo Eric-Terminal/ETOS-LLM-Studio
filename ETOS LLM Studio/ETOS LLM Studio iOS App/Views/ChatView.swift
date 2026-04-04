@@ -2130,7 +2130,7 @@ private struct TelegramMessageComposer: View {
                 }
             }
         }
-        .sheet(isPresented: $showCamera) {
+        .fullScreenCover(isPresented: $showCamera) {
             CameraImagePicker(isPresented: $showCamera) { image in
                 if let image {
                     viewModel.addImageAttachment(image)
@@ -2977,15 +2977,30 @@ private struct MessageComposerView: View {
 
 // MARK: - Camera Image Picker
 
+private final class PortraitCameraImagePickerController: UIImagePickerController {
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        .portrait
+    }
+
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+        .portrait
+    }
+
+    override var shouldAutorotate: Bool {
+        false
+    }
+}
+
 private struct CameraImagePicker: UIViewControllerRepresentable {
     @Binding var isPresented: Bool
     let onImagePicked: (UIImage?) -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
+        let picker = PortraitCameraImagePickerController()
         picker.sourceType = .camera
         picker.cameraCaptureMode = .photo
         picker.allowsEditing = false
+        picker.modalPresentationStyle = .fullScreen
         picker.delegate = context.coordinator
         return picker
     }

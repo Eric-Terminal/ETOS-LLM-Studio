@@ -413,7 +413,8 @@ struct DailyPulseView: View {
                                 systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
                             )
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.mint)
 
                         Button(role: .destructive) {
                             pulseManager.applyFeedback(.hidden, cardID: card.id, runID: runID)

@@ -181,6 +181,7 @@ public struct LocalDebugView: View {
 
 private struct WatchDocumentationView: View {
     @Environment(\.dismiss) private var dismiss
+    private let debugToolReleaseURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/releases/latest")!
     
     var body: some View {
         List {
@@ -206,10 +207,15 @@ private struct WatchDocumentationView: View {
             Section("启动步骤") {
                 VStack(alignment: .leading, spacing: 8) {
                     StepItem(num: 1, text: "电脑端下载并运行:")
-                    Text("https://raw.githubusercontent.com/Eric-Terminal/ETOS-LLM-Studio/main/docs/debug-tools/debug_server.py")
-                        .etFont(.system(size: 9).monospaced())
+                    Text("在 GitHub Release 下载最新调试工具（Go 版）")
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.leading)
+                    Link(destination: debugToolReleaseURL) {
+                        Label("前往下载页面", systemImage: "arrow.up.right.square")
+                            .etFont(.caption2)
+                    }
+                    .padding(.leading)
                     
                     StepItem(num: 2, text: "记下显示的 IP 地址")
                     

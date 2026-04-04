@@ -16,6 +16,7 @@ import Shared
 import UIKit
 import AVFoundation
 import Combine
+import WebKit
 
 // MARK: - Telegram 风格气泡形状
 
@@ -109,6 +110,14 @@ struct ChatBubble: View {
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
+    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
+    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
+    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
+    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
+    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
+    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
+    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
 
     init(
         messageState: ChatMessageRenderState,
@@ -151,6 +160,33 @@ struct ChatBubble: View {
     // Telegram 颜色
     private let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
     private let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
+
+    private var resolvedUserBubbleStartColor: Color {
+        guard enableCustomUserBubbleColor else { return telegramBlue }
+        return ChatAppearanceColorCodec.color(from: customUserBubbleColorHex, fallback: telegramBlue)
+    }
+
+    private var resolvedUserBubbleEndColor: Color {
+        guard enableCustomUserBubbleColor else { return telegramBlueDark }
+        return ChatAppearanceColorCodec.darkened(resolvedUserBubbleStartColor, factor: 0.86)
+    }
+
+    private var resolvedAssistantBubbleColor: Color? {
+        guard enableCustomAssistantBubbleColor else { return nil }
+        return ChatAppearanceColorCodec.color(
+            from: customAssistantBubbleColorHex,
+            fallback: Color(uiColor: .secondarySystemBackground)
+        )
+    }
+
+    private var customTextColorOverride: Color? {
+        if colorScheme == .dark {
+            guard enableCustomDarkTextColor else { return nil }
+            return ChatAppearanceColorCodec.color(from: customDarkTextColorHex, fallback: .white)
+        }
+        guard enableCustomLightTextColor else { return nil }
+        return ChatAppearanceColorCodec.color(from: customLightTextColorHex, fallback: .primary)
+    }
     
     private var isOutgoing: Bool {
         message.role == .user
@@ -158,6 +194,10 @@ struct ChatBubble: View {
     
     private var isError: Bool {
         message.role == .error || (message.role == .assistant && message.content.hasPrefix("重试失败"))
+    }
+
+    private var usesNoBubbleStyle: Bool {
+        enableNoBubbleUI && !isOutgoing && !isError
     }
 
     private var bubbleShape: BubbleCornerShape {
@@ -174,7 +214,7 @@ struct ChatBubble: View {
     }
 
     private var shouldShowMergedSeparator: Bool {
-        !enableNoBubbleUI && mergeWithPrevious && !isOutgoing
+        !usesNoBubbleStyle && mergeWithPrevious && !isOutgoing
     }
 
     private var separatorThickness: CGFloat {
@@ -189,7 +229,7 @@ struct ChatBubble: View {
     }
 
     private var bubbleShadow: (color: Color, radius: CGFloat, y: CGFloat) {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return (Color.clear, 0, 0)
         }
         if mergeWithPrevious && mergeWithNext {
@@ -200,29 +240,45 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
-        let widthRatio = enableNoBubbleUI ? 0.96 : 0.88
+        let widthRatio = usesNoBubbleStyle ? 0.96 : 0.88
         return baseWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return true
         }
         return !isOutgoing && (mergeWithPrevious || mergeWithNext)
     }
 
     private var rowSideSpacerMinLength: CGFloat {
-        enableNoBubbleUI ? 0 : 20
+        usesNoBubbleStyle ? 0 : 20
+    }
+
+    private var rowVerticalPadding: CGFloat {
+        let basePadding: CGFloat = 3
+        return enableNoBubbleUI ? basePadding * 3 : basePadding
     }
 
     private var textForegroundColor: Color {
-        if isError && enableNoBubbleUI {
+        if isError && usesNoBubbleStyle {
             return .red
         }
-        if enableNoBubbleUI {
-            return .primary
+        if usesNoBubbleStyle {
+            return resolvedTextColor(default: .primary)
         }
-        return isOutgoing ? .white : .primary
+        return resolvedTextColor(default: isOutgoing ? .white : .primary)
+    }
+
+    private func resolvedTextColor(default defaultColor: Color) -> Color {
+        customTextColorOverride ?? defaultColor
+    }
+
+    private func resolvedSecondaryTextColor(default defaultColor: Color, customOpacity: Double = 0.78) -> Color {
+        if let customTextColorOverride {
+            return customTextColorOverride.opacity(customOpacity)
+        }
+        return defaultColor
     }
     
     /// 图片占位符文本（各语言版本）
@@ -243,14 +299,17 @@ struct ChatBubble: View {
     }
     
     private var hasToolResults: Bool {
+        let hasWidgetPayload = message.toolCalls?.contains { call in
+            ToolWidgetPayloadParser.parse(from: call.arguments) != nil
+        } ?? false
         let hasCallResults = message.toolCalls?.contains { call in
             !(call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         } ?? false
         if message.role == .tool {
             let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            return hasCallResults || hasContent
+            return hasCallResults || hasContent || hasWidgetPayload
         }
-        return hasCallResults
+        return hasCallResults || hasWidgetPayload
     }
 
     private var hasPendingToolResults: Bool {
@@ -379,8 +438,8 @@ struct ChatBubble: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.top, mergeWithPrevious ? 0 : 3)
-        .padding(.bottom, mergeWithNext ? 0 : 3)
+        .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
+        .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .background(
             GeometryReader { proxy in
                 Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)
@@ -439,19 +498,31 @@ struct ChatBubble: View {
             .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
             .opacity(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? 1 : 0.4)
         }
-        .foregroundStyle(enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.8) : Color.secondary))
+        .foregroundStyle(
+            usesNoBubbleStyle
+                ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8)
+                : (isOutgoing
+                    ? resolvedSecondaryTextColor(default: Color.white.opacity(0.8), customOpacity: 0.8)
+                    : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8))
+        )
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(enableNoBubbleUI ? Color.clear : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
+                .fill(
+                    usesNoBubbleStyle
+                        ? Color.clear
+                        : (isOutgoing
+                            ? resolvedSecondaryTextColor(default: Color.white, customOpacity: 0.2)
+                            : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.15))
+                )
         )
     }
     
     // MARK: - 气泡渐变背景
     
     private var bubbleGradient: some ShapeStyle {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return AnyShapeStyle(Color.clear)
         }
         let userOpacity = enableBackground ? 0.85 : 1.0
@@ -473,16 +544,24 @@ struct ChatBubble: View {
             // Telegram 蓝色渐变
             return AnyShapeStyle(
                 LinearGradient(
-                    colors: [telegramBlue.opacity(userOpacity), telegramBlueDark.opacity(userOpacity)],
+                    colors: [
+                        resolvedUserBubbleStartColor.opacity(userOpacity),
+                        resolvedUserBubbleEndColor.opacity(userOpacity)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
         case .assistant, .system, .tool:
             // 接收消息：浅灰/白色
-            let baseColor = enableBackground
-                ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
-                : Color(uiColor: .systemBackground)
+            let baseColor: Color
+            if let resolvedAssistantBubbleColor {
+                baseColor = resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1)
+            } else {
+                baseColor = enableBackground
+                    ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
+                    : Color(uiColor: .systemBackground)
+            }
             return AnyShapeStyle(baseColor)
         case .error:
             return AnyShapeStyle(Color.red.opacity(0.15 * errorOpacity))
@@ -515,7 +594,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func bubbleBackground(for shape: BubbleCornerShape) -> some View {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             shape
                 .fill(Color.clear)
         } else if enableLiquidGlass {
@@ -555,8 +634,8 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 6) {
             content()
         }
-        .padding(.horizontal, enableNoBubbleUI ? 2 : 12)
-        .padding(.vertical, enableNoBubbleUI ? 4 : 8)
+        .padding(.horizontal, usesNoBubbleStyle ? 2 : 12)
+        .padding(.vertical, usesNoBubbleStyle ? 4 : 8)
         .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
         .background(
             bubbleDecoratedBackground(
@@ -623,7 +702,8 @@ struct ChatBubble: View {
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast) {
                     ToolCallsInlineView(
                         toolCalls: [call],
-                        isOutgoing: isOutgoing
+                        isOutgoing: isOutgoing,
+                        customTextColor: customTextColorOverride
                     )
 
                     if let permissionRequest = activeToolPermissionRequest(for: call) {
@@ -642,7 +722,8 @@ struct ChatBubble: View {
                             isExpanded: toolResultExpansionBinding(for: call.id),
                             isOutgoing: isOutgoing,
                             isPending: isPendingToolResult(for: call),
-                            enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay
+                            enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                            customTextColor: customTextColorOverride
                         )
                     }
                 }
@@ -659,8 +740,9 @@ struct ChatBubble: View {
                 reasoning: reasoning,
                 isExpanded: $isReasoningExpanded,
                 isOutgoing: isOutgoing,
-                usesNoBubbleStyle: enableNoBubbleUI,
-                isShimmering: shouldShimmerReasoningHeader
+                usesNoBubbleStyle: usesNoBubbleStyle,
+                isShimmering: shouldShimmerReasoningHeader,
+                customTextColor: customTextColorOverride
             )
         }
 
@@ -686,13 +768,13 @@ struct ChatBubble: View {
                 ShimmeringText(
                     text: "正在思考...",
                     font: .subheadline,
-                    baseColor: Color.secondary,
-                    highlightColor: Color.primary.opacity(0.85)
+                    baseColor: resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75),
+                    highlightColor: resolvedTextColor(default: Color.primary.opacity(0.85))
                 )
             } else {
                 Text("正在思考...")
                     .etFont(.subheadline)
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75))
             }
         }
 
@@ -707,7 +789,8 @@ struct ChatBubble: View {
            !toolCalls.isEmpty {
             ToolCallsInlineView(
                 toolCalls: toolCalls,
-                isOutgoing: isOutgoing
+                isOutgoing: isOutgoing,
+                customTextColor: customTextColorOverride
             )
             if let activeToolPermissionRequest {
                 ToolPermissionInlineView(
@@ -725,7 +808,8 @@ struct ChatBubble: View {
                     isExpanded: $isToolCallsExpanded,
                     isOutgoing: isOutgoing,
                     isPending: hasPendingToolResults,
-                    enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay
+                    enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                    customTextColor: customTextColorOverride
                 )
             }
         }
@@ -744,11 +828,17 @@ struct ChatBubble: View {
     }
 
     private func isPendingToolResult(for call: InternalToolCall) -> Bool {
-        hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
+        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+            return false
+        }
+        return hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
     }
 
     private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
-        !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
+        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+            return true
+        }
+        return !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
     }
 
     private func activeToolPermissionRequest(for call: InternalToolCall) -> ToolPermissionRequest? {
@@ -806,17 +896,33 @@ struct ChatBubble: View {
                 HStack(spacing: 8) {
                     Image(systemName: "doc")
                         .etFont(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
+                        .foregroundStyle(
+                            usesNoBubbleStyle
+                                ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8)
+                                : (isOutgoing
+                                    ? resolvedSecondaryTextColor(default: Color.white.opacity(0.85), customOpacity: 0.85)
+                                    : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8))
+                        )
                     Text(fileName)
                         .etFont(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                        .foregroundStyle(enableNoBubbleUI ? Color.primary : (isOutgoing ? Color.white : Color.primary))
+                        .foregroundStyle(
+                            usesNoBubbleStyle
+                                ? resolvedTextColor(default: Color.primary)
+                                : resolvedTextColor(default: isOutgoing ? Color.white : Color.primary)
+                        )
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(enableNoBubbleUI ? Color.clear : (isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground)))
+                        .fill(
+                            usesNoBubbleStyle
+                                ? Color.clear
+                                : (isOutgoing
+                                    ? resolvedUserBubbleEndColor
+                                    : (resolvedAssistantBubbleColor ?? Color(uiColor: .secondarySystemBackground)))
+                        )
                 )
             }
         }
@@ -825,20 +931,27 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
-        let shouldRenderAsOutgoing = (isOutgoing && !enableNoBubbleUI) || isError
+        let shouldRenderAsOutgoing = isOutgoing || isError
         ETAdvancedMarkdownRenderer(
             content: content,
             enableMarkdown: enableMarkdown,
             isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
-            enableMathRendering: enableMathRendering
+            enableMathRendering: enableMathRendering,
+            customTextColor: customTextColorOverride
         )
     }
     
     @ViewBuilder
     private func audioPlayerView(fileName: String) -> some View {
-        let foregroundColor = enableNoBubbleUI ? Color.primary : (isOutgoing ? Color.white : Color.primary)
-        let secondaryColor = enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+        let foregroundColor = usesNoBubbleStyle
+            ? resolvedTextColor(default: Color.primary)
+            : resolvedTextColor(default: isOutgoing ? Color.white : Color.primary)
+        let secondaryColor = usesNoBubbleStyle
+            ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75)
+            : (isOutgoing
+                ? resolvedSecondaryTextColor(default: Color.white.opacity(0.7), customOpacity: 0.7)
+                : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75))
         
         HStack(spacing: 12) {
             // 播放按钮
@@ -847,7 +960,7 @@ struct ChatBubble: View {
             } label: {
                 ZStack {
                     Circle()
-                        .fill(enableNoBubbleUI ? Color.secondary.opacity(0.15) : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
+                        .fill(usesNoBubbleStyle ? Color.secondary.opacity(0.15) : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
                         .frame(width: 44, height: 44)
                     Image(systemName: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName ? "stop.fill" : "play.fill")
                         .etFont(.system(size: 16, weight: .semibold))
@@ -1142,9 +1255,7 @@ struct ReasoningDisclosureView: View, Equatable {
     let isOutgoing: Bool
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
-    
-    // 限制显示的最大字符数，超过时截断并提示
-    private static let maxDisplayLength = 8000
+    let customTextColor: Color?
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
@@ -1152,23 +1263,25 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.isOutgoing == rhs.isOutgoing
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
-    }
-    
-    private var displayText: String {
-        if reasoning.count > Self.maxDisplayLength {
-            return String(reasoning.prefix(Self.maxDisplayLength)) + "\n\n... (内容过长，已截断)"
-        }
-        return reasoning
+            && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            let baseColor: Color = usesNoBubbleStyle
-                ? .secondary
-                : (isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
-            let highlightColor: Color = usesNoBubbleStyle
-                ? .primary.opacity(0.85)
-                : (isOutgoing ? Color.white : Color.primary.opacity(0.85))
+            let baseColor: Color = resolvedSecondaryTextColor(
+                default: usesNoBubbleStyle
+                    ? .secondary
+                    : (isOutgoing ? Color.white.opacity(0.9) : Color.secondary),
+                customTextColor: customTextColor,
+                customOpacity: 0.9
+            )
+            let highlightColor: Color = resolvedTextColor(
+                default: usesNoBubbleStyle
+                    ? .primary.opacity(0.85)
+                    : (isOutgoing ? Color.white : Color.primary.opacity(0.85)),
+                customTextColor: customTextColor,
+                customOpacity: 0.92
+            )
             // 点击区域：标题行
             Button {
                 isExpanded.toggle()
@@ -1203,9 +1316,17 @@ struct ReasoningDisclosureView: View, Equatable {
             
             // 内容区域：只在展开时渲染
             if isExpanded {
-                Text(displayText)
+                Text(reasoning)
                     .etFont(.subheadline)
-                    .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
+                    .foregroundStyle(
+                        resolvedSecondaryTextColor(
+                            default: usesNoBubbleStyle
+                                ? Color.secondary
+                                : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary),
+                            customTextColor: customTextColor,
+                            customOpacity: 0.85
+                        )
+                    )
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
@@ -1214,15 +1335,34 @@ struct ReasoningDisclosureView: View, Equatable {
         }
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
+
+    private func resolvedTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
+        if let customTextColor {
+            return customTextColor.opacity(customOpacity)
+        }
+        return defaultColor
+    }
+
+    private func resolvedSecondaryTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
+        resolvedTextColor(default: defaultColor, customTextColor: customTextColor, customOpacity: customOpacity)
+    }
+
+    private static func colorSignature(_ color: Color?) -> String? {
+        guard let color else { return nil }
+        return ChatAppearanceColorCodec.hexRGBA(from: color)
+    }
 }
 
 // MARK: - 工具调用视图（内联展示）
 struct ToolCallsInlineView: View, Equatable {
     let toolCalls: [InternalToolCall]
     let isOutgoing: Bool
+    let customTextColor: Color?
     
     static func == (lhs: ToolCallsInlineView, rhs: ToolCallsInlineView) -> Bool {
-        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isOutgoing == rhs.isOutgoing
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
+            && lhs.isOutgoing == rhs.isOutgoing
+            && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
     }
 
     private func displayName(for toolName: String) -> String {
@@ -1235,7 +1375,15 @@ struct ToolCallsInlineView: View, Equatable {
         if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
             return label
         }
+        if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
         return toolName
+    }
+
+    private static func colorSignature(_ color: Color?) -> String? {
+        guard let color else { return nil }
+        return ChatAppearanceColorCodec.hexRGBA(from: color)
     }
     
     var body: some View {
@@ -1245,7 +1393,8 @@ struct ToolCallsInlineView: View, Equatable {
                 ToolCallDisclosureRow(
                     label: label,
                     arguments: call.arguments,
-                    isOutgoing: isOutgoing
+                    isOutgoing: isOutgoing,
+                    customTextColor: customTextColor
                 )
             }
         }
@@ -1255,6 +1404,7 @@ struct ToolCallsInlineView: View, Equatable {
         let label: String
         let arguments: String
         let isOutgoing: Bool
+        let customTextColor: Color?
         @State private var isExpanded = true
 
         private var trimmedArguments: String {
@@ -1279,13 +1429,29 @@ struct ToolCallsInlineView: View, Equatable {
                         text: trimmedArguments,
                         maxHeight: 200,
                         font: .caption,
-                        foreground: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                        foreground: resolvedSecondaryTextColor(
+                            default: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                            customTextColor: customTextColor,
+                            customOpacity: 0.75
+                        ),
                         enableSelection: true
                     )
                     .padding(6)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                            .fill(
+                                isOutgoing
+                                    ? resolvedSecondaryTextColor(
+                                        default: Color.white,
+                                        customTextColor: customTextColor,
+                                        customOpacity: 0.15
+                                    )
+                                    : resolvedSecondaryTextColor(
+                                        default: Color.secondary,
+                                        customTextColor: customTextColor,
+                                        customOpacity: 0.1
+                                    )
+                            )
                     )
                 }
             }
@@ -1305,8 +1471,21 @@ struct ToolCallsInlineView: View, Equatable {
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
             }
-            .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+            .foregroundStyle(
+                resolvedSecondaryTextColor(
+                    default: isOutgoing ? Color.white.opacity(0.9) : Color.secondary,
+                    customTextColor: customTextColor,
+                    customOpacity: 0.9
+                )
+            )
             .contentShape(Rectangle())
+        }
+
+        private func resolvedSecondaryTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
+            if let customTextColor {
+                return customTextColor.opacity(customOpacity)
+            }
+            return defaultColor
         }
     }
 }
@@ -1379,6 +1558,7 @@ struct ToolResultsDisclosureView: View, Equatable {
     let isOutgoing: Bool
     let isPending: Bool
     let enableExperimentalToolResultDisplay: Bool
+    let customTextColor: Color?
     
     static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
         lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
@@ -1387,6 +1567,7 @@ struct ToolResultsDisclosureView: View, Equatable {
             && lhs.resultText == rhs.resultText
             && lhs.isPending == rhs.isPending
             && lhs.enableExperimentalToolResultDisplay == rhs.enableExperimentalToolResultDisplay
+            && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
     }
 
     private func displayName(for toolName: String) -> String {
@@ -1399,23 +1580,38 @@ struct ToolResultsDisclosureView: View, Equatable {
         if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
             return label
         }
+        if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
         return toolName
     }
 
     private var headerForegroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.9) : Color.secondary
+        if let customTextColor {
+            return customTextColor.opacity(0.9)
+        }
+        return isOutgoing ? Color.white.opacity(0.9) : Color.secondary
     }
 
     private var summaryForegroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.72) : Color.secondary.opacity(0.9)
+        if let customTextColor {
+            return customTextColor.opacity(0.72)
+        }
+        return isOutgoing ? Color.white.opacity(0.72) : Color.secondary.opacity(0.9)
     }
 
     private var sectionForegroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.78) : Color.secondary
+        if let customTextColor {
+            return customTextColor.opacity(0.78)
+        }
+        return isOutgoing ? Color.white.opacity(0.78) : Color.secondary
     }
 
     private var sectionBackgroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1)
+        if let customTextColor {
+            return customTextColor.opacity(isOutgoing ? 0.15 : 0.1)
+        }
+        return isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1)
     }
 
     private func resolvedResult(for call: InternalToolCall) -> String {
@@ -1429,8 +1625,16 @@ struct ToolResultsDisclosureView: View, Equatable {
     private var disclosureSummaryText: String? {
         guard enableExperimentalToolResultDisplay else { return nil }
         let summaries = toolCalls
-            .map { displayModel(for: $0) }
-            .map(\.summaryText)
+            .map { call -> String in
+                if let payload = widgetPayload(for: call) {
+                    if let title = payload.title,
+                       !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        return "可视化 Widget · \(title)"
+                    }
+                    return "可视化 Widget"
+                }
+                return displayModel(for: call).summaryText
+            }
             .filter { !$0.isEmpty }
 
         guard !summaries.isEmpty else { return nil }
@@ -1448,7 +1652,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                         text: "结果：\(toolNames.joined(separator: ", "))",
                         font: .subheadline.weight(.medium),
                         baseColor: headerForegroundColor,
-                        highlightColor: isOutgoing ? Color.white : Color.primary.opacity(0.85)
+                        highlightColor: customTextColor?.opacity(0.95) ?? (isOutgoing ? Color.white : Color.primary.opacity(0.85))
                     )
                     .lineLimit(1)
                     Spacer()
@@ -1503,11 +1707,56 @@ struct ToolResultsDisclosureView: View, Equatable {
 
     @ViewBuilder
     private func toolResultContent(for call: InternalToolCall) -> some View {
-        if enableExperimentalToolResultDisplay {
+        if let payload = widgetPayload(for: call) {
+            widgetToolResultContent(for: call, payload: payload)
+        } else if enableExperimentalToolResultDisplay {
             experimentalToolResultContent(for: call)
         } else {
             legacyToolResultContent(for: call)
         }
+    }
+
+    private func widgetPayload(for call: InternalToolCall) -> ToolWidgetPayload? {
+        if let payload = ToolWidgetPayloadParser.parse(from: call.arguments) {
+            return payload
+        }
+
+        let resolved = resolvedResult(for: call)
+        if let payload = ToolWidgetPayloadParser.parse(from: resolved) {
+            return payload
+        }
+
+        if let payload = ToolWidgetPayloadParser.parse(from: resultText) {
+            return payload
+        }
+
+        return nil
+    }
+
+    private func widgetToolResultContent(for call: InternalToolCall, payload: ToolWidgetPayload) -> some View {
+        let display = displayModel(for: call)
+        let label = displayName(for: call.toolName)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .etFont(.caption.weight(.semibold))
+            ToolWidgetRendererCard(payload: payload)
+            if display.shouldShowRawSection {
+                Divider()
+                    .background(sectionBackgroundColor.opacity(0.7))
+                toolResultSection(
+                    title: "原始返回",
+                    text: display.rawDisplayText,
+                    font: .system(.caption, design: .monospaced),
+                    enableSelection: true
+                )
+            }
+        }
+        .foregroundStyle(sectionForegroundColor)
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(sectionBackgroundColor)
+        )
     }
 
     private func experimentalToolResultContent(for call: InternalToolCall) -> some View {
@@ -1588,6 +1837,267 @@ struct ToolResultsDisclosureView: View, Equatable {
                 enableSelection: enableSelection
             )
         }
+    }
+
+    private static func colorSignature(_ color: Color?) -> String? {
+        guard let color else { return nil }
+        return ChatAppearanceColorCodec.hexRGBA(from: color)
+    }
+}
+
+private struct ToolWidgetRendererCard: View {
+    let payload: ToolWidgetPayload
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var renderedHeight: CGFloat = 180
+    @State private var hasRendered = false
+
+    private var loadingText: String {
+        payload.loadingMessages.first?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? (payload.loadingMessages.first ?? "正在渲染 Widget…")
+            : "正在渲染 Widget…"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title = payload.title,
+               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(title)
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            GeometryReader { proxy in
+                ToolWidgetWebView(
+                    widgetCode: payload.widgetCode,
+                    colorScheme: colorScheme,
+                    availableWidth: max(1, floor(proxy.size.width)),
+                    renderedHeight: $renderedHeight,
+                    hasRendered: $hasRendered
+                )
+            }
+            .frame(height: max(120, renderedHeight))
+            .overlay {
+                if !hasRendered {
+                    ProgressView(loadingText)
+                        .progressViewStyle(.circular)
+                        .tint(.secondary)
+                        .etFont(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(.ultraThinMaterial)
+                        )
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
+            )
+        }
+    }
+}
+
+private struct ToolWidgetWebView: UIViewRepresentable {
+    let widgetCode: String
+    let colorScheme: ColorScheme
+    let availableWidth: CGFloat
+    @Binding var renderedHeight: CGFloat
+    @Binding var hasRendered: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(renderedHeight: $renderedHeight, hasRendered: $hasRendered)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let controller = WKUserContentController()
+        controller.add(context.coordinator, name: Coordinator.heightMessageName)
+        configuration.userContentController = controller
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.scrollView.showsVerticalScrollIndicator = false
+        webView.scrollView.showsHorizontalScrollIndicator = false
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        let stableWidth = max(1, floor(availableWidth))
+        let html = wrappedHTML(widgetCode: widgetCode, stableWidth: stableWidth)
+        let renderKey = "\(colorScheme == .dark ? "dark" : "light")|\(html)"
+        guard context.coordinator.lastRenderKey != renderKey else { return }
+        context.coordinator.lastRenderKey = renderKey
+
+        DispatchQueue.main.async {
+            hasRendered = false
+        }
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.navigationDelegate = nil
+        webView.stopLoading()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
+    }
+
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+        static let heightMessageName = "etWidgetHeight"
+
+        @Binding var renderedHeight: CGFloat
+        @Binding var hasRendered: Bool
+        var lastRenderKey: String?
+
+        init(renderedHeight: Binding<CGFloat>, hasRendered: Binding<Bool>) {
+            self._renderedHeight = renderedHeight
+            self._hasRendered = hasRendered
+        }
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard message.name == Self.heightMessageName else { return }
+            guard let value = message.body as? Double else { return }
+            let nextHeight = max(120, ceil(value))
+            if abs(renderedHeight - nextHeight) > 0.5 {
+                DispatchQueue.main.async {
+                    self.renderedHeight = nextHeight
+                    self.hasRendered = true
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.hasRendered = true
+                }
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            webView.evaluateJavaScript("window.__etReportSize && window.__etReportSize();", completionHandler: nil)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFail navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            DispatchQueue.main.async {
+                self.hasRendered = true
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            DispatchQueue.main.async {
+                self.hasRendered = true
+            }
+        }
+    }
+
+    private func wrappedHTML(widgetCode: String, stableWidth: CGFloat) -> String {
+        """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style id="et-widget-host-style">
+    :root {
+      color-scheme: light dark;
+      --color-background-primary: #FFFFFF;
+      --color-background-secondary: #F2F2F7;
+      --color-background-tertiary: #FFFFFF;
+      --color-text-primary: #1C1C1E;
+      --color-text-secondary: #3C3C43;
+      --color-text-tertiary: #8E8E93;
+      --color-text-info: #0A84FF;
+      --color-border-tertiary: rgba(60, 60, 67, 0.16);
+      --color-border-secondary: rgba(60, 60, 67, 0.3);
+      --border-radius-md: 8px;
+      --border-radius-lg: 12px;
+      --border-radius-xl: 16px;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      --font-serif: Georgia, 'Times New Roman', serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-background-primary: #1C1C1E;
+        --color-background-secondary: #2C2C2E;
+        --color-background-tertiary: #1C1C1E;
+        --color-text-primary: #FFFFFF;
+        --color-text-secondary: #EBEBF5;
+        --color-text-tertiary: #8E8E93;
+        --color-text-info: #5AC8FA;
+        --color-border-tertiary: rgba(235, 235, 245, 0.16);
+        --color-border-secondary: rgba(235, 235, 245, 0.3);
+      }
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100%;
+      background: transparent;
+      overflow-x: hidden;
+    }
+    #et-widget-root {
+      width: min(100%, \(Int(stableWidth))px);
+      max-width: 100%;
+      margin: 0;
+      box-sizing: border-box;
+      overflow: visible;
+    }
+  </style>
+</head>
+<body>
+  <div id="et-widget-root">
+\(widgetCode)
+  </div>
+  <script>
+    (function () {
+      function reportHeight() {
+        var body = document.body;
+        var root = document.documentElement;
+        var height = Math.max(
+          body ? body.scrollHeight : 0,
+          body ? body.offsetHeight : 0,
+          root ? root.scrollHeight : 0,
+          root ? root.offsetHeight : 0
+        );
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etWidgetHeight) {
+          window.webkit.messageHandlers.etWidgetHeight.postMessage(height);
+        }
+      }
+      window.__etReportSize = reportHeight;
+      if (window.ResizeObserver) {
+        var observer = new ResizeObserver(reportHeight);
+        if (document.documentElement) observer.observe(document.documentElement);
+        if (document.body) observer.observe(document.body);
+      }
+      window.addEventListener('load', reportHeight);
+      window.addEventListener('resize', reportHeight);
+      setTimeout(reportHeight, 0);
+      setTimeout(reportHeight, 120);
+      setTimeout(reportHeight, 360);
+    })();
+  </script>
+</body>
+</html>
+"""
     }
 }
 
