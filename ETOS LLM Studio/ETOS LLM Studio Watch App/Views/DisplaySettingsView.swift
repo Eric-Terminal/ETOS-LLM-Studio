@@ -399,19 +399,12 @@ private struct WatchFontSettingsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(assets) { asset in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(asset.displayName)
-                                        .etFont(.footnote)
-                                    Text(asset.postScriptName)
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 8)
-                                Toggle("启用", isOn: enabledBinding(for: asset))
-                                    .labelsHidden()
-                            }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(asset.displayName)
+                                .etFont(.footnote)
+                            Text(asset.postScriptName)
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -435,12 +428,7 @@ private struct WatchFontSettingsView: View {
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(asset.displayName)
-                                    .foregroundStyle(asset.isEnabled ? .primary : .secondary)
-                                if !asset.isEnabled {
-                                    Text("已停用")
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
+                                    .foregroundStyle(.primary)
                             }
                             Spacer(minLength: 8)
                             HStack(spacing: 4) {
@@ -511,7 +499,7 @@ private struct WatchFontSettingsView: View {
             titleVisibility: .visible
         ) {
             ForEach(availableAssetsForSelectedRole) { asset in
-                Button(asset.isEnabled ? asset.displayName : "\(asset.displayName)（已停用）") {
+                Button(asset.displayName) {
                     addAssetToSelectedRole(asset.id)
                 }
             }
@@ -568,19 +556,19 @@ private struct WatchFontSettingsView: View {
     }
 
     private func reloadData() {
-        assets = FontLibrary.loadAssets()
-        routes = FontLibrary.loadRouteConfiguration()
-    }
-
-    private func enabledBinding(for asset: FontAssetRecord) -> Binding<Bool> {
-        Binding(
-            get: {
-                assets.first(where: { $0.id == asset.id })?.isEnabled ?? asset.isEnabled
-            },
-            set: { newValue in
-                updateAssetEnabled(assetID: asset.id, isEnabled: newValue)
+        let loadedAssets = FontLibrary.loadAssets()
+        if loadedAssets.contains(where: { !$0.isEnabled }) {
+            let normalizedAssets = loadedAssets.map { asset in
+                var mutable = asset
+                mutable.isEnabled = true
+                return mutable
             }
-        )
+            _ = FontLibrary.saveAssets(normalizedAssets)
+            assets = normalizedAssets
+        } else {
+            assets = loadedAssets
+        }
+        routes = FontLibrary.loadRouteConfiguration()
     }
 
     private func moveAsset(at index: Int, offset: Int) {
@@ -608,12 +596,6 @@ private struct WatchFontSettingsView: View {
         chain.removeAll { $0 == assetID }
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
-        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
-    }
-
-    private func updateAssetEnabled(assetID: UUID, isEnabled: Bool) {
-        guard FontLibrary.setAssetEnabled(id: assetID, isEnabled: isEnabled) else { return }
-        reloadData()
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
     }
 }

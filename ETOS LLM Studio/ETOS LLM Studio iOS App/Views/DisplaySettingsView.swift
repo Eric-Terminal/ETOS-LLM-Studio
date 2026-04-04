@@ -226,7 +226,7 @@ private struct FontSettingsView: View {
                     summary: "管理每个样式槽位的字体候选链；越靠上优先级越高。",
                     details: """
                     怎么用（建议顺序）
-                    1. 先在“字体文件”导入并启用你要用的字体。
+                    1. 先在“字体文件”导入你要用的字体。
                     2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
                     3. 点击右上角“编辑”，拖拽右侧把手调整顺序。
                     4. 在编辑状态使用“添加字体到当前槽位”，把漏掉的字体补进来。
@@ -253,16 +253,11 @@ private struct FontSettingsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(assets) { asset in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(asset.displayName)
-                                Text(asset.postScriptName)
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Toggle("启用", isOn: enabledBinding(for: asset))
-                                .labelsHidden()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(asset.displayName)
+                            Text(asset.postScriptName)
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .onDelete(perform: deleteAssets)
@@ -286,14 +281,9 @@ private struct FontSettingsView: View {
                     ForEach(chainRecords) { asset in
                         HStack {
                             Text(asset.displayName)
-                                .foregroundStyle(asset.isEnabled ? .primary : .secondary)
+                                .foregroundStyle(.primary)
                             Spacer()
                             HStack(spacing: 6) {
-                                if !asset.isEnabled {
-                                    Text("已停用")
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
                                 Text(asset.postScriptName)
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
@@ -322,7 +312,7 @@ private struct FontSettingsView: View {
                                 Button {
                                     addAssetToSelectedRole(asset.id)
                                 } label: {
-                                    Text(asset.isEnabled ? asset.displayName : "\(asset.displayName)（已停用）")
+                                    Text(asset.displayName)
                                 }
                             }
                         } label: {
@@ -454,19 +444,19 @@ private struct FontSettingsView: View {
     }
 
     private func reloadData() {
-        assets = FontLibrary.loadAssets()
-        routes = FontLibrary.loadRouteConfiguration()
-    }
-
-    private func enabledBinding(for asset: FontAssetRecord) -> Binding<Bool> {
-        Binding(
-            get: {
-                assets.first(where: { $0.id == asset.id })?.isEnabled ?? asset.isEnabled
-            },
-            set: { newValue in
-                updateAssetEnabled(assetID: asset.id, isEnabled: newValue)
+        let loadedAssets = FontLibrary.loadAssets()
+        if loadedAssets.contains(where: { !$0.isEnabled }) {
+            let normalizedAssets = loadedAssets.map { asset in
+                var mutable = asset
+                mutable.isEnabled = true
+                return mutable
             }
-        )
+            _ = FontLibrary.saveAssets(normalizedAssets)
+            assets = normalizedAssets
+        } else {
+            assets = loadedAssets
+        }
+        routes = FontLibrary.loadRouteConfiguration()
     }
 
     private func movePriority(from source: IndexSet, to destination: Int) {
@@ -512,12 +502,6 @@ private struct FontSettingsView: View {
                 deleteErrorMessage = error.localizedDescription
             }
         }
-        reloadData()
-        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
-    }
-
-    private func updateAssetEnabled(assetID: UUID, isEnabled: Bool) {
-        guard FontLibrary.setAssetEnabled(id: assetID, isEnabled: isEnabled) else { return }
         reloadData()
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
     }
