@@ -15,6 +15,7 @@ struct ToolCenterView: View {
     @StateObject private var appToolManager = AppToolManager.shared
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var shortcutManager = ShortcutToolManager.shared
+    @StateObject private var skillManager = SkillManager.shared
 
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
@@ -137,6 +138,42 @@ struct ToolCenterView: View {
             }
     }
 
+    private var filteredSkills: [SkillMetadata] {
+        skillManager.skills
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .filter { skill in
+                let keywords = [
+                    skill.name,
+                    skill.description,
+                    skill.compatibility ?? "",
+                    "Agent Skills",
+                    "use_skill"
+                ]
+                guard matchesSearch(for: keywords) else { return false }
+                if showEnabledOnly {
+                    return skillManager.isSkillEnabled(skill.name)
+                }
+                return true
+            }
+    }
+
+    private var isSkillsSectionVisible: Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
+            return true
+        }
+        if !filteredSkills.isEmpty {
+            return true
+        }
+        return matchesSearch(
+            for: [
+                "Agent Skills",
+                "use_skill",
+                "向模型暴露 Agent Skills（use_skill）"
+            ]
+        )
+    }
+
     private var configuredMCPCount: Int {
         mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
@@ -166,15 +203,25 @@ struct ToolCenterView: View {
         shortcutManager.tools.filter(\.isEnabled).count
     }
 
+    private var configuredSkillCount: Int {
+        skillManager.skills.filter { skillManager.isSkillEnabled($0.name) }.count
+    }
+
     private var availableShortcutCount: Int {
         guard shortcutManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
         return configuredShortcutCount
+    }
+
+    private var availableSkillCount: Int {
+        guard skillManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
+        return configuredSkillCount
     }
 
     private var hasVisibleTools: Bool {
         !filteredBuiltInStates.isEmpty
         || isAppToolSectionVisible
         || !filteredMCPTools.isEmpty
+        || isSkillsSectionVisible
         || !filteredShortcutTools.isEmpty
     }
 
@@ -183,7 +230,7 @@ struct ToolCenterView: View {
             Section {
                 settingsIntroCard(
                     title: "工具中心",
-                    summary: "集中管理内置记忆、拓展工具、MCP 与快捷指令的聊天暴露状态。",
+                    summary: "集中管理内置记忆、拓展工具、MCP、Agent Skills 与快捷指令的聊天暴露状态。",
                     details: """
                     适用场景
                     • 你想快速判断“当前会话到底能用哪些工具”。
@@ -195,9 +242,9 @@ struct ToolCenterView: View {
                     • 两个数字不一致通常不是 bug，而是被会话条件限制（例如世界书隔离发送）。
 
                     推荐使用流程
-                    1. 先看概览区，确认四类工具的可用数量。
+                    1. 先看概览区，确认五类工具的可用数量。
                     2. 用“仅显示已启用”快速聚焦当前生效配置。
-                    3. 分别进入内置/拓展/MCP/快捷指令分类做单项微调。
+                    3. 分别进入内置/拓展/MCP/Skills/快捷指令分类做单项微调。
 
                     关键开关说明
                     • 启用长期记忆系统：决定记忆相关内置工具是否可参与聊天。
@@ -206,7 +253,7 @@ struct ToolCenterView: View {
 
                     排查建议
                     • 工具不生效：优先核对“当前会话可用”而不是“配置已启用”。
-                    • 会话隔离提示为橙色时：记忆、MCP、快捷指令会被会话级策略屏蔽。
+                    • 会话隔离提示为橙色时：记忆、MCP、Agent Skills、快捷指令会被会话级策略屏蔽。
                     """,
                     isExpanded: $isShowingIntroDetails
                 )
@@ -219,6 +266,9 @@ struct ToolCenterView: View {
                 appToolSection
             }
             mcpSection
+            if isSkillsSectionVisible {
+                skillsSection
+            }
             shortcutSection
 
             if !hasVisibleTools {
@@ -234,6 +284,9 @@ struct ToolCenterView: View {
             placement: .navigationBarDrawer(displayMode: .automatic),
             prompt: Text(NSLocalizedString("搜索工具", comment: "Search tools prompt"))
         )
+        .onAppear {
+            skillManager.reloadFromDisk()
+        }
     }
 
     private var overviewSection: some View {
@@ -260,6 +313,13 @@ struct ToolCenterView: View {
             )
 
             ToolCenterSummaryRow(
+                title: "Agent Skills",
+                configuredEnabled: configuredSkillCount,
+                availableNow: availableSkillCount,
+                total: skillManager.skills.count
+            )
+
+            ToolCenterSummaryRow(
                 title: NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"),
                 configuredEnabled: configuredShortcutCount,
                 availableNow: availableShortcutCount,
@@ -267,7 +327,7 @@ struct ToolCenterView: View {
             )
 
             if currentSessionIsolationActive {
-                Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP 与快捷指令工具。", comment: "Worldbook isolation warning in tool center"))
+                Text("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。")
                     .etFont(.footnote)
                     .foregroundStyle(.orange)
             }
@@ -468,6 +528,61 @@ struct ToolCenterView: View {
         }
     }
 
+    private var skillsSection: some View {
+        Section(
+            header: Text("Agent Skills"),
+            footer: Text("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。")
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        ) {
+            Toggle(
+                "向模型暴露 Agent Skills（use_skill）",
+                isOn: Binding(
+                    get: { skillManager.chatToolsEnabled },
+                    set: { skillManager.setChatToolsEnabled($0) }
+                )
+            )
+
+            if !skillManager.chatToolsEnabled {
+                Text("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if skillManager.skills.isEmpty {
+                Text("当前还没有已安装技能，可在设置里的 Agent Skills 页面添加。")
+                    .foregroundStyle(.secondary)
+            } else if filteredSkills.isEmpty {
+                Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(filteredSkills) { skill in
+                    HStack(alignment: .top, spacing: 12) {
+                        ToolCenterStatusRow(
+                            title: skill.name,
+                            subtitle: skill.description,
+                            detail: skillStatusText(for: skill),
+                            auxiliary: skill.compatibility,
+                            color: skillStatusColor(for: skill)
+                        )
+
+                        Spacer(minLength: 8)
+
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { skillManager.isSkillEnabled(skill.name) },
+                                set: { skillManager.setSkillEnabled(name: skill.name, isEnabled: $0) }
+                            )
+                        )
+                        .labelsHidden()
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
     private func matchesSearch(for keywords: [String]) -> Bool {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return true }
@@ -618,6 +733,25 @@ struct ToolCenterView: View {
         }
         return .green
     }
+
+    private func skillStatusText(for skill: SkillMetadata) -> String {
+        if currentSessionIsolationActive {
+            return "当前会话因世界书隔离发送而不会实际启用该工具。"
+        }
+        if !skillManager.chatToolsEnabled {
+            return "总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。"
+        }
+        return skillManager.isSkillEnabled(skill.name)
+            ? "该技能当前可参与聊天。"
+            : "已停用。"
+    }
+
+    private func skillStatusColor(for skill: SkillMetadata) -> Color {
+        if currentSessionIsolationActive || !skillManager.chatToolsEnabled || !skillManager.isSkillEnabled(skill.name) {
+            return .secondary
+        }
+        return .green
+    }
 }
 
 private struct ToolCenterSummaryRow: View {
@@ -729,7 +863,7 @@ private struct BuiltInToolDetailView: View {
                 Text(statusText(for: state))
                     .foregroundStyle(state.isAvailableInCurrentSession ? .green : .secondary)
                 if currentSessionIsolationActive {
-                    Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP 与快捷指令工具。", comment: "Worldbook isolation warning in tool center"))
+                    Text("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。")
                         .etFont(.footnote)
                         .foregroundStyle(.orange)
                 }

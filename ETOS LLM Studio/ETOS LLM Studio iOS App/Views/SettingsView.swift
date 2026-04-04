@@ -152,6 +152,12 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    AgentSkillsView()
+                } label: {
+                    Label("Agent Skills", systemImage: "sparkles.square.filled.on.square")
+                }
+
+                NavigationLink {
                     ShortcutIntegrationView()
                 } label: {
                     Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")

@@ -75,18 +75,6 @@ struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
-                    AgentSkillsView()
-                } label: {
-                    Label("Agent Skills", systemImage: "sparkles.square.filled.on.square")
-                }
-            } footer: {
-                Text("管理可按需加载的技能包，并控制是否向模型暴露 use_skill 工具。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                NavigationLink {
                     ThirdPartyImportView()
                 } label: {
                     Label("第三方导入", systemImage: "square.and.arrow.down.on.square")
