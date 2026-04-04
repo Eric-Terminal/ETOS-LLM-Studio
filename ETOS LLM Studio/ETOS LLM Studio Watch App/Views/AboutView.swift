@@ -15,7 +15,7 @@ import AuthenticationServices
 
 struct AboutView: View {
     private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
-    @StateObject private var webAuthLauncher = WatchWebAuthLauncher()
+    @State private var webAuthLauncher = WatchWebAuthLauncher()
     @State private var versionTapCount = 0
     @State private var lastVersionTapAt: Date = .distantPast
     @State private var showAppLogs = false
@@ -159,7 +159,7 @@ struct AboutView: View {
 }
 
 @MainActor
-private final class WatchWebAuthLauncher: NSObject, ObservableObject {
+private final class WatchWebAuthLauncher: NSObject {
     private var session: ASWebAuthenticationSession?
 
     func open(url: URL) {
