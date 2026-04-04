@@ -3128,6 +3128,8 @@ private struct AudioRecorderSheet: View {
     @State private var recordingURL: URL?
     @State private var timer: Timer?
     @State private var liveTranscript: String = ""
+    @State private var preparedTranscript: String?
+    @State private var hasAppliedPreparedTranscript = false
     @State private var processingErrorMessage: String?
     @State private var isTranscriptionInProgress = false
     @State private var streamingSession: SystemSpeechStreamingSession?
@@ -3226,6 +3228,15 @@ private struct AudioRecorderSheet: View {
     
     private func startRecording() {
         processingErrorMessage = nil
+        preparedTranscript = nil
+        hasAppliedPreparedTranscript = false
+        liveTranscript = ""
+        if let existingURL = recordingURL {
+            try? FileManager.default.removeItem(at: existingURL)
+        }
+        recordingURL = nil
+        audioRecorder = nil
+        streamingSession = nil
         if usesSystemStreamingRecognizer {
             startSystemStreamingRecording()
             return
@@ -3343,6 +3354,8 @@ private struct AudioRecorderSheet: View {
         isRecording = false
         isTranscriptionInProgress = false
         liveTranscript = ""
+        preparedTranscript = nil
+        hasAppliedPreparedTranscript = false
         processingErrorMessage = nil
     }
     
@@ -3359,6 +3372,18 @@ private struct AudioRecorderSheet: View {
                 return
             }
             onCompleteTranscript(transcript)
+            dismiss()
+            return
+        }
+
+        if case .speechToText = mode,
+           let preparedText = preparedTranscript,
+           !preparedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !hasAppliedPreparedTranscript {
+                onCompleteTranscript(preparedText)
+                hasAppliedPreparedTranscript = true
+            }
+            cleanupRecordedFile()
             dismiss()
             return
         }
@@ -3402,10 +3427,19 @@ private struct AudioRecorderSheet: View {
                     }
 
                     await MainActor.run {
-                        onCompleteTranscript(transcript)
-                        cleanupRecordedFile()
+                        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmedTranscript.isEmpty else {
+                            processingErrorMessage = "未识别到有效语音内容。"
+                            isTranscriptionInProgress = false
+                            return
+                        }
+                        liveTranscript = trimmedTranscript
+                        preparedTranscript = trimmedTranscript
+                        if !hasAppliedPreparedTranscript {
+                            onCompleteTranscript(trimmedTranscript)
+                            hasAppliedPreparedTranscript = true
+                        }
                         isTranscriptionInProgress = false
-                        dismiss()
                     }
                 } catch {
                     await MainActor.run {
@@ -3443,6 +3477,8 @@ private struct AudioRecorderSheet: View {
         recordingURL = nil
         audioRecorder = nil
         streamingSession = nil
+        preparedTranscript = nil
+        hasAppliedPreparedTranscript = false
     }
 
     private var isSpeechToTextMode: Bool {
@@ -3467,6 +3503,11 @@ private struct AudioRecorderSheet: View {
             return isRecording
                 ? false
                 : liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if isSpeechToTextMode,
+           let preparedTranscript,
+           !preparedTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return false
         }
         return recordingURL == nil || isRecording
     }

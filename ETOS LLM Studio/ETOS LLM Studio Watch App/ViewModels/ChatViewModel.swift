@@ -938,6 +938,7 @@ class ChatViewModel: ObservableObject {
             isSpeechRecorderPresented = false
             return
         }
+        speechStreamingTranscript = ""
 
         if shouldUseSystemSpeechStreaming {
             let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
@@ -1046,16 +1047,27 @@ class ChatViewModel: ObservableObject {
     }
     
     func finishSpeechRecording() {
-        guard isRecordingSpeech else { return }
+        if !isRecordingSpeech {
+            if speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return
+            }
+            isSpeechRecorderPresented = false
+            speechStreamingTranscript = ""
+            return
+        }
+
         isRecordingSpeech = false
         stopRecordingTimer()
 
         if let streamSession = systemSpeechStreamingSession {
-            let transcript = streamSession.finish()
+            let transcript = streamSession.finish().trimmingCharacters(in: .whitespacesAndNewlines)
             systemSpeechStreamingSession = nil
-            speechStreamingTranscript = ""
-            isSpeechRecorderPresented = false
             resetRecordingVisuals()
+            guard !transcript.isEmpty else {
+                presentSpeechError("未识别到有效语音内容。")
+                return
+            }
+            speechStreamingTranscript = transcript
             appendTranscribedText(transcript)
             return
         }
@@ -1077,7 +1089,6 @@ class ChatViewModel: ObservableObject {
         Task {
             defer {
                 speechTranscriptionInProgress = false
-                isSpeechRecorderPresented = false
                 audioRecorder = nil
                 speechRecordingURL = nil
                 try? FileManager.default.removeItem(at: url)
@@ -1106,7 +1117,12 @@ class ChatViewModel: ObservableObject {
                         fileName: url.lastPathComponent,
                         mimeType: audioRecordingFormat.mimeType
                     )
-                    appendTranscribedText(transcript)
+                    let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmedTranscript.isEmpty else {
+                        throw NSError(domain: "SpeechRecorder", code: -3, userInfo: [NSLocalizedDescriptionKey: "未识别到有效语音内容。"])
+                    }
+                    speechStreamingTranscript = trimmedTranscript
+                    appendTranscribedText(trimmedTranscript)
                 }
             } catch {
                 presentSpeechError(error.localizedDescription)
@@ -1131,6 +1147,7 @@ class ChatViewModel: ObservableObject {
         audioRecorder = nil
         speechRecordingURL = nil
         isSpeechRecorderPresented = false
+        speechStreamingTranscript = ""
         stopRecordingTimer(resetVisuals: true)
     }
     
