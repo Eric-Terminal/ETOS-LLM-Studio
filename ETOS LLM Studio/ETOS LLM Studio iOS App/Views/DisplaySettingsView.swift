@@ -213,12 +213,33 @@ private struct FontSettingsView: View {
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
+    @State private var isShowingIntroDetails = false
     @State private var showImporter = false
     @State private var importErrorMessage: String?
     @State private var deleteErrorMessage: String?
 
     var body: some View {
         Form {
+            Section {
+                settingsIntroCard(
+                    title: "字体样式优先级",
+                    summary: "管理每个样式槽位的字体候选链；越靠上优先级越高。",
+                    details: """
+                    怎么用（建议顺序）
+                    1. 先在“字体文件”导入并启用你要用的字体。
+                    2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
+                    3. 点击右上角“编辑”，拖拽右侧把手调整顺序。
+                    4. 在编辑状态使用“添加字体到当前槽位”，把漏掉的字体补进来。
+
+                    规则说明
+                    • 每个槽位都有独立优先级链。
+                    • 字体可同时存在于多个槽位。
+                    • 槽位内字体都不可用时，会回退到系统字体。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section("字体文件") {
                 Button {
                     showImporter = true
@@ -350,6 +371,45 @@ private struct FontSettingsView: View {
             Button("确定", role: .cancel) {}
         } message: {
             Text(deleteErrorMessage ?? "未知错误")
+        }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.primary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 

@@ -366,10 +366,31 @@ private struct WatchFontSettingsView: View {
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
+    @State private var isShowingIntroDetails = false
     @State private var showAddAssetDialog = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "字体样式优先级",
+                    summary: "按槽位管理字体顺序，越靠上优先级越高。",
+                    details: """
+                    快速上手
+                    1. 先在 iPhone 端导入字体并同步到手表。
+                    2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
+                    3. 用上下箭头调整顺序。
+                    4. 点击“添加字体到当前槽位”补入缺失字体。
+
+                    规则说明
+                    • 每个槽位互相独立。
+                    • 同一字体可加入多个槽位。
+                    • 当前槽位无可用字体时自动回退系统字体。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section("字体来源") {
                 if assets.isEmpty {
                     Text("暂无字体，请先在 iPhone 端导入并同步。")
@@ -487,6 +508,44 @@ private struct WatchFontSettingsView: View {
                 }
             }
             Button("取消", role: .cancel) {}
+        }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+        )
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         }
     }
 
