@@ -1152,22 +1152,12 @@ struct ReasoningDisclosureView: View, Equatable {
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
     
-    // 限制显示的最大字符数，超过时截断并提示
-    private static let maxDisplayLength = 8000
-    
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
             && lhs.isExpanded == rhs.isExpanded
             && lhs.isOutgoing == rhs.isOutgoing
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
-    }
-    
-    private var displayText: String {
-        if reasoning.count > Self.maxDisplayLength {
-            return String(reasoning.prefix(Self.maxDisplayLength)) + "\n\n... (内容过长，已截断)"
-        }
-        return reasoning
     }
     
     var body: some View {
@@ -1212,7 +1202,7 @@ struct ReasoningDisclosureView: View, Equatable {
             
             // 内容区域：只在展开时渲染
             if isExpanded {
-                Text(displayText)
+                Text(reasoning)
                     .etFont(.subheadline)
                     .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
                     .textSelection(.enabled)
