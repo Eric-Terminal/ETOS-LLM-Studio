@@ -339,8 +339,23 @@ public enum SyncEngine {
         var local = ConfigLoader.loadProviders()
         var imported = 0
         var skipped = 0
+        var didMutateProviderStore = false
 
-        for provider in incoming {
+        let localCompaction = compactProvidersByIdentity(local)
+        if localCompaction.changed {
+            for removedProvider in localCompaction.removedProviders {
+                ConfigLoader.deleteProvider(removedProvider)
+            }
+            for updatedProvider in localCompaction.updatedProviders {
+                ConfigLoader.saveProvider(updatedProvider)
+            }
+            local = localCompaction.providers
+            didMutateProviderStore = true
+        }
+
+        let incomingProviders = compactProvidersByIdentity(incoming).providers
+
+        for provider in incomingProviders {
             let incomingHash = computeProviderContentHash(provider)
 
             if let exactIndex = local.firstIndex(where: { computeProviderContentHash($0) == incomingHash }) {
@@ -351,6 +366,7 @@ public enum SyncEngine {
                     local[exactIndex].apiKeys = mergedAPIKeys
                     ConfigLoader.saveProvider(local[exactIndex])
                     imported += 1
+                    didMutateProviderStore = true
                 }
                 continue
             }
@@ -365,9 +381,22 @@ public enum SyncEngine {
                     local[candidateIndex] = mergedProvider
                     ConfigLoader.saveProvider(mergedProvider)
                     imported += 1
+                    didMutateProviderStore = true
                     continue
                 case .conflict:
-                    break
+                    guard providerMergeIdentity(local[candidateIndex]) == providerMergeIdentity(provider) else {
+                        break
+                    }
+                    let conservativeResult = mergeProviderConservatively(local[candidateIndex], with: provider)
+                    if conservativeResult.changed {
+                        local[candidateIndex] = conservativeResult.provider
+                        ConfigLoader.saveProvider(conservativeResult.provider)
+                        imported += 1
+                        didMutateProviderStore = true
+                    } else {
+                        skipped += 1
+                    }
+                    continue
                 }
             }
 
@@ -376,9 +405,10 @@ public enum SyncEngine {
             ConfigLoader.saveProvider(copied)
             local.append(copied)
             imported += 1
+            didMutateProviderStore = true
         }
-        
-        if imported > 0 {
+
+        if didMutateProviderStore {
             chatService.reloadProviders()
         }
         
@@ -1218,6 +1248,256 @@ public enum SyncEngine {
         case conflict
     }
 
+    private struct ProviderCompactionResult {
+        var providers: [Provider]
+        var updatedProviders: [Provider]
+        var removedProviders: [Provider]
+
+        var changed: Bool {
+            !updatedProviders.isEmpty || !removedProviders.isEmpty
+        }
+    }
+
+    private static func compactProvidersByIdentity(_ providers: [Provider]) -> ProviderCompactionResult {
+        guard !providers.isEmpty else {
+            return ProviderCompactionResult(
+                providers: [],
+                updatedProviders: [],
+                removedProviders: []
+            )
+        }
+
+        var compacted: [Provider] = []
+        var indexByIdentity: [String: Int] = [:]
+        var updatedProvidersByID: [UUID: Provider] = [:]
+        var removedProviders: [Provider] = []
+
+        for provider in providers {
+            let identity = providerMergeIdentity(provider)
+            if let existingIndex = indexByIdentity[identity] {
+                let existing = compacted[existingIndex]
+                let result = mergeProviderConservatively(existing, with: provider)
+                compacted[existingIndex] = result.provider
+                if result.changed {
+                    updatedProvidersByID[result.provider.id] = result.provider
+                }
+                removedProviders.append(provider)
+                continue
+            }
+
+            indexByIdentity[identity] = compacted.count
+            compacted.append(provider)
+        }
+
+        return ProviderCompactionResult(
+            providers: compacted,
+            updatedProviders: Array(updatedProvidersByID.values),
+            removedProviders: removedProviders
+        )
+    }
+
+    private static func mergeProviderConservatively(
+        _ local: Provider,
+        with incoming: Provider
+    ) -> (provider: Provider, changed: Bool) {
+        var merged = local
+        var changed = false
+
+        let canonicalFormat = canonicalProviderAPIFormat(local.apiFormat)
+        if normalizeAPIFormatToken(local.apiFormat) != canonicalFormat {
+            merged.apiFormat = canonicalFormat
+            changed = true
+        }
+
+        let mergedAPIKeys = mergeProviderAPIKeys(merged.apiKeys, incoming.apiKeys)
+        if mergedAPIKeys != merged.apiKeys {
+            merged.apiKeys = mergedAPIKeys
+            changed = true
+        }
+
+        let mergedHeaders = mergeStringDictionaryConservatively(merged.headerOverrides, incoming.headerOverrides)
+        if mergedHeaders != merged.headerOverrides {
+            merged.headerOverrides = mergedHeaders
+            changed = true
+        }
+
+        let mergedProxyConfiguration = mergeProviderProxyConfigurationConservatively(
+            merged.proxyConfiguration,
+            incoming.proxyConfiguration
+        )
+        if mergedProxyConfiguration != merged.proxyConfiguration {
+            merged.proxyConfiguration = mergedProxyConfiguration
+            changed = true
+        }
+
+        let mergedModelsResult = mergeProviderModelsConservatively(merged.models, incoming.models)
+        if mergedModelsResult.changed {
+            merged.models = mergedModelsResult.models
+            changed = true
+        }
+
+        return (merged, changed)
+    }
+
+    private static func mergeProviderModelsConservatively(
+        _ localModels: [Model],
+        _ incomingModels: [Model]
+    ) -> (models: [Model], changed: Bool) {
+        var merged = localModels
+        var changed = false
+        var modelIDs = Set(merged.map(\.id))
+
+        for incomingModel in incomingModels {
+            if let existingIndex = merged.firstIndex(where: {
+                normalizedModelIdentity($0) == normalizedModelIdentity(incomingModel)
+            }) {
+                switch mergeModelDeep(merged[existingIndex], with: incomingModel) {
+                case .unchanged(let model):
+                    merged[existingIndex] = model
+                case .merged(let model):
+                    merged[existingIndex] = model
+                    changed = true
+                case .conflict:
+                    let conservative = mergeModelConservatively(merged[existingIndex], with: incomingModel)
+                    if conservative.changed {
+                        merged[existingIndex] = conservative.model
+                        changed = true
+                    }
+                }
+                continue
+            }
+
+            var appended = incomingModel
+            if modelIDs.contains(appended.id) {
+                appended.id = UUID()
+            }
+            merged.append(appended)
+            modelIDs.insert(appended.id)
+            changed = true
+        }
+
+        return (merged, changed)
+    }
+
+    private static func mergeModelConservatively(
+        _ local: Model,
+        with incoming: Model
+    ) -> (model: Model, changed: Bool) {
+        var merged = local
+        var changed = false
+
+        if merged.displayName == merged.modelName,
+           incoming.displayName != incoming.modelName,
+           incoming.displayName != merged.displayName {
+            merged.displayName = incoming.displayName
+            changed = true
+        }
+
+        let mergedIsActivated = merged.isActivated || incoming.isActivated
+        if mergedIsActivated != merged.isActivated {
+            merged.isActivated = mergedIsActivated
+            changed = true
+        }
+
+        let mergedCapabilities = mergeCapabilities(merged.capabilities, incoming.capabilities)
+        if mergedCapabilities != merged.capabilities {
+            merged.capabilities = mergedCapabilities
+            changed = true
+        }
+
+        let mergedOverrideParameters = mergeJSONDictionaryConservatively(
+            merged.overrideParameters,
+            incoming.overrideParameters
+        )
+        if mergedOverrideParameters != merged.overrideParameters {
+            merged.overrideParameters = mergedOverrideParameters
+            changed = true
+        }
+
+        if let mergedRequestBodyMode = mergeRequestBodyOverrideMode(local: merged, incoming: incoming),
+           mergedRequestBodyMode != merged.requestBodyOverrideMode {
+            merged.requestBodyOverrideMode = mergedRequestBodyMode
+            changed = true
+        }
+
+        let normalizedLocalRaw = normalizeOptionalJSONString(merged.rawRequestBodyJSON)
+        let normalizedIncomingRaw = normalizeOptionalJSONString(incoming.rawRequestBodyJSON)
+        if normalizedLocalRaw == nil, let normalizedIncomingRaw {
+            merged.rawRequestBodyJSON = normalizedIncomingRaw
+            changed = true
+        }
+
+        return (merged, changed)
+    }
+
+    private static func mergeStringDictionaryConservatively(
+        _ local: [String: String],
+        _ incoming: [String: String]
+    ) -> [String: String] {
+        var merged = local
+        for (key, incomingValue) in incoming {
+            guard merged[key] == nil else { continue }
+            merged[key] = incomingValue
+        }
+        return merged
+    }
+
+    private static func mergeProviderProxyConfigurationConservatively(
+        _ local: NetworkProxyConfiguration?,
+        _ incoming: NetworkProxyConfiguration?
+    ) -> NetworkProxyConfiguration? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return nil
+        case (let local?, nil):
+            return local
+        case (nil, let incoming?):
+            return incoming
+        case (let local?, let incoming?):
+            if local == incoming {
+                return local
+            }
+            if !local.isEnabled && incoming.isEnabled {
+                return incoming
+            }
+            return local
+        }
+    }
+
+    private static func mergeJSONDictionaryConservatively(
+        _ local: [String: JSONValue],
+        _ incoming: [String: JSONValue]
+    ) -> [String: JSONValue] {
+        var merged = local
+        for (key, incomingValue) in incoming {
+            if let localValue = merged[key] {
+                merged[key] = mergeJSONValueConservatively(localValue, incomingValue)
+            } else {
+                merged[key] = incomingValue
+            }
+        }
+        return merged
+    }
+
+    private static func mergeJSONValueConservatively(_ local: JSONValue, _ incoming: JSONValue) -> JSONValue {
+        if local == incoming {
+            return local
+        }
+
+        switch (local, incoming) {
+        case (.dictionary(let localDictionary), .dictionary(let incomingDictionary)):
+            return .dictionary(mergeJSONDictionaryConservatively(localDictionary, incomingDictionary))
+        case (.array(let localArray), .array(let incomingArray)):
+            return .array(mergeJSONArray(localArray, incomingArray))
+        case (.null, _):
+            return incoming
+        case (_, .null):
+            return local
+        default:
+            return local
+        }
+    }
+
     private static func containsSessionHash(
         _ hash: String,
         sessions: [ChatSession],
@@ -1535,6 +1815,12 @@ public enum SyncEngine {
         var merged = local
         var changed = false
 
+        let canonicalFormat = canonicalProviderAPIFormat(local.apiFormat)
+        if normalizeAPIFormatToken(local.apiFormat) != canonicalFormat {
+            merged.apiFormat = canonicalFormat
+            changed = true
+        }
+
         let mergedAPIKeys = mergeProviderAPIKeys(local.apiKeys, incoming.apiKeys)
         if mergedAPIKeys != local.apiKeys {
             merged.apiKeys = mergedAPIKeys
@@ -1840,11 +2126,48 @@ public enum SyncEngine {
     }
 
     private static func providerMergeIdentity(_ provider: Provider) -> String {
+        let canonicalAPIFormat = canonicalProviderAPIFormat(provider.apiFormat)
         [
             provider.baseNameWithoutSyncSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-            provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
-            provider.apiFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            normalizeProviderBaseURL(provider.baseURL, apiFormat: canonicalAPIFormat),
+            canonicalAPIFormat
         ].joined(separator: "\u{1F}")
+    }
+
+    private static func normalizeAPIFormatToken(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func canonicalProviderAPIFormat(_ value: String) -> String {
+        let normalized = normalizeAPIFormatToken(value)
+        if normalized.contains("anthropic") || normalized.contains("claude") {
+            return "anthropic"
+        }
+        if normalized.contains("gemini") || normalized.contains("google") || normalized.contains("vertex") {
+            return "gemini"
+        }
+        return "openai-compatible"
+    }
+
+    private static func normalizeProviderBaseURL(_ value: String, apiFormat: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var normalized = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !normalized.isEmpty else { return normalized }
+
+        let lower = normalized.lowercased()
+        let hasVersion = lower.contains("/v1") || lower.contains("/v1beta") || lower.contains("/v2")
+        if !hasVersion {
+            switch canonicalProviderAPIFormat(apiFormat) {
+            case "anthropic":
+                normalized += "/v1"
+            case "gemini":
+                normalized += "/v1beta"
+            default:
+                normalized += "/v1"
+            }
+        }
+
+        return normalized.lowercased()
     }
 
     private static func normalizedModelIdentity(_ model: Model) -> String {
@@ -2067,20 +2390,31 @@ public enum SyncEngine {
     /// 包含：基础名称（去除同步后缀）、URL、API 格式、模型配置
     private static func computeProviderContentHash(_ provider: Provider) -> String {
         var hasher = Hasher()
-        hasher.combine(provider.baseNameWithoutSyncSuffix)
-        hasher.combine(provider.baseURL)
-        hasher.combine(provider.apiFormat)
+        let canonicalAPIFormat = canonicalProviderAPIFormat(provider.apiFormat)
+        hasher.combine(provider.baseNameWithoutSyncSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        hasher.combine(normalizeProviderBaseURL(provider.baseURL, apiFormat: canonicalAPIFormat))
+        hasher.combine(canonicalAPIFormat)
         for (key, value) in provider.headerOverrides.sorted(by: { $0.key < $1.key }) {
             hasher.combine(key)
             hasher.combine(value)
         }
-        for model in provider.models {
+        if let proxy = provider.proxyConfiguration {
+            hasher.combine(proxy.isEnabled)
+            hasher.combine(proxy.type.rawValue)
+            hasher.combine(proxy.host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+            hasher.combine(proxy.port)
+            hasher.combine(proxy.username.trimmingCharacters(in: .whitespacesAndNewlines))
+            hasher.combine(proxy.password)
+        } else {
+            hasher.combine("proxy:nil")
+        }
+        for model in provider.models.sorted(by: { normalizedModelIdentity($0) < normalizedModelIdentity($1) }) {
             hasher.combine(model.modelName)
             hasher.combine(model.displayName)
             hasher.combine(model.isActivated)
             hasher.combine(model.requestBodyOverrideMode.rawValue)
             hasher.combine(model.rawRequestBodyJSON ?? "")
-            for capability in model.capabilities {
+            for capability in model.capabilities.sorted(by: { $0.rawValue < $1.rawValue }) {
                 hasher.combine(capability.rawValue)
             }
             for (key, value) in model.overrideParameters.sorted(by: { $0.key < $1.key }) {
