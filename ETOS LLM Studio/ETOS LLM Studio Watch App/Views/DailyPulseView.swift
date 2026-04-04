@@ -417,7 +417,8 @@ struct DailyPulseView: View {
                             systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
                         )
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.mint)
 
                     HStack {
                         Button {
