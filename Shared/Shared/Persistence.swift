@@ -593,7 +593,6 @@ public enum Persistence {
     /// 读取某个会话的跨对话摘要。
     public static func loadConversationSessionSummary(for sessionID: UUID) -> ConversationSessionSummary? {
         guard let summary = try? loadSessionSummaryV3(for: sessionID),
-              let summary,
               let text = summary.session.conversationSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else {
             return nil
@@ -621,7 +620,6 @@ public enum Persistence {
                 continue
             }
             guard let recordSummary = try? loadSessionSummaryV3(for: item.id),
-                  let recordSummary,
                   let text = recordSummary.session.conversationSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !text.isEmpty else {
                 continue
@@ -876,7 +874,7 @@ public enum Persistence {
 
     private static func makeSessionRecordV3(session: ChatSession, messages: [ChatMessage]) -> SessionRecordFileV3 {
         let preservedSummary = (try? loadSessionSummaryV3(for: session.id))?.session
-        SessionRecordFileV3(
+        return SessionRecordFileV3(
             schemaVersion: sessionStoreSchemaVersion,
             session: SessionMetaV3(
                 id: session.id,
