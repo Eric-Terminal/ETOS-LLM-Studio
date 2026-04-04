@@ -258,8 +258,7 @@ struct ChatBubble: View {
     }
 
     private var rowVerticalPadding: CGFloat {
-        let basePadding: CGFloat = 4
-        return enableNoBubbleUI ? basePadding * 1.5 : basePadding
+        4
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
