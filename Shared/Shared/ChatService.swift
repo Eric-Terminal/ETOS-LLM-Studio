@@ -353,7 +353,7 @@ public class ChatService {
 
     public var activatedTTSModels: [RunnableModel] {
         let ttsCapable = activatedRunnableModels.filter { $0.model.supportsTextToSpeech }
-        return ttsCapable.isEmpty ? activatedRunnableModels : ttsCapable
+        return ttsCapable
     }
     
     private func resolveSelectedSpeechModel() -> RunnableModel? {
