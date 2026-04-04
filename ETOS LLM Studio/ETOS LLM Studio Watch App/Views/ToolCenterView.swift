@@ -15,6 +15,7 @@ struct ToolCenterView: View {
     @StateObject private var appToolManager = AppToolManager.shared
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var shortcutManager = ShortcutToolManager.shared
+    @StateObject private var skillManager = SkillManager.shared
 
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
@@ -82,6 +83,14 @@ struct ToolCenterView: View {
             }
     }
 
+    private var filteredSkills: [SkillMetadata] {
+        skillManager.skills
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .filter { skill in
+                showEnabledOnly ? skillManager.isSkillEnabled(skill.name) : true
+            }
+    }
+
     private var configuredMCPCount: Int {
         mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
@@ -116,6 +125,15 @@ struct ToolCenterView: View {
         return configuredShortcutCount
     }
 
+    private var configuredSkillCount: Int {
+        skillManager.skills.filter { skillManager.isSkillEnabled($0.name) }.count
+    }
+
+    private var availableSkillCount: Int {
+        guard skillManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
+        return configuredSkillCount
+    }
+
     var body: some View {
         List {
             Section {
@@ -136,7 +154,7 @@ struct ToolCenterView: View {
                     3. 进入具体工具页调整策略与状态。
 
                     常见情况
-                    • 如果显示世界书隔离生效，记忆、MCP、快捷指令可能被会话策略屏蔽。
+                    • 如果显示世界书隔离生效，记忆、MCP、Agent Skills、快捷指令可能被会话策略屏蔽。
                     """,
                     isExpanded: $isShowingIntroDetails
                 )
@@ -193,6 +211,22 @@ struct ToolCenterView: View {
                 .etFont(.caption2)
                 Text(
                     String(
+                        format: NSLocalizedString("Agent Skills：配置已启用 %d / %d", comment: "Skills configured count"),
+                        configuredSkillCount,
+                        skillManager.skills.count
+                    )
+                )
+                .etFont(.caption2)
+                Text(
+                    String(
+                        format: NSLocalizedString("Agent Skills：当前会话实际可用 %d / %d", comment: "Skills available count"),
+                        availableSkillCount,
+                        skillManager.skills.count
+                    )
+                )
+                .etFont(.caption2)
+                Text(
+                    String(
                         format: NSLocalizedString("快捷指令工具：配置已启用 %d / %d", comment: "Shortcut configured count"),
                         configuredShortcutCount,
                         shortcutManager.tools.count
@@ -208,7 +242,7 @@ struct ToolCenterView: View {
                 )
                 .etFont(.caption2)
                 if currentSessionIsolationActive {
-                    Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP 与快捷指令工具。", comment: "Worldbook isolation warning in tool center"))
+                    Text("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。")
                         .etFont(.caption2)
                         .foregroundStyle(.orange)
                 }
@@ -320,6 +354,55 @@ struct ToolCenterView: View {
             }
 
             Section(
+                header: Text("Agent Skills"),
+                footer: Text("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    "向模型暴露 Agent Skills（use_skill）",
+                    isOn: Binding(
+                        get: { skillManager.chatToolsEnabled },
+                        set: { skillManager.setChatToolsEnabled($0) }
+                    )
+                )
+
+                if !skillManager.chatToolsEnabled {
+                    Text("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if skillManager.skills.isEmpty {
+                    Text("当前还没有已安装技能，可在 Agent Skills 页面添加。")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredSkills) { skill in
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(skill.name)
+                                Text(skill.description)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(skillStatusText(for: skill))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(skillStatusColor(for: skill))
+                            }
+                            Spacer(minLength: 4)
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { skillManager.isSkillEnabled(skill.name) },
+                                    set: { skillManager.setSkillEnabled(name: skill.name, isEnabled: $0) }
+                                )
+                            )
+                            .labelsHidden()
+                        }
+                    }
+                }
+            }
+
+            Section(
                 header: Text(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title")),
                 footer: Text(NSLocalizedString("统一查看已导入的快捷指令工具，并集中调整启用状态、运行模式与描述。", comment: "Shortcut tools footer"))
                     .etFont(.footnote)
@@ -353,7 +436,7 @@ struct ToolCenterView: View {
                 }
             }
 
-            if filteredBuiltInStates.isEmpty && filteredAppTools.isEmpty && filteredMCPTools.isEmpty && filteredShortcutTools.isEmpty {
+            if filteredBuiltInStates.isEmpty && filteredAppTools.isEmpty && filteredMCPTools.isEmpty && filteredSkills.isEmpty && filteredShortcutTools.isEmpty {
                 Section {
                     Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
                         .foregroundStyle(.secondary)
@@ -361,6 +444,9 @@ struct ToolCenterView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具中心", comment: "Tool center title"))
+        .onAppear {
+            skillManager.reloadFromDisk()
+        }
     }
 
     private func settingsIntroCard(
@@ -516,6 +602,25 @@ struct ToolCenterView: View {
 
     private func shortcutStatusColor(for tool: ShortcutToolDefinition) -> Color {
         if currentSessionIsolationActive || !shortcutManager.chatToolsEnabled || !tool.isEnabled {
+            return .secondary
+        }
+        return .green
+    }
+
+    private func skillStatusText(for skill: SkillMetadata) -> String {
+        if currentSessionIsolationActive {
+            return "当前会话因世界书隔离发送而不会实际启用该工具。"
+        }
+        if !skillManager.chatToolsEnabled {
+            return "总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。"
+        }
+        return skillManager.isSkillEnabled(skill.name)
+            ? "该技能当前可参与聊天。"
+            : "已停用。"
+    }
+
+    private func skillStatusColor(for skill: SkillMetadata) -> Color {
+        if currentSessionIsolationActive || !skillManager.chatToolsEnabled || !skillManager.isSkillEnabled(skill.name) {
             return .secondary
         }
         return .green
