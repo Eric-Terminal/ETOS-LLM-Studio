@@ -11,9 +11,11 @@ import SwiftUI
 import Foundation
 import Shared
 import WatchKit
+import AuthenticationServices
 
 struct AboutView: View {
     private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
+    @StateObject private var webAuthLauncher = WatchWebAuthLauncher()
     @State private var versionTapCount = 0
     @State private var lastVersionTapAt: Date = .distantPast
     @State private var showAppLogs = false
@@ -104,7 +106,9 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     InfoRow(title: "开源协议", value: "GPLv3")
                     
-                    Link(destination: privacyURL) {
+                    Button {
+                        webAuthLauncher.open(url: privacyURL)
+                    } label: {
                         HStack {
                             Text("隐私政策")
                                 .etFont(.caption)
@@ -151,6 +155,22 @@ struct AboutView: View {
         showAppLogs = true
         AppLog.userOperation(category: "调试入口", action: "打开应用日志页")
         WKInterfaceDevice.current().play(.success)
+    }
+}
+
+@MainActor
+private final class WatchWebAuthLauncher: NSObject, ObservableObject {
+    private var session: ASWebAuthenticationSession?
+
+    func open(url: URL) {
+        session?.cancel()
+        session = ASWebAuthenticationSession(url: url, callbackURLScheme: nil) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.session = nil
+            }
+        }
+        session?.prefersEphemeralWebBrowserSession = true
+        _ = session?.start()
     }
 }
 
