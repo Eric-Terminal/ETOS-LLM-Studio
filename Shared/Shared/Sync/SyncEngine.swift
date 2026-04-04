@@ -2127,7 +2127,7 @@ public enum SyncEngine {
 
     private static func providerMergeIdentity(_ provider: Provider) -> String {
         let canonicalAPIFormat = canonicalProviderAPIFormat(provider.apiFormat)
-        [
+        return [
             provider.baseNameWithoutSyncSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
             normalizeProviderBaseURL(provider.baseURL, apiFormat: canonicalAPIFormat),
             canonicalAPIFormat
