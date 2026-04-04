@@ -381,6 +381,7 @@ private struct WatchFontSettingsView: View {
                     2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
                     3. 用上下箭头调整顺序。
                     4. 点击“添加字体到当前槽位”补入缺失字体。
+                    5. 对槽位内字体右滑可“移除”，仅移出当前槽位。
 
                     规则说明
                     • 每个槽位互相独立。
@@ -418,7 +419,7 @@ private struct WatchFontSettingsView: View {
 
             Section(
                 header: Text("样式优先级"),
-                footer: Text("使用上下箭头调整顺序；可通过“添加字体到当前槽位”补入未加入的字体，越靠上优先级越高。")
+                footer: Text("使用上下箭头调整顺序；可通过“添加字体到当前槽位”补入未加入的字体；对槽位内字体右滑可移除。越靠上优先级越高。")
             ) {
                 Picker("样式槽位", selection: $selectedRole) {
                     ForEach(FontSemanticRole.allCases) { role in
@@ -458,6 +459,13 @@ private struct WatchFontSettingsView: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .disabled(index >= chainRecords.count - 1)
+                            }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                removeAssetFromSelectedRole(asset.id)
+                            } label: {
+                                Label("移除", systemImage: "trash")
                             }
                         }
                     }
@@ -589,6 +597,15 @@ private struct WatchFontSettingsView: View {
         var chain = routes.chain(for: selectedRole)
         guard !chain.contains(assetID) else { return }
         chain.append(assetID)
+        routes.setChain(chain, for: selectedRole)
+        FontLibrary.updateChain(chain, for: selectedRole)
+        NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func removeAssetFromSelectedRole(_ assetID: UUID) {
+        var chain = routes.chain(for: selectedRole)
+        guard chain.contains(assetID) else { return }
+        chain.removeAll { $0 == assetID }
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
