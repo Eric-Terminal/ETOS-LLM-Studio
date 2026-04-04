@@ -1469,6 +1469,17 @@ public enum SyncEngine {
             changed = true
         }
 
+        guard let mergedProxyConfiguration = mergeProviderProxyConfiguration(
+            local.proxyConfiguration,
+            incoming.proxyConfiguration
+        ) else {
+            return .conflict
+        }
+        if mergedProxyConfiguration != local.proxyConfiguration {
+            merged.proxyConfiguration = mergedProxyConfiguration
+            changed = true
+        }
+
         guard let mergedModelsResult = mergeProviderModels(local.models, incoming.models) else {
             return .conflict
         }
@@ -1702,6 +1713,23 @@ public enum SyncEngine {
 
     private static func mergeProviderAPIKeys(_ local: [String], _ incoming: [String]) -> [String] {
         ProviderCredentialStore.normalizeAPIKeys(local + incoming)
+    }
+
+    private static func mergeProviderProxyConfiguration(
+        _ local: NetworkProxyConfiguration?,
+        _ incoming: NetworkProxyConfiguration?
+    ) -> NetworkProxyConfiguration?? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return .some(nil)
+        case (let local?, nil):
+            return .some(local)
+        case (nil, let incoming?):
+            return .some(incoming)
+        case (let local?, let incoming?):
+            guard local == incoming else { return nil }
+            return .some(local)
+        }
     }
 
     private static func reassignProviderIdentifiersIfNeeded(

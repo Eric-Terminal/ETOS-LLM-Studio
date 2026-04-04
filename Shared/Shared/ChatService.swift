@@ -592,7 +592,7 @@ public class ChatService {
         }
         
         do {
-            let data = try await fetchData(for: request)
+            let data = try await fetchData(for: request, provider: provider)
             let fetchedModels = try adapter.parseModelListResponse(data: data)
             logger.info("  - 成功获取并解析了 \(fetchedModels.count) 个模型。")
             return fetchedModels
@@ -634,7 +634,7 @@ public class ChatService {
         }
         
         do {
-            let data = try await fetchData(for: request)
+            let data = try await fetchData(for: request, provider: model.provider)
             let transcript = try adapter.parseTranscriptionResponse(data: data)
             logger.info("语音转文字完成，长度 \(transcript.count) 字符。")
             return transcript
@@ -2648,6 +2648,7 @@ public class ChatService {
         if enableStreaming {
             await handleStreamedResponse(
                 request: request,
+                provider: runnableModel.provider,
                 adapter: adapter,
                 loadingMessageID: loadingMessageID,
                 currentSessionID: currentSessionID,
@@ -2671,6 +2672,7 @@ public class ChatService {
         } else {
             await handleStandardResponse(
                 request: request,
+                provider: runnableModel.provider,
                 adapter: adapter,
                 loadingMessageID: loadingMessageID,
                 currentSessionID: currentSessionID,
@@ -3134,7 +3136,7 @@ public class ChatService {
 
         do {
             logger.info("生图请求发送中: session=\(currentSessionID.uuidString)")
-            let data = try await fetchData(for: request)
+            let data = try await fetchData(for: request, provider: runnableModel.provider)
             logger.info("生图响应已返回: session=\(currentSessionID.uuidString), bytes=\(data.count)")
             let imageResults = try adapter.parseImageGenerationResponse(data: data)
             logger.info("生图响应解析完成: session=\(currentSessionID.uuidString), results=\(imageResults.count)")
@@ -3149,7 +3151,7 @@ public class ChatService {
                     logger.info("生图结果[\(index)] 包含 revised prompt: length=\(revised.count)")
                 }
 
-                guard let payload = try await resolveGeneratedImagePayload(from: result) else {
+                guard let payload = try await resolveGeneratedImagePayload(from: result, provider: runnableModel.provider) else {
                     logger.warning("生图结果[\(index)] 未解析到有效图片数据，已跳过。")
                     continue
                 }
@@ -3254,7 +3256,10 @@ public class ChatService {
         }
     }
 
-    private func resolveGeneratedImagePayload(from result: GeneratedImageResult) async throws -> (data: Data, mimeType: String)? {
+    private func resolveGeneratedImagePayload(
+        from result: GeneratedImageResult,
+        provider: Provider
+    ) async throws -> (data: Data, mimeType: String)? {
         if let imageData = result.data, !imageData.isEmpty {
             let mimeType = (result.mimeType?.isEmpty == false ? result.mimeType! : detectImageMimeType(from: imageData))
             logger.info("生图结果使用内联图片数据: mime=\(mimeType), bytes=\(imageData.count)")
@@ -3264,7 +3269,9 @@ public class ChatService {
         guard let remoteURL = result.remoteURL else { return nil }
         logger.info("生图结果改为下载远端图片: \(remoteURL.absoluteString)")
 
-        let (data, response) = try await urlSession.data(from: remoteURL)
+        var request = URLRequest(url: remoteURL)
+        request.httpMethod = "GET"
+        let (data, response) = try await requestData(for: request, provider: provider)
         if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
             logger.error("下载生图结果失败: status=\(httpResponse.statusCode), url=\(remoteURL.absoluteString)")
             throw NetworkError.badStatusCode(code: httpResponse.statusCode, responseBody: data.isEmpty ? nil : data)
@@ -3529,8 +3536,42 @@ public class ChatService {
         Persistence.appendRequestLog(logEntry)
     }
 
-    private func fetchData(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await urlSession.data(for: request)
+    private func makeProxySessionIfNeeded(for provider: Provider?) -> (session: URLSession, proxy: NetworkProxyConfiguration?) {
+        guard let proxyConfiguration = NetworkProxySettings.resolvedConfiguration(for: provider),
+              let proxyDictionary = NetworkProxySettings.makeConnectionProxyDictionary(from: proxyConfiguration) else {
+            return (urlSession, nil)
+        }
+        let configuration = URLSessionConfiguration.default
+        configuration.connectionProxyDictionary = proxyDictionary
+        return (URLSession(configuration: configuration), proxyConfiguration)
+    }
+
+    private func requestData(
+        for request: URLRequest,
+        provider: Provider?
+    ) async throws -> (Data, URLResponse) {
+        let resolved = makeProxySessionIfNeeded(for: provider)
+        let proxiedRequest = NetworkProxySettings.applyProxyAuthorizationHeader(
+            to: request,
+            configuration: resolved.proxy
+        )
+        return try await resolved.session.data(for: proxiedRequest)
+    }
+
+    private func requestBytes(
+        for request: URLRequest,
+        provider: Provider?
+    ) async throws -> (URLSession.AsyncBytes, URLResponse) {
+        let resolved = makeProxySessionIfNeeded(for: provider)
+        let proxiedRequest = NetworkProxySettings.applyProxyAuthorizationHeader(
+            to: request,
+            configuration: resolved.proxy
+        )
+        return try await resolved.session.bytes(for: proxiedRequest)
+    }
+
+    private func fetchData(for request: URLRequest, provider: Provider?) async throws -> Data {
+        let (data, response) = try await requestData(for: request, provider: provider)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             if let prettyBody = String(data: data, encoding: .utf8) {
@@ -3545,8 +3586,8 @@ public class ChatService {
         return data
     }
 
-    private func streamData(for request: URLRequest) async throws -> URLSession.AsyncBytes {
-        let (bytes, response) = try await urlSession.bytes(for: request)
+    private func streamData(for request: URLRequest, provider: Provider?) async throws -> URLSession.AsyncBytes {
+        let (bytes, response) = try await requestBytes(for: request, provider: provider)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             var capturedBody: Data?
@@ -3663,6 +3704,7 @@ public class ChatService {
     
     private func handleStandardResponse(
         request: URLRequest,
+        provider: Provider,
         adapter: APIAdapter,
         loadingMessageID: UUID,
         currentSessionID: UUID,
@@ -3684,7 +3726,7 @@ public class ChatService {
         requestLogContext: RequestLogContext
     ) async {
         do {
-            let data = try await fetchData(for: request)
+            let data = try await fetchData(for: request, provider: provider)
             let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
             logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
             
@@ -3987,6 +4029,7 @@ public class ChatService {
     
     private func handleStreamedResponse(
         request: URLRequest,
+        provider: Provider,
         adapter: APIAdapter,
         loadingMessageID: UUID,
         currentSessionID: UUID,
@@ -4009,7 +4052,7 @@ public class ChatService {
     ) async {
         var latestTokenUsage: MessageTokenUsage?
         do {
-            let bytes = try await streamData(for: request)
+            let bytes = try await streamData(for: request, provider: provider)
 
             // 保存流式过程中逐步构建的工具调用，用于后续二次调用
             var toolCallBuilders: [Int: (id: String?, name: String?, arguments: String, providerSpecificFields: [String: JSONValue]?)] = [:]
@@ -5045,7 +5088,7 @@ public class ChatService {
         }
 
         do {
-            let data = try await fetchData(for: request)
+            let data = try await fetchData(for: request, provider: runnableModel.provider)
             let response = try adapter.parseResponse(data: data)
             let text = response.content
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5099,7 +5142,7 @@ public class ChatService {
             throw DetachedCompletionError.buildRequestFailed
         }
 
-        let data = try await fetchData(for: request)
+        let data = try await fetchData(for: request, provider: targetModel.provider)
         let responseMessage = try adapter.parseResponse(data: data)
         return responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -5149,7 +5192,7 @@ public class ChatService {
         }
 
         do {
-            let data = try await fetchData(for: request)
+            let data = try await fetchData(for: request, provider: runnableModel.provider)
             logger.log("[Log] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
             let responseMessage = try adapter.parseResponse(data: data)
             

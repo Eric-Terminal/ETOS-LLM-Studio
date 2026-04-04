@@ -90,6 +90,68 @@ public struct ModelListResponse: Decodable {
     public let data: [ModelData]
 }
 
+public enum NetworkProxyType: String, Codable, Hashable, CaseIterable, Sendable {
+    case http
+    case socks5
+}
+
+public struct NetworkProxyConfiguration: Codable, Hashable, Sendable {
+    public var isEnabled: Bool
+    public var type: NetworkProxyType
+    public var host: String
+    public var port: Int
+    public var username: String
+    public var password: String
+
+    public init(
+        isEnabled: Bool = false,
+        type: NetworkProxyType = .http,
+        host: String = "",
+        port: Int = 8080,
+        username: String = "",
+        password: String = ""
+    ) {
+        self.isEnabled = isEnabled
+        self.type = type
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+    }
+
+    public var trimmedHost: String {
+        host.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var trimmedUsername: String {
+        username.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var trimmedPassword: String {
+        password.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var hasAuthentication: Bool {
+        !trimmedUsername.isEmpty
+    }
+
+    public var normalizedIfEnabled: NetworkProxyConfiguration? {
+        guard isEnabled else { return nil }
+        let normalizedHost = trimmedHost
+        guard !normalizedHost.isEmpty, (1...65535).contains(port) else {
+            return nil
+        }
+        return NetworkProxyConfiguration(
+            isEnabled: true,
+            type: type,
+            host: normalizedHost,
+            port: port,
+            username: trimmedUsername,
+            password: trimmedPassword
+        )
+    }
+}
+
 
 /// 代表一个用户自定义的 API 服务提供商
 public struct Provider: Codable, Identifiable, Hashable {
@@ -101,6 +163,8 @@ public struct Provider: Codable, Identifiable, Hashable {
     public var apiFormat: String // 例如: "openai-compatible"
     public var models: [Model]
     public var headerOverrides: [String: String]
+    /// 提供商独立代理。为 `nil` 时回退到全局代理设置。
+    public var proxyConfiguration: NetworkProxyConfiguration?
 
     public init(
         id: UUID = UUID(),
@@ -109,7 +173,8 @@ public struct Provider: Codable, Identifiable, Hashable {
         apiKeys: [String],
         apiFormat: String,
         models: [Model] = [],
-        headerOverrides: [String: String] = [:]
+        headerOverrides: [String: String] = [:],
+        proxyConfiguration: NetworkProxyConfiguration? = nil
     ) {
         self.id = id
         self.name = name
@@ -118,10 +183,11 @@ public struct Provider: Codable, Identifiable, Hashable {
         self.apiFormat = apiFormat
         self.models = models
         self.headerOverrides = headerOverrides
+        self.proxyConfiguration = proxyConfiguration
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, baseURL, apiKeys, apiFormat, models, headerOverrides
+        case id, name, baseURL, apiKeys, apiFormat, models, headerOverrides, proxyConfiguration
     }
 
     public init(from decoder: Decoder) throws {
@@ -133,6 +199,7 @@ public struct Provider: Codable, Identifiable, Hashable {
         self.apiFormat = try container.decode(String.self, forKey: .apiFormat)
         self.models = try container.decodeIfPresent([Model].self, forKey: .models) ?? []
         self.headerOverrides = try container.decodeIfPresent([String: String].self, forKey: .headerOverrides) ?? [:]
+        self.proxyConfiguration = try container.decodeIfPresent(NetworkProxyConfiguration.self, forKey: .proxyConfiguration)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -147,6 +214,9 @@ public struct Provider: Codable, Identifiable, Hashable {
         try container.encode(models, forKey: .models)
         if !headerOverrides.isEmpty {
             try container.encode(headerOverrides, forKey: .headerOverrides)
+        }
+        if let proxyConfiguration {
+            try container.encode(proxyConfiguration, forKey: .proxyConfiguration)
         }
     }
 }

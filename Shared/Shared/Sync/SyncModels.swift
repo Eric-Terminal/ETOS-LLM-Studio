@@ -420,6 +420,7 @@ extension Provider {
         baseURL == other.baseURL &&
         apiFormat == other.apiFormat &&
         headerOverrides == other.headerOverrides &&
+        proxyConfiguration == other.proxyConfiguration &&
         models.count == other.models.count &&
         zip(models, other.models).allSatisfy { $0.isEquivalent(to: $1) }
     }

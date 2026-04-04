@@ -359,6 +359,9 @@ public struct ConfigLoader {
         if old.headerOverrides != new.headerOverrides {
             fields.append("请求头覆写")
         }
+        if old.proxyConfiguration != new.proxyConfiguration {
+            fields.append("代理配置")
+        }
         if old.apiKeys != new.apiKeys {
             fields.append("API Key 列表")
         }
@@ -371,7 +374,8 @@ public struct ConfigLoader {
         lhs.baseURL == rhs.baseURL &&
         lhs.apiFormat == rhs.apiFormat &&
         lhs.models == rhs.models &&
-        lhs.headerOverrides == rhs.headerOverrides
+        lhs.headerOverrides == rhs.headerOverrides &&
+        lhs.proxyConfiguration == rhs.proxyConfiguration
     }
 
     private static func hydrateProviderCredentials(for provider: Provider) -> CredentialHydrationResult {

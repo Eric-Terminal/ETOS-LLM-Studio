@@ -47,6 +47,14 @@ private struct WatchProviderManagementContentView: View {
 
     var body: some View {
         List {
+            Section("网络") {
+                NavigationLink {
+                    GlobalProxySettingsView()
+                } label: {
+                    Label("全局代理设置", systemImage: "network")
+                }
+            }
+
             ForEach(viewModel.providers) { provider in
                 NavigationLink(destination: ProviderDetailView(provider: provider)) {
                     MarqueeTitleSubtitleLabel(
