@@ -41,7 +41,8 @@ struct ETAdvancedMarkdownRenderer: View {
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing,
-                customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) }
+                customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
+                prefersDarkPalette: colorScheme == .dark
             )
         } else {
             baseTextView(normalizedContent)
@@ -132,6 +133,7 @@ private struct ETMathWebMarkdownView: View {
     let enableMarkdown: Bool
     let isOutgoing: Bool
     let customTextHex: String?
+    let prefersDarkPalette: Bool
 
     @State private var renderedHeight: CGFloat = 28
 
@@ -142,6 +144,7 @@ private struct ETMathWebMarkdownView: View {
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing,
                 customTextHex: customTextHex,
+                prefersDarkPalette: prefersDarkPalette,
                 availableWidth: max(1, geometry.size.width),
                 renderedHeight: $renderedHeight
             )
@@ -155,6 +158,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let enableMarkdown: Bool
     let isOutgoing: Bool
     let customTextHex: String?
+    let prefersDarkPalette: Bool
     let availableWidth: CGFloat
     @Binding var renderedHeight: CGFloat
 
@@ -186,7 +190,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         let shellConfiguration = ShellConfiguration(
             enableMarkdown: enableMarkdown,
             isOutgoing: isOutgoing,
-            customTextHex: customTextHex
+            customTextHex: customTextHex,
+            prefersDarkPalette: prefersDarkPalette
         )
         context.coordinator.render(
             payload,
@@ -298,11 +303,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         let enableMarkdown: Bool
         let isOutgoing: Bool
         let customTextHex: String?
+        let prefersDarkPalette: Bool
 
         var htmlDocument: String {
-            let defaultTextColor = isOutgoing ? "#FFFFFF" : "#1C1C1E"
+            let defaultTextColor = isOutgoing ? "#FFFFFF" : (prefersDarkPalette ? "#FFFFFF" : "#1C1C1E")
             let textColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 1) ?? defaultTextColor
-            let defaultSecondaryTextColor = isOutgoing ? "rgba(255,255,255,0.85)" : "#3C3C43"
+            let defaultSecondaryTextColor = isOutgoing
+                ? "rgba(255,255,255,0.85)"
+                : (prefersDarkPalette ? "rgba(255,255,255,0.82)" : "#3C3C43")
             let secondaryTextColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 0.85) ?? defaultSecondaryTextColor
             let linkColor = isOutgoing ? "rgba(255,255,255,0.95)" : "#0A84FF"
             let codeKeywordColor = isOutgoing ? "rgba(255,255,255,0.96)" : "#8E44AD"
