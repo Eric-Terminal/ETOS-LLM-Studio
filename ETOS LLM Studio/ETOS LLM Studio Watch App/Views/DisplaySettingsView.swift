@@ -97,7 +97,7 @@ struct DisplaySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("聊天颜色自定义") {
+            Section {
                 Toggle("自定义用户气泡颜色", isOn: $enableCustomUserBubbleColor)
                 if enableCustomUserBubbleColor {
                     ColorPicker("用户气泡颜色", selection: userBubbleColorBinding, supportsOpacity: false)
@@ -123,6 +123,8 @@ struct DisplaySettingsView: View {
                         resetCustomChatColors()
                     }
                 }
+            } header: {
+                Text("聊天颜色自定义")
             } footer: {
                 Text("默认全部关闭时，聊天配色与当前版本完全一致。")
                     .etFont(.footnote)
