@@ -47,6 +47,7 @@ final class ChatViewModel: ObservableObject {
     @Published var memories: [MemoryItem] = []
     @Published var selectedEmbeddingModel: RunnableModel?
     @Published var selectedTitleGenerationModel: RunnableModel?
+    @Published var selectedDailyPulseModel: RunnableModel?
     @Published var selectedTTSModel: RunnableModel?
     @Published var ttsModels: [RunnableModel] = []
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
@@ -121,6 +122,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("ttsModelIdentifier") var ttsModelIdentifier: String = ""
     @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
+    @AppStorage("dailyPulseModelIdentifier") var dailyPulseModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
     @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
@@ -176,6 +178,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     var titleGenerationModelOptions: [RunnableModel] {
+        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+    }
+
+    var dailyPulseModelOptions: [RunnableModel] {
         activatedModels.filter { $0.model.capabilities.contains(.chat) }
     }
     
@@ -426,6 +432,7 @@ final class ChatViewModel: ObservableObject {
                 self.syncTTSModelSelection()
                 self.syncEmbeddingModelSelection()
                 self.syncTitleGenerationModelSelection()
+                self.syncDailyPulseModelSelection()
             }
             .store(in: &cancellables)
         
@@ -549,6 +556,7 @@ final class ChatViewModel: ObservableObject {
         syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
+        syncDailyPulseModelSelection()
     }
     
     private func rotateBackgroundImageIfNeeded() {
@@ -773,6 +781,14 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func setSelectedDailyPulseModel(_ model: RunnableModel?) {
+        selectedDailyPulseModel = model
+        let newIdentifier = model?.id ?? ""
+        if dailyPulseModelIdentifier != newIdentifier {
+            dailyPulseModelIdentifier = newIdentifier
+        }
+    }
+
     func addGlobalSystemPromptEntry() {
         let entry = GlobalSystemPromptEntry(title: "", content: "", updatedAt: Date())
         globalSystemPromptEntries.insert(entry, at: 0)
@@ -925,6 +941,25 @@ final class ChatViewModel: ObservableObject {
 
         selectedTitleGenerationModel = nil
         titleGenerationModelIdentifier = ""
+    }
+
+    private func syncDailyPulseModelSelection() {
+        if let match = dailyPulseModelOptions.first(where: { $0.id == dailyPulseModelIdentifier }) {
+            if selectedDailyPulseModel?.id != match.id {
+                selectedDailyPulseModel = match
+            }
+            return
+        }
+
+        guard !dailyPulseModelIdentifier.isEmpty else {
+            selectedDailyPulseModel = nil
+            return
+        }
+
+        guard !dailyPulseModelOptions.isEmpty else { return }
+
+        selectedDailyPulseModel = nil
+        dailyPulseModelIdentifier = ""
     }
 
     func requestBackgroundReplyNotificationPermission() {

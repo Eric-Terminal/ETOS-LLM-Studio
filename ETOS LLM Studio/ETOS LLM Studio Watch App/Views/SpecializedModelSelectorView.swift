@@ -41,6 +41,13 @@ struct SpecializedModelSelectorView: View {
         )
     }
 
+    private var dailyPulseModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedDailyPulseModel },
+            set: { viewModel.setSelectedDailyPulseModel($0) }
+        )
+    }
+
     private var imageGenerationModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) },
@@ -76,6 +83,13 @@ struct SpecializedModelSelectorView: View {
                 options: viewModel.titleGenerationModelOptions,
                 selection: titleModelBinding,
                 footer: "留空时跟随当前对话模型。"
+            )
+
+            modelSelectionSection(
+                title: "每日脉冲模型",
+                options: viewModel.dailyPulseModelOptions,
+                selection: dailyPulseModelBinding,
+                footer: "用于每日脉冲生成；留空时跟随当前对话模型。"
             )
 
             modelSelectionSection(

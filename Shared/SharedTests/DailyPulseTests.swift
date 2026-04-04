@@ -182,6 +182,45 @@ struct DailyPulseTests {
         #expect(merged.cards.first?.savedSessionID == savedSessionID)
     }
 
+    @Test("每日脉冲优先使用已配置的专用模型")
+    func resolveGenerationModelPrefersDedicatedModel() {
+        let selected = makeRunnableModel(name: "chat-main")
+        let dedicated = makeRunnableModel(name: "chat-daily")
+
+        let resolved = DailyPulseManager.resolveGenerationModel(
+            dedicatedModelIdentifier: dedicated.id,
+            selectedModel: selected,
+            activatedModels: [selected, dedicated]
+        )
+
+        #expect(resolved?.id == dedicated.id)
+    }
+
+    @Test("专用模型失效时会回退到当前聊天模型")
+    func resolveGenerationModelFallsBackToSelectedModelWhenDedicatedInvalid() {
+        let selected = makeRunnableModel(name: "chat-main")
+        let resolved = DailyPulseManager.resolveGenerationModel(
+            dedicatedModelIdentifier: "not-exist",
+            selectedModel: selected,
+            activatedModels: [selected]
+        )
+
+        #expect(resolved?.id == selected.id)
+    }
+
+    @Test("无当前聊天模型时会回退到首个可用聊天模型")
+    func resolveGenerationModelFallsBackToFirstChatModel() {
+        let embeddingOnly = makeRunnableModel(name: "embed-only", capabilities: [.embedding])
+        let chatFallback = makeRunnableModel(name: "chat-fallback")
+        let resolved = DailyPulseManager.resolveGenerationModel(
+            dedicatedModelIdentifier: "",
+            selectedModel: nil,
+            activatedModels: [embeddingOnly, chatFallback]
+        )
+
+        #expect(resolved?.id == chatFallback.id)
+    }
+
     @Test("仅有外部上下文时也可视为可生成每日脉冲")
     func generationInputAcceptsExternalContextOnly() {
         let input = DailyPulseGenerationInput(
@@ -858,4 +897,24 @@ struct DailyPulseTests {
         #expect(!AppLocalNotificationCenter.notificationTargetsDailyPulse(userInfo: ["route": "other"]))
     }
 #endif
+
+    private func makeRunnableModel(
+        name: String,
+        capabilities: [Model.Capability] = [.chat]
+    ) -> RunnableModel {
+        let model = Model(
+            modelName: name,
+            displayName: name,
+            isActivated: true,
+            capabilities: capabilities
+        )
+        let provider = Provider(
+            name: "\(name)-provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [model]
+        )
+        return RunnableModel(provider: provider, model: model)
+    }
 }
