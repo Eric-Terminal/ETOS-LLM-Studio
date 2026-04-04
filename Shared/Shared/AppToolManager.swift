@@ -870,7 +870,7 @@ public final class AppToolManager: ObservableObject {
 
     public func approvalPolicy(for kind: AppToolKind) -> AppToolApprovalPolicy {
         guard kind.requiresApproval else { return .alwaysAllow }
-        toolApprovalPolicies[kind.rawValue] ?? .askEveryTime
+        return toolApprovalPolicies[kind.rawValue] ?? .askEveryTime
     }
 
     public func approvalPolicy(for toolName: String) -> AppToolApprovalPolicy? {
