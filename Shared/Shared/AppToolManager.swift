@@ -50,6 +50,7 @@ public extension Notification.Name {
 }
 
 public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case showWidget = "show_widget"
     case echoText = "echo_text"
     case fillUserInput = "fill_user_input"
     case editMemory = "edit_memory"
@@ -73,6 +74,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var toolName: String {
         switch self {
+        case .showWidget:
+            return "app_show_widget"
         case .echoText:
             return "app_echo_text"
         case .fillUserInput:
@@ -114,6 +117,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var displayName: String {
         switch self {
+        case .showWidget:
+            return NSLocalizedString("显示网页卡片", comment: "Show widget tool name")
         case .echoText:
             return NSLocalizedString("示例：文本回显", comment: "Example echo tool name")
         case .fillUserInput:
@@ -155,6 +160,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var summary: String {
         switch self {
+        case .showWidget:
+            return NSLocalizedString("在聊天中渲染可视化网页卡片（Widget）。", comment: "Show widget tool summary")
         case .echoText:
             return NSLocalizedString("把传入文本原样返回，用于验证拓展工具链路是否正常。", comment: "Example echo tool summary")
         case .fillUserInput:
@@ -196,6 +203,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var detailDescription: String {
         switch self {
+        case .showWidget:
+            return NSLocalizedString("工具详情：显示网页卡片", comment: "Show widget tool detail description")
         case .echoText:
             return NSLocalizedString("示例工具详情：文本回显", comment: "Example echo tool detail description")
         case .fillUserInput:
@@ -237,6 +246,28 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var parameters: JSONValue {
         switch self {
+        case .showWidget:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "title": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("Widget 标题（可选）。", comment: "Show widget tool title parameter description"))
+                    ]),
+                    "widget_code": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("用于渲染 Widget 的 HTML 片段，可包含 style/script。", comment: "Show widget tool html parameter description"))
+                    ]),
+                    "loading_messages": .dictionary([
+                        "type": .string("array"),
+                        "description": .string(NSLocalizedString("渲染中提示文案列表（可选）。", comment: "Show widget tool loading messages parameter description")),
+                        "items": .dictionary([
+                            "type": .string("string")
+                        ])
+                    ])
+                ]),
+                "required": .array([.string("widget_code")])
+            ])
         case .echoText:
             return JSONValue.dictionary([
                 "type": .string("object"),
@@ -591,6 +622,11 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var toolDescription: String {
         switch self {
+        case .showWidget:
+            return NSLocalizedString(
+                "把传入的 HTML Widget 渲染为聊天内联网页卡片。title 可选，widget_code 必填，loading_messages 可选。",
+                comment: "Show widget tool description sent to model"
+            )
         case .echoText:
             return NSLocalizedString(
                 "示例工具：把 text 参数中的文本原样返回，仅用于验证本地拓展工具链路与参数生成是否正常。",
@@ -757,6 +793,7 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let chatToolsEnabledUserDefaultsKey = "appTools.chatToolsEnabled"
     private nonisolated static let enabledToolIDsUserDefaultsKey = "appTools.enabledToolIDs"
     private nonisolated static let toolApprovalPoliciesUserDefaultsKey = "appTools.toolApprovalPolicies"
+    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget]
 
     @Published public private(set) var chatToolsEnabled: Bool
     @Published private var enabledToolIDs: Set<String>
@@ -764,8 +801,12 @@ public final class AppToolManager: ObservableObject {
 
     private init(defaults: UserDefaults = .standard) {
         chatToolsEnabled = defaults.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
-        let storedIDs = defaults.stringArray(forKey: Self.enabledToolIDsUserDefaultsKey) ?? []
-        enabledToolIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
+        if let storedIDs = defaults.stringArray(forKey: Self.enabledToolIDsUserDefaultsKey) {
+            enabledToolIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
+        } else {
+            enabledToolIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
+            defaults.set(Array(enabledToolIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+        }
         let storedPolicyRawValues = defaults.dictionary(forKey: Self.toolApprovalPoliciesUserDefaultsKey) as? [String: String] ?? [:]
         toolApprovalPolicies = storedPolicyRawValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
             guard AppToolKind(rawValue: pair.key) != nil else { return }
@@ -869,6 +910,38 @@ public final class AppToolManager: ObservableObject {
         }
 
         switch kind {
+        case .showWidget:
+            struct ShowWidgetArgs: Decodable {
+                let title: String?
+                let widget_code: String
+                let loading_messages: [String]?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(ShowWidgetArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 show_widget 的参数，请提供 widget_code。", comment: "Show widget tool invalid arguments")
+                )
+            }
+
+            let widgetCode = args.widget_code.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !widgetCode.isEmpty else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：show_widget 的 widget_code 不能为空。", comment: "Show widget tool empty widget code")
+                )
+            }
+
+            let normalizedTitle = args.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedLoadingMessages = (args.loading_messages ?? [])
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            let payload: [String: Any] = [
+                "title": normalizedTitle as Any,
+                "widget_code": widgetCode,
+                "loading_messages": normalizedLoadingMessages
+            ]
+            return prettyPrintedJSONString(from: payload)
         case .echoText:
             struct EchoArgs: Decodable {
                 let text: String

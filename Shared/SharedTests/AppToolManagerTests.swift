@@ -38,6 +38,7 @@ struct AppToolManagerTests {
     func testToolCatalogContainsRequestedTools() {
         let kinds = Set(AppToolKind.allCases)
 
+        #expect(kinds.contains(.showWidget))
         #expect(kinds.contains(.editMemory))
         #expect(kinds.contains(.submitFeedbackTicket))
         #expect(kinds.contains(.fillUserInput))
@@ -191,6 +192,42 @@ struct AppToolManagerTests {
         )
 
         #expect(result == "文本回显结果：测试文本")
+    }
+
+    @MainActor
+    @Test("显示网页卡片工具会返回可渲染载荷")
+    func testExecuteShowWidgetToolReturnsPayload() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.showWidget]
+        )
+
+        let result = try await manager.executeToolFromChat(
+            toolName: AppToolKind.showWidget.toolName,
+            argumentsJSON: #"{"title":"测试卡片","widget_code":"<div>hello</div>","loading_messages":["渲染中..."]}"#
+        )
+
+        guard let data = result.data(using: .utf8),
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            Issue.record("show_widget 返回结果不是有效 JSON")
+            return
+        }
+
+        #expect(json["title"] as? String == "测试卡片")
+        #expect(json["widget_code"] as? String == "<div>hello</div>")
+        #expect((json["loading_messages"] as? [String]) == ["渲染中..."])
     }
 
     @MainActor
