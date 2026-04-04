@@ -12,6 +12,16 @@
 import Foundation
 import Combine
 import os.log
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
+
+private struct FeedbackTicketUpdateEvent {
+    let hasStatusChange: Bool
+    let oldStatus: FeedbackTicketStatus
+    let newStatus: FeedbackTicketStatus
+    let latestDeveloperComment: FeedbackComment?
+}
 
 public struct FeedbackServiceConfig: Sendable {
     public var baseURL: URL
@@ -290,8 +300,16 @@ public final class FeedbackService: ObservableObject {
             comments: statusResponse.comments
         )
 
-        FeedbackStore.upsertTicket(ticket.merged(with: snapshot))
+        let baselineTicket = FeedbackStore
+            .loadTickets()
+            .first(where: { $0.issueNumber == ticket.issueNumber }) ?? ticket
+        let updateEvent = makeTicketUpdateEventIfNeeded(previousTicket: baselineTicket, snapshot: snapshot)
+        let mergedTicket = baselineTicket.merged(with: snapshot)
+        FeedbackStore.upsertTicket(mergedTicket)
         tickets = FeedbackStore.loadTickets()
+        if let updateEvent {
+            await notifyTicketUpdateIfNeeded(event: updateEvent, ticket: mergedTicket)
+        }
         return snapshot
     }
 
@@ -462,6 +480,159 @@ public final class FeedbackService: ObservableObject {
             throw FeedbackServiceError.serverError(fallback)
         }
     }
+
+    private func makeTicketUpdateEventIfNeeded(
+        previousTicket: FeedbackTicket,
+        snapshot: FeedbackStatusSnapshot
+    ) -> FeedbackTicketUpdateEvent? {
+        let hasStatusChange = previousTicket.lastKnownStatus != snapshot.status
+        let latestDeveloperComment = latestDeveloperComment(in: snapshot.comments)
+        let hasNewDeveloperReply = hasNewDeveloperReply(
+            previousTicket: previousTicket,
+            latestDeveloperComment: latestDeveloperComment,
+            currentCommentCount: snapshot.comments.count
+        )
+
+        guard hasStatusChange || hasNewDeveloperReply else {
+            return nil
+        }
+
+        return FeedbackTicketUpdateEvent(
+            hasStatusChange: hasStatusChange,
+            oldStatus: previousTicket.lastKnownStatus,
+            newStatus: snapshot.status,
+            latestDeveloperComment: hasNewDeveloperReply ? latestDeveloperComment : nil
+        )
+    }
+
+    private func latestDeveloperComment(in comments: [FeedbackComment]) -> FeedbackComment? {
+        comments
+            .filter({ $0.isDeveloper })
+            .max(by: { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.id < rhs.id
+            })
+    }
+
+    private func hasNewDeveloperReply(
+        previousTicket: FeedbackTicket,
+        latestDeveloperComment: FeedbackComment?,
+        currentCommentCount: Int
+    ) -> Bool {
+        guard let latestDeveloperComment else { return false }
+
+        if let knownCommentID = previousTicket.lastKnownDeveloperCommentID,
+           !knownCommentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return knownCommentID != latestDeveloperComment.id
+        }
+
+        if let knownCommentAt = previousTicket.lastKnownDeveloperCommentAt {
+            if latestDeveloperComment.createdAt != knownCommentAt {
+                return latestDeveloperComment.createdAt > knownCommentAt
+            }
+            return false
+        }
+
+        if let knownCommentCount = previousTicket.lastKnownCommentCount {
+            return currentCommentCount > knownCommentCount
+        }
+
+        if let knownUpdatedAt = previousTicket.lastKnownUpdatedAt {
+            return latestDeveloperComment.createdAt > knownUpdatedAt
+        }
+
+        return false
+    }
+
+    private func feedbackNotificationSnippet(from comment: FeedbackComment?) -> String {
+        guard let comment else {
+            return NSLocalizedString("开发者已更新这条反馈。", comment: "Feedback notification fallback comment snippet")
+        }
+
+        let collapsed = comment.body
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !collapsed.isEmpty else {
+            return NSLocalizedString("开发者已回复这条反馈。", comment: "Feedback notification empty comment fallback")
+        }
+
+        if collapsed.count <= 50 {
+            return collapsed
+        }
+        return String(collapsed.prefix(49)) + "…"
+    }
+
+#if canImport(UserNotifications)
+    private func notifyTicketUpdateIfNeeded(event: FeedbackTicketUpdateEvent, ticket: FeedbackTicket) async {
+        AppLocalNotificationCenter.shared.configureIfNeeded()
+        let granted = await AppLocalNotificationCenter.shared.requestAuthorizationIfNeeded(options: [.alert, .sound, .badge])
+        guard granted else { return }
+
+        let content = UNMutableNotificationContent()
+        if event.hasStatusChange && event.latestDeveloperComment != nil {
+            content.title = NSLocalizedString("反馈工单有新进展", comment: "Feedback ticket has both status and developer reply update title")
+            content.body = String(
+                format: NSLocalizedString("工单 #%d 收到开发者回复，状态已从“%@”更新为“%@”。", comment: "Feedback ticket both status and reply update body"),
+                ticket.issueNumber,
+                event.oldStatus.localizedTitle,
+                event.newStatus.localizedTitle
+            )
+        } else if let developerComment = event.latestDeveloperComment {
+            content.title = NSLocalizedString("开发者回复了你的反馈", comment: "Feedback developer reply notification title")
+            content.body = String(
+                format: NSLocalizedString("工单 #%d：%@", comment: "Feedback developer reply notification body"),
+                ticket.issueNumber,
+                feedbackNotificationSnippet(from: developerComment)
+            )
+        } else if event.hasStatusChange {
+            content.title = NSLocalizedString("反馈工单状态已更新", comment: "Feedback ticket status changed notification title")
+            content.body = String(
+                format: NSLocalizedString("工单 #%d 状态从“%@”变更为“%@”。", comment: "Feedback ticket status changed notification body"),
+                ticket.issueNumber,
+                event.oldStatus.localizedTitle,
+                event.newStatus.localizedTitle
+            )
+        } else {
+            return
+        }
+
+        content.sound = .default
+        content.threadIdentifier = "feedback.ticket.update"
+        content.userInfo = [
+            "route": "feedback",
+            "issue_number": ticket.issueNumber
+        ]
+        if #available(iOS 15.0, watchOS 8.0, *) {
+            content.interruptionLevel = .timeSensitive
+            content.relevanceScore = 1.0
+        }
+
+        let identifier = feedbackNotificationIdentifier(event: event, issueNumber: ticket.issueNumber)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        _ = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
+    }
+
+    private func feedbackNotificationIdentifier(event: FeedbackTicketUpdateEvent, issueNumber: Int) -> String {
+        var components: [String] = [
+            "feedback",
+            "ticket",
+            String(issueNumber),
+            event.newStatus.rawValue
+        ]
+        if let developerCommentID = event.latestDeveloperComment?.id,
+           !developerCommentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            components.append(developerCommentID)
+        }
+        return components
+            .joined(separator: ".")
+            .replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "-", options: .regularExpression)
+    }
+#else
+    private func notifyTicketUpdateIfNeeded(event: FeedbackTicketUpdateEvent, ticket: FeedbackTicket) async {}
+#endif
 }
 
 // MARK: - DTO
