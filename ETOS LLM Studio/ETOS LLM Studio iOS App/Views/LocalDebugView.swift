@@ -269,6 +269,7 @@ private struct DebugLogsView: View {
 
 private struct DocumentationView: View {
     @Environment(\.dismiss) private var dismiss
+    private let debugToolReleaseURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/releases/latest")!
     
     var body: some View {
         List {
@@ -292,8 +293,14 @@ private struct DocumentationView: View {
             }
             
             Section("启动步骤") {
-                StepRow(number: 1, title: "电脑端下载并运行", detail: "https://raw.githubusercontent.com/Eric-Terminal/ETOS-LLM-Studio/main/docs/debug-tools/debug_server.py")
-                StepRow(number: 2, title: "记录 IP", detail: "脚本会显示电脑的局域网 IP 地址")
+                StepRow(
+                    number: 1,
+                    title: "电脑端下载并运行",
+                    detail: "在 GitHub Release 下载最新调试工具（Go 版）",
+                    linkTitle: "前往下载页面",
+                    linkURL: debugToolReleaseURL
+                )
+                StepRow(number: 2, title: "记录 IP", detail: "工具会显示电脑的局域网 IP 地址")
                 StepRow(number: 3, title: "输入并连接", detail: "在本界面输入 IP 地址和端口（默认 8765）")
                 StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")
             }
@@ -349,6 +356,16 @@ private struct StepRow: View {
     let number: Int
     let title: String
     let detail: String
+    let linkTitle: String?
+    let linkURL: URL?
+    
+    init(number: Int, title: String, detail: String, linkTitle: String? = nil, linkURL: URL? = nil) {
+        self.number = number
+        self.title = title
+        self.detail = detail
+        self.linkTitle = linkTitle
+        self.linkURL = linkURL
+    }
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -364,6 +381,13 @@ private struct StepRow: View {
                 Text(detail)
                     .etFont(.subheadline)
                     .foregroundStyle(.secondary)
+                
+                if let linkTitle, let linkURL {
+                    Link(destination: linkURL) {
+                        Label(linkTitle, systemImage: "arrow.up.right.square")
+                            .etFont(.caption)
+                    }
+                }
             }
         }
         .padding(.vertical, 4)
