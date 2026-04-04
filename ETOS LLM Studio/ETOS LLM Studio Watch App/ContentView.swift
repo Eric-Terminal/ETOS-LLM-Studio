@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     @State private var pendingJumpRequest: MessageJumpRequest?
+    @State private var speechSheetDetent: PresentationDetent = .medium
     @State private var rootBodyFont: Font = .body
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
@@ -667,8 +668,15 @@ struct ContentView: View {
                     .disabled(viewModel.speechModels.isEmpty)
                 }
             }
+            .onChange(of: viewModel.isSpeechRecorderPresented) { _, presented in
+                if presented {
+                    speechSheetDetent = .medium
+                }
+            }
             .sheet(isPresented: speechSheetBinding) {
                 SpeechRecorderView(viewModel: viewModel)
+                    .presentationDetents([.medium, .large], selection: $speechSheetDetent)
+                    .presentationDragIndicator(.visible)
             }
             .alert("语音输入错误", isPresented: speechErrorBinding) {
                 Button("好的", role: .cancel) { }

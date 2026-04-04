@@ -2027,6 +2027,7 @@ private struct TelegramMessageComposer: View {
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var showAudioRecorder = false
+    @State private var audioRecorderSheetDetent: PresentationDetent = .fraction(0.5)
     @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showAudioImporter = false
     @State private var showFileImporter = false
@@ -2127,6 +2128,11 @@ private struct TelegramMessageComposer: View {
         .onChange(of: inputAvailableWidth) { _, _ in
             handleAutoExpand(for: text)
         }
+        .onChange(of: showAudioRecorder) { _, presented in
+            if presented {
+                audioRecorderSheetDetent = .fraction(0.5)
+            }
+        }
         .onChange(of: focus.wrappedValue) { _, isFocused in
             if isFocused {
                 handleAutoExpand(for: text)
@@ -2157,6 +2163,8 @@ private struct TelegramMessageComposer: View {
                     viewModel.appendTranscribedText(transcript)
                 }
             )
+            .presentationDetents([.fraction(0.5), .large], selection: $audioRecorderSheetDetent)
+            .presentationDragIndicator(.visible)
         }
         .fileImporter(
             isPresented: $showAudioImporter,
@@ -2746,6 +2754,7 @@ private struct MessageComposerView: View {
     @State private var showAttachmentMenu = false
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
+    @State private var audioRecorderSheetDetent: PresentationDetent = .fraction(0.5)
     @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
@@ -2876,6 +2885,11 @@ private struct MessageComposerView: View {
                 selectedPhotos = []
             }
         }
+        .onChange(of: showAudioRecorder) { _, presented in
+            if presented {
+                audioRecorderSheetDetent = .fraction(0.5)
+            }
+        }
         .sheet(isPresented: $showAudioRecorder) {
             AudioRecorderSheet(
                 format: viewModel.audioRecordingFormat,
@@ -2890,6 +2904,8 @@ private struct MessageComposerView: View {
                     viewModel.appendTranscribedText(transcript)
                 }
             )
+            .presentationDetents([.fraction(0.5), .large], selection: $audioRecorderSheetDetent)
+            .presentationDragIndicator(.visible)
         }
         .fileImporter(
             isPresented: $showFileImporter,
