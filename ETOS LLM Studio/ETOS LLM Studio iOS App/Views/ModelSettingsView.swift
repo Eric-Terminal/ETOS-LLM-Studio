@@ -42,6 +42,7 @@ struct ModelSettingsView: View {
 
             Section("模型能力") {
                 Toggle("聊天", isOn: capabilityBinding(.chat))
+                Toggle("工具", isOn: capabilityBinding(.toolCalling))
                 Toggle("语音转文字", isOn: capabilityBinding(.speechToText))
                 Toggle("文字转语音", isOn: capabilityBinding(.textToSpeech))
                 Toggle("嵌入", isOn: capabilityBinding(.embedding))
@@ -553,7 +554,7 @@ extension ModelSettingsView {
                 if capabilitySet.isEmpty {
                     capabilitySet.insert(.chat)
                 }
-                let ordered: [Model.Capability] = [.chat, .speechToText, .textToSpeech, .embedding, .imageGeneration]
+                let ordered: [Model.Capability] = [.chat, .toolCalling, .speechToText, .textToSpeech, .embedding, .imageGeneration]
                 model.capabilities = ordered.filter { capabilitySet.contains($0) }
             }
         )

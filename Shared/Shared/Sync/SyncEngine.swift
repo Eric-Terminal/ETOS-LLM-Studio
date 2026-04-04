@@ -1751,7 +1751,7 @@ public enum SyncEngine {
         for capability in incoming where !merged.contains(capability) {
             merged.append(capability)
         }
-        return merged.isEmpty ? [.chat] : merged
+        return merged.isEmpty ? Model.defaultCapabilities : merged
     }
 
     private static func mergeRequestBodyOverrideMode(

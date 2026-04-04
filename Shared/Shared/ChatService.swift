@@ -2683,6 +2683,10 @@ public class ChatService {
             let includeUsageInStream = UserDefaults.standard.object(forKey: "enableOpenAIStreamIncludeUsage") as? Bool ?? true
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
         }
+        let effectiveTools = runnableModel.model.supportsToolCalling ? tools : nil
+        if tools != nil, effectiveTools == nil {
+            logger.info("当前模型未启用工具能力，本次请求不会附带工具定义。")
+        }
         let requestStartedAt = Date()
         let requestLogContext = RequestLogContext(
             requestID: UUID(),
@@ -2694,7 +2698,7 @@ public class ChatService {
             requestedAt: requestStartedAt
         )
         
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: tools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
+        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: effectiveTools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
             addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
             requestStatusSubject.send(.error)
             persistRequestLog(
@@ -2719,7 +2723,7 @@ public class ChatService {
                 aiTopP: aiTopP,
                 systemPrompt: systemPrompt,
                 maxChatHistory: maxChatHistory,
-                availableTools: tools,
+                availableTools: effectiveTools,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
@@ -2739,7 +2743,7 @@ public class ChatService {
                 currentSessionID: currentSessionID,
                 userMessage: userMessage,
                 wasTemporarySession: wasTemporarySession,
-                availableTools: tools,
+                availableTools: effectiveTools,
                 aiTemperature: aiTemperature,
                 aiTopP: aiTopP,
                 systemPrompt: systemPrompt,

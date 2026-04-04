@@ -226,11 +226,14 @@ public struct Provider: Codable, Identifiable, Hashable {
 public struct Model: Codable, Identifiable, Hashable {
     public enum Capability: String, Codable, Hashable {
         case chat
+        case toolCalling
         case speechToText
         case textToSpeech
         case embedding
         case imageGeneration
     }
+
+    public static let defaultCapabilities: [Capability] = [.chat, .toolCalling]
 
     public enum RequestBodyOverrideMode: String, Codable, Hashable {
         case expression
@@ -252,7 +255,7 @@ public struct Model: Codable, Identifiable, Hashable {
         displayName: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
-        capabilities: [Capability] = [.chat],
+        capabilities: [Capability] = Model.defaultCapabilities,
         requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
         rawRequestBodyJSON: String? = nil
     ) {
@@ -261,7 +264,7 @@ public struct Model: Codable, Identifiable, Hashable {
         self.displayName = displayName ?? modelName
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
-        self.capabilities = capabilities.isEmpty ? [.chat] : capabilities
+        self.capabilities = capabilities.isEmpty ? Self.defaultCapabilities : capabilities
         self.requestBodyOverrideMode = requestBodyOverrideMode
         self.rawRequestBodyJSON = rawRequestBodyJSON
     }
@@ -279,8 +282,8 @@ public struct Model: Codable, Identifiable, Hashable {
         self.displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? modelName
         self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
-        let decodedCapabilities = try container.decodeIfPresent([Capability].self, forKey: .capabilities) ?? [.chat]
-        self.capabilities = decodedCapabilities.isEmpty ? [.chat] : decodedCapabilities
+        let decodedCapabilities = try container.decodeIfPresent([Capability].self, forKey: .capabilities) ?? Self.defaultCapabilities
+        self.capabilities = decodedCapabilities.isEmpty ? Self.defaultCapabilities : decodedCapabilities
         self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .expression
         self.rawRequestBodyJSON = try container.decodeIfPresent(String.self, forKey: .rawRequestBodyJSON)
     }
@@ -296,7 +299,7 @@ public struct Model: Codable, Identifiable, Hashable {
         if !overrideParameters.isEmpty {
             try container.encode(overrideParameters, forKey: .overrideParameters)
         }
-        if !(capabilities.count == 1 && capabilities.first == .chat) {
+        if capabilities != Self.defaultCapabilities {
             try container.encode(capabilities, forKey: .capabilities)
         }
         if requestBodyOverrideMode != .expression {
@@ -398,6 +401,10 @@ private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet,
 }
 
 public extension Model {
+    var supportsToolCalling: Bool {
+        capabilities.contains(.toolCalling)
+    }
+
     var supportsSpeechToText: Bool {
         capabilities.contains(.speechToText)
     }

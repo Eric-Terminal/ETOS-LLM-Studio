@@ -286,7 +286,7 @@ public class OpenAIAdapter: APIAdapter {
 
     private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
         let lowered = modelName.lowercased()
-        var capabilities: [Model.Capability] = [.chat]
+        var capabilities: [Model.Capability] = Model.defaultCapabilities
         if lowered.contains("tts") || lowered.contains("text-to-speech") || lowered.contains("speech") {
             capabilities.append(.textToSpeech)
         }
@@ -1884,7 +1884,7 @@ public class GeminiAdapter: APIAdapter {
 
     private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
         let lowered = modelName.lowercased()
-        var capabilities: [Model.Capability] = [.chat]
+        var capabilities: [Model.Capability] = Model.defaultCapabilities
         if lowered.contains("tts") || lowered.contains("speech") {
             capabilities.append(.textToSpeech)
         }
