@@ -230,11 +230,14 @@ private struct ProjectLinksView: View {
     
     private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
     private let issuesURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues")!
+    @State private var webAuthLauncher = WatchWebAuthLauncher()
     
     var body: some View {
         List {
             // 项目主页链接
-            Link(destination: githubURL) {
+            Button {
+                webAuthLauncher.open(url: githubURL)
+            } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Label("项目主页", systemImage: "house")
@@ -251,7 +254,9 @@ private struct ProjectLinksView: View {
             }
             
             // 问题反馈链接
-            Link(destination: issuesURL) {
+            Button {
+                webAuthLauncher.open(url: issuesURL)
+            } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")
