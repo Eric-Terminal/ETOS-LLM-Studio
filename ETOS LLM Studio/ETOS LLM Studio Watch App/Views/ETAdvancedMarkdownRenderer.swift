@@ -263,6 +263,17 @@ private extension View {
                 }
                 ForegroundColor(textColor)
             }
+            .markdownBlockStyle(\.blockquote) { configuration in
+                configuration.label
+                    .padding(.leading, 10)
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(isOutgoing ? Color.white.opacity(0.56) : Color.secondary.opacity(0.48))
+                            .frame(width: 3)
+                            .padding(.vertical, 2)
+                    }
+                    .markdownMargin(top: .em(0.2), bottom: .em(0.7))
+            }
             .markdownBlockStyle(\.codeBlock) { configuration in
                 let codeBlockContent = configuration.content.trimmingCharacters(in: .newlines)
                 let canAppendCodeBlock = !codeBlockContent

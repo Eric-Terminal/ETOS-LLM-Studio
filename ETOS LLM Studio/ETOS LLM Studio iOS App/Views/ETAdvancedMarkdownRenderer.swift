@@ -307,6 +307,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             let codeBlockBackgroundColor = isOutgoing ? "rgba(255,255,255,0.16)" : "rgba(127,127,127,0.16)"
             let codeHeaderBackgroundColor = isOutgoing ? "rgba(255,255,255,0.2)" : "rgba(127,127,127,0.2)"
             let codeBorderColor = isOutgoing ? "rgba(255,255,255,0.28)" : "rgba(127,127,127,0.3)"
+            let quoteBorderColor = isOutgoing ? "rgba(255,255,255,0.56)" : "rgba(120,120,128,0.48)"
             let bodyFontFamily = Self.cssFontFamily(
                 role: .body,
                 fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
@@ -382,6 +383,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     p { margin: 0.25em 0; }
     ul, ol { margin: 0.3em 0; padding-left: 1.25em; }
     li { margin: 0.2em 0; }
+    blockquote {
+      margin: 0.3em 0;
+      padding: 0.05em 0 0.05em 0.82em;
+      border-left: 3px solid \(quoteBorderColor);
+    }
+    blockquote > :first-child { margin-top: 0; }
+    blockquote > :last-child { margin-bottom: 0; }
     a { color: var(--link); text-decoration: underline; }
     strong { font-weight: 600; font-family: var(--font-strong); }
     em { font-style: italic; font-family: var(--font-emphasis); }
@@ -1111,6 +1119,17 @@ private extension View {
                     FontFamilyVariant(.monospaced)
                 }
                 ForegroundColor(textColor)
+            }
+            .markdownBlockStyle(\.blockquote) { configuration in
+                configuration.label
+                    .padding(.leading, 12)
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(isOutgoing ? Color.white.opacity(0.56) : Color.secondary.opacity(0.48))
+                            .frame(width: 3)
+                            .padding(.vertical, 2)
+                    }
+                    .markdownMargin(top: .em(0.2), bottom: .em(0.75))
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
                 VStack(alignment: .leading, spacing: 0) {
