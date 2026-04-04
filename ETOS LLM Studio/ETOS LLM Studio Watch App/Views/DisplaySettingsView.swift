@@ -45,24 +45,35 @@ struct DisplaySettingsView: View {
     
     var body: some View {
         Form {
-            if #available(watchOS 26.0, *) {
-                Section(header: Text("特效")) {
-                    Toggle("启用液态玻璃", isOn: $enableLiquidGlass)
-                }
-            }
-            
-            Section(header: Text("内容显示")) {
+            Section {
                 Toggle("渲染 Markdown", isOn: $enableMarkdown)
-            }
-
-            if enableMarkdown {
-                Section {
+                if enableMarkdown {
                     Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
-                } footer: {
+                }
+            } header: {
+                Text("内容显示")
+            } footer: {
+                if enableMarkdown {
                     Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section {
+                NavigationLink {
+                    WatchFontSettingsView()
+                } label: {
+                    Label("字体设置", systemImage: "textformat.alt")
+                }
+            }
+
+            Section {
+                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+            } footer: {
+                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -81,20 +92,10 @@ struct DisplaySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                NavigationLink {
-                    WatchFontSettingsView()
-                } label: {
-                    Label("字体设置", systemImage: "textformat.alt")
+            if #available(watchOS 26.0, *) {
+                Section(header: Text("特效")) {
+                    Toggle("启用液态玻璃", isOn: $enableLiquidGlass)
                 }
-            }
-
-            Section {
-                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
-            } footer: {
-                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section {
