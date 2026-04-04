@@ -28,5 +28,10 @@
 	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>语音输入需要访问语音识别</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
