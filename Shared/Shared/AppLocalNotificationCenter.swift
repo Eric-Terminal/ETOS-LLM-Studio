@@ -20,10 +20,13 @@ public extension Notification.Name {
     static let requestOpenDailyPulse = Notification.Name("com.ETOS.dailyPulse.requestOpen")
     /// 请求当前设备直接进入 Daily Pulse 对应会话并填入继续聊提示词。
     static let requestContinueDailyPulseChat = Notification.Name("com.ETOS.dailyPulse.requestContinueChat")
+    /// 请求当前设备直接打开反馈页面（可附带工单号）。
+    static let requestOpenFeedback = Notification.Name("com.ETOS.feedback.requestOpen")
 }
 
 public enum AppLocalNotificationRoute: String, Sendable {
     case dailyPulse
+    case feedback
 }
 
 public struct AppLocalNotificationDailyPulseContinuation: Sendable, Equatable {
@@ -41,6 +44,7 @@ private let appLocalNotificationKindUserInfoKey = "kind"
 private let appLocalNotificationDayKeyUserInfoKey = "dayKey"
 private let appLocalNotificationRunIDUserInfoKey = "runID"
 private let appLocalNotificationCardIDUserInfoKey = "cardID"
+private let appLocalNotificationIssueNumberUserInfoKey = "issue_number"
 private let appLocalNotificationDailyPulseReminderCategoryIdentifier = "dailyPulse.reminder"
 private let appLocalNotificationDailyPulseReadyCategoryIdentifier = "dailyPulse.ready"
 private let appLocalNotificationDailyPulseOpenActionIdentifier = "dailyPulse.action.open"
@@ -56,6 +60,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published public private(set) var pendingRoute: AppLocalNotificationRoute?
     @Published public private(set) var pendingDailyPulseContinuation: AppLocalNotificationDailyPulseContinuation?
+    @Published public private(set) var pendingFeedbackIssueNumber: Int?
 
     private var didConfigure = false
 
@@ -152,6 +157,11 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         return route == AppLocalNotificationRoute.dailyPulse.rawValue
     }
 
+    public nonisolated static func notificationTargetsFeedback(userInfo: [AnyHashable: Any]) -> Bool {
+        guard let route = userInfo[appLocalNotificationRouteUserInfoKey] as? String else { return false }
+        return route == AppLocalNotificationRoute.feedback.rawValue
+    }
+
     public nonisolated static func dailyPulseCategoryIdentifier(kind: String) -> String {
         kind == "ready"
             ? appLocalNotificationDailyPulseReadyCategoryIdentifier
@@ -168,6 +178,12 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         let continuation = pendingDailyPulseContinuation
         pendingDailyPulseContinuation = nil
         return continuation
+    }
+
+    public func consumePendingFeedbackIssueNumber() -> Int? {
+        let issueNumber = pendingFeedbackIssueNumber
+        pendingFeedbackIssueNumber = nil
+        return issueNumber
     }
 
     private func registerNotificationCategories() {
@@ -234,6 +250,12 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
     }
 
+    private func openFeedbackFromNotification(userInfo: [AnyHashable: Any]) {
+        pendingRoute = .feedback
+        pendingFeedbackIssueNumber = parseIssueNumber(from: userInfo)
+        NotificationCenter.default.post(name: .requestOpenFeedback, object: nil)
+    }
+
     private func continueDailyPulseFromNotification(userInfo: [AnyHashable: Any]) {
         guard let target = dailyPulseTarget(from: userInfo),
               let session = DailyPulseManager.shared.saveCardAsSession(cardID: target.card.id, runID: target.runID) else {
@@ -279,6 +301,19 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
             }
         }
     }
+
+    private func parseIssueNumber(from userInfo: [AnyHashable: Any]) -> Int? {
+        if let intValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? Int {
+            return intValue
+        }
+        if let numberValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? NSNumber {
+            return numberValue.intValue
+        }
+        if let stringValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? String {
+            return Int(stringValue)
+        }
+        return nil
+    }
 }
 
 extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
@@ -305,12 +340,17 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if Self.notificationTargetsDailyPulse(userInfo: response.notification.request.content.userInfo) {
+        let userInfo = response.notification.request.content.userInfo
+        if Self.notificationTargetsDailyPulse(userInfo: userInfo) {
             Task { @MainActor in
                 AppLocalNotificationCenter.shared.handleDailyPulseAction(
                     actionIdentifier: response.actionIdentifier,
-                    userInfo: response.notification.request.content.userInfo
+                    userInfo: userInfo
                 )
+            }
+        } else if Self.notificationTargetsFeedback(userInfo: userInfo) {
+            Task { @MainActor in
+                AppLocalNotificationCenter.shared.openFeedbackFromNotification(userInfo: userInfo)
             }
         }
         completionHandler()
@@ -319,6 +359,7 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
 #else
 public extension Notification.Name {
     static let requestOpenDailyPulse = Notification.Name("com.ETOS.dailyPulse.requestOpen")
+    static let requestOpenFeedback = Notification.Name("com.ETOS.feedback.requestOpen")
 }
 
 @MainActor

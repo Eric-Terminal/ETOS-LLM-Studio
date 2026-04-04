@@ -10,10 +10,21 @@ import SwiftUI
 import Foundation
 import Shared
 
-enum SettingsNavigationDestination: String, Hashable, Identifiable {
+enum SettingsNavigationDestination: Hashable, Identifiable {
     case dailyPulse
+    case feedbackCenter
+    case feedbackIssue(issueNumber: Int)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .dailyPulse:
+            return "dailyPulse"
+        case .feedbackCenter:
+            return "feedbackCenter"
+        case .feedbackIssue(let issueNumber):
+            return "feedbackIssue-\(issueNumber)"
+        }
+    }
 }
 
 struct SettingsView: View {
@@ -269,6 +280,10 @@ struct SettingsView: View {
             case .dailyPulse:
                 DailyPulseView()
                     .environmentObject(viewModel)
+            case .feedbackCenter:
+                FeedbackCenterView()
+            case .feedbackIssue(let issueNumber):
+                FeedbackDetailView(issueNumber: issueNumber)
             }
         }
     }

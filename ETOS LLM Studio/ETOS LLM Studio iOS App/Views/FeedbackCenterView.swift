@@ -234,7 +234,7 @@ private struct FeedbackComposeView: View {
     }
 }
 
-private struct FeedbackDetailView: View {
+struct FeedbackDetailView: View {
     @Environment(\.openURL) private var openURL
     @ObservedObject private var service = FeedbackService.shared
 

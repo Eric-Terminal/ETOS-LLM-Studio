@@ -896,6 +896,17 @@ struct DailyPulseTests {
         #expect(AppLocalNotificationCenter.notificationTargetsDailyPulse(userInfo: userInfo))
         #expect(!AppLocalNotificationCenter.notificationTargetsDailyPulse(userInfo: ["route": "other"]))
     }
+
+    @Test("反馈通知路由能识别目标 userInfo")
+    func feedbackNotificationRouteDetection() {
+        let userInfo: [AnyHashable: Any] = [
+            "route": "feedback",
+            "issue_number": 12345
+        ]
+
+        #expect(AppLocalNotificationCenter.notificationTargetsFeedback(userInfo: userInfo))
+        #expect(!AppLocalNotificationCenter.notificationTargetsFeedback(userInfo: ["route": "dailyPulse"]))
+    }
 #endif
 
     private func makeRunnableModel(

@@ -11,10 +11,21 @@
 import SwiftUI
 import Shared
 
-enum WatchSettingsNavigationDestination: String, Hashable, Identifiable {
+enum WatchSettingsNavigationDestination: Hashable, Identifiable {
     case dailyPulse
+    case feedbackCenter
+    case feedbackIssue(issueNumber: Int)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .dailyPulse:
+            return "dailyPulse"
+        case .feedbackCenter:
+            return "feedbackCenter"
+        case .feedbackIssue(let issueNumber):
+            return "feedbackIssue-\(issueNumber)"
+        }
+    }
 }
 
 /// 设置视图
@@ -214,6 +225,10 @@ struct SettingsView: View {
                 switch destination {
                 case .dailyPulse:
                     DailyPulseView(viewModel: viewModel)
+                case .feedbackCenter:
+                    FeedbackCenterView()
+                case .feedbackIssue(let issueNumber):
+                    WatchFeedbackDetailView(issueNumber: issueNumber)
                 }
             }
         }
