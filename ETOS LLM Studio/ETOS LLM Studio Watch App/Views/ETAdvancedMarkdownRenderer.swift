@@ -17,6 +17,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let customTextColor: Color?
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
@@ -26,6 +27,7 @@ struct ETAdvancedMarkdownRenderer: View {
         isOutgoing: Bool,
         enableAdvancedRenderer: Bool,
         enableMathRendering: Bool,
+        customTextColor: Color? = nil,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) {
         self.content = content
@@ -33,6 +35,7 @@ struct ETAdvancedMarkdownRenderer: View {
         self.isOutgoing = isOutgoing
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
+        self.customTextColor = customTextColor
         self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
     }
 
@@ -49,6 +52,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing,
+                customTextColor: customTextColor,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
         } else {
@@ -103,8 +107,8 @@ struct ETAdvancedMarkdownRenderer: View {
 
     @ViewBuilder
     private func baseTextView(_ text: String) -> some View {
+        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         if enableMarkdown {
-            let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
@@ -115,7 +119,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 )
         } else {
             Text(text)
-                .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                .foregroundStyle(textColor)
         }
     }
 }
@@ -124,11 +128,12 @@ private struct ETMathAwareMarkdownView: View {
     let content: String
     let enableMarkdown: Bool
     let isOutgoing: Bool
+    let customTextColor: Color?
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     private var textColor: Color {
-        isOutgoing ? .white : .primary
+        customTextColor ?? (isOutgoing ? .white : .primary)
     }
 
     private var blocks: [ETMathRenderBlock] {

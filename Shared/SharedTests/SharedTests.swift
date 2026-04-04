@@ -17,6 +17,7 @@ import Testing
 import Foundation
 @testable import Shared
 import Combine
+import SwiftUI
 
 // MARK: - Network Mocking Infrastructure
 
@@ -62,6 +63,51 @@ fileprivate class MockURLProtocol: URLProtocol {
 
     override func stopLoading() {
         // 这个方法必须被重写，但我们不需要在里面做任何事。
+    }
+}
+
+@Suite("聊天颜色偏好编解码")
+struct ChatAppearanceColorCodecTests {
+    @Test("支持解析 6 位十六进制并默认不透明")
+    func parsesRGBHexWithOpaqueAlpha() {
+        let color = ChatAppearanceColorCodec.color(from: "3D8FF2", fallback: .black)
+        let rgba = ChatAppearanceColorCodec.rgbaComponents(from: color)
+
+        #expect(rgba != nil)
+        #expect(abs((rgba?.red ?? 0) - 0.239) < 0.01)
+        #expect(abs((rgba?.green ?? 0) - 0.561) < 0.01)
+        #expect(abs((rgba?.blue ?? 0) - 0.949) < 0.01)
+        #expect(abs((rgba?.alpha ?? 0) - 1.0) < 0.001)
+    }
+
+    @Test("Color 与十六进制 RGBA 可往返")
+    func supportsRoundTripBetweenColorAndHex() {
+        let original = Color(.sRGB, red: 0.2, green: 0.4, blue: 0.6, opacity: 0.8)
+        let encoded = ChatAppearanceColorCodec.hexRGBA(from: original)
+
+        #expect(encoded == "336699CC")
+
+        let decoded = ChatAppearanceColorCodec.color(from: encoded ?? "", fallback: .clear)
+        let rgba = ChatAppearanceColorCodec.rgbaComponents(from: decoded)
+
+        #expect(rgba != nil)
+        #expect(abs((rgba?.red ?? 0) - 0.2) < 0.01)
+        #expect(abs((rgba?.green ?? 0) - 0.4) < 0.01)
+        #expect(abs((rgba?.blue ?? 0) - 0.6) < 0.01)
+        #expect(abs((rgba?.alpha ?? 0) - 0.8) < 0.01)
+    }
+
+    @Test("变暗处理仅缩放 RGB 并保持 Alpha")
+    func darkenedKeepsAlpha() {
+        let original = Color(.sRGB, red: 0.8, green: 0.5, blue: 0.3, opacity: 0.4)
+        let darkened = ChatAppearanceColorCodec.darkened(original, factor: 0.5)
+        let rgba = ChatAppearanceColorCodec.rgbaComponents(from: darkened)
+
+        #expect(rgba != nil)
+        #expect(abs((rgba?.red ?? 0) - 0.4) < 0.01)
+        #expect(abs((rgba?.green ?? 0) - 0.25) < 0.01)
+        #expect(abs((rgba?.blue ?? 0) - 0.15) < 0.01)
+        #expect(abs((rgba?.alpha ?? 0) - 0.4) < 0.01)
     }
 }
 

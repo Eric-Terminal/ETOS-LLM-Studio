@@ -109,6 +109,14 @@ struct ChatBubble: View {
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
+    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
+    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
+    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
+    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
+    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
+    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
+    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
 
     init(
         messageState: ChatMessageRenderState,
@@ -151,6 +159,33 @@ struct ChatBubble: View {
     // Telegram 颜色
     private let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
     private let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
+
+    private var resolvedUserBubbleStartColor: Color {
+        guard enableCustomUserBubbleColor else { return telegramBlue }
+        return ChatAppearanceColorCodec.color(from: customUserBubbleColorHex, fallback: telegramBlue)
+    }
+
+    private var resolvedUserBubbleEndColor: Color {
+        guard enableCustomUserBubbleColor else { return telegramBlueDark }
+        return ChatAppearanceColorCodec.darkened(resolvedUserBubbleStartColor, factor: 0.86)
+    }
+
+    private var resolvedAssistantBubbleColor: Color? {
+        guard enableCustomAssistantBubbleColor else { return nil }
+        return ChatAppearanceColorCodec.color(
+            from: customAssistantBubbleColorHex,
+            fallback: Color(uiColor: .secondarySystemBackground)
+        )
+    }
+
+    private var customTextColorOverride: Color? {
+        if colorScheme == .dark {
+            guard enableCustomDarkTextColor else { return nil }
+            return ChatAppearanceColorCodec.color(from: customDarkTextColorHex, fallback: .white)
+        }
+        guard enableCustomLightTextColor else { return nil }
+        return ChatAppearanceColorCodec.color(from: customLightTextColorHex, fallback: .primary)
+    }
     
     private var isOutgoing: Bool {
         message.role == .user
@@ -229,9 +264,20 @@ struct ChatBubble: View {
             return .red
         }
         if usesNoBubbleStyle {
-            return .primary
+            return resolvedTextColor(default: .primary)
         }
-        return isOutgoing ? .white : .primary
+        return resolvedTextColor(default: isOutgoing ? .white : .primary)
+    }
+
+    private func resolvedTextColor(default defaultColor: Color) -> Color {
+        customTextColorOverride ?? defaultColor
+    }
+
+    private func resolvedSecondaryTextColor(default defaultColor: Color, customOpacity: Double = 0.78) -> Color {
+        if let customTextColorOverride {
+            return customTextColorOverride.opacity(customOpacity)
+        }
+        return defaultColor
     }
     
     /// 图片占位符文本（各语言版本）
@@ -448,12 +494,24 @@ struct ChatBubble: View {
             .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
             .opacity(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? 1 : 0.4)
         }
-        .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.8) : Color.secondary))
+        .foregroundStyle(
+            usesNoBubbleStyle
+                ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8)
+                : (isOutgoing
+                    ? resolvedSecondaryTextColor(default: Color.white.opacity(0.8), customOpacity: 0.8)
+                    : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8))
+        )
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(usesNoBubbleStyle ? Color.clear : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
+                .fill(
+                    usesNoBubbleStyle
+                        ? Color.clear
+                        : (isOutgoing
+                            ? resolvedSecondaryTextColor(default: Color.white, customOpacity: 0.2)
+                            : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.15))
+                )
         )
     }
     
@@ -482,16 +540,24 @@ struct ChatBubble: View {
             // Telegram 蓝色渐变
             return AnyShapeStyle(
                 LinearGradient(
-                    colors: [telegramBlue.opacity(userOpacity), telegramBlueDark.opacity(userOpacity)],
+                    colors: [
+                        resolvedUserBubbleStartColor.opacity(userOpacity),
+                        resolvedUserBubbleEndColor.opacity(userOpacity)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
         case .assistant, .system, .tool:
             // 接收消息：浅灰/白色
-            let baseColor = enableBackground
-                ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
-                : Color(uiColor: .systemBackground)
+            let baseColor: Color
+            if let resolvedAssistantBubbleColor {
+                baseColor = resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1)
+            } else {
+                baseColor = enableBackground
+                    ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
+                    : Color(uiColor: .systemBackground)
+            }
             return AnyShapeStyle(baseColor)
         case .error:
             return AnyShapeStyle(Color.red.opacity(0.15 * errorOpacity))
@@ -632,7 +698,8 @@ struct ChatBubble: View {
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast) {
                     ToolCallsInlineView(
                         toolCalls: [call],
-                        isOutgoing: isOutgoing
+                        isOutgoing: isOutgoing,
+                        customTextColor: customTextColorOverride
                     )
 
                     if let permissionRequest = activeToolPermissionRequest(for: call) {
@@ -651,7 +718,8 @@ struct ChatBubble: View {
                             isExpanded: toolResultExpansionBinding(for: call.id),
                             isOutgoing: isOutgoing,
                             isPending: isPendingToolResult(for: call),
-                            enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay
+                            enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                            customTextColor: customTextColorOverride
                         )
                     }
                 }
@@ -669,7 +737,8 @@ struct ChatBubble: View {
                 isExpanded: $isReasoningExpanded,
                 isOutgoing: isOutgoing,
                 usesNoBubbleStyle: usesNoBubbleStyle,
-                isShimmering: shouldShimmerReasoningHeader
+                isShimmering: shouldShimmerReasoningHeader,
+                customTextColor: customTextColorOverride
             )
         }
 
@@ -695,13 +764,13 @@ struct ChatBubble: View {
                 ShimmeringText(
                     text: "正在思考...",
                     font: .subheadline,
-                    baseColor: Color.secondary,
-                    highlightColor: Color.primary.opacity(0.85)
+                    baseColor: resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75),
+                    highlightColor: resolvedTextColor(default: Color.primary.opacity(0.85))
                 )
             } else {
                 Text("正在思考...")
                     .etFont(.subheadline)
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75))
             }
         }
 
@@ -716,7 +785,8 @@ struct ChatBubble: View {
            !toolCalls.isEmpty {
             ToolCallsInlineView(
                 toolCalls: toolCalls,
-                isOutgoing: isOutgoing
+                isOutgoing: isOutgoing,
+                customTextColor: customTextColorOverride
             )
             if let activeToolPermissionRequest {
                 ToolPermissionInlineView(
@@ -734,7 +804,8 @@ struct ChatBubble: View {
                     isExpanded: $isToolCallsExpanded,
                     isOutgoing: isOutgoing,
                     isPending: hasPendingToolResults,
-                    enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay
+                    enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                    customTextColor: customTextColorOverride
                 )
             }
         }
@@ -815,17 +886,33 @@ struct ChatBubble: View {
                 HStack(spacing: 8) {
                     Image(systemName: "doc")
                         .etFont(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
+                        .foregroundStyle(
+                            usesNoBubbleStyle
+                                ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8)
+                                : (isOutgoing
+                                    ? resolvedSecondaryTextColor(default: Color.white.opacity(0.85), customOpacity: 0.85)
+                                    : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8))
+                        )
                     Text(fileName)
                         .etFont(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                        .foregroundStyle(usesNoBubbleStyle ? Color.primary : (isOutgoing ? Color.white : Color.primary))
+                        .foregroundStyle(
+                            usesNoBubbleStyle
+                                ? resolvedTextColor(default: Color.primary)
+                                : resolvedTextColor(default: isOutgoing ? Color.white : Color.primary)
+                        )
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(usesNoBubbleStyle ? Color.clear : (isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground)))
+                        .fill(
+                            usesNoBubbleStyle
+                                ? Color.clear
+                                : (isOutgoing
+                                    ? resolvedUserBubbleEndColor
+                                    : (resolvedAssistantBubbleColor ?? Color(uiColor: .secondarySystemBackground)))
+                        )
                 )
             }
         }
@@ -840,14 +927,21 @@ struct ChatBubble: View {
             enableMarkdown: enableMarkdown,
             isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
-            enableMathRendering: enableMathRendering
+            enableMathRendering: enableMathRendering,
+            customTextColor: customTextColorOverride
         )
     }
     
     @ViewBuilder
     private func audioPlayerView(fileName: String) -> some View {
-        let foregroundColor = usesNoBubbleStyle ? Color.primary : (isOutgoing ? Color.white : Color.primary)
-        let secondaryColor = usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+        let foregroundColor = usesNoBubbleStyle
+            ? resolvedTextColor(default: Color.primary)
+            : resolvedTextColor(default: isOutgoing ? Color.white : Color.primary)
+        let secondaryColor = usesNoBubbleStyle
+            ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75)
+            : (isOutgoing
+                ? resolvedSecondaryTextColor(default: Color.white.opacity(0.7), customOpacity: 0.7)
+                : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75))
         
         HStack(spacing: 12) {
             // 播放按钮
@@ -1151,6 +1245,7 @@ struct ReasoningDisclosureView: View, Equatable {
     let isOutgoing: Bool
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
+    let customTextColor: Color?
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
@@ -1158,16 +1253,25 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.isOutgoing == rhs.isOutgoing
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
+            && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            let baseColor: Color = usesNoBubbleStyle
-                ? .secondary
-                : (isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
-            let highlightColor: Color = usesNoBubbleStyle
-                ? .primary.opacity(0.85)
-                : (isOutgoing ? Color.white : Color.primary.opacity(0.85))
+            let baseColor: Color = resolvedSecondaryTextColor(
+                default: usesNoBubbleStyle
+                    ? .secondary
+                    : (isOutgoing ? Color.white.opacity(0.9) : Color.secondary),
+                customTextColor: customTextColor,
+                customOpacity: 0.9
+            )
+            let highlightColor: Color = resolvedTextColor(
+                default: usesNoBubbleStyle
+                    ? .primary.opacity(0.85)
+                    : (isOutgoing ? Color.white : Color.primary.opacity(0.85)),
+                customTextColor: customTextColor,
+                customOpacity: 0.92
+            )
             // 点击区域：标题行
             Button {
                 isExpanded.toggle()
@@ -1204,7 +1308,15 @@ struct ReasoningDisclosureView: View, Equatable {
             if isExpanded {
                 Text(reasoning)
                     .etFont(.subheadline)
-                    .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
+                    .foregroundStyle(
+                        resolvedSecondaryTextColor(
+                            default: usesNoBubbleStyle
+                                ? Color.secondary
+                                : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary),
+                            customTextColor: customTextColor,
+                            customOpacity: 0.85
+                        )
+                    )
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
@@ -1213,15 +1325,34 @@ struct ReasoningDisclosureView: View, Equatable {
         }
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
+
+    private func resolvedTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
+        if let customTextColor {
+            return customTextColor.opacity(customOpacity)
+        }
+        return defaultColor
+    }
+
+    private func resolvedSecondaryTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
+        resolvedTextColor(default: defaultColor, customTextColor: customTextColor, customOpacity: customOpacity)
+    }
+
+    private static func colorSignature(_ color: Color?) -> String? {
+        guard let color else { return nil }
+        return ChatAppearanceColorCodec.hexRGBA(from: color)
+    }
 }
 
 // MARK: - 工具调用视图（内联展示）
 struct ToolCallsInlineView: View, Equatable {
     let toolCalls: [InternalToolCall]
     let isOutgoing: Bool
+    let customTextColor: Color?
     
     static func == (lhs: ToolCallsInlineView, rhs: ToolCallsInlineView) -> Bool {
-        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id) && lhs.isOutgoing == rhs.isOutgoing
+        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
+            && lhs.isOutgoing == rhs.isOutgoing
+            && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
     }
 
     private func displayName(for toolName: String) -> String {
@@ -1236,6 +1367,11 @@ struct ToolCallsInlineView: View, Equatable {
         }
         return toolName
     }
+
+    private static func colorSignature(_ color: Color?) -> String? {
+        guard let color else { return nil }
+        return ChatAppearanceColorCodec.hexRGBA(from: color)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1244,7 +1380,8 @@ struct ToolCallsInlineView: View, Equatable {
                 ToolCallDisclosureRow(
                     label: label,
                     arguments: call.arguments,
-                    isOutgoing: isOutgoing
+                    isOutgoing: isOutgoing,
+                    customTextColor: customTextColor
                 )
             }
         }
@@ -1254,6 +1391,7 @@ struct ToolCallsInlineView: View, Equatable {
         let label: String
         let arguments: String
         let isOutgoing: Bool
+        let customTextColor: Color?
         @State private var isExpanded = true
 
         private var trimmedArguments: String {
@@ -1278,13 +1416,29 @@ struct ToolCallsInlineView: View, Equatable {
                         text: trimmedArguments,
                         maxHeight: 200,
                         font: .caption,
-                        foreground: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                        foreground: resolvedSecondaryTextColor(
+                            default: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
+                            customTextColor: customTextColor,
+                            customOpacity: 0.75
+                        ),
                         enableSelection: true
                     )
                     .padding(6)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1))
+                            .fill(
+                                isOutgoing
+                                    ? resolvedSecondaryTextColor(
+                                        default: Color.white,
+                                        customTextColor: customTextColor,
+                                        customOpacity: 0.15
+                                    )
+                                    : resolvedSecondaryTextColor(
+                                        default: Color.secondary,
+                                        customTextColor: customTextColor,
+                                        customOpacity: 0.1
+                                    )
+                            )
                     )
                 }
             }
@@ -1304,8 +1458,21 @@ struct ToolCallsInlineView: View, Equatable {
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
             }
-            .foregroundStyle(isOutgoing ? Color.white.opacity(0.9) : Color.secondary)
+            .foregroundStyle(
+                resolvedSecondaryTextColor(
+                    default: isOutgoing ? Color.white.opacity(0.9) : Color.secondary,
+                    customTextColor: customTextColor,
+                    customOpacity: 0.9
+                )
+            )
             .contentShape(Rectangle())
+        }
+
+        private func resolvedSecondaryTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
+            if let customTextColor {
+                return customTextColor.opacity(customOpacity)
+            }
+            return defaultColor
         }
     }
 }
@@ -1378,6 +1545,7 @@ struct ToolResultsDisclosureView: View, Equatable {
     let isOutgoing: Bool
     let isPending: Bool
     let enableExperimentalToolResultDisplay: Bool
+    let customTextColor: Color?
     
     static func == (lhs: ToolResultsDisclosureView, rhs: ToolResultsDisclosureView) -> Bool {
         lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
@@ -1386,6 +1554,7 @@ struct ToolResultsDisclosureView: View, Equatable {
             && lhs.resultText == rhs.resultText
             && lhs.isPending == rhs.isPending
             && lhs.enableExperimentalToolResultDisplay == rhs.enableExperimentalToolResultDisplay
+            && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
     }
 
     private func displayName(for toolName: String) -> String {
@@ -1402,19 +1571,31 @@ struct ToolResultsDisclosureView: View, Equatable {
     }
 
     private var headerForegroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.9) : Color.secondary
+        if let customTextColor {
+            return customTextColor.opacity(0.9)
+        }
+        return isOutgoing ? Color.white.opacity(0.9) : Color.secondary
     }
 
     private var summaryForegroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.72) : Color.secondary.opacity(0.9)
+        if let customTextColor {
+            return customTextColor.opacity(0.72)
+        }
+        return isOutgoing ? Color.white.opacity(0.72) : Color.secondary.opacity(0.9)
     }
 
     private var sectionForegroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.78) : Color.secondary
+        if let customTextColor {
+            return customTextColor.opacity(0.78)
+        }
+        return isOutgoing ? Color.white.opacity(0.78) : Color.secondary
     }
 
     private var sectionBackgroundColor: Color {
-        isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1)
+        if let customTextColor {
+            return customTextColor.opacity(isOutgoing ? 0.15 : 0.1)
+        }
+        return isOutgoing ? Color.white.opacity(0.15) : Color.secondary.opacity(0.1)
     }
 
     private func resolvedResult(for call: InternalToolCall) -> String {
@@ -1447,7 +1628,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                         text: "结果：\(toolNames.joined(separator: ", "))",
                         font: .subheadline.weight(.medium),
                         baseColor: headerForegroundColor,
-                        highlightColor: isOutgoing ? Color.white : Color.primary.opacity(0.85)
+                        highlightColor: customTextColor?.opacity(0.95) ?? (isOutgoing ? Color.white : Color.primary.opacity(0.85))
                     )
                     .lineLimit(1)
                     Spacer()
@@ -1587,6 +1768,11 @@ struct ToolResultsDisclosureView: View, Equatable {
                 enableSelection: enableSelection
             )
         }
+    }
+
+    private static func colorSignature(_ color: Color?) -> String? {
+        guard let color else { return nil }
+        return ChatAppearanceColorCodec.hexRGBA(from: color)
     }
 }
 

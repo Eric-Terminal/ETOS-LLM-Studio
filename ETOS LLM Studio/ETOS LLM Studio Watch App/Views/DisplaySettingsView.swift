@@ -27,6 +27,15 @@ struct DisplaySettingsView: View {
     @Binding var enableExperimentalToolResultDisplay: Bool
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
+
+    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
+    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
+    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
+    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
+    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
+    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
+    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
+    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
     
     // MARK: - 属性
     
@@ -87,6 +96,38 @@ struct DisplaySettingsView: View {
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section("聊天颜色自定义") {
+                Toggle("自定义用户气泡颜色", isOn: $enableCustomUserBubbleColor)
+                if enableCustomUserBubbleColor {
+                    ColorPicker("用户气泡颜色", selection: userBubbleColorBinding, supportsOpacity: false)
+                }
+
+                Toggle("自定义助手气泡颜色（含 Tool）", isOn: $enableCustomAssistantBubbleColor)
+                if enableCustomAssistantBubbleColor {
+                    ColorPicker("助手气泡颜色", selection: assistantBubbleColorBinding, supportsOpacity: false)
+                }
+
+                Toggle("自定义白天文字颜色", isOn: $enableCustomLightTextColor)
+                if enableCustomLightTextColor {
+                    ColorPicker("白天文字颜色", selection: lightTextColorBinding, supportsOpacity: false)
+                }
+
+                Toggle("自定义夜览文字颜色", isOn: $enableCustomDarkTextColor)
+                if enableCustomDarkTextColor {
+                    ColorPicker("夜览文字颜色", selection: darkTextColorBinding, supportsOpacity: false)
+                }
+
+                if hasAnyCustomColorOverride {
+                    Button("恢复默认聊天颜色") {
+                        resetCustomChatColors()
+                    }
+                }
+            } footer: {
+                Text("默认全部关闭时，聊天配色与当前版本完全一致。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             
             Section(header: Text("背景")) {
                 Toggle("显示背景", isOn: $enableBackground)
@@ -125,6 +166,51 @@ struct DisplaySettingsView: View {
                 enableAdvancedRenderer = false
             }
         }
+    }
+
+    private var hasAnyCustomColorOverride: Bool {
+        enableCustomUserBubbleColor
+            || enableCustomAssistantBubbleColor
+            || enableCustomLightTextColor
+            || enableCustomDarkTextColor
+    }
+
+    private var userBubbleColorBinding: Binding<Color> {
+        colorBinding(hex: $customUserBubbleColorHex, fallback: .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1))
+    }
+
+    private var assistantBubbleColorBinding: Binding<Color> {
+        colorBinding(hex: $customAssistantBubbleColorHex, fallback: .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1))
+    }
+
+    private var lightTextColorBinding: Binding<Color> {
+        colorBinding(hex: $customLightTextColorHex, fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1))
+    }
+
+    private var darkTextColorBinding: Binding<Color> {
+        colorBinding(hex: $customDarkTextColorHex, fallback: .white)
+    }
+
+    private func colorBinding(hex: Binding<String>, fallback: Color) -> Binding<Color> {
+        Binding(
+            get: { ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback) },
+            set: { newColor in
+                if let encoded = ChatAppearanceColorCodec.hexRGBA(from: newColor) {
+                    hex.wrappedValue = encoded
+                }
+            }
+        )
+    }
+
+    private func resetCustomChatColors() {
+        enableCustomUserBubbleColor = false
+        enableCustomAssistantBubbleColor = false
+        enableCustomLightTextColor = false
+        enableCustomDarkTextColor = false
+        customUserBubbleColorHex = "3D8FF2FF"
+        customAssistantBubbleColorHex = "F2F2F7FF"
+        customLightTextColorHex = "1C1C1EFF"
+        customDarkTextColorHex = "FFFFFFFF"
     }
 }
 

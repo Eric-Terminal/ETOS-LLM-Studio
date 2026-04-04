@@ -97,6 +97,14 @@ struct ChatBubble: View {
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
+    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
+    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
+    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
+    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
+    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
+    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
+    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
 
     init(
         messageState: ChatMessageRenderState,
@@ -132,6 +140,37 @@ struct ChatBubble: View {
     
     private var message: ChatMessage {
         messageState.message
+    }
+
+    private var resolvedUserBubbleColorOverride: Color? {
+        guard enableCustomUserBubbleColor else { return nil }
+        return ChatAppearanceColorCodec.color(from: customUserBubbleColorHex, fallback: .blue)
+    }
+
+    private var resolvedAssistantBubbleColorOverride: Color? {
+        let fallback = Color(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
+        guard enableCustomAssistantBubbleColor else { return nil }
+        return ChatAppearanceColorCodec.color(from: customAssistantBubbleColorHex, fallback: fallback)
+    }
+
+    private var customTextColorOverride: Color? {
+        if colorScheme == .dark {
+            guard enableCustomDarkTextColor else { return nil }
+            return ChatAppearanceColorCodec.color(from: customDarkTextColorHex, fallback: .white)
+        }
+        guard enableCustomLightTextColor else { return nil }
+        return ChatAppearanceColorCodec.color(from: customLightTextColorHex, fallback: .primary)
+    }
+
+    private func resolvedTextColor(default defaultColor: Color) -> Color {
+        customTextColorOverride ?? defaultColor
+    }
+
+    private func resolvedSecondaryTextColor(default defaultColor: Color, customOpacity: Double) -> Color {
+        if let customTextColorOverride {
+            return customTextColorOverride.opacity(customOpacity)
+        }
+        return defaultColor
     }
 
     /// 图片占位符文本（各语言版本）
@@ -383,7 +422,9 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private var userTextBubble: some View {
-        let userTextColor: Color = usesNoBubbleStyle ? .primary : .white
+        let userTextColor: Color = usesNoBubbleStyle
+            ? resolvedTextColor(default: .primary)
+            : resolvedTextColor(default: .white)
         let content = Group {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName, isUser: true)
@@ -400,7 +441,7 @@ struct ChatBubble: View {
             if #available(watchOS 26.0, *) {
                 content
                     .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                    .background(Color.blue.opacity(0.5))
+                    .background((resolvedUserBubbleColorOverride ?? .blue).opacity(0.5))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
                 userBubbleFallback(content)
@@ -431,7 +472,11 @@ struct ChatBubble: View {
 
                     if message.role != .tool && hasNonPlaceholderText {
                         renderContent(message.content)
-                            .foregroundColor(isErrorVersion ? (usesNoBubbleStyle ? .red : .white) : nil)
+                            .foregroundColor(
+                                isErrorVersion
+                                    ? resolvedTextColor(default: usesNoBubbleStyle ? .red : .white)
+                                    : resolvedTextColor(default: message.role == .user ? .white : .primary)
+                            )
                     }
                 }
                 .padding(10)
@@ -525,7 +570,11 @@ struct ChatBubble: View {
 
                 if hasNonPlaceholderText {
                     renderContent(message.content)
-                        .foregroundColor(isErrorVersion ? (usesNoBubbleStyle ? .red : .white) : nil)
+                        .foregroundColor(
+                            isErrorVersion
+                                ? resolvedTextColor(default: usesNoBubbleStyle ? .red : .white)
+                                : resolvedTextColor(default: message.role == .user ? .white : .primary)
+                        )
                 }
 
                 if shouldShowToolCallsAfterContent {
@@ -537,13 +586,13 @@ struct ChatBubble: View {
                         ShimmeringText(
                             text: currentThinkingText,
                             font: .caption,
-                            baseColor: .secondary,
-                            highlightColor: .primary.opacity(0.85)
+                            baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75),
+                            highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
                         )
                     } else {
                         Text(currentThinkingText)
                             .etFont(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75))
                     }
                 }
             }
@@ -634,14 +683,18 @@ struct ChatBubble: View {
             isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
             enableMathRendering: enableMathRendering,
+            customTextColor: customTextColorOverride,
             onCodeBlockHeaderTap: onCodeBlockHeaderTap
         )
     }
     
     @ViewBuilder
     private func audioPlayerView(fileName: String, isUser: Bool) -> some View {
-        let foregroundColor = (isUser && !usesNoBubbleStyle) ? Color.white : Color.primary
-        let secondaryColor = (isUser && !usesNoBubbleStyle) ? Color.white.opacity(0.7) : Color.secondary
+        let foregroundColor = resolvedTextColor(default: (isUser && !usesNoBubbleStyle) ? Color.white : Color.primary)
+        let secondaryColor = resolvedSecondaryTextColor(
+            default: (isUser && !usesNoBubbleStyle) ? Color.white.opacity(0.7) : Color.secondary,
+            customOpacity: 0.75
+        )
         let isCurrentFile = audioPlayer.currentFileName == fileName
         
         VStack(alignment: .leading, spacing: 4) {
@@ -718,20 +771,20 @@ struct ChatBubble: View {
                         ShimmeringText(
                             text: "思考过程",
                             font: .footnote,
-                            baseColor: .secondary,
-                            highlightColor: .primary.opacity(0.85)
+                            baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75),
+                            highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
                         )
                         .lineLimit(1)
                     } else {
                         Text("思考过程")
                             .etFont(.footnote)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
                             .lineLimit(1)
                     }
                     Spacer()
                     Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
                         .etFont(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
                 }
             }
             .buttonStyle(.plain)
@@ -739,7 +792,7 @@ struct ChatBubble: View {
             if isReasoningExpanded {
                 Text(reasoning)
                     .etFont(.footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
             }
         }
         .padding(.bottom, isReasoningExpanded ? 5 : 0)
@@ -763,7 +816,11 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(toolCalls, id: \.id) { toolCall in
                 let label = toolDisplayLabel(for: toolCall.toolName)
-                ToolCallDisclosureRow(label: label, arguments: toolCall.arguments)
+                ToolCallDisclosureRow(
+                    label: label,
+                    arguments: toolCall.arguments,
+                    customTextColor: customTextColorOverride
+                )
             }
         }
         .padding(.bottom, 5)
@@ -772,6 +829,7 @@ struct ChatBubble: View {
     private struct ToolCallDisclosureRow: View {
         let label: String
         let arguments: String
+        let customTextColor: Color?
         @State private var isExpanded = true
 
         private var trimmedArguments: String {
@@ -797,7 +855,7 @@ struct ChatBubble: View {
                         text: trimmedArguments,
                         maxHeight: 120,
                         font: .caption2,
-                        foreground: .secondary
+                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8)
                     )
                 }
             }
@@ -808,17 +866,24 @@ struct ChatBubble: View {
             HStack(spacing: 4) {
                 Text("调用：\(label)")
                     .etFont(.footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
                     .lineLimit(1)
                 if !trimmedArguments.isEmpty {
                     Spacer()
                     Image(systemName: "chevron.right")
                         .etFont(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
             }
             .contentShape(Rectangle())
+        }
+
+        private func resolvedSecondaryTextColor(default defaultColor: Color, customOpacity: Double) -> Color {
+            guard let customTextColor else {
+                return defaultColor
+            }
+            return customTextColor.opacity(customOpacity)
         }
     }
 
@@ -856,16 +921,16 @@ struct ChatBubble: View {
                     ShimmeringText(
                         text: "结果：\(toolNames.joined(separator: ", "))",
                         font: .footnote,
-                        baseColor: .secondary,
-                        highlightColor: .primary.opacity(0.85)
+                        baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8),
+                        highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
                     )
                     .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .etFont(.caption)
-                        .foregroundColor(.secondary.opacity(0.6))
+                        .foregroundColor(resolvedSecondaryTextColor(default: .secondary.opacity(0.6), customOpacity: 0.6))
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
             } else {
                 Button(action: {
                     withAnimation {
@@ -876,7 +941,7 @@ struct ChatBubble: View {
                         HStack {
                             Text("结果：\(toolNames.joined(separator: ", "))")
                                 .etFont(.footnote)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
                                 .lineLimit(1)
                             Spacer()
                             Image(systemName: expansion.wrappedValue ? "chevron.down" : "chevron.right")
@@ -885,12 +950,12 @@ struct ChatBubble: View {
                         if !summaries.isEmpty {
                             Text(summaries.joined(separator: " · "))
                                 .etFont(.caption2)
-                                .foregroundColor(.secondary.opacity(0.9))
+                                .foregroundColor(resolvedSecondaryTextColor(default: .secondary.opacity(0.9), customOpacity: 0.9))
                                 .lineLimit(3)
                                 .multilineTextAlignment(.leading)
                         }
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
                 }
                 .buttonStyle(.plain)
             }
@@ -919,7 +984,7 @@ struct ChatBubble: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .etFont(.caption2.weight(.semibold))
-                .foregroundColor(.secondary)
+                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
             if display.shouldShowRawSection {
                 toolResultSection(
                     title: "原始返回",
@@ -946,13 +1011,13 @@ struct ChatBubble: View {
         return VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .etFont(.caption2.weight(.semibold))
-                .foregroundColor(.secondary)
+                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
             if !result.isEmpty {
                 CappedScrollableText(
                     text: result,
                     maxHeight: 120,
                     font: .caption2,
-                    foreground: .secondary
+                    foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8)
                 )
             }
         }
@@ -972,12 +1037,12 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .etFont(.caption2.weight(.semibold))
-                .foregroundColor(.secondary.opacity(0.9))
+                .foregroundColor(resolvedSecondaryTextColor(default: .secondary.opacity(0.9), customOpacity: 0.9))
             CappedScrollableText(
                 text: text,
                 maxHeight: maxHeight,
                 font: font,
-                foreground: .secondary
+                foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8)
             )
         }
     }
@@ -1081,8 +1146,15 @@ struct ChatBubble: View {
     @ViewBuilder
     private func userBubbleFallback<Content: View>(_ content: Content) -> some View {
         content
-            .background(enableBackground ? Color.blue.opacity(0.7) : Color.blue)
+            .background(userFallbackBackground)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var userFallbackBackground: Color {
+        if let resolvedUserBubbleColorOverride {
+            return enableBackground ? resolvedUserBubbleColorOverride.opacity(0.7) : resolvedUserBubbleColorOverride
+        }
+        return enableBackground ? Color.blue.opacity(0.7) : Color.blue
     }
     
     @ViewBuilder
@@ -1099,8 +1171,19 @@ struct ChatBubble: View {
         shape: BubbleCornerShape
     ) -> some View {
         content
-            .background(isError ? Color.red.opacity(0.7) : (enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)))
+            .background(
+                isError
+                    ? Color.red.opacity(0.7)
+                    : assistantFallbackBackground
+            )
             .clipShape(shape)
+    }
+
+    private var assistantFallbackBackground: Color {
+        if let resolvedAssistantBubbleColorOverride {
+            return enableBackground ? resolvedAssistantBubbleColorOverride.opacity(0.7) : resolvedAssistantBubbleColorOverride
+        }
+        return enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
     }
 
     private var standaloneAssistantBubbleShape: BubbleCornerShape {
@@ -1148,7 +1231,13 @@ struct ChatBubble: View {
                     if #available(watchOS 26.0, *) {
                         sizedContent
                             .glassEffect(.clear, in: shape)
-                            .background(isError ? Color.red.opacity(0.5) : nil)
+                            .background(
+                                isError
+                                    ? Color.red.opacity(0.5)
+                                    : resolvedAssistantBubbleColorOverride.map {
+                                        enableBackground ? $0.opacity(0.5) : $0
+                                    }
+                            )
                     } else {
                         assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
                     }

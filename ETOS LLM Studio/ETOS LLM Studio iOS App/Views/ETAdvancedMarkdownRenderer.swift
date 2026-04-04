@@ -19,6 +19,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
+    let customTextColor: Color?
     @Environment(\.colorScheme) private var colorScheme
 
     private var shouldUseWebRenderer: Bool {
@@ -39,7 +40,8 @@ struct ETAdvancedMarkdownRenderer: View {
             ETMathWebMarkdownView(
                 content: normalizedContent,
                 enableMarkdown: enableMarkdown,
-                isOutgoing: isOutgoing
+                isOutgoing: isOutgoing,
+                customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) }
             )
         } else {
             baseTextView(normalizedContent)
@@ -109,8 +111,8 @@ struct ETAdvancedMarkdownRenderer: View {
 
     @ViewBuilder
     private func baseTextView(_ text: String) -> some View {
+        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         if enableMarkdown {
-            let textColor: Color = isOutgoing ? .white : .primary
             Markdown(text)
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
@@ -120,7 +122,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 )
         } else {
             Text(text)
-                .foregroundStyle(isOutgoing ? Color.white : Color.primary)
+                .foregroundStyle(textColor)
         }
     }
 }
@@ -129,6 +131,7 @@ private struct ETMathWebMarkdownView: View {
     let content: String
     let enableMarkdown: Bool
     let isOutgoing: Bool
+    let customTextHex: String?
 
     @State private var renderedHeight: CGFloat = 28
 
@@ -138,6 +141,7 @@ private struct ETMathWebMarkdownView: View {
                 content: content,
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing,
+                customTextHex: customTextHex,
                 availableWidth: max(1, geometry.size.width),
                 renderedHeight: $renderedHeight
             )
@@ -150,6 +154,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let content: String
     let enableMarkdown: Bool
     let isOutgoing: Bool
+    let customTextHex: String?
     let availableWidth: CGFloat
     @Binding var renderedHeight: CGFloat
 
@@ -180,7 +185,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         let payload = Payload(content: content, availableWidth: stableWidth)
         let shellConfiguration = ShellConfiguration(
             enableMarkdown: enableMarkdown,
-            isOutgoing: isOutgoing
+            isOutgoing: isOutgoing,
+            customTextHex: customTextHex
         )
         context.coordinator.render(
             payload,
@@ -291,10 +297,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     struct ShellConfiguration: Equatable {
         let enableMarkdown: Bool
         let isOutgoing: Bool
+        let customTextHex: String?
 
         var htmlDocument: String {
-            let textColor = isOutgoing ? "#FFFFFF" : "#1C1C1E"
-            let secondaryTextColor = isOutgoing ? "rgba(255,255,255,0.85)" : "#3C3C43"
+            let defaultTextColor = isOutgoing ? "#FFFFFF" : "#1C1C1E"
+            let textColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 1) ?? defaultTextColor
+            let defaultSecondaryTextColor = isOutgoing ? "rgba(255,255,255,0.85)" : "#3C3C43"
+            let secondaryTextColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 0.85) ?? defaultSecondaryTextColor
             let linkColor = isOutgoing ? "rgba(255,255,255,0.95)" : "#0A84FF"
             let codeKeywordColor = isOutgoing ? "rgba(255,255,255,0.96)" : "#8E44AD"
             let codeStringColor = isOutgoing ? "#D4F5FF" : "#1A9445"
@@ -1029,6 +1038,17 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "'", with: "\\'")
             return "'\(escaped)'"
+        }
+
+        nonisolated private static func cssRGBA(from hexRGBA: String?, alphaMultiplier: Double) -> String? {
+            guard let hexRGBA else { return nil }
+            let parsedColor = ChatAppearanceColorCodec.color(from: hexRGBA, fallback: .clear)
+            guard let components = ChatAppearanceColorCodec.rgbaComponents(from: parsedColor) else { return nil }
+            let alpha = min(max(components.alpha * alphaMultiplier, 0), 1)
+            let red = Int((components.red * 255).rounded())
+            let green = Int((components.green * 255).rounded())
+            let blue = Int((components.blue * 255).rounded())
+            return "rgba(\(red),\(green),\(blue),\(String(format: "%.3f", alpha)))"
         }
     }
 
