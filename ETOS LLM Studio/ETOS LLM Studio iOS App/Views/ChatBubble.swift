@@ -16,6 +16,7 @@ import Shared
 import UIKit
 import AVFoundation
 import Combine
+import WebKit
 
 // MARK: - Telegram 风格气泡形状
 
@@ -298,14 +299,17 @@ struct ChatBubble: View {
     }
     
     private var hasToolResults: Bool {
+        let hasWidgetPayload = message.toolCalls?.contains { call in
+            ToolWidgetPayloadParser.parse(from: call.arguments) != nil
+        } ?? false
         let hasCallResults = message.toolCalls?.contains { call in
             !(call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         } ?? false
         if message.role == .tool {
             let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            return hasCallResults || hasContent
+            return hasCallResults || hasContent || hasWidgetPayload
         }
-        return hasCallResults
+        return hasCallResults || hasWidgetPayload
     }
 
     private var hasPendingToolResults: Bool {
@@ -824,11 +828,17 @@ struct ChatBubble: View {
     }
 
     private func isPendingToolResult(for call: InternalToolCall) -> Bool {
+        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+            return false
+        }
         hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
     }
 
     private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
-        !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
+        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+            return true
+        }
+        return !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
     }
 
     private func activeToolPermissionRequest(for call: InternalToolCall) -> ToolPermissionRequest? {
@@ -1615,8 +1625,16 @@ struct ToolResultsDisclosureView: View, Equatable {
     private var disclosureSummaryText: String? {
         guard enableExperimentalToolResultDisplay else { return nil }
         let summaries = toolCalls
-            .map { displayModel(for: $0) }
-            .map(\.summaryText)
+            .map { call -> String in
+                if let payload = widgetPayload(for: call) {
+                    if let title = payload.title,
+                       !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        return "可视化 Widget · \(title)"
+                    }
+                    return "可视化 Widget"
+                }
+                return displayModel(for: call).summaryText
+            }
             .filter { !$0.isEmpty }
 
         guard !summaries.isEmpty else { return nil }
@@ -1689,11 +1707,56 @@ struct ToolResultsDisclosureView: View, Equatable {
 
     @ViewBuilder
     private func toolResultContent(for call: InternalToolCall) -> some View {
-        if enableExperimentalToolResultDisplay {
+        if let payload = widgetPayload(for: call) {
+            widgetToolResultContent(for: call, payload: payload)
+        } else if enableExperimentalToolResultDisplay {
             experimentalToolResultContent(for: call)
         } else {
             legacyToolResultContent(for: call)
         }
+    }
+
+    private func widgetPayload(for call: InternalToolCall) -> ToolWidgetPayload? {
+        if let payload = ToolWidgetPayloadParser.parse(from: call.arguments) {
+            return payload
+        }
+
+        let resolved = resolvedResult(for: call)
+        if let payload = ToolWidgetPayloadParser.parse(from: resolved) {
+            return payload
+        }
+
+        if let payload = ToolWidgetPayloadParser.parse(from: resultText) {
+            return payload
+        }
+
+        return nil
+    }
+
+    private func widgetToolResultContent(for call: InternalToolCall, payload: ToolWidgetPayload) -> some View {
+        let display = displayModel(for: call)
+        let label = displayName(for: call.toolName)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .etFont(.caption.weight(.semibold))
+            ToolWidgetRendererCard(payload: payload)
+            if display.shouldShowRawSection {
+                Divider()
+                    .background(sectionBackgroundColor.opacity(0.7))
+                toolResultSection(
+                    title: "原始返回",
+                    text: display.rawDisplayText,
+                    font: .system(.caption, design: .monospaced),
+                    enableSelection: true
+                )
+            }
+        }
+        .foregroundStyle(sectionForegroundColor)
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(sectionBackgroundColor)
+        )
     }
 
     private func experimentalToolResultContent(for call: InternalToolCall) -> some View {
@@ -1779,6 +1842,262 @@ struct ToolResultsDisclosureView: View, Equatable {
     private static func colorSignature(_ color: Color?) -> String? {
         guard let color else { return nil }
         return ChatAppearanceColorCodec.hexRGBA(from: color)
+    }
+}
+
+private struct ToolWidgetRendererCard: View {
+    let payload: ToolWidgetPayload
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var renderedHeight: CGFloat = 180
+    @State private var hasRendered = false
+
+    private var loadingText: String {
+        payload.loadingMessages.first?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? (payload.loadingMessages.first ?? "正在渲染 Widget…")
+            : "正在渲染 Widget…"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title = payload.title,
+               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(title)
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            GeometryReader { proxy in
+                ToolWidgetWebView(
+                    widgetCode: payload.widgetCode,
+                    colorScheme: colorScheme,
+                    availableWidth: max(1, floor(proxy.size.width)),
+                    renderedHeight: $renderedHeight,
+                    hasRendered: $hasRendered
+                )
+            }
+            .frame(height: max(120, renderedHeight))
+            .overlay {
+                if !hasRendered {
+                    ProgressView(loadingText)
+                        .progressViewStyle(.circular)
+                        .tint(.secondary)
+                        .etFont(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(.ultraThinMaterial)
+                        )
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
+            )
+        }
+    }
+}
+
+private struct ToolWidgetWebView: UIViewRepresentable {
+    let widgetCode: String
+    let colorScheme: ColorScheme
+    let availableWidth: CGFloat
+    @Binding var renderedHeight: CGFloat
+    @Binding var hasRendered: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(renderedHeight: $renderedHeight, hasRendered: $hasRendered)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let controller = WKUserContentController()
+        controller.add(context.coordinator, name: Coordinator.heightMessageName)
+        configuration.userContentController = controller
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.scrollView.showsVerticalScrollIndicator = false
+        webView.scrollView.showsHorizontalScrollIndicator = false
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        let stableWidth = max(1, floor(availableWidth))
+        let html = wrappedHTML(widgetCode: widgetCode, stableWidth: stableWidth)
+        let renderKey = "\(colorScheme == .dark ? "dark" : "light")|\(html)"
+        guard context.coordinator.lastRenderKey != renderKey else { return }
+        context.coordinator.lastRenderKey = renderKey
+
+        DispatchQueue.main.async {
+            hasRendered = false
+        }
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.navigationDelegate = nil
+        webView.stopLoading()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
+    }
+
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+        static let heightMessageName = "etWidgetHeight"
+
+        @Binding var renderedHeight: CGFloat
+        @Binding var hasRendered: Bool
+        var lastRenderKey: String?
+
+        init(renderedHeight: Binding<CGFloat>, hasRendered: Binding<Bool>) {
+            self._renderedHeight = renderedHeight
+            self._hasRendered = hasRendered
+        }
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard message.name == Self.heightMessageName else { return }
+            guard let value = message.body as? Double else { return }
+            let nextHeight = max(120, ceil(value))
+            if abs(renderedHeight - nextHeight) > 0.5 {
+                DispatchQueue.main.async {
+                    self.renderedHeight = nextHeight
+                    self.hasRendered = true
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.hasRendered = true
+                }
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            webView.evaluateJavaScript("window.__etReportSize && window.__etReportSize();", completionHandler: nil)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFail navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            DispatchQueue.main.async {
+                self.hasRendered = true
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            DispatchQueue.main.async {
+                self.hasRendered = true
+            }
+        }
+    }
+
+    private func wrappedHTML(widgetCode: String, stableWidth: CGFloat) -> String {
+        """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style id="et-widget-host-style">
+    :root {
+      color-scheme: light dark;
+      --color-background-primary: #FFFFFF;
+      --color-background-secondary: #F2F2F7;
+      --color-background-tertiary: #FFFFFF;
+      --color-text-primary: #1C1C1E;
+      --color-text-secondary: #3C3C43;
+      --color-text-tertiary: #8E8E93;
+      --color-text-info: #0A84FF;
+      --color-border-tertiary: rgba(60, 60, 67, 0.16);
+      --color-border-secondary: rgba(60, 60, 67, 0.3);
+      --border-radius-md: 8px;
+      --border-radius-lg: 12px;
+      --border-radius-xl: 16px;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      --font-serif: Georgia, 'Times New Roman', serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-background-primary: #1C1C1E;
+        --color-background-secondary: #2C2C2E;
+        --color-background-tertiary: #1C1C1E;
+        --color-text-primary: #FFFFFF;
+        --color-text-secondary: #EBEBF5;
+        --color-text-tertiary: #8E8E93;
+        --color-text-info: #5AC8FA;
+        --color-border-tertiary: rgba(235, 235, 245, 0.16);
+        --color-border-secondary: rgba(235, 235, 245, 0.3);
+      }
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100%;
+      background: transparent;
+      overflow-x: hidden;
+    }
+    #et-widget-root {
+      width: min(100%, \(Int(stableWidth))px);
+      max-width: 100%;
+      margin: 0;
+      box-sizing: border-box;
+      overflow: visible;
+    }
+  </style>
+</head>
+<body>
+  <div id="et-widget-root">
+\(widgetCode)
+  </div>
+  <script>
+    (function () {
+      function reportHeight() {
+        var body = document.body;
+        var root = document.documentElement;
+        var height = Math.max(
+          body ? body.scrollHeight : 0,
+          body ? body.offsetHeight : 0,
+          root ? root.scrollHeight : 0,
+          root ? root.offsetHeight : 0
+        );
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etWidgetHeight) {
+          window.webkit.messageHandlers.etWidgetHeight.postMessage(height);
+        }
+      }
+      window.__etReportSize = reportHeight;
+      if (window.ResizeObserver) {
+        var observer = new ResizeObserver(reportHeight);
+        if (document.documentElement) observer.observe(document.documentElement);
+        if (document.body) observer.observe(document.body);
+      }
+      window.addEventListener('load', reportHeight);
+      window.addEventListener('resize', reportHeight);
+      setTimeout(reportHeight, 0);
+      setTimeout(reportHeight, 120);
+      setTimeout(reportHeight, 360);
+    })();
+  </script>
+</body>
+</html>
+"""
     }
 }
 

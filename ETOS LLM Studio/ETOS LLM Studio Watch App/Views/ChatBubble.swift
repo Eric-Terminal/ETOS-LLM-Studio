@@ -187,14 +187,17 @@ struct ChatBubble: View {
     }
     
     private var hasToolResults: Bool {
+        let hasWidgetPayload = message.toolCalls?.contains { call in
+            ToolWidgetPayloadParser.parse(from: call.arguments) != nil
+        } ?? false
         let hasCallResults = message.toolCalls?.contains { call in
             !(call.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         } ?? false
         if message.role == .tool {
             let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            return hasCallResults || hasContent
+            return hasCallResults || hasContent || hasWidgetPayload
         }
-        return hasCallResults
+        return hasCallResults || hasWidgetPayload
     }
 
     private var hasPendingToolResults: Bool {
@@ -636,11 +639,17 @@ struct ChatBubble: View {
     }
 
     private func isPendingToolResult(for call: InternalToolCall) -> Bool {
+        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+            return false
+        }
         hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
     }
 
     private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
-        !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
+        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+            return true
+        }
+        return !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
     }
 
     private func activeToolPermissionRequest(for call: InternalToolCall) -> ToolPermissionRequest? {
@@ -914,8 +923,16 @@ struct ChatBubble: View {
         let expansion = expanded ?? $isToolCallsExpanded
         let summaries: [String] = enableExperimentalToolResultDisplay
             ? toolCalls
-                .map { toolResultDisplayModel(for: ($0.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)) }
-                .map(\.summaryText)
+                .map { call -> String in
+                    if let payload = toolWidgetPayload(for: call, resultText: resultText) {
+                        if let title = payload.title,
+                           !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            return "可视化 Widget · \(title)"
+                        }
+                        return "可视化 Widget"
+                    }
+                    return toolResultDisplayModel(for: (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)).summaryText
+                }
                 .filter { !$0.isEmpty }
             : []
         VStack(alignment: .leading, spacing: 5) {
@@ -974,11 +991,63 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func toolResultContent(for toolCall: InternalToolCall, resultText: String) -> some View {
-        if enableExperimentalToolResultDisplay {
+        if let payload = toolWidgetPayload(for: toolCall, resultText: resultText) {
+            widgetToolResultContent(for: toolCall, payload: payload, resultText: resultText)
+        } else if enableExperimentalToolResultDisplay {
             experimentalToolResultContent(for: toolCall, resultText: resultText)
         } else {
             legacyToolResultContent(for: toolCall, resultText: resultText)
         }
+    }
+
+    private func toolWidgetPayload(for toolCall: InternalToolCall, resultText: String) -> ToolWidgetPayload? {
+        if let payload = ToolWidgetPayloadParser.parse(from: toolCall.arguments) {
+            return payload
+        }
+
+        let rawResult = (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)
+        if let payload = ToolWidgetPayloadParser.parse(from: rawResult) {
+            return payload
+        }
+
+        return ToolWidgetPayloadParser.parse(from: resultText)
+    }
+
+    private func widgetToolResultContent(
+        for toolCall: InternalToolCall,
+        payload: ToolWidgetPayload,
+        resultText: String
+    ) -> some View {
+        let display = toolResultDisplayModel(for: (toolCall.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines))
+        let label = toolDisplayLabel(for: toolCall.toolName)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .etFont(.caption2.weight(.semibold))
+                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("检测到可视化 Widget")
+                    .etFont(.caption2.weight(.medium))
+                if let title = payload.title,
+                   !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("标题：\(title)")
+                        .etFont(.caption2)
+                }
+                Text("请在 iPhone 端查看完整渲染效果。")
+                    .etFont(.caption2)
+            }
+            .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82))
+            .padding(.vertical, 2)
+
+            if display.shouldShowRawSection {
+                toolResultSection(
+                    title: "原始返回",
+                    text: display.rawDisplayText,
+                    font: .system(.caption2, design: .monospaced),
+                    maxHeight: 90
+                )
+            }
+        }
+        .padding(.leading, 4)
     }
 
     private func experimentalToolResultContent(for toolCall: InternalToolCall, resultText: String) -> some View {
