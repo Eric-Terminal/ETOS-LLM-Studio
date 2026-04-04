@@ -160,6 +160,10 @@ struct ChatBubble: View {
         message.role == .error || (message.role == .assistant && message.content.hasPrefix("重试失败"))
     }
 
+    private var usesNoBubbleStyle: Bool {
+        enableNoBubbleUI && !isOutgoing && !isError
+    }
+
     private var bubbleShape: BubbleCornerShape {
         let baseRadius: CGFloat = 18
         let mergedRadius: CGFloat = 0
@@ -174,7 +178,7 @@ struct ChatBubble: View {
     }
 
     private var shouldShowMergedSeparator: Bool {
-        !enableNoBubbleUI && mergeWithPrevious && !isOutgoing
+        !usesNoBubbleStyle && mergeWithPrevious && !isOutgoing
     }
 
     private var separatorThickness: CGFloat {
@@ -189,7 +193,7 @@ struct ChatBubble: View {
     }
 
     private var bubbleShadow: (color: Color, radius: CGFloat, y: CGFloat) {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return (Color.clear, 0, 0)
         }
         if mergeWithPrevious && mergeWithNext {
@@ -200,26 +204,26 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
-        let widthRatio = enableNoBubbleUI ? 0.96 : 0.88
+        let widthRatio = usesNoBubbleStyle ? 0.96 : 0.88
         return baseWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return true
         }
         return !isOutgoing && (mergeWithPrevious || mergeWithNext)
     }
 
     private var rowSideSpacerMinLength: CGFloat {
-        enableNoBubbleUI ? 0 : 20
+        usesNoBubbleStyle ? 0 : 20
     }
 
     private var textForegroundColor: Color {
-        if isError && enableNoBubbleUI {
+        if isError && usesNoBubbleStyle {
             return .red
         }
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return .primary
         }
         return isOutgoing ? .white : .primary
@@ -439,19 +443,19 @@ struct ChatBubble: View {
             .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
             .opacity(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? 1 : 0.4)
         }
-        .foregroundStyle(enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.8) : Color.secondary))
+        .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.8) : Color.secondary))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(enableNoBubbleUI ? Color.clear : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
+                .fill(usesNoBubbleStyle ? Color.clear : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
         )
     }
     
     // MARK: - 气泡渐变背景
     
     private var bubbleGradient: some ShapeStyle {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return AnyShapeStyle(Color.clear)
         }
         let userOpacity = enableBackground ? 0.85 : 1.0
@@ -515,7 +519,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func bubbleBackground(for shape: BubbleCornerShape) -> some View {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             shape
                 .fill(Color.clear)
         } else if enableLiquidGlass {
@@ -555,8 +559,8 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 6) {
             content()
         }
-        .padding(.horizontal, enableNoBubbleUI ? 2 : 12)
-        .padding(.vertical, enableNoBubbleUI ? 4 : 8)
+        .padding(.horizontal, usesNoBubbleStyle ? 2 : 12)
+        .padding(.vertical, usesNoBubbleStyle ? 4 : 8)
         .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
         .background(
             bubbleDecoratedBackground(
@@ -659,7 +663,7 @@ struct ChatBubble: View {
                 reasoning: reasoning,
                 isExpanded: $isReasoningExpanded,
                 isOutgoing: isOutgoing,
-                usesNoBubbleStyle: enableNoBubbleUI,
+                usesNoBubbleStyle: usesNoBubbleStyle,
                 isShimmering: shouldShimmerReasoningHeader
             )
         }
@@ -806,17 +810,17 @@ struct ChatBubble: View {
                 HStack(spacing: 8) {
                     Image(systemName: "doc")
                         .etFont(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
+                        .foregroundStyle(usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary))
                     Text(fileName)
                         .etFont(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                        .foregroundStyle(enableNoBubbleUI ? Color.primary : (isOutgoing ? Color.white : Color.primary))
+                        .foregroundStyle(usesNoBubbleStyle ? Color.primary : (isOutgoing ? Color.white : Color.primary))
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(enableNoBubbleUI ? Color.clear : (isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground)))
+                        .fill(usesNoBubbleStyle ? Color.clear : (isOutgoing ? telegramBlueDark : Color(uiColor: .secondarySystemBackground)))
                 )
             }
         }
@@ -825,7 +829,7 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
-        let shouldRenderAsOutgoing = (isOutgoing && !enableNoBubbleUI) || isError
+        let shouldRenderAsOutgoing = isOutgoing || isError
         ETAdvancedMarkdownRenderer(
             content: content,
             enableMarkdown: enableMarkdown,
@@ -837,8 +841,8 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func audioPlayerView(fileName: String) -> some View {
-        let foregroundColor = enableNoBubbleUI ? Color.primary : (isOutgoing ? Color.white : Color.primary)
-        let secondaryColor = enableNoBubbleUI ? Color.secondary : (isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
+        let foregroundColor = usesNoBubbleStyle ? Color.primary : (isOutgoing ? Color.white : Color.primary)
+        let secondaryColor = usesNoBubbleStyle ? Color.secondary : (isOutgoing ? Color.white.opacity(0.7) : Color.secondary)
         
         HStack(spacing: 12) {
             // 播放按钮
@@ -847,7 +851,7 @@ struct ChatBubble: View {
             } label: {
                 ZStack {
                     Circle()
-                        .fill(enableNoBubbleUI ? Color.secondary.opacity(0.15) : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
+                        .fill(usesNoBubbleStyle ? Color.secondary.opacity(0.15) : (isOutgoing ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15)))
                         .frame(width: 44, height: 44)
                     Image(systemName: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName ? "stop.fill" : "play.fill")
                         .etFont(.system(size: 16, weight: .semibold))

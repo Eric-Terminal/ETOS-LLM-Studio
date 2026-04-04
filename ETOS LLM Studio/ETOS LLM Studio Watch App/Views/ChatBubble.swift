@@ -190,6 +190,10 @@ struct ChatBubble: View {
         hasToolCalls && message.role != .user && message.role != .error
     }
 
+    private var usesNoBubbleStyle: Bool {
+        enableNoBubbleUI && message.role != .user && message.role != .error
+    }
+
     private var hasMainContentWhenToolCallsSeparated: Bool {
         let hasReasoning = message.reasoningContent != nil && !(message.reasoningContent ?? "").isEmpty
         let hasVisibleContent = hasNonPlaceholderText && message.role != .tool
@@ -223,7 +227,7 @@ struct ChatBubble: View {
     }
 
     private var shouldShowMergedSeparator: Bool {
-        !enableNoBubbleUI && mergeWithPrevious && message.role != .user && message.role != .error
+        !usesNoBubbleStyle && mergeWithPrevious && message.role != .user && message.role != .error
     }
 
     private var separatorThickness: CGFloat {
@@ -242,12 +246,12 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
-        let widthRatio = enableNoBubbleUI ? 0.96 : 0.86
+        let widthRatio = usesNoBubbleStyle ? 0.96 : 0.86
         return baseWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             return true
         }
         return message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
@@ -330,9 +334,9 @@ struct ChatBubble: View {
     private var errorBubble: some View {
         let content = Text(message.content)
             .padding(10)
-            .foregroundColor(enableNoBubbleUI ? .red : .white)
+            .foregroundColor(usesNoBubbleStyle ? .red : .white)
 
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             content
         } else if enableLiquidGlass {
             if #available(watchOS 26.0, *) {
@@ -375,7 +379,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private var userTextBubble: some View {
-        let userTextColor: Color = enableNoBubbleUI ? .primary : .white
+        let userTextColor: Color = usesNoBubbleStyle ? .primary : .white
         let content = Group {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName, isUser: true)
@@ -386,7 +390,7 @@ struct ChatBubble: View {
         .padding(10)
         .foregroundColor(userTextColor)
 
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             content
         } else if enableLiquidGlass {
             if #available(watchOS 26.0, *) {
@@ -423,7 +427,7 @@ struct ChatBubble: View {
 
                     if message.role != .tool && hasNonPlaceholderText {
                         renderContent(message.content)
-                            .foregroundColor(isErrorVersion ? (enableNoBubbleUI ? .red : .white) : nil)
+                            .foregroundColor(isErrorVersion ? (usesNoBubbleStyle ? .red : .white) : nil)
                     }
                 }
                 .padding(10)
@@ -517,7 +521,7 @@ struct ChatBubble: View {
 
                 if hasNonPlaceholderText {
                     renderContent(message.content)
-                        .foregroundColor(isErrorVersion ? (enableNoBubbleUI ? .red : .white) : nil)
+                        .foregroundColor(isErrorVersion ? (usesNoBubbleStyle ? .red : .white) : nil)
                 }
 
                 if shouldShowToolCallsAfterContent {
@@ -617,7 +621,7 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func renderContent(_ content: String) -> some View {
-        let shouldRenderAsOutgoing = (message.role == .user && !enableNoBubbleUI)
+        let shouldRenderAsOutgoing = message.role == .user
             || message.role == .error
             || (message.role == .assistant && message.content.hasPrefix("重试失败"))
         ETAdvancedMarkdownRenderer(
@@ -632,8 +636,8 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private func audioPlayerView(fileName: String, isUser: Bool) -> some View {
-        let foregroundColor = (isUser && !enableNoBubbleUI) ? Color.white : Color.primary
-        let secondaryColor = (isUser && !enableNoBubbleUI) ? Color.white.opacity(0.7) : Color.secondary
+        let foregroundColor = (isUser && !usesNoBubbleStyle) ? Color.white : Color.primary
+        let secondaryColor = (isUser && !usesNoBubbleStyle) ? Color.white.opacity(0.7) : Color.secondary
         let isCurrentFile = audioPlayer.currentFileName == fileName
         
         VStack(alignment: .leading, spacing: 4) {
@@ -1132,7 +1136,7 @@ struct ChatBubble: View {
         let sizedContent = content
             .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
 
-        if enableNoBubbleUI {
+        if usesNoBubbleStyle {
             sizedContent
         } else {
             Group {
