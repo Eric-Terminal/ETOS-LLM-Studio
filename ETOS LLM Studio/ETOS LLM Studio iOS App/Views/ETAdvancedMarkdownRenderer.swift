@@ -1729,8 +1729,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
     func highlightCode(_ code: String, language: String?) -> Text {
         guard !code.isEmpty else { return Text("") }
 
-        let nsCode = code as NSString
-        let length = nsCode.length
+        let length = code.utf16.count
         guard length > 0, length <= 12_000 else {
             return Text(code).foregroundColor(baseColor)
         }
@@ -1814,7 +1813,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
         )
         apply(pattern: #"[{}\[\]();,.:]"#, kind: .punctuation, priority: 56)
 
-        var result = Text("")
+        var attributed = AttributedString(code)
         var segmentStart = 0
         var currentKind = kinds[0]
 
@@ -1822,9 +1821,13 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
             let reachedEnd = index == length
             let kindChanged = !reachedEnd && kinds[index] != currentKind
             if reachedEnd || kindChanged {
-                let range = NSRange(location: segmentStart, length: index - segmentStart)
-                let segment = nsCode.substring(with: range)
-                result = result + Text(segment).foregroundColor(color(for: currentKind, palette: palette))
+                let start = String.Index(utf16Offset: segmentStart, in: code)
+                let end = String.Index(utf16Offset: index, in: code)
+                if let attributedStart = AttributedString.Index(start, within: attributed),
+                   let attributedEnd = AttributedString.Index(end, within: attributed),
+                   attributedStart < attributedEnd {
+                    attributed[attributedStart..<attributedEnd].foregroundColor = color(for: currentKind, palette: palette)
+                }
                 if !reachedEnd {
                     segmentStart = index
                     currentKind = kinds[index]
@@ -1832,7 +1835,7 @@ private struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
             }
         }
 
-        return result
+        return Text(attributed)
     }
 
     private func color(for token: TokenKind, palette: ETCodeHighlightPalette) -> Color {
