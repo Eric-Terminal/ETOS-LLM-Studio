@@ -1167,6 +1167,9 @@ private struct AppToolCategoryDetailView: View {
         if !item.isEnabled {
             return NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
         }
+        if !item.kind.requiresApproval {
+            return NSLocalizedString("内置免审批，启用后可直接调用。", comment: "No approval required status for built-in-like app tool")
+        }
         if policy == .alwaysDeny {
             return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
         }
@@ -1175,7 +1178,8 @@ private struct AppToolCategoryDetailView: View {
 
     private func appToolStatusColor(for item: AppToolCatalogItem) -> Color {
         let policy = manager.approvalPolicy(for: item.kind)
-        if currentSessionIsolationActive || !manager.chatToolsEnabled || !item.isEnabled || policy == .alwaysDeny {
+        let isUnavailableByApproval = item.kind.requiresApproval && policy == .alwaysDeny
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !item.isEnabled || isUnavailableByApproval {
             return .secondary
         }
         return .green
@@ -1219,55 +1223,57 @@ private struct AppToolCenterDetailView: View {
                 )
             }
 
-            Section(
-                header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
-                footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            ) {
-                Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
-                    ForEach(AppToolApprovalPolicy.allCases, id: \.self) { policy in
-                        Text(policy.displayName).tag(policy)
-                    }
-                }
-                .pickerStyle(.menu)
-            }
-
-            Section(
-                header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
-                footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            ) {
-                Toggle(
-                    NSLocalizedString("全局启用倒计时自动同意", comment: "Enable global auto approve"),
-                    isOn: Binding(
-                        get: { permissionCenter.autoApproveEnabled },
-                        set: { permissionCenter.setAutoApproveEnabled($0) }
-                    )
-                )
-
-                Stepper(
-                    value: Binding(
-                        get: { permissionCenter.autoApproveCountdownSeconds },
-                        set: { permissionCenter.setAutoApproveCountdownSeconds($0) }
-                    ),
-                    in: 1...30
+            if kind.requiresApproval {
+                Section(
+                    header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
+                    footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
                 ) {
-                    Text(
-                        String(
-                            format: NSLocalizedString("倒计时：%ds", comment: "Auto approve countdown value"),
-                            permissionCenter.autoApproveCountdownSeconds
+                    Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
+                        ForEach(AppToolApprovalPolicy.allCases, id: \.self) { policy in
+                            Text(policy.displayName).tag(policy)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                Section(
+                    header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
+                    footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                ) {
+                    Toggle(
+                        NSLocalizedString("全局启用倒计时自动同意", comment: "Enable global auto approve"),
+                        isOn: Binding(
+                            get: { permissionCenter.autoApproveEnabled },
+                            set: { permissionCenter.setAutoApproveEnabled($0) }
                         )
                     )
-                }
-                .disabled(!permissionCenter.autoApproveEnabled)
 
-                Toggle(
-                    NSLocalizedString("允许该工具自动同意", comment: "Allow auto approve for this tool"),
-                    isOn: autoApproveToolBinding
-                )
-                .disabled(!permissionCenter.autoApproveEnabled)
+                    Stepper(
+                        value: Binding(
+                            get: { permissionCenter.autoApproveCountdownSeconds },
+                            set: { permissionCenter.setAutoApproveCountdownSeconds($0) }
+                        ),
+                        in: 1...30
+                    ) {
+                        Text(
+                            String(
+                                format: NSLocalizedString("倒计时：%ds", comment: "Auto approve countdown value"),
+                                permissionCenter.autoApproveCountdownSeconds
+                            )
+                        )
+                    }
+                    .disabled(!permissionCenter.autoApproveEnabled)
+
+                    Toggle(
+                        NSLocalizedString("允许该工具自动同意", comment: "Allow auto approve for this tool"),
+                        isOn: autoApproveToolBinding
+                    )
+                    .disabled(!permissionCenter.autoApproveEnabled)
+                }
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
@@ -1283,17 +1289,21 @@ private struct AppToolCenterDetailView: View {
         if !manager.isToolEnabled(kind) {
             return NSLocalizedString("已停用。", comment: "Tool disabled status")
         }
-        if manager.approvalPolicy(for: kind) == .alwaysDeny {
+        if kind.requiresApproval && manager.approvalPolicy(for: kind) == .alwaysDeny {
             return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        if !kind.requiresApproval {
+            return NSLocalizedString("该工具为内置免审批工具，启用后可直接参与聊天。", comment: "No approval tool available status")
         }
         return NSLocalizedString("该工具当前可参与聊天。", comment: "Tool available in chat")
     }
 
     private var currentStatusColor: Color {
+        let isUnavailableByApproval = kind.requiresApproval && manager.approvalPolicy(for: kind) == .alwaysDeny
         if currentSessionIsolationActive
             || !manager.chatToolsEnabled
             || !manager.isToolEnabled(kind)
-            || manager.approvalPolicy(for: kind) == .alwaysDeny {
+            || isUnavailableByApproval {
             return .secondary
         }
         return .green

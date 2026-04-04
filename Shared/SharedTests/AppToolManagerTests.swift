@@ -231,6 +231,35 @@ struct AppToolManagerTests {
     }
 
     @MainActor
+    @Test("显示网页卡片工具默认免审批且不可被审批策略阻断")
+    func testShowWidgetToolAlwaysAllowWithoutApproval() {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.showWidget],
+            approvalPolicies: [.showWidget: .alwaysDeny]
+        )
+
+        #expect(manager.approvalPolicy(for: .showWidget) == .alwaysAllow)
+        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }))
+
+        manager.setToolApprovalPolicy(kind: .showWidget, policy: .alwaysDeny)
+        #expect(manager.approvalPolicy(for: .showWidget) == .alwaysAllow)
+        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }))
+    }
+
+    @MainActor
     @Test("填充输入框工具会广播输入框填充请求")
     func testExecuteFillUserInputToolPostsNotification() async throws {
         let manager = AppToolManager.shared

@@ -72,6 +72,15 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var id: String { rawValue }
 
+    public var requiresApproval: Bool {
+        switch self {
+        case .showWidget:
+            return false
+        default:
+            return true
+        }
+    }
+
     public var toolName: String {
         switch self {
         case .showWidget:
@@ -810,7 +819,8 @@ public final class AppToolManager: ObservableObject {
         }
         let storedPolicyRawValues = defaults.dictionary(forKey: Self.toolApprovalPoliciesUserDefaultsKey) as? [String: String] ?? [:]
         toolApprovalPolicies = storedPolicyRawValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
-            guard AppToolKind(rawValue: pair.key) != nil else { return }
+            guard let kind = AppToolKind(rawValue: pair.key) else { return }
+            guard kind.requiresApproval else { return }
             guard let policy = AppToolApprovalPolicy(rawValue: pair.value), policy != .askEveryTime else { return }
             result[pair.key] = policy
         }
@@ -859,6 +869,7 @@ public final class AppToolManager: ObservableObject {
     }
 
     public func approvalPolicy(for kind: AppToolKind) -> AppToolApprovalPolicy {
+        guard kind.requiresApproval else { return .alwaysAllow }
         toolApprovalPolicies[kind.rawValue] ?? .askEveryTime
     }
 
@@ -868,6 +879,13 @@ public final class AppToolManager: ObservableObject {
     }
 
     public func setToolApprovalPolicy(kind: AppToolKind, policy: AppToolApprovalPolicy) {
+        guard kind.requiresApproval else {
+            if toolApprovalPolicies[kind.rawValue] != nil {
+                toolApprovalPolicies.removeValue(forKey: kind.rawValue)
+                persistToolApprovalPolicies()
+            }
+            return
+        }
         if policy == .askEveryTime {
             toolApprovalPolicies.removeValue(forKey: kind.rawValue)
         } else {
@@ -1555,6 +1573,7 @@ public final class AppToolManager: ObservableObject {
         self.chatToolsEnabled = chatToolsEnabled
         enabledToolIDs = Set(enabledKinds.map(\.rawValue))
         toolApprovalPolicies = approvalPolicies.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
+            guard pair.key.requiresApproval else { return }
             guard pair.value != .askEveryTime else { return }
             result[pair.key.rawValue] = pair.value
         }
