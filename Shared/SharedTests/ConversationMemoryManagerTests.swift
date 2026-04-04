@@ -52,6 +52,38 @@ struct ConversationMemoryManagerTests {
         )
     }
 
+    @Test("persist user profile in memory json")
+    func persistUserProfileInMemoryJSON() throws {
+        let previousProfile = ConversationMemoryManager.loadUserProfile()
+        defer {
+            if let previousProfile {
+                try? ConversationMemoryManager.saveUserProfile(
+                    content: previousProfile.content,
+                    updatedAt: previousProfile.updatedAt,
+                    sourceSessionID: previousProfile.sourceSessionID
+                )
+            } else {
+                try? ConversationMemoryManager.clearUserProfile()
+            }
+        }
+
+        let sourceSessionID = UUID()
+        let updatedAt = Date(timeIntervalSince1970: 1_736_121_600)
+        try ConversationMemoryManager.saveUserProfile(
+            content: "用户长期偏好：偏好技术实现细节，关注跨平台客户端体验。",
+            updatedAt: updatedAt,
+            sourceSessionID: sourceSessionID
+        )
+
+        let loaded = ConversationMemoryManager.loadUserProfile()
+        #expect(loaded?.content == "用户长期偏好：偏好技术实现细节，关注跨平台客户端体验。")
+        #expect(loaded?.updatedAt == updatedAt)
+        #expect(loaded?.sourceSessionID == sourceSessionID)
+
+        try ConversationMemoryManager.clearUserProfile()
+        #expect(ConversationMemoryManager.loadUserProfile() == nil)
+    }
+
     @Test("persist session summary in session json")
     func persistSessionSummaryInSessionJSON() throws {
         let previousSessions = Persistence.loadChatSessions().filter { !$0.isTemporary }
