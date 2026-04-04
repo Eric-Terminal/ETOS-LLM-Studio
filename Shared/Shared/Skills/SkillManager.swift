@@ -283,14 +283,26 @@ public final class SkillManager: ObservableObject {
             return body
         }
 
-        guard let target = resolveSkillFile(skillName: name, relativePath: path) else {
+        guard let skillContent = readSkillContent(skillName: name) else {
+            throw SkillStoreError.fileNotFound
+        }
+        guard let normalizedPath = SkillLinkedPathPolicy.normalizeRelativePath(path) else {
+            throw SkillStoreError.saveFailed("use_skill 的 path 无效。")
+        }
+
+        let linkedPaths = SkillLinkedPathPolicy.extractLinkedRelativePaths(from: skillContent)
+        guard linkedPaths.contains(normalizedPath) else {
+            throw SkillStoreError.saveFailed("use_skill 的 path 未在 SKILL.md 链接中声明：\(normalizedPath)")
+        }
+
+        guard let target = resolveSkillFile(skillName: name, relativePath: normalizedPath) else {
             throw SkillStoreError.invalidPath
         }
         guard FileManager.default.fileExists(atPath: target.path) else {
             throw SkillStoreError.fileNotFound
         }
         guard let content = try? String(contentsOf: target, encoding: .utf8) else {
-            throw SkillStoreError.saveFailed("无法读取技能文件：\(path)")
+            throw SkillStoreError.saveFailed("无法读取技能文件：\(normalizedPath)")
         }
         return content
     }
@@ -323,5 +335,104 @@ public final class SkillManager: ObservableObject {
 
     private func persistEnabledSkillNames() {
         defaults.set(enabledSkillNames.sorted(), forKey: DefaultsKey.enabledSkillNames)
+    }
+}
+
+/// use_skill 的路径白名单策略：
+/// - 仅允许读取 SKILL.md 里 Markdown 链接显式声明过的相对路径；
+/// - 自动忽略锚点 / 查询参数 / 外链。
+enum SkillLinkedPathPolicy {
+    private static let inlineLinkRegex = try! NSRegularExpression(
+        pattern: #"(?<!!)\[[^\]]+\]\(([^)\s]+|<[^>]+>)(?:\s+\"[^\"]*\")?\)"#,
+        options: []
+    )
+    private static let referenceDefinitionRegex = try! NSRegularExpression(
+        pattern: #"(?m)^\s*\[[^\]]+\]:\s*(<[^>]+>|\S+)"#,
+        options: []
+    )
+    private static let urlSchemeRegex = try! NSRegularExpression(
+        pattern: #"^[A-Za-z][A-Za-z0-9+.-]*:"#,
+        options: []
+    )
+
+    static func extractLinkedRelativePaths(from skillMarkdown: String) -> Set<String> {
+        var paths: Set<String> = []
+
+        let inlineTargets = captureTargets(
+            from: skillMarkdown,
+            regex: inlineLinkRegex,
+            captureGroup: 1
+        )
+        for target in inlineTargets {
+            if let normalized = normalizeRelativePath(target) {
+                paths.insert(normalized)
+            }
+        }
+
+        let referenceTargets = captureTargets(
+            from: skillMarkdown,
+            regex: referenceDefinitionRegex,
+            captureGroup: 1
+        )
+        for target in referenceTargets {
+            if let normalized = normalizeRelativePath(target) {
+                paths.insert(normalized)
+            }
+        }
+
+        return paths
+    }
+
+    static func normalizeRelativePath(_ rawPath: String) -> String? {
+        var normalized = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+
+        if normalized.hasPrefix("<"), normalized.hasSuffix(">"), normalized.count >= 2 {
+            normalized = String(normalized.dropFirst().dropLast())
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if normalized.hasPrefix("#") {
+            return nil
+        }
+        if let queryIndex = normalized.firstIndex(of: "?") {
+            normalized = String(normalized[..<queryIndex])
+        }
+        if let fragmentIndex = normalized.firstIndex(of: "#") {
+            normalized = String(normalized[..<fragmentIndex])
+        }
+
+        while normalized.hasPrefix("./") {
+            normalized.removeFirst(2)
+        }
+
+        normalized = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        guard !normalized.hasPrefix("/") else { return nil }
+        guard !normalized.contains("\\") else { return nil }
+        guard !normalized.split(separator: "/").contains("..") else { return nil }
+        guard !hasURLScheme(normalized) else { return nil }
+        return normalized
+    }
+
+    private static func captureTargets(
+        from text: String,
+        regex: NSRegularExpression,
+        captureGroup: Int
+    ) -> [String] {
+        let range = NSRange(location: 0, length: text.utf16.count)
+        let matches = regex.matches(in: text, options: [], range: range)
+        let nsText = text as NSString
+        return matches.compactMap { match in
+            guard match.numberOfRanges > captureGroup else { return nil }
+            let targetRange = match.range(at: captureGroup)
+            guard targetRange.location != NSNotFound else { return nil }
+            return nsText.substring(with: targetRange)
+        }
+    }
+
+    private static func hasURLScheme(_ value: String) -> Bool {
+        let range = NSRange(location: 0, length: value.utf16.count)
+        return urlSchemeRegex.firstMatch(in: value, options: [], range: range) != nil
     }
 }

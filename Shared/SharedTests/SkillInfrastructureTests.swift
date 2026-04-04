@@ -5,6 +5,7 @@
 // - frontmatter 解析
 // - 路径安全
 // - 同步模型兼容性
+// - use_skill 链接白名单策略
 // ============================================================================
 
 import Testing
@@ -94,5 +95,46 @@ allowed-tools: read_file, search_web
 
         let package = try JSONDecoder().decode(SyncPackage.self, from: Data(legacyJSON.utf8))
         #expect(package.skills.isEmpty)
+    }
+
+    @Test("use_skill 仅允许 SKILL.md 中声明的相对链接路径")
+    func testSkillLinkedPathPolicyExtractsMarkdownLinks() {
+        let content = """
+---
+name: demo
+description: "demo"
+---
+
+[清单](refs/checklist.md)
+[带锚点](./refs/guide.md#part)
+[带查询](refs/query.md?lang=zh)
+[外链](https://example.com/docs)
+[纯锚点](#section)
+![图片](assets/diagram.png)
+[引用式][ref_doc]
+
+[ref_doc]: refs/reference.md
+"""
+
+        let paths = SkillLinkedPathPolicy.extractLinkedRelativePaths(from: content)
+
+        #expect(paths.contains("refs/checklist.md"))
+        #expect(paths.contains("refs/guide.md"))
+        #expect(paths.contains("refs/query.md"))
+        #expect(paths.contains("assets/diagram.png"))
+        #expect(paths.contains("refs/reference.md"))
+        #expect(!paths.contains("https://example.com/docs"))
+        #expect(!paths.contains("#section"))
+    }
+
+    @Test("use_skill 路径规范化会过滤非法输入")
+    func testSkillLinkedPathPolicyNormalize() {
+        #expect(SkillLinkedPathPolicy.normalizeRelativePath("./refs/guide.md#intro") == "refs/guide.md")
+        #expect(SkillLinkedPathPolicy.normalizeRelativePath("refs/checklist.md?x=1") == "refs/checklist.md")
+        #expect(SkillLinkedPathPolicy.normalizeRelativePath("<refs/a.md>") == "refs/a.md")
+        #expect(SkillLinkedPathPolicy.normalizeRelativePath("#only-anchor") == nil)
+        #expect(SkillLinkedPathPolicy.normalizeRelativePath("https://example.com/a.md") == nil)
+        #expect(SkillLinkedPathPolicy.normalizeRelativePath("../escape.md") == nil)
+        #expect(SkillLinkedPathPolicy.normalizeRelativePath("") == nil)
     }
 }
