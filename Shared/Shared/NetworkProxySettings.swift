@@ -67,7 +67,7 @@ public enum NetworkProxySettings {
             dictionary["HTTPSProxy"] = effective.host
             dictionary["HTTPSPort"] = effective.port
         case .socks5:
-            dictionary[kCFNetworkProxiesSOCKSEnable as String] = 1
+            dictionary["SOCKSEnable"] = 1
             dictionary["SOCKSProxy"] = effective.host
             dictionary["SOCKSPort"] = effective.port
             dictionary[kCFStreamPropertySOCKSProxyHost as String] = effective.host
