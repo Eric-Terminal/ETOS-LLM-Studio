@@ -121,6 +121,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if isSyncOptionEnabled(key: "sync.options.memories", defaultValue: false) { options.insert(.memories) }
         if isSyncOptionEnabled(key: "sync.options.mcpServers", defaultValue: true) { options.insert(.mcpServers) }
         if isSyncOptionEnabled(key: "sync.options.imageFiles", defaultValue: true) { options.insert(.imageFiles) }
+        if isSyncOptionEnabled(key: "sync.options.skills", defaultValue: true) { options.insert(.skills) }
         if isSyncOptionEnabled(key: "sync.options.shortcutTools", defaultValue: true) { options.insert(.shortcutTools) }
         if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
         if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
@@ -212,6 +213,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedMemories > 0 { parts.append("记忆 +\(summary.importedMemories)") }
         if summary.importedMCPServers > 0 { parts.append("MCP +\(summary.importedMCPServers)") }
         if summary.importedImageFiles > 0 { parts.append("图片 +\(summary.importedImageFiles)") }
+        if summary.importedSkills > 0 { parts.append("Skills +\(summary.importedSkills)") }
         if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }
         if summary.importedWorldbooks > 0 { parts.append("世界书 +\(summary.importedWorldbooks)") }
         if summary.importedFeedbackTickets > 0 { parts.append("工单 +\(summary.importedFeedbackTickets)") }

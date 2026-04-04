@@ -143,6 +143,20 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    AgentSkillsView()
+                } label: {
+                    Label("Agent Skills", systemImage: "sparkles.square.filled.on.square")
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("管理可按需加载的技能包，并控制是否向模型暴露 use_skill 工具。")
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     WorldbookSettingsView(viewModel: viewModel)
                 } label: {
                     Label("世界书", systemImage: "book.pages")

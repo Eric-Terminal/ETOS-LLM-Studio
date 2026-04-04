@@ -28,6 +28,7 @@ public enum SyncEngine {
         var mcpServers: [MCPServerConfiguration] = []
         var audioFiles: [SyncedAudio] = []
         var imageFiles: [SyncedImage] = []
+        var skills: [SyncedSkillBundle] = []
         var shortcutTools: [ShortcutToolDefinition] = []
         var worldbooks: [Worldbook] = []
         var feedbackTickets: [FeedbackTicket] = []
@@ -86,6 +87,10 @@ public enum SyncEngine {
         
         if options.contains(.mcpServers) {
             mcpServers = MCPServerStore.loadServers()
+        }
+
+        if options.contains(.skills) {
+            skills = SkillStore.exportSkillBundles()
         }
 
         if options.contains(.shortcutTools) {
@@ -175,6 +180,7 @@ public enum SyncEngine {
             mcpServers: mcpServers,
             audioFiles: audioFiles,
             imageFiles: imageFiles,
+            skills: skills,
             shortcutTools: shortcutTools,
             worldbooks: worldbooks,
             feedbackTickets: feedbackTickets,
@@ -234,6 +240,12 @@ public enum SyncEngine {
             let result = mergeMCPServers(package.mcpServers)
             summary.importedMCPServers = result.imported
             summary.skippedMCPServers = result.skipped
+        }
+
+        if package.options.contains(.skills) {
+            let result = mergeSkills(package.skills)
+            summary.importedSkills = result.imported
+            summary.skippedSkills = result.skipped
         }
 
         if package.options.contains(.shortcutTools) {
@@ -1012,6 +1024,74 @@ public enum SyncEngine {
         }
 
         return normalized
+    }
+
+    // MARK: - Skills
+
+    private static func mergeSkills(
+        _ incoming: [SyncedSkillBundle]
+    ) -> (imported: Int, skipped: Int) {
+        guard !incoming.isEmpty else { return (0, 0) }
+
+        var imported = 0
+        var skipped = 0
+
+        for bundle in incoming {
+            let skillName = bundle.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard SkillPaths.isValidSkillName(skillName), !bundle.files.isEmpty else {
+                skipped += 1
+                continue
+            }
+
+            var incomingFiles: [String: String] = [:]
+            var hasDuplicatePath = false
+            for file in bundle.files {
+                let relativePath = file.relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !relativePath.isEmpty else {
+                    hasDuplicatePath = true
+                    break
+                }
+                if incomingFiles.updateValue(file.content, forKey: relativePath) != nil {
+                    hasDuplicatePath = true
+                    break
+                }
+            }
+            guard !hasDuplicatePath else {
+                skipped += 1
+                continue
+            }
+            guard incomingFiles.keys.contains("SKILL.md") else {
+                skipped += 1
+                continue
+            }
+
+            let localFiles = SkillStore.readAllSkillFiles(skillName: skillName)
+            if let localFiles {
+                let localBundle = SyncedSkillBundle(
+                    name: skillName,
+                    files: localFiles
+                        .map { SyncedSkillFile(relativePath: $0.key, content: $0.value) }
+                )
+                if localBundle.checksum == bundle.checksum {
+                    skipped += 1
+                    continue
+                }
+            }
+
+            if SkillStore.saveSkillFilesAtomically(skillName: skillName, files: incomingFiles) {
+                imported += 1
+            } else {
+                skipped += 1
+            }
+        }
+
+        if imported > 0 {
+            Task { @MainActor in
+                SkillManager.shared.reloadFromDisk()
+            }
+        }
+
+        return (imported, skipped)
     }
 
     // MARK: - Shortcut Tools

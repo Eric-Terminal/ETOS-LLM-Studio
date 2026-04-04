@@ -808,6 +808,9 @@ struct ChatBubble: View {
         if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
             return label
         }
+        if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
         return toolName
     }
     

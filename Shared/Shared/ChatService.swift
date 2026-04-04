@@ -1365,6 +1365,7 @@ public class ChatService {
         let includeAppTools: Bool
         let includeMCPTools: Bool
         let includeShortcutTools: Bool
+        let includeSkills: Bool
     }
 
     private func auxiliaryContextPolicy(
@@ -1381,7 +1382,8 @@ public class ChatService {
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeAppTools: true,
                 includeMCPTools: true,
-                includeShortcutTools: true
+                includeShortcutTools: true,
+                includeSkills: true
             )
         }
 
@@ -1392,7 +1394,8 @@ public class ChatService {
             enableMemoryActiveRetrieval: false,
             includeAppTools: false,
             includeMCPTools: false,
-            includeShortcutTools: false
+            includeShortcutTools: false,
+            includeSkills: false
         )
     }
 
@@ -1427,6 +1430,10 @@ public class ChatService {
         if policy.includeShortcutTools {
             let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
             resolvedTools.append(contentsOf: shortcutTools)
+        }
+        if policy.includeSkills {
+            let skillTools = await MainActor.run { SkillManager.shared.chatToolsForLLM() }
+            resolvedTools.append(contentsOf: skillTools)
         }
         return (resolvedTools.isEmpty ? nil : resolvedTools, policy)
     }
@@ -2264,6 +2271,34 @@ public class ChatService {
                     displayResult = content
                     logger.error("  - 快捷指令工具调用失败: \(error.localizedDescription)")
                 }
+            }
+
+        case _ where SkillManager.isSkillToolName(toolCall.toolName):
+            let toolLabel = await MainActor.run {
+                SkillManager.shared.displayLabel(for: toolCall.toolName)
+            } ?? toolCall.toolName
+            let skillsEnabled = await MainActor.run { SkillManager.shared.chatToolsEnabled }
+            guard skillsEnabled else {
+                content = "Agent Skills 总开关已关闭。"
+                displayResult = content
+                logger.info("  - Agent Skills 调用被总开关拒绝: \(toolCall.toolName)")
+                break
+            }
+
+            do {
+                let result = try await MainActor.run {
+                    try SkillManager.shared.executeToolFromChat(
+                        toolName: toolCall.toolName,
+                        argumentsJSON: toolCall.arguments
+                    )
+                }
+                content = result
+                displayResult = result
+                logger.info("  - Agent Skills 调用成功: \(toolCall.toolName)")
+            } catch {
+                content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                displayResult = content
+                logger.error("  - Agent Skills 调用失败: \(error.localizedDescription)")
             }
 
         case _ where AppToolManager.isAppToolName(toolCall.toolName):
