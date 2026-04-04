@@ -394,7 +394,10 @@ private struct WatchFontSettingsView: View {
                 }
             }
 
-            Section("样式优先级") {
+            Section(
+                header: Text("样式优先级"),
+                footer: Text("使用上下箭头调整顺序，越靠上优先级越高。")
+            ) {
                 Picker("样式槽位", selection: $selectedRole) {
                     ForEach(FontSemanticRole.allCases) { role in
                         Text(role.title).tag(role)

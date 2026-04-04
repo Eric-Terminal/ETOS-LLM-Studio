@@ -246,7 +246,10 @@ private struct FontSettingsView: View {
                 }
             }
 
-            Section("样式优先级") {
+            Section(
+                header: Text("样式优先级"),
+                footer: Text("拖拽右侧把手可调整当前样式槽位的字体优先级，越靠上优先级越高。")
+            ) {
                 Picker("样式槽位", selection: $selectedRole) {
                     ForEach(FontSemanticRole.allCases) { role in
                         Text(role.title).tag(role)
@@ -275,6 +278,7 @@ private struct FontSettingsView: View {
                         }
                     }
                     .onMove(perform: movePriority)
+                    .environment(\.editMode, .constant(.active))
                 }
             }
 
