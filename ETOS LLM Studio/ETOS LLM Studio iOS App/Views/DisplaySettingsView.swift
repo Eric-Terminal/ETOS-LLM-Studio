@@ -38,6 +38,35 @@ struct DisplaySettingsView: View {
     
     var body: some View {
         Form {
+            Section("背景") {
+                Toggle("显示背景", isOn: $enableBackground)
+                
+                if enableBackground {
+                    Picker("填充模式", selection: $backgroundContentMode) {
+                        Text("填充 (居中裁剪)").tag("fill")
+                        Text("适应 (完整显示)").tag("fit")
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(String(format: NSLocalizedString("模糊 %.1f", comment: ""), backgroundBlur))
+                        Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(String(format: NSLocalizedString("不透明度 %.2f", comment: ""), backgroundOpacity))
+                        Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
+                    }
+                    
+                    Toggle("自动轮换背景", isOn: $enableAutoRotateBackground)
+                    
+                    NavigationLink {
+                        BackgroundPickerView(allBackgrounds: allBackgrounds, selectedBackground: $currentBackgroundImage)
+                    } label: {
+                        Label("选择背景图", systemImage: "photo.on.rectangle")
+                    }
+                }
+            }
+
             Section {
                 Toggle("渲染 Markdown", isOn: $enableMarkdown)
                 if enableMarkdown {
@@ -123,35 +152,6 @@ struct DisplaySettingsView: View {
                 Text("默认全部关闭时，聊天配色与当前版本完全一致。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
-            }
-            
-            Section("背景") {
-                Toggle("显示背景", isOn: $enableBackground)
-                
-                if enableBackground {
-                    Picker("填充模式", selection: $backgroundContentMode) {
-                        Text("填充 (居中裁剪)").tag("fill")
-                        Text("适应 (完整显示)").tag("fit")
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(format: NSLocalizedString("模糊 %.1f", comment: ""), backgroundBlur))
-                        Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(format: NSLocalizedString("不透明度 %.2f", comment: ""), backgroundOpacity))
-                        Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
-                    }
-                    
-                    Toggle("自动轮换背景", isOn: $enableAutoRotateBackground)
-                    
-                    NavigationLink {
-                        BackgroundPickerView(allBackgrounds: allBackgrounds, selectedBackground: $currentBackgroundImage)
-                    } label: {
-                        Label("选择背景图", systemImage: "photo.on.rectangle")
-                    }
-                }
             }
         }
         .navigationTitle("显示设置")
