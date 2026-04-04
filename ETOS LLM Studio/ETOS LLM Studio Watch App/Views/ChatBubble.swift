@@ -642,7 +642,7 @@ struct ChatBubble: View {
         if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
             return false
         }
-        hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
+        return hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
     }
 
     private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
