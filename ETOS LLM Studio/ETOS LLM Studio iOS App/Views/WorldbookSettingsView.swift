@@ -32,11 +32,11 @@ struct WorldbookSettingsView: View {
             Section {
                 settingsIntroCard(
                     title: "世界书",
-                    summary: "按规则在发送消息时自动激活并注入，独立于长期记忆。",
+                    summary: "按规则在发送消息时自动激活并注入，独立于记忆系统。",
                     details: """
                     能力说明
                     • 世界书会根据触发规则在发送消息时自动注入上下文。
-                    • 它是“静态规则知识”，不参与长期记忆写入。
+                    • 它是“静态规则知识”，不参与记忆系统写入。
 
                     怎么用（建议顺序）
                     1. 先导入世界书（支持 JSON/PNG 或 URL）。
@@ -1426,7 +1426,7 @@ private struct WorldbookSessionBindingView: View {
                     )
                 )
 
-                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送长期记忆、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
+                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送记忆系统、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

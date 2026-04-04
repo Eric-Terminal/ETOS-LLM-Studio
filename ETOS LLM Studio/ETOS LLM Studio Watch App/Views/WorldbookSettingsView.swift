@@ -26,11 +26,11 @@ struct WorldbookSettingsView: View {
             Section {
                 settingsIntroCard(
                     title: "世界书",
-                    summary: "按关键词规则注入上下文，不会写入长期记忆。",
+                    summary: "按关键词规则注入上下文，不会写入记忆系统。",
                     details: """
                     能力说明
                     • 世界书会按条目规则注入上下文，帮助模型保持设定一致。
-                    • 它不等于长期记忆，不会自动学习新事实。
+                    • 它不等于记忆系统，不会自动学习新事实。
 
                     在手表上怎么用
                     1. 先确认会话已绑定目标世界书。
@@ -909,7 +909,7 @@ private struct WatchWorldbookSessionBindingView: View {
                     )
                 )
 
-                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送长期记忆、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
+                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送记忆系统、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -391,7 +391,7 @@ final class ChatViewModel: ObservableObject {
 
     private func presentMemoryRetryStoppedNotice() {
         let message = NSLocalizedString(
-            "长期记忆嵌入已停止自动重试，请前往“记忆设置”检查嵌入模型。",
+            "记忆系统嵌入已停止自动重试，请前往“记忆设置”检查嵌入模型。",
             comment: "Non-modal notice shown when automatic memory embedding retry is stopped."
         )
         memoryRetryStoppedNoticeMessage = message

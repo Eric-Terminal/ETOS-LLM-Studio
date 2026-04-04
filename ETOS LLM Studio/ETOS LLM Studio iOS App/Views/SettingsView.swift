@@ -142,7 +142,7 @@ struct SettingsView: View {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("长期记忆系统", systemImage: "brain.head.profile")
+                    Label("记忆系统", systemImage: "brain.head.profile")
                 }
 
                 NavigationLink {

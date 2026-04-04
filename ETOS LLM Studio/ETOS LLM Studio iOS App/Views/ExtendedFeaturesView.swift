@@ -128,7 +128,7 @@ struct ExtendedFeaturesView: View {
     }
 }
 
-// MARK: - 长期记忆设置
+// MARK: - 记忆系统设置
 
 struct LongTermMemoryFeatureView: View {
     @EnvironmentObject var viewModel: ChatViewModel
@@ -141,12 +141,12 @@ struct LongTermMemoryFeatureView: View {
         Form {
             Section {
                 settingsIntroCard(
-                    title: "长期记忆系统",
+                    title: "记忆系统",
                     summary: "让 AI 在多轮对话里持续记住你的偏好、背景与目标。",
                     details: """
                     能力说明
-                    • 长期记忆会在每次回复前参与检索，帮助模型关联你过去的偏好与上下文。
-                    • 与“世界书”不同，长期记忆是可持续积累、可读可写的动态知识。
+                    • 记忆系统会在每次回复前参与检索，帮助模型关联你过去的偏好与上下文。
+                    • 与“世界书”不同，记忆系统是可持续积累、可读可写的动态知识。
 
                     关键开关
                     • 启用记忆功能：总开关。关闭后不会检索、也不会写入新记忆。
@@ -191,7 +191,7 @@ struct LongTermMemoryFeatureView: View {
                 }
             }
         }
-        .navigationTitle("长期记忆系统")
+        .navigationTitle("记忆系统")
     }
 
     private func settingsIntroCard(
