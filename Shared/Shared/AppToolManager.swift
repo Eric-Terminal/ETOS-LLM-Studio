@@ -803,6 +803,7 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let enabledToolIDsUserDefaultsKey = "appTools.enabledToolIDs"
     private nonisolated static let toolApprovalPoliciesUserDefaultsKey = "appTools.toolApprovalPolicies"
     private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget]
+    private nonisolated static let builtInToolKinds: Set<AppToolKind> = [.showWidget]
 
     @Published public private(set) var chatToolsEnabled: Bool
     @Published private var enabledToolIDs: Set<String>
@@ -830,8 +831,13 @@ public final class AppToolManager: ObservableObject {
         AppToolKind.resolve(from: name) != nil
     }
 
+    public nonisolated static func isBuiltInToolName(_ name: String) -> Bool {
+        guard let kind = AppToolKind.resolve(from: name) else { return false }
+        return builtInToolKinds.contains(kind)
+    }
+
     public var tools: [AppToolCatalogItem] {
-        AppToolKind.allCases.map { kind in
+        AppToolKind.allCases.filter { !Self.builtInToolKinds.contains($0) }.map { kind in
             AppToolCatalogItem(kind: kind, isEnabled: enabledToolIDs.contains(kind.rawValue))
         }
     }
@@ -900,14 +906,12 @@ public final class AppToolManager: ObservableObject {
         return tools
             .filter(\.isEnabled)
             .filter { approvalPolicy(for: $0.kind) != .alwaysDeny }
-            .map { item in
-                InternalToolDefinition(
-                    name: item.kind.toolName,
-                    description: item.kind.toolDescription,
-                    parameters: item.kind.parameters,
-                    isBlocking: true
-                )
-            }
+            .map { item in toolDefinition(for: item.kind) }
+    }
+
+    public func builtInToolsForLLM() -> [InternalToolDefinition] {
+        guard isToolEnabled(.showWidget) else { return [] }
+        return [toolDefinition(for: .showWidget)]
     }
 
     public func displayLabel(for toolName: String) -> String? {
@@ -915,11 +919,11 @@ public final class AppToolManager: ObservableObject {
     }
 
     public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
-        guard chatToolsEnabled else {
-            throw AppToolExecutionError.toolGroupDisabled
-        }
         guard let kind = AppToolKind.resolve(from: toolName) else {
             throw AppToolExecutionError.unknownTool
+        }
+        if !Self.builtInToolKinds.contains(kind) && !chatToolsEnabled {
+            throw AppToolExecutionError.toolGroupDisabled
         }
         guard isToolEnabled(kind) else {
             throw AppToolExecutionError.toolDisabled(kind.displayName)
@@ -1651,6 +1655,15 @@ public final class AppToolManager: ObservableObject {
             return components.joined(separator: "/").lowercased()
         }
         return (["Documents"] + components).joined(separator: "/").lowercased()
+    }
+
+    private func toolDefinition(for kind: AppToolKind) -> InternalToolDefinition {
+        InternalToolDefinition(
+            name: kind.toolName,
+            description: kind.toolDescription,
+            parameters: kind.parameters,
+            isBlocking: true
+        )
     }
 
     private func prettyPrintedJSONString(from payload: [String: Any]) -> String {

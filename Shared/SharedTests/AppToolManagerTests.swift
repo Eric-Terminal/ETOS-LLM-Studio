@@ -231,7 +231,7 @@ struct AppToolManagerTests {
     }
 
     @MainActor
-    @Test("显示网页卡片工具默认免审批且不可被审批策略阻断")
+    @Test("显示网页卡片工具默认免审批并通过内置工具通道暴露")
     func testShowWidgetToolAlwaysAllowWithoutApproval() {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
@@ -252,11 +252,40 @@ struct AppToolManagerTests {
         )
 
         #expect(manager.approvalPolicy(for: .showWidget) == .alwaysAllow)
-        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }))
+        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }) == false)
+        #expect(manager.builtInToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }))
 
         manager.setToolApprovalPolicy(kind: .showWidget, policy: .alwaysDeny)
         #expect(manager.approvalPolicy(for: .showWidget) == .alwaysAllow)
-        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }))
+        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }) == false)
+        #expect(manager.builtInToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }))
+    }
+
+    @MainActor
+    @Test("显示网页卡片工具在拓展工具总开关关闭时仍可执行")
+    func testShowWidgetToolWorksWhenAppToolGroupDisabled() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: false,
+            enabledKinds: [.showWidget]
+        )
+
+        let result = try await manager.executeToolFromChat(
+            toolName: AppToolKind.showWidget.toolName,
+            argumentsJSON: #"{"widget_code":"<div>ok</div>"}"#
+        )
+        #expect(result.contains("\"widget_code\""))
     }
 
     @MainActor

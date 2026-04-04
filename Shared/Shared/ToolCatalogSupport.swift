@@ -11,6 +11,7 @@ import Foundation
 public enum ToolCatalogBuiltInToolKind: String, CaseIterable, Identifiable, Sendable {
     case memoryWrite
     case memorySearch
+    case widgetCard
 
     public var id: String { rawValue }
 }
@@ -22,6 +23,7 @@ public enum ToolCatalogBuiltInToolStatusReason: String, Equatable, Sendable {
     case activeRetrievalDisabled
     case zeroTopK
     case isolatedByWorldbook
+    case widgetDisabled
 }
 
 public struct ToolCatalogBuiltInToolState: Identifiable, Equatable, Sendable {
@@ -54,6 +56,7 @@ public enum ToolCatalogSupport {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         memoryTopK: Int,
+        enableWidgetTool: Bool,
         isIsolatedSession: Bool
     ) -> [ToolCatalogBuiltInToolState] {
         let memoryWriteConfiguredEnabled = enableMemory && enableMemoryWrite
@@ -85,6 +88,8 @@ public enum ToolCatalogSupport {
             memorySearchReason = .enabled
         }
 
+        let widgetReason: ToolCatalogBuiltInToolStatusReason = enableWidgetTool ? .enabled : .widgetDisabled
+
         return [
             ToolCatalogBuiltInToolState(
                 kind: .memoryWrite,
@@ -98,6 +103,12 @@ public enum ToolCatalogSupport {
                 isAvailableInCurrentSession: memorySearchAvailable,
                 statusReason: memorySearchReason,
                 memoryTopK: resolvedTopK
+            ),
+            ToolCatalogBuiltInToolState(
+                kind: .widgetCard,
+                isConfiguredEnabled: enableWidgetTool,
+                isAvailableInCurrentSession: enableWidgetTool,
+                statusReason: widgetReason
             )
         ]
     }

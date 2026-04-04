@@ -1425,6 +1425,8 @@ public class ChatService {
         if policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
             resolvedTools.append(searchMemoryTool)
         }
+        let builtInAppTools = await MainActor.run { AppToolManager.shared.builtInToolsForLLM() }
+        resolvedTools.append(contentsOf: builtInAppTools)
         if policy.includeAppTools {
             let appTools = await MainActor.run { AppToolManager.shared.chatToolsForLLM() }
             resolvedTools.append(contentsOf: appTools)
@@ -2311,8 +2313,9 @@ public class ChatService {
             let toolLabel = await MainActor.run {
                 AppToolManager.shared.displayLabel(for: toolCall.toolName)
             } ?? toolCall.toolName
+            let isBuiltInAppTool = AppToolManager.isBuiltInToolName(toolCall.toolName)
             let appToolsEnabled = await MainActor.run { AppToolManager.shared.chatToolsEnabled }
-            guard appToolsEnabled else {
+            guard appToolsEnabled || isBuiltInAppTool else {
                 content = "拓展工具总开关已关闭。"
                 displayResult = content
                 logger.info("  - 拓展工具调用被总开关拒绝: \(toolCall.toolName)")
