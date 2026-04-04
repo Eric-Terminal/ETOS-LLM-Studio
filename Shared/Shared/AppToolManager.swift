@@ -804,8 +804,9 @@ public final class AppToolManager: ObservableObject {
         if let storedIDs = defaults.stringArray(forKey: Self.enabledToolIDsUserDefaultsKey) {
             enabledToolIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
         } else {
-            enabledToolIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
-            defaults.set(Array(enabledToolIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+            let defaultIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
+            enabledToolIDs = defaultIDs
+            defaults.set(Array(defaultIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
         }
         let storedPolicyRawValues = defaults.dictionary(forKey: Self.toolApprovalPoliciesUserDefaultsKey) as? [String: String] ?? [:]
         toolApprovalPolicies = storedPolicyRawValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
