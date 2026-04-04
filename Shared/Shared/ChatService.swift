@@ -5213,7 +5213,8 @@ public class ChatService {
         let summaryUserPrompt = String(
             format: NSLocalizedString("""
             请总结以下对话：
-            %@""", comment: "Conversation summary user prompt"),
+            %@
+            """, comment: "Conversation summary user prompt"),
             summaryContext
         )
 
