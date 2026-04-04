@@ -13,7 +13,7 @@ import Shared
 import WatchKit
 
 struct AboutView: View {
-    private let privacyURL = URL(string: "http://privacy.els.ericterminal.com/")!
+    private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
     @State private var versionTapCount = 0
     @State private var lastVersionTapAt: Date = .distantPast
     @State private var showAppLogs = false

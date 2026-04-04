@@ -26,7 +26,7 @@ struct AboutView: View {
     }
     
     private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
-    private let privacyURL = URL(string: "http://privacy.els.ericterminal.com/")!
+    private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
     
     var body: some View {
         List {
