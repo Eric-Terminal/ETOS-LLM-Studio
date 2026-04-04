@@ -100,22 +100,42 @@ struct DisplaySettingsView: View {
             Section {
                 Toggle("自定义用户气泡颜色", isOn: $enableCustomUserBubbleColor)
                 if enableCustomUserBubbleColor {
-                    ColorPicker("用户气泡颜色", selection: userBubbleColorBinding, supportsOpacity: false)
+                    colorEditorLink(
+                        title: "用户气泡颜色",
+                        hex: $customUserBubbleColorHex,
+                        fallback: defaultUserBubbleColor,
+                        description: "影响你发送消息的气泡背景颜色。"
+                    )
                 }
 
                 Toggle("自定义助手气泡颜色（含 Tool）", isOn: $enableCustomAssistantBubbleColor)
                 if enableCustomAssistantBubbleColor {
-                    ColorPicker("助手气泡颜色", selection: assistantBubbleColorBinding, supportsOpacity: false)
+                    colorEditorLink(
+                        title: "助手气泡颜色",
+                        hex: $customAssistantBubbleColorHex,
+                        fallback: defaultAssistantBubbleColor,
+                        description: "影响助手消息与 Tool 消息的气泡背景颜色。"
+                    )
                 }
 
                 Toggle("自定义白天文字颜色", isOn: $enableCustomLightTextColor)
                 if enableCustomLightTextColor {
-                    ColorPicker("白天文字颜色", selection: lightTextColorBinding, supportsOpacity: false)
+                    colorEditorLink(
+                        title: "白天文字颜色",
+                        hex: $customLightTextColorHex,
+                        fallback: defaultLightTextColor,
+                        description: "在浅色模式下覆盖聊天文本颜色。"
+                    )
                 }
 
                 Toggle("自定义夜览文字颜色", isOn: $enableCustomDarkTextColor)
                 if enableCustomDarkTextColor {
-                    ColorPicker("夜览文字颜色", selection: darkTextColorBinding, supportsOpacity: false)
+                    colorEditorLink(
+                        title: "夜览文字颜色",
+                        hex: $customDarkTextColorHex,
+                        fallback: defaultDarkTextColor,
+                        description: "在深色模式下覆盖聊天文本颜色。"
+                    )
                 }
 
                 if hasAnyCustomColorOverride {
@@ -177,31 +197,45 @@ struct DisplaySettingsView: View {
             || enableCustomDarkTextColor
     }
 
-    private var userBubbleColorBinding: Binding<Color> {
-        colorBinding(hex: $customUserBubbleColorHex, fallback: .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1))
+    private var defaultUserBubbleColor: Color {
+        .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1)
     }
 
-    private var assistantBubbleColorBinding: Binding<Color> {
-        colorBinding(hex: $customAssistantBubbleColorHex, fallback: .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1))
+    private var defaultAssistantBubbleColor: Color {
+        .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
     }
 
-    private var lightTextColorBinding: Binding<Color> {
-        colorBinding(hex: $customLightTextColorHex, fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1))
+    private var defaultLightTextColor: Color {
+        .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1)
     }
 
-    private var darkTextColorBinding: Binding<Color> {
-        colorBinding(hex: $customDarkTextColorHex, fallback: .white)
+    private var defaultDarkTextColor: Color {
+        .white
     }
 
-    private func colorBinding(hex: Binding<String>, fallback: Color) -> Binding<Color> {
-        Binding(
-            get: { ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback) },
-            set: { newColor in
-                if let encoded = ChatAppearanceColorCodec.hexRGBA(from: newColor) {
-                    hex.wrappedValue = encoded
-                }
+    @ViewBuilder
+    private func colorEditorLink(
+        title: String,
+        hex: Binding<String>,
+        fallback: Color,
+        description: String
+    ) -> some View {
+        NavigationLink {
+            WatchColorEditorView(
+                title: title,
+                hexValue: hex,
+                fallback: fallback,
+                description: description
+            )
+        } label: {
+            HStack(spacing: 8) {
+                Text("设置\(title)")
+                Spacer(minLength: 8)
+                Circle()
+                    .fill(ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback))
+                    .frame(width: 14, height: 14)
             }
-        )
+        }
     }
 
     private func resetCustomChatColors() {
@@ -213,6 +247,117 @@ struct DisplaySettingsView: View {
         customAssistantBubbleColorHex = "F2F2F7FF"
         customLightTextColorHex = "1C1C1EFF"
         customDarkTextColorHex = "FFFFFFFF"
+    }
+}
+
+private struct WatchColorEditorView: View {
+    let title: String
+    @Binding var hexValue: String
+    let fallback: Color
+    let description: String
+
+    @State private var red: Double = 0
+    @State private var green: Double = 0
+    @State private var blue: Double = 0
+
+    private var previewColor: Color {
+        Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
+    }
+
+    private var previewHex: String {
+        ChatAppearanceColorCodec.hexRGBA(from: previewColor) ?? hexValue
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Text(description)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(previewColor)
+                    .frame(height: 36)
+                Text(previewHex)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            } header: {
+                Text("预览")
+            }
+
+            Section {
+                channelSlider(title: "红", value: $red, tint: .red)
+                channelSlider(title: "绿", value: $green, tint: .green)
+                channelSlider(title: "蓝", value: $blue, tint: .blue)
+            } header: {
+                Text("RGB")
+            }
+
+            Section {
+                Button("恢复默认") {
+                    applyFallbackColor()
+                }
+            }
+        }
+        .navigationTitle(title)
+        .onAppear {
+            loadFromHex()
+        }
+        .onChange(of: red) { _, _ in
+            persistColor()
+        }
+        .onChange(of: green) { _, _ in
+            persistColor()
+        }
+        .onChange(of: blue) { _, _ in
+            persistColor()
+        }
+    }
+
+    @ViewBuilder
+    private func channelSlider(title: String, value: Binding<Double>, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                Spacer(minLength: 8)
+                Text("\(Int((value.wrappedValue * 255).rounded()))")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: value, in: 0...1, step: 1.0 / 255.0)
+                .tint(tint)
+        }
+    }
+
+    private func loadFromHex() {
+        let color = ChatAppearanceColorCodec.color(from: hexValue, fallback: fallback)
+        guard let rgba = ChatAppearanceColorCodec.rgbaComponents(from: color) else {
+            applyFallbackColor()
+            return
+        }
+        red = rgba.red
+        green = rgba.green
+        blue = rgba.blue
+        persistColor()
+    }
+
+    private func persistColor() {
+        if let encoded = ChatAppearanceColorCodec.hexRGBA(from: previewColor) {
+            hexValue = encoded
+        }
+    }
+
+    private func applyFallbackColor() {
+        if let rgba = ChatAppearanceColorCodec.rgbaComponents(from: fallback) {
+            red = rgba.red
+            green = rgba.green
+            blue = rgba.blue
+            persistColor()
+        }
     }
 }
 
