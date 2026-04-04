@@ -228,6 +228,9 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
     public var submittedExpectedBehavior: String?
     public var submittedActualBehavior: String?
     public var submittedExtraContext: String?
+    public var lastKnownCommentCount: Int?
+    public var lastKnownDeveloperCommentID: String?
+    public var lastKnownDeveloperCommentAt: Date?
 
     public init(
         issueNumber: Int,
@@ -247,7 +250,10 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         submittedReproductionSteps: String? = nil,
         submittedExpectedBehavior: String? = nil,
         submittedActualBehavior: String? = nil,
-        submittedExtraContext: String? = nil
+        submittedExtraContext: String? = nil,
+        lastKnownCommentCount: Int? = nil,
+        lastKnownDeveloperCommentID: String? = nil,
+        lastKnownDeveloperCommentAt: Date? = nil
     ) {
         self.issueNumber = issueNumber
         self.ticketToken = ticketToken
@@ -267,6 +273,9 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         self.submittedExpectedBehavior = submittedExpectedBehavior
         self.submittedActualBehavior = submittedActualBehavior
         self.submittedExtraContext = submittedExtraContext
+        self.lastKnownCommentCount = lastKnownCommentCount
+        self.lastKnownDeveloperCommentID = lastKnownDeveloperCommentID
+        self.lastKnownDeveloperCommentAt = lastKnownDeveloperCommentAt
     }
 
     public func merged(with snapshot: FeedbackStatusSnapshot, checkedAt: Date = Date()) -> FeedbackTicket {
@@ -276,6 +285,21 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         updated.lastCheckedAt = checkedAt
         updated.lastKnownUpdatedAt = snapshot.updatedAt
         updated.publicURL = snapshot.publicURL
+        updated.lastKnownCommentCount = snapshot.comments.count
+        if let latestDeveloperComment = snapshot.comments
+            .filter({ $0.isDeveloper })
+            .max(by: { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.id < rhs.id
+            }) {
+            updated.lastKnownDeveloperCommentID = latestDeveloperComment.id
+            updated.lastKnownDeveloperCommentAt = latestDeveloperComment.createdAt
+        } else {
+            updated.lastKnownDeveloperCommentID = nil
+            updated.lastKnownDeveloperCommentAt = nil
+        }
         return updated
     }
 }

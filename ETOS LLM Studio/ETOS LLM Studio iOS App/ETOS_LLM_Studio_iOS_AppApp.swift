@@ -22,6 +22,8 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var dailyPulseManager = DailyPulseManager.shared
     @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @StateObject private var feedbackService = FeedbackService.shared
+    @State private var hasTriggeredFeedbackRefreshOnLaunch = false
 
     init() {
         DailyPulseDeliveryCoordinator.shared.activate()
@@ -48,6 +50,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     mcpManager.connectSelectedServersIfNeeded()
                     dailyPulseDeliveryCoordinator.activate()
                     DailyPulseBackgroundDeliveryScheduler.shared.activate()
+                    triggerFeedbackRefreshOnLaunchIfNeeded()
                 }
                 .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
@@ -64,6 +67,14 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         }
         .backgroundTask(.appRefresh(DailyPulseBackgroundDeliveryScheduler.taskIdentifier)) {
             await DailyPulseBackgroundDeliveryScheduler.shared.handleAppRefresh()
+        }
+    }
+
+    private func triggerFeedbackRefreshOnLaunchIfNeeded() {
+        guard !hasTriggeredFeedbackRefreshOnLaunch else { return }
+        hasTriggeredFeedbackRefreshOnLaunch = true
+        Task(priority: .utility) {
+            await feedbackService.refreshAllTickets()
         }
     }
 }

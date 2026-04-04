@@ -101,6 +101,9 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 openDailyPulse()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .requestOpenFeedback)) { _ in
+                openFeedbackFromNotification()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
                 Task { @MainActor in
                     applyDailyPulseContinuationIfNeeded()
@@ -708,8 +711,13 @@ struct ContentView: View {
                 if applyDailyPulseContinuationIfNeeded() {
                     return
                 }
-                if notificationCenter.consumePendingRoute() == .dailyPulse {
-                    openDailyPulse()
+                if let pendingRoute = notificationCenter.consumePendingRoute() {
+                    switch pendingRoute {
+                    case .dailyPulse:
+                        openDailyPulse()
+                    case .feedback:
+                        openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
+                    }
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
@@ -727,6 +735,24 @@ struct ContentView: View {
         settingsDestination = nil
         DispatchQueue.main.async {
             settingsDestination = .dailyPulse
+        }
+    }
+
+    private func openFeedbackFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
+    }
+
+    private func openFeedback(issueNumber: Int?) {
+        isSettingsPresented = true
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            if let issueNumber,
+               FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
+                settingsDestination = .feedbackIssue(issueNumber: issueNumber)
+            } else {
+                settingsDestination = .feedbackCenter
+            }
         }
     }
 

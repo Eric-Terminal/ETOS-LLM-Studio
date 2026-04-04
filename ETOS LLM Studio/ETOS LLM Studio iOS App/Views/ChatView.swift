@@ -2009,6 +2009,11 @@ private struct TelegramPatternView: View {
 
 // MARK: - Telegram Message Composer
 
+private enum AudioRecorderEntryMode {
+    case attachment
+    case speechInput
+}
+
 /// Telegram 风格的消息输入框
 private struct TelegramMessageComposer: View {
     @EnvironmentObject private var viewModel: ChatViewModel
@@ -2022,6 +2027,8 @@ private struct TelegramMessageComposer: View {
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var showAudioRecorder = false
+    @State private var audioRecorderSheetDetent: PresentationDetent = .fraction(0.5)
+    @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showAudioImporter = false
     @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
@@ -2121,6 +2128,11 @@ private struct TelegramMessageComposer: View {
         .onChange(of: inputAvailableWidth) { _, _ in
             handleAutoExpand(for: text)
         }
+        .onChange(of: showAudioRecorder) { _, presented in
+            if presented {
+                audioRecorderSheetDetent = .fraction(0.5)
+            }
+        }
         .onChange(of: focus.wrappedValue) { _, isFocused in
             if isFocused {
                 handleAutoExpand(for: text)
@@ -2138,9 +2150,21 @@ private struct TelegramMessageComposer: View {
             }
         }
         .sheet(isPresented: $showAudioRecorder) {
-            AudioRecorderSheet(format: viewModel.audioRecordingFormat) { attachment in
-                viewModel.setAudioAttachment(attachment)
-            }
+            AudioRecorderSheet(
+                format: viewModel.audioRecordingFormat,
+                mode: recorderMode,
+                transcribeRemotely: { model, attachment in
+                    try await viewModel.transcribeAudioAttachment(using: model, attachment: attachment)
+                },
+                onCompleteAudio: { attachment in
+                    viewModel.setAudioAttachment(attachment)
+                },
+                onCompleteTranscript: { transcript in
+                    viewModel.appendTranscribedText(transcript)
+                }
+            )
+            .presentationDetents([.fraction(0.5), .large], selection: $audioRecorderSheetDetent)
+            .presentationDragIndicator(.visible)
         }
         .fileImporter(
             isPresented: $showAudioImporter,
@@ -2187,6 +2211,7 @@ private struct TelegramMessageComposer: View {
             .disabled(!isCameraAvailable)
 
             Button {
+                audioRecorderEntryMode = .attachment
                 showAudioRecorder = true
             } label: {
                 Label("录制语音", systemImage: "waveform")
@@ -2220,6 +2245,7 @@ private struct TelegramMessageComposer: View {
             } else if hasContent {
                 sendAction()
             } else if viewModel.enableSpeechInput {
+                audioRecorderEntryMode = .speechInput
                 showAudioRecorder = true
             } else {
                 focus.wrappedValue = true
@@ -2259,6 +2285,19 @@ private struct TelegramMessageComposer: View {
         }
         .frame(minHeight: targetHeight, maxHeight: targetHeight)
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
+    }
+
+    private var recorderMode: AudioRecorderSheet.Mode {
+        guard audioRecorderEntryMode == .speechInput, viewModel.enableSpeechInput else {
+            return .audioAttachment
+        }
+        guard !viewModel.sendSpeechAsAudio else {
+            return .audioAttachment
+        }
+        if let model = viewModel.selectedSpeechModel ?? viewModel.speechModels.first {
+            return .speechToText(model: model)
+        }
+        return .audioAttachment
     }
 
     private func handleAutoExpand(for newValue: String) {
@@ -2715,6 +2754,8 @@ private struct MessageComposerView: View {
     @State private var showAttachmentMenu = false
     @State private var showImagePicker = false
     @State private var showAudioRecorder = false
+    @State private var audioRecorderSheetDetent: PresentationDetent = .fraction(0.5)
+    @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
@@ -2743,6 +2784,7 @@ private struct MessageComposerView: View {
                             showImagePicker = true
                         }
                         Button("录制语音") {
+                            audioRecorderEntryMode = .attachment
                             showAudioRecorder = true
                         }
                         Button("选择文件") {
@@ -2763,6 +2805,7 @@ private struct MessageComposerView: View {
                             showImagePicker = true
                         }
                         Button("录制语音") {
+                            audioRecorderEntryMode = .attachment
                             showAudioRecorder = true
                         }
                         Button("选择文件") {
@@ -2842,10 +2885,27 @@ private struct MessageComposerView: View {
                 selectedPhotos = []
             }
         }
-        .sheet(isPresented: $showAudioRecorder) {
-            AudioRecorderSheet(format: viewModel.audioRecordingFormat) { attachment in
-                viewModel.setAudioAttachment(attachment)
+        .onChange(of: showAudioRecorder) { _, presented in
+            if presented {
+                audioRecorderSheetDetent = .fraction(0.5)
             }
+        }
+        .sheet(isPresented: $showAudioRecorder) {
+            AudioRecorderSheet(
+                format: viewModel.audioRecordingFormat,
+                mode: recorderMode,
+                transcribeRemotely: { model, attachment in
+                    try await viewModel.transcribeAudioAttachment(using: model, attachment: attachment)
+                },
+                onCompleteAudio: { attachment in
+                    viewModel.setAudioAttachment(attachment)
+                },
+                onCompleteTranscript: { transcript in
+                    viewModel.appendTranscribedText(transcript)
+                }
+            )
+            .presentationDetents([.fraction(0.5), .large], selection: $audioRecorderSheetDetent)
+            .presentationDragIndicator(.visible)
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -2861,6 +2921,19 @@ private struct MessageComposerView: View {
                 print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
             }
         }
+    }
+
+    private var recorderMode: AudioRecorderSheet.Mode {
+        guard audioRecorderEntryMode == .speechInput, viewModel.enableSpeechInput else {
+            return .audioAttachment
+        }
+        guard !viewModel.sendSpeechAsAudio else {
+            return .audioAttachment
+        }
+        if let model = viewModel.selectedSpeechModel ?? viewModel.speechModels.first {
+            return .speechToText(model: model)
+        }
+        return .audioAttachment
     }
     
     @ViewBuilder
@@ -3036,8 +3109,16 @@ private struct CameraImagePicker: UIViewControllerRepresentable {
 // MARK: - Audio Recorder Sheet
 
 private struct AudioRecorderSheet: View {
+    enum Mode {
+        case audioAttachment
+        case speechToText(model: RunnableModel)
+    }
+
     let format: AudioRecordingFormat
-    let onComplete: (AudioAttachment) -> Void
+    let mode: Mode
+    let transcribeRemotely: ((RunnableModel, AudioAttachment) async throws -> String)?
+    let onCompleteAudio: (AudioAttachment) -> Void
+    let onCompleteTranscript: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     
@@ -3046,49 +3127,83 @@ private struct AudioRecorderSheet: View {
     @State private var audioRecorder: AVAudioRecorder?
     @State private var recordingURL: URL?
     @State private var timer: Timer?
+    @State private var liveTranscript: String = ""
+    @State private var preparedTranscript: String?
+    @State private var hasAppliedPreparedTranscript = false
+    @State private var processingErrorMessage: String?
+    @State private var isTranscriptionInProgress = false
+    @State private var streamingSession: SystemSpeechStreamingSession?
     
     var body: some View {
         NavigationStack {
             VStack(spacing: 30) {
                 Spacer()
                 
-                // 录音时长显示
-                Text(formatDuration(recordingDuration))
-                    .etFont(.system(size: 48, weight: .light, design: .monospaced))
-                    .foregroundStyle(isRecording ? .red : .primary)
-                
-                // 录音按钮
-                Button {
-                    if isRecording {
-                        stopRecording()
-                    } else {
-                        startRecording()
-                    }
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(isRecording ? Color.red : Color.accentColor)
-                            .frame(width: 80, height: 80)
-                        
-                        Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                            .etFont(.system(size: 30))
-                            .foregroundStyle(isRecording ? .white : (colorScheme == .dark ? .black : .white))
-                    }
-                }
-                
-                if isRecording {
-                    Text("正在录音...")
+                if isTranscriptionInProgress {
+                    ProgressView("正在转换…")
+                        .progressViewStyle(.circular)
+                    Text("请稍候，正在将语音转换为文本。")
                         .etFont(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("点击开始录音")
-                        .etFont(.callout)
-                        .foregroundStyle(.secondary)
+                    // 录音时长显示
+                    Text(formatDuration(recordingDuration))
+                        .etFont(.system(size: 48, weight: .light, design: .monospaced))
+                        .foregroundStyle(isRecording ? .red : .primary)
+                    
+                    // 录音按钮
+                    Button {
+                        if isRecording {
+                            stopRecording()
+                        } else {
+                            startRecording()
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(isRecording ? Color.red : Color.accentColor)
+                                .frame(width: 80, height: 80)
+                            
+                            Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                                .etFont(.system(size: 30))
+                                .foregroundStyle(isRecording ? .white : (colorScheme == .dark ? .black : .white))
+                        }
+                    }
+                    
+                    if isRecording {
+                        Text("正在录音...")
+                            .etFont(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(isSpeechToTextMode ? "点击开始识别" : "点击开始录音")
+                            .etFont(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if isSpeechToTextMode && !liveTranscript.isEmpty {
+                        ScrollView {
+                            Text(liveTranscript)
+                                .etFont(.body)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color(uiColor: .secondarySystemBackground))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .frame(maxHeight: 120)
+                    }
+
+                    if let processingErrorMessage, !processingErrorMessage.isEmpty {
+                        Text(processingErrorMessage)
+                            .etFont(.footnote)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 
                 Spacer()
             }
-            .navigationTitle("录制语音")
+            .navigationTitle(isSpeechToTextMode ? "语音输入" : "录制语音")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -3102,7 +3217,7 @@ private struct AudioRecorderSheet: View {
                     Button("完成") {
                         finishRecording()
                     }
-                    .disabled(recordingURL == nil || isRecording)
+                    .disabled(doneButtonDisabled)
                 }
             }
         }
@@ -3112,6 +3227,55 @@ private struct AudioRecorderSheet: View {
     }
     
     private func startRecording() {
+        processingErrorMessage = nil
+        preparedTranscript = nil
+        hasAppliedPreparedTranscript = false
+        liveTranscript = ""
+        if let existingURL = recordingURL {
+            try? FileManager.default.removeItem(at: existingURL)
+        }
+        recordingURL = nil
+        audioRecorder = nil
+        streamingSession = nil
+        if usesSystemStreamingRecognizer {
+            startSystemStreamingRecording()
+            return
+        }
+        startFileRecording()
+    }
+
+    private func startSystemStreamingRecording() {
+        Task { @MainActor in
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers])
+                try session.setActive(true)
+
+                let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
+                guard speechPermissionGranted else {
+                    processingErrorMessage = "语音识别权限被拒绝，请到设置中开启。"
+                    return
+                }
+
+                let streamSession = try SystemSpeechStreamingSession()
+                liveTranscript = ""
+                try streamSession.start { transcript in
+                    Task { @MainActor in
+                        liveTranscript = transcript
+                    }
+                }
+                streamingSession = streamSession
+                isRecording = true
+                startTimer()
+            } catch {
+                processingErrorMessage = error.localizedDescription
+                stopTimer()
+                streamingSession = nil
+            }
+        }
+    }
+
+    private func startFileRecording() {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playAndRecord, mode: .default)
@@ -3154,48 +3318,137 @@ private struct AudioRecorderSheet: View {
             recordingURL = url
             isRecording = true
             recordingDuration = 0
-            
-            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                recordingDuration += 0.1
-            }
+            startTimer()
         } catch {
             // 录音启动失败
+            processingErrorMessage = error.localizedDescription
         }
     }
     
     private func stopRecording() {
-        timer?.invalidate()
-        timer = nil
+        stopTimer()
+        if usesSystemStreamingRecognizer {
+            let transcript = streamingSession?.finish() ?? liveTranscript
+            liveTranscript = transcript
+            streamingSession = nil
+            isRecording = false
+            return
+        }
+
         audioRecorder?.stop()
         isRecording = false
     }
     
     private func cancelRecording() {
-        stopRecording()
+        stopTimer()
+        if isRecording {
+            audioRecorder?.stop()
+        }
+        streamingSession?.stop()
+        streamingSession = nil
         if let url = recordingURL {
             try? FileManager.default.removeItem(at: url)
         }
         recordingURL = nil
+        audioRecorder = nil
+        isRecording = false
+        isTranscriptionInProgress = false
+        liveTranscript = ""
+        preparedTranscript = nil
+        hasAppliedPreparedTranscript = false
+        processingErrorMessage = nil
     }
     
     private func finishRecording() {
-        stopRecording()
+        processingErrorMessage = nil
+        if isRecording {
+            stopRecording()
+        }
+
+        if usesSystemStreamingRecognizer {
+            let transcript = liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !transcript.isEmpty else {
+                processingErrorMessage = "未识别到有效语音内容。"
+                return
+            }
+            onCompleteTranscript(transcript)
+            dismiss()
+            return
+        }
+
+        if case .speechToText = mode,
+           let preparedText = preparedTranscript,
+           !preparedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !hasAppliedPreparedTranscript {
+                onCompleteTranscript(preparedText)
+                hasAppliedPreparedTranscript = true
+            }
+            cleanupRecordedFile()
+            dismiss()
+            return
+        }
+
         guard let url = recordingURL,
               let data = try? Data(contentsOf: url) else {
             dismiss()
             return
         }
-        
+
         let attachment = AudioAttachment(
             data: data,
             mimeType: format.mimeType,
             format: format.fileExtension,
             fileName: url.lastPathComponent
         )
-        
-        try? FileManager.default.removeItem(at: url)
-        onComplete(attachment)
-        dismiss()
+
+        switch mode {
+        case .audioAttachment:
+            onCompleteAudio(attachment)
+            cleanupRecordedFile()
+            dismiss()
+        case .speechToText(let model):
+            isTranscriptionInProgress = true
+            Task {
+                do {
+                    let transcript: String
+                    if ChatService.isSystemSpeechRecognizerModel(model) {
+                        transcript = try await SystemSpeechRecognizerService.transcribe(
+                            audioData: attachment.data,
+                            fileExtension: attachment.format
+                        )
+                    } else if let transcribeRemotely {
+                        transcript = try await transcribeRemotely(model, attachment)
+                    } else {
+                        throw NSError(
+                            domain: "AudioRecorderSheet",
+                            code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "当前未配置语音转写处理器。"]
+                        )
+                    }
+
+                    await MainActor.run {
+                        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmedTranscript.isEmpty else {
+                            processingErrorMessage = "未识别到有效语音内容。"
+                            isTranscriptionInProgress = false
+                            return
+                        }
+                        liveTranscript = trimmedTranscript
+                        preparedTranscript = trimmedTranscript
+                        if !hasAppliedPreparedTranscript {
+                            onCompleteTranscript(trimmedTranscript)
+                            hasAppliedPreparedTranscript = true
+                        }
+                        isTranscriptionInProgress = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        processingErrorMessage = error.localizedDescription
+                        isTranscriptionInProgress = false
+                    }
+                }
+            }
+        }
     }
     
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -3203,6 +3456,60 @@ private struct AudioRecorderSheet: View {
         let seconds = Int(duration) % 60
         let tenths = Int((duration.truncatingRemainder(dividingBy: 1)) * 10)
         return String(format: "%02d:%02d.%d", minutes, seconds, tenths)
+    }
+
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            recordingDuration += 0.1
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func cleanupRecordedFile() {
+        if let url = recordingURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        recordingURL = nil
+        audioRecorder = nil
+        streamingSession = nil
+        preparedTranscript = nil
+        hasAppliedPreparedTranscript = false
+    }
+
+    private var isSpeechToTextMode: Bool {
+        if case .speechToText = mode {
+            return true
+        }
+        return false
+    }
+
+    private var usesSystemStreamingRecognizer: Bool {
+        if case .speechToText(let model) = mode {
+            return ChatService.isSystemSpeechRecognizerModel(model)
+        }
+        return false
+    }
+
+    private var doneButtonDisabled: Bool {
+        if isTranscriptionInProgress {
+            return true
+        }
+        if usesSystemStreamingRecognizer {
+            return isRecording
+                ? false
+                : liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if isSpeechToTextMode,
+           let preparedTranscript,
+           !preparedTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return false
+        }
+        return recordingURL == nil || isRecording
     }
 }
 

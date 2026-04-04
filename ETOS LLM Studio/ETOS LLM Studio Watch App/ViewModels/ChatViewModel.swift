@@ -68,6 +68,7 @@ class ChatViewModel: ObservableObject {
     @Published var isSpeechRecorderPresented: Bool = false
     @Published var isRecordingSpeech: Bool = false
     @Published var speechTranscriptionInProgress: Bool = false
+    @Published var speechStreamingTranscript: String = ""
     @Published var speechErrorMessage: String?
     @Published var showSpeechErrorAlert: Bool = false
     @Published var showDimensionMismatchAlert: Bool = false
@@ -232,6 +233,7 @@ class ChatViewModel: ObservableObject {
     private var lastSessionID: UUID?
     private let incrementalHistoryBatchSize = 5
     private var audioRecorder: AVAudioRecorder?
+    private var systemSpeechStreamingSession: SystemSpeechStreamingSession?
     private var speechRecordingURL: URL?
     private var recordingStartDate: Date?
     private var recordingTimer: Timer?
@@ -936,6 +938,49 @@ class ChatViewModel: ObservableObject {
             isSpeechRecorderPresented = false
             return
         }
+        speechStreamingTranscript = ""
+
+        if shouldUseSystemSpeechStreaming {
+            let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
+            guard speechPermissionGranted else {
+                presentSpeechError("语音识别权限被拒绝，请到设置中开启。")
+                isSpeechRecorderPresented = false
+                return
+            }
+
+            do {
+                let streamSession = try SystemSpeechStreamingSession()
+                speechStreamingTranscript = ""
+                resetRecordingVisuals()
+                try streamSession.start(
+                    onTranscript: { [weak self] transcript in
+                        Task { @MainActor [weak self] in
+                            self?.speechStreamingTranscript = transcript
+                        }
+                    },
+                    onAudioLevel: { [weak self] level in
+                        Task { @MainActor [weak self] in
+                            self?.appendWaveformSample(level)
+                        }
+                    }
+                )
+                systemSpeechStreamingSession = streamSession
+                isRecordingSpeech = true
+                startRecordingTimer()
+            } catch {
+                presentSpeechError(
+                    String(
+                        format: NSLocalizedString("开始录音失败: %@", comment: ""),
+                        error.localizedDescription
+                    )
+                )
+                isSpeechRecorderPresented = false
+                stopRecordingTimer(resetVisuals: true)
+                systemSpeechStreamingSession = nil
+                speechStreamingTranscript = ""
+            }
+            return
+        }
         
         do {
             let session = AVAudioSession.sharedInstance()
@@ -995,15 +1040,39 @@ class ChatViewModel: ObservableObject {
             isSpeechRecorderPresented = false
             stopRecordingTimer(resetVisuals: true)
             audioRecorder = nil
+            systemSpeechStreamingSession = nil
             speechRecordingURL = nil
+            speechStreamingTranscript = ""
         }
     }
     
     func finishSpeechRecording() {
-        guard isRecordingSpeech else { return }
+        if !isRecordingSpeech {
+            if speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return
+            }
+            isSpeechRecorderPresented = false
+            speechStreamingTranscript = ""
+            return
+        }
+
         isRecordingSpeech = false
-        audioRecorder?.stop()
         stopRecordingTimer()
+
+        if let streamSession = systemSpeechStreamingSession {
+            let transcript = streamSession.finish().trimmingCharacters(in: .whitespacesAndNewlines)
+            systemSpeechStreamingSession = nil
+            resetRecordingVisuals()
+            guard !transcript.isEmpty else {
+                presentSpeechError("未识别到有效语音内容。")
+                return
+            }
+            speechStreamingTranscript = transcript
+            appendTranscribedText(transcript)
+            return
+        }
+
+        audioRecorder?.stop()
         guard let url = speechRecordingURL else {
             audioRecorder = nil
             speechRecordingURL = nil
@@ -1020,7 +1089,6 @@ class ChatViewModel: ObservableObject {
         Task {
             defer {
                 speechTranscriptionInProgress = false
-                isSpeechRecorderPresented = false
                 audioRecorder = nil
                 speechRecordingURL = nil
                 try? FileManager.default.removeItem(at: url)
@@ -1049,7 +1117,12 @@ class ChatViewModel: ObservableObject {
                         fileName: url.lastPathComponent,
                         mimeType: audioRecordingFormat.mimeType
                     )
-                    appendTranscribedText(transcript)
+                    let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmedTranscript.isEmpty else {
+                        throw NSError(domain: "SpeechRecorder", code: -3, userInfo: [NSLocalizedDescriptionKey: "未识别到有效语音内容。"])
+                    }
+                    speechStreamingTranscript = trimmedTranscript
+                    appendTranscribedText(trimmedTranscript)
                 }
             } catch {
                 presentSpeechError(error.localizedDescription)
@@ -1058,6 +1131,11 @@ class ChatViewModel: ObservableObject {
     }
     
     func cancelSpeechRecording() {
+        if let streamSession = systemSpeechStreamingSession {
+            streamSession.stop()
+            systemSpeechStreamingSession = nil
+            speechStreamingTranscript = ""
+        }
         if isRecordingSpeech {
             audioRecorder?.stop()
             isRecordingSpeech = false
@@ -1069,6 +1147,7 @@ class ChatViewModel: ObservableObject {
         audioRecorder = nil
         speechRecordingURL = nil
         isSpeechRecorderPresented = false
+        speechStreamingTranscript = ""
         stopRecordingTimer(resetVisuals: true)
     }
     
@@ -1101,17 +1180,26 @@ class ChatViewModel: ObservableObject {
     
     @MainActor
     private func updateRecordingMetrics() {
+        recordingDuration = Date().timeIntervalSince(recordingStartDate ?? Date())
         guard let recorder = audioRecorder else { return }
         recorder.updateMeters()
         let power = recorder.averagePower(forChannel: 0)
         let normalizedLevel = max(0, min(1, (power + 60) / 60))
-        recordingDuration = Date().timeIntervalSince(recordingStartDate ?? Date())
+        appendWaveformSample(CGFloat(normalizedLevel))
+    }
+
+    @MainActor
+    private func appendWaveformSample(_ level: CGFloat) {
         var samples = waveformSamples
-        samples.append(CGFloat(normalizedLevel))
+        samples.append(level)
         if samples.count > waveformSampleCount {
             samples.removeFirst(samples.count - waveformSampleCount)
         }
         waveformSamples = samples
+    }
+
+    private var shouldUseSystemSpeechStreaming: Bool {
+        !sendSpeechAsAudio && ChatService.isSystemSpeechRecognizerModel(selectedSpeechModel)
     }
     
     // MARK: 会话和消息管理
@@ -1576,7 +1664,7 @@ class ChatViewModel: ObservableObject {
 
     private func presentMemoryRetryStoppedNotice() {
         let message = NSLocalizedString(
-            "长期记忆嵌入已停止自动重试，请前往“记忆设置”检查嵌入模型。",
+            "记忆系统嵌入已停止自动重试，请前往“记忆设置”检查嵌入模型。",
             comment: "Non-modal notice shown when automatic memory embedding retry is stopped."
         )
         memoryRetryStoppedNoticeMessage = message

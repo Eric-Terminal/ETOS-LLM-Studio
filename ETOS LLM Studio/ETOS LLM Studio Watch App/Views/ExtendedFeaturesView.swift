@@ -29,7 +29,7 @@ public struct ExtendedFeaturesView: View {
 
                     入口建议
                     • 工具中心：排查工具是否在当前会话可用。
-                    • 长期记忆 / 世界书：管理长期偏好与规则知识。
+                    • 记忆系统 / 世界书：管理长期偏好与规则知识。
                     • MCP / 快捷指令：接入外部能力和自动化流程。
                     • 存储管理 / 远程文件访问：做维护与清理。
 
@@ -103,7 +103,7 @@ public struct ExtendedFeaturesView: View {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("长期记忆系统", systemImage: "brain.head.profile")
+                    Label("记忆系统", systemImage: "brain.head.profile")
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -271,7 +271,7 @@ public struct ExtendedFeaturesView: View {
     }
 }
 
-// MARK: - 长期记忆设置
+// MARK: - 记忆系统设置
 
 private struct LongTermMemoryFeatureView: View {
     @EnvironmentObject var viewModel: ChatViewModel
@@ -284,11 +284,11 @@ private struct LongTermMemoryFeatureView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "长期记忆系统",
+                    title: "记忆系统",
                     summary: "让 AI 持续理解你的长期偏好和上下文。",
                     details: """
                     能力说明
-                    • 长期记忆会在回复前检索历史信息，提升连续性。
+                    • 记忆系统会在回复前检索历史信息，提升连续性。
                     • 写入开关仅影响“新增记忆”，不影响读取已有记忆。
 
                     推荐流程
@@ -303,7 +303,7 @@ private struct LongTermMemoryFeatureView: View {
             Section {
                 Toggle("启用记忆功能", isOn: $enableMemory)
             } footer: {
-                Text("启用后，AI 将拥有长期记忆能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。")
+                Text("启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。")
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -329,7 +329,7 @@ private struct LongTermMemoryFeatureView: View {
                 }
             }
         }
-        .navigationTitle("长期记忆系统")
+        .navigationTitle("记忆系统")
     }
 
     private func settingsIntroCard(

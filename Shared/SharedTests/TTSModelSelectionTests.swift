@@ -52,8 +52,8 @@ struct TTSModelSelectionTests {
         }
     }
 
-    @Test("没有 TTS 能力模型时回退到全部激活模型")
-    func testActivatedTTSModelsFallsBackToActivatedModels() {
+    @Test("没有 TTS 能力模型时列表为空")
+    func testActivatedTTSModelsEmptyWhenNoCapableModel() {
         let backupProviders = ConfigLoader.loadProviders()
         defer { restoreProviders(backupProviders) }
 
@@ -72,8 +72,8 @@ struct TTSModelSelectionTests {
         let service = ChatService()
         let activated = service.activatedTTSModels
 
-        #expect(activated.count == 1)
-        #expect(activated.first?.model.modelName == "gpt-4o")
+        #expect(activated.isEmpty)
+        #expect(service.resolveSelectedTTSModel() == nil)
     }
 
     @Test("文本分片函数会按标点与长度切分")

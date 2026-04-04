@@ -263,7 +263,7 @@ struct ToolCenterView: View {
                     .foregroundStyle(.secondary)
             ) {
                 Toggle(
-                    NSLocalizedString("启用长期记忆系统", comment: "Enable long-term memory"),
+                    NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
                     isOn: $enableMemory
                 )
 
@@ -487,9 +487,9 @@ struct ToolCenterView: View {
     private func builtInTitle(for kind: ToolCatalogBuiltInToolKind) -> String {
         switch kind {
         case .memoryWrite:
-            return NSLocalizedString("长期记忆写入", comment: "Memory write tool title")
+            return NSLocalizedString("记忆系统写入", comment: "Memory write tool title")
         case .memorySearch:
-            return NSLocalizedString("长期记忆主动检索", comment: "Memory search tool title")
+            return NSLocalizedString("记忆系统主动检索", comment: "Memory search tool title")
         case .widgetCard:
             return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
         @unknown default:
@@ -504,7 +504,7 @@ struct ToolCenterView: View {
             case .enabled:
                 return NSLocalizedString("已允许写入新的记忆。", comment: "Memory write enabled")
             case .memoryDisabled:
-                return NSLocalizedString("长期记忆总开关已关闭。", comment: "Memory system disabled")
+                return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
             case .memoryWriteDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
             case .isolatedByWorldbook:
@@ -522,7 +522,7 @@ struct ToolCenterView: View {
                     state.memoryTopK
                 )
             case .memoryDisabled:
-                return NSLocalizedString("长期记忆总开关已关闭。", comment: "Memory system disabled")
+                return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
             case .activeRetrievalDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search disabled")
             case .zeroTopK:
@@ -935,7 +935,7 @@ private struct WatchBuiltInToolDetailView: View {
             case .memoryWrite:
                 Section(NSLocalizedString("启用状态", comment: "Enable status")) {
                     Toggle(
-                        NSLocalizedString("启用长期记忆系统", comment: "Enable long-term memory"),
+                        NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
                         isOn: $enableMemory
                     )
                     Toggle(
@@ -947,7 +947,7 @@ private struct WatchBuiltInToolDetailView: View {
             case .memorySearch:
                 Section(NSLocalizedString("启用状态", comment: "Enable status")) {
                     Toggle(
-                        NSLocalizedString("启用长期记忆系统", comment: "Enable long-term memory"),
+                        NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
                         isOn: $enableMemory
                     )
                     Toggle(
@@ -991,9 +991,9 @@ private struct WatchBuiltInToolDetailView: View {
     private var title: String {
         switch kind {
         case .memoryWrite:
-            return NSLocalizedString("长期记忆写入", comment: "Memory write tool title")
+            return NSLocalizedString("记忆系统写入", comment: "Memory write tool title")
         case .memorySearch:
-            return NSLocalizedString("长期记忆主动检索", comment: "Memory search tool title")
+            return NSLocalizedString("记忆系统主动检索", comment: "Memory search tool title")
         case .widgetCard:
             return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
         @unknown default:
@@ -1032,7 +1032,7 @@ private struct WatchBuiltInToolDetailView: View {
             case .enabled:
                 return NSLocalizedString("已允许写入新的记忆。", comment: "Memory write enabled")
             case .memoryDisabled:
-                return NSLocalizedString("长期记忆总开关已关闭。", comment: "Memory system disabled")
+                return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
             case .memoryWriteDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
             case .isolatedByWorldbook:
@@ -1050,7 +1050,7 @@ private struct WatchBuiltInToolDetailView: View {
                     state.memoryTopK
                 )
             case .memoryDisabled:
-                return NSLocalizedString("长期记忆总开关已关闭。", comment: "Memory system disabled")
+                return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
             case .activeRetrievalDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search disabled")
             case .zeroTopK:

@@ -11,9 +11,11 @@ import SwiftUI
 import Foundation
 import Shared
 import WatchKit
+import AuthenticationServices
 
 struct AboutView: View {
-    private let privacyURL = URL(string: "http://privacy.els.ericterminal.com/")!
+    private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
+    @State private var webAuthLauncher = WatchWebAuthLauncher()
     @State private var versionTapCount = 0
     @State private var lastVersionTapAt: Date = .distantPast
     @State private var showAppLogs = false
@@ -104,7 +106,9 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     InfoRow(title: "开源协议", value: "GPLv3")
                     
-                    Link(destination: privacyURL) {
+                    Button {
+                        webAuthLauncher.open(url: privacyURL)
+                    } label: {
                         HStack {
                             Text("隐私政策")
                                 .etFont(.caption)
@@ -151,6 +155,22 @@ struct AboutView: View {
         showAppLogs = true
         AppLog.userOperation(category: "调试入口", action: "打开应用日志页")
         WKInterfaceDevice.current().play(.success)
+    }
+}
+
+@MainActor
+private final class WatchWebAuthLauncher: NSObject {
+    private var session: ASWebAuthenticationSession?
+
+    func open(url: URL) {
+        session?.cancel()
+        session = ASWebAuthenticationSession(url: url, callbackURLScheme: nil) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.session = nil
+            }
+        }
+        session?.prefersEphemeralWebBrowserSession = true
+        _ = session?.start()
     }
 }
 
@@ -210,11 +230,14 @@ private struct ProjectLinksView: View {
     
     private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
     private let issuesURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues")!
+    @State private var webAuthLauncher = WatchWebAuthLauncher()
     
     var body: some View {
         List {
             // 项目主页链接
-            Link(destination: githubURL) {
+            Button {
+                webAuthLauncher.open(url: githubURL)
+            } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Label("项目主页", systemImage: "house")
@@ -231,7 +254,9 @@ private struct ProjectLinksView: View {
             }
             
             // 问题反馈链接
-            Link(destination: issuesURL) {
+            Button {
+                webAuthLauncher.open(url: issuesURL)
+            } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")

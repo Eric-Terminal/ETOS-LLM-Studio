@@ -37,6 +37,15 @@ struct SpeechRecorderView: View {
                     
                     Text("正在录音…")
                         .etFont(.headline)
+
+                    if !viewModel.speechStreamingTranscript.isEmpty {
+                        Text(viewModel.speechStreamingTranscript)
+                            .etFont(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 } else {
                     Image(systemName: "mic.slash")
                         .etFont(.system(size: 34))
@@ -44,6 +53,15 @@ struct SpeechRecorderView: View {
                         .padding(.top, 6)
                     Text(viewModel.sendSpeechAsAudio ? "录音后将直接发送" : "准备录音")
                         .etFont(.headline)
+
+                    if !viewModel.speechStreamingTranscript.isEmpty {
+                        Text(viewModel.speechStreamingTranscript)
+                            .etFont(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
             
@@ -60,7 +78,10 @@ struct SpeechRecorderView: View {
                     viewModel.finishSpeechRecording()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!viewModel.isRecordingSpeech || viewModel.speechTranscriptionInProgress)
+                .disabled(
+                    viewModel.speechTranscriptionInProgress
+                    || (!viewModel.isRecordingSpeech && viewModel.speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                )
                 .frame(maxWidth: .infinity)
             }
         }

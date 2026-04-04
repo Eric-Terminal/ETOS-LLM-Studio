@@ -161,7 +161,10 @@ struct FeedbackTicketTests {
             submittedReproductionSteps: "步骤 1 -> 步骤 2",
             submittedExpectedBehavior: "应当展示详情",
             submittedActualBehavior: "详情页未展示",
-            submittedExtraContext: "仅在预览卡片可见"
+            submittedExtraContext: "仅在预览卡片可见",
+            lastKnownCommentCount: 5,
+            lastKnownDeveloperCommentID: "999",
+            lastKnownDeveloperCommentAt: now
         )
 
         let encoder = FeedbackDateCodec.makeJSONEncoder()
@@ -179,6 +182,9 @@ struct FeedbackTicketTests {
         #expect(decoded[0].submittedExpectedBehavior == "应当展示详情")
         #expect(decoded[0].submittedActualBehavior == "详情页未展示")
         #expect(decoded[0].submittedExtraContext == "仅在预览卡片可见")
+        #expect(decoded[0].lastKnownCommentCount == 5)
+        #expect(decoded[0].lastKnownDeveloperCommentID == "999")
+        #expect(decoded[0].lastKnownDeveloperCommentAt == now)
     }
 
     @Test("兼容旧工单数据解码")
@@ -206,6 +212,43 @@ struct FeedbackTicketTests {
         #expect(decoded[0].submittedExpectedBehavior == nil)
         #expect(decoded[0].submittedActualBehavior == nil)
         #expect(decoded[0].submittedExtraContext == nil)
+        #expect(decoded[0].lastKnownCommentCount == nil)
+        #expect(decoded[0].lastKnownDeveloperCommentID == nil)
+        #expect(decoded[0].lastKnownDeveloperCommentAt == nil)
+    }
+
+    @Test("工单合并状态快照时会更新评论追踪标记")
+    func mergedSnapshotUpdatesCommentMarkers() {
+        let baseDate = Date(timeIntervalSince1970: 1_730_000_000)
+        let ticket = FeedbackTicket(
+            issueNumber: 77,
+            ticketToken: "token-77",
+            category: .bug,
+            title: "旧标题",
+            createdAt: baseDate,
+            lastKnownStatus: .triage
+        )
+
+        let snapshot = FeedbackStatusSnapshot(
+            issueNumber: 77,
+            title: "新标题",
+            status: .inProgress,
+            labels: ["status/in-progress"],
+            updatedAt: baseDate.addingTimeInterval(120),
+            publicURL: URL(string: "https://example.com/issues/77"),
+            isClosed: false,
+            comments: [
+                FeedbackComment(id: "1", author: "user", body: "我补充一下", createdAt: baseDate.addingTimeInterval(30), isDeveloper: false),
+                FeedbackComment(id: "2", author: "dev", body: "已收到，我们在看。", createdAt: baseDate.addingTimeInterval(60), isDeveloper: true)
+            ]
+        )
+
+        let merged = ticket.merged(with: snapshot, checkedAt: baseDate.addingTimeInterval(180))
+        #expect(merged.title == "新标题")
+        #expect(merged.lastKnownStatus == .inProgress)
+        #expect(merged.lastKnownCommentCount == 2)
+        #expect(merged.lastKnownDeveloperCommentID == "2")
+        #expect(merged.lastKnownDeveloperCommentAt == baseDate.addingTimeInterval(60))
     }
 }
 

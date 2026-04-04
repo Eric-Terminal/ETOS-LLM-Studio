@@ -207,7 +207,7 @@ private struct WatchFeedbackComposeView: View {
     }
 }
 
-private struct WatchFeedbackDetailView: View {
+struct WatchFeedbackDetailView: View {
     @Environment(\.openURL) private var openURL
     @ObservedObject private var service = FeedbackService.shared
 
