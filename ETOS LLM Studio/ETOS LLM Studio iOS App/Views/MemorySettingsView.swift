@@ -17,13 +17,30 @@ struct MemorySettingsView: View {
     @State private var showReembedConfirmation = false
     @State private var reembedAlert: MemoryReembedAlert?
     @State private var editingMemory: MemoryItem?
+    @State private var showClearConversationSummariesConfirmation = false
+    @State private var showClearConversationProfileConfirmation = false
+    @State private var isEditingConversationProfile = false
+    @State private var conversationProfileDraft: String = ""
+    @State private var conversationMemoryAlert: ConversationMemoryAlert?
     @AppStorage("memoryTopK") private var memoryTopK: Int = 3
     @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
+    @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
+    @AppStorage("conversationMemoryRecentLimit") private var conversationMemoryRecentLimit: Int = 5
+    @AppStorage("conversationMemoryRoundThreshold") private var conversationMemoryRoundThreshold: Int = 6
+    @AppStorage("conversationMemorySummaryMinIntervalMinutes") private var conversationMemorySummaryMinIntervalMinutes: Int = 120
+    @AppStorage("enableConversationProfileDailyUpdate") private var enableConversationProfileDailyUpdate: Bool = true
     
     private var embeddingModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.selectedEmbeddingModel },
             set: { viewModel.setSelectedEmbeddingModel($0) }
+        )
+    }
+
+    private var conversationSummaryModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedConversationSummaryModel },
+            set: { viewModel.setSelectedConversationSummaryModel($0) }
         )
     }
     
@@ -137,6 +154,153 @@ struct MemorySettingsView: View {
                 Text("检索设置")
             } footer: {
                 Text("设置为 0 表示跳过检索，直接把所有记忆原文注入上下文。默认为 3。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("启用异步跨对话记忆", isOn: $enableConversationMemoryAsync)
+
+                if enableConversationMemoryAsync {
+                    LabeledContent("注入最近摘要数") {
+                        TextField("5", value: $conversationMemoryRecentLimit, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                            .onChange(of: conversationMemoryRecentLimit) { _, newValue in
+                                conversationMemoryRecentLimit = max(1, newValue)
+                            }
+                    }
+
+                    LabeledContent("摘要触发轮次阈值") {
+                        TextField("6", value: $conversationMemoryRoundThreshold, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                            .onChange(of: conversationMemoryRoundThreshold) { _, newValue in
+                                conversationMemoryRoundThreshold = max(1, newValue)
+                            }
+                    }
+
+                    LabeledContent("摘要最小间隔(分钟)") {
+                        TextField("120", value: $conversationMemorySummaryMinIntervalMinutes, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                            .onChange(of: conversationMemorySummaryMinIntervalMinutes) { _, newValue in
+                                conversationMemorySummaryMinIntervalMinutes = max(0, newValue)
+                            }
+                    }
+
+                    Toggle("用户画像每天自动更新一次", isOn: $enableConversationProfileDailyUpdate)
+
+                    let options = viewModel.conversationSummaryModelOptions
+                    if options.isEmpty {
+                        Text("暂无可用聊天模型，无法配置摘要专用模型。")
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        NavigationLink {
+                            EmbeddingModelSelectionView(
+                                embeddingModels: options,
+                                selectedEmbeddingModel: conversationSummaryModelBinding
+                            )
+                        } label: {
+                            HStack {
+                                Text("摘要专用模型")
+                                MarqueeText(
+                                    content: selectedConversationSummaryModelLabel(in: options),
+                                    uiFont: .preferredFont(forTextStyle: .body)
+                                )
+                                .foregroundStyle(.secondary)
+                                .allowsHitTesting(false)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("跨对话记忆")
+            } footer: {
+                Text("会话摘要会写入会话 JSON；用户画像会保存到 Memory 目录下，并限制为每天最多更新一次。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                let conversationSummaries = viewModel.conversationSessionSummaries
+                if conversationSummaries.isEmpty {
+                    Text("暂无会话摘要。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(conversationSummaries) { item in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(item.sessionName)
+                                    .lineLimit(1)
+                                    .font(.headline)
+                                Spacer()
+                                Text(item.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(item.summary)
+                                .lineLimit(3)
+                                .etFont(.footnote)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                viewModel.deleteConversationSummary(for: item.sessionID)
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        showClearConversationSummariesConfirmation = true
+                    } label: {
+                        Label("清空全部会话摘要", systemImage: "trash.slash")
+                    }
+                }
+            } header: {
+                Text("会话摘要管理")
+            } footer: {
+                Text("这里展示跨会话注入用的摘要，可按条删除或一键清空。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                if let profile = viewModel.conversationUserProfile {
+                    Text(profile.content)
+                        .lineLimit(6)
+                    Text("更新时间：\(profile.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("编辑用户画像") {
+                        conversationProfileDraft = profile.content
+                        isEditingConversationProfile = true
+                    }
+                    Button(role: .destructive) {
+                        showClearConversationProfileConfirmation = true
+                    } label: {
+                        Label("清空用户画像", systemImage: "trash")
+                    }
+                } else {
+                    Text("暂无用户画像。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("新建用户画像") {
+                        conversationProfileDraft = ""
+                        isEditingConversationProfile = true
+                    }
+                }
+            } header: {
+                Text("用户画像")
+            } footer: {
+                Text("用户画像用于补充稳定偏好和长期背景。即使自动更新关闭，你仍可在这里手动编辑。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -335,6 +499,41 @@ struct MemorySettingsView: View {
                 dismissButton: .default(Text("好的"))
             )
         }
+        .confirmationDialog(
+            "清空全部会话摘要？",
+            isPresented: $showClearConversationSummariesConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("清空", role: .destructive) {
+                let removed = viewModel.clearAllConversationSummaries()
+                if removed > 0 {
+                    conversationMemoryAlert = .init(title: "已清空会话摘要", message: "共清理 \(removed) 条摘要。")
+                }
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "清空用户画像？",
+            isPresented: $showClearConversationProfileConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("清空", role: .destructive) {
+                do {
+                    try viewModel.clearConversationUserProfile()
+                    conversationMemoryAlert = .init(title: "已清空用户画像", message: "后续可重新生成或手动编辑。")
+                } catch {
+                    conversationMemoryAlert = .init(title: "清空失败", message: error.localizedDescription)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .alert(item: $conversationMemoryAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("好的"))
+            )
+        }
         .sheet(isPresented: $isAddingMemory) {
             NavigationStack {
                 AddMemorySheet()
@@ -346,6 +545,24 @@ struct MemorySettingsView: View {
                 MemoryEditView(memory: memory)
                     .environmentObject(viewModel)
             }
+        }
+        .sheet(isPresented: $isEditingConversationProfile) {
+            NavigationStack {
+                ConversationProfileEditorSheet(
+                    initialText: conversationProfileDraft,
+                    onSave: { newText in
+                        do {
+                            try viewModel.saveConversationUserProfile(content: newText)
+                            conversationMemoryAlert = .init(title: "保存成功", message: "用户画像已更新。")
+                        } catch {
+                            conversationMemoryAlert = .init(title: "保存失败", message: error.localizedDescription)
+                        }
+                    }
+                )
+            }
+        }
+        .task {
+            viewModel.reloadConversationMemoryState()
         }
     }
     
@@ -359,6 +576,14 @@ struct MemorySettingsView: View {
         guard let selected = viewModel.selectedEmbeddingModel,
               options.contains(where: { $0.id == selected.id }) else {
             return "未选择"
+        }
+        return "\(selected.model.displayName) | \(selected.provider.name)"
+    }
+
+    private func selectedConversationSummaryModelLabel(in options: [RunnableModel]) -> String {
+        guard let selected = viewModel.selectedConversationSummaryModel,
+              options.contains(where: { $0.id == selected.id }) else {
+            return "未选择（跟随当前对话模型）"
         }
         return "\(selected.model.displayName) | \(selected.provider.name)"
     }
@@ -460,6 +685,45 @@ struct AddMemorySheet: View {
             }
         }
     }
+}
+
+private struct ConversationProfileEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: String
+    let onSave: (String) -> Void
+
+    init(initialText: String, onSave: @escaping (String) -> Void) {
+        _draft = State(initialValue: initialText)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        Form {
+            Section("用户画像内容") {
+                TextEditor(text: $draft)
+                    .frame(minHeight: 220)
+            }
+        }
+        .navigationTitle("编辑用户画像")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("保存") {
+                    onSave(draft)
+                    dismiss()
+                }
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+}
+
+private struct ConversationMemoryAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 private struct MemoryReembedAlert: Identifiable {

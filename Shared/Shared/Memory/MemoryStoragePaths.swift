@@ -16,6 +16,7 @@ enum MemoryStoragePaths {
     
     private static let directoryName = "Memory"
     private static let rawFileName = "memories.json"
+    private static let userProfileFileName = "user_profile.json"
     private static let vectorStoreNameValue = "memory_vectors"
     
     @discardableResult
@@ -38,6 +39,10 @@ enum MemoryStoragePaths {
     
     static func rawMemoriesFileURL(rootDirectory overrideRootDirectory: URL? = nil) -> URL {
         rootDirectory(rootDirectory: overrideRootDirectory).appendingPathComponent(rawFileName, isDirectory: false)
+    }
+
+    static func userProfileFileURL(rootDirectory overrideRootDirectory: URL? = nil) -> URL {
+        rootDirectory(rootDirectory: overrideRootDirectory).appendingPathComponent(userProfileFileName, isDirectory: false)
     }
     
     static func vectorStoreDirectory(rootDirectory overrideRootDirectory: URL? = nil) -> URL {
