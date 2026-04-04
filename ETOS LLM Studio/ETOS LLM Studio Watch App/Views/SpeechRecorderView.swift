@@ -37,6 +37,15 @@ struct SpeechRecorderView: View {
                     
                     Text("正在录音…")
                         .etFont(.headline)
+
+                    if !viewModel.speechStreamingTranscript.isEmpty {
+                        Text(viewModel.speechStreamingTranscript)
+                            .etFont(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 } else {
                     Image(systemName: "mic.slash")
                         .etFont(.system(size: 34))

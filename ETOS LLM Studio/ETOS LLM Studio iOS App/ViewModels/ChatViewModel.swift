@@ -876,6 +876,15 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func transcribeAudioAttachment(using model: RunnableModel, attachment: AudioAttachment) async throws -> String {
+        try await chatService.transcribeAudio(
+            using: model,
+            audioData: attachment.data,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType
+        )
+    }
+
     private func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
         let content = request.text
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }

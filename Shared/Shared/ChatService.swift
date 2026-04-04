@@ -65,6 +65,29 @@ public class ChatService {
     private static let conversationMemoryRoundThresholdKey = "conversationMemoryRoundThreshold"
     private static let conversationMemorySummaryMinIntervalMinutesKey = "conversationMemorySummaryMinIntervalMinutes"
     private static let conversationProfileDailyUpdateEnabledKey = "enableConversationProfileDailyUpdate"
+    public static let systemSpeechRecognizerProviderID = UUID(uuidString: "2FB43D6B-8E40-4D65-9EA6-C13AB41D8A2E")!
+    public static let systemSpeechRecognizerModelID = UUID(uuidString: "EE2F84DF-F640-47B8-9A83-BE438905C4F3")!
+    public static let systemSpeechRecognizerRunnableModel: RunnableModel = {
+        let provider = Provider(
+            id: systemSpeechRecognizerProviderID,
+            name: "SFSpeechRecognizer",
+            baseURL: "local://sf-speech-recognizer",
+            apiKeys: [],
+            apiFormat: "local-speech"
+        )
+        let model = Model(
+            id: systemSpeechRecognizerModelID,
+            modelName: "sf-speech-recognizer",
+            displayName: "SFSpeechRecognizer",
+            isActivated: true,
+            capabilities: [.speechToText]
+        )
+        return RunnableModel(provider: provider, model: model)
+    }()
+
+    public static func isSystemSpeechRecognizerModel(_ model: RunnableModel?) -> Bool {
+        model?.id == systemSpeechRecognizerRunnableModel.id
+    }
 
     // MARK: - 单例
     public static let shared = ChatService()
@@ -321,7 +344,11 @@ public class ChatService {
     
     public var activatedSpeechModels: [RunnableModel] {
         let speechCapable = activatedRunnableModels.filter { $0.model.supportsSpeechToText }
-        return speechCapable.isEmpty ? activatedRunnableModels : speechCapable
+        var candidates = speechCapable.isEmpty ? activatedRunnableModels : speechCapable
+        if !candidates.contains(where: { $0.id == Self.systemSpeechRecognizerRunnableModel.id }) {
+            candidates.insert(Self.systemSpeechRecognizerRunnableModel, at: 0)
+        }
+        return candidates
     }
 
     public var activatedTTSModels: [RunnableModel] {
@@ -623,6 +650,18 @@ public class ChatService {
         mimeType: String,
         language: String? = nil
     ) async throws -> String {
+        if Self.isSystemSpeechRecognizerModel(model) {
+            let extensionFromName = URL(fileURLWithPath: fileName).pathExtension
+            let fallbackExtension = mimeType.lowercased().contains("wav") ? "wav" : "m4a"
+            let transcript = try await SystemSpeechRecognizerService.transcribe(
+                audioData: audioData,
+                fileExtension: extensionFromName.isEmpty ? fallbackExtension : extensionFromName,
+                localeIdentifier: language
+            )
+            logger.info("系统语音识别完成，长度 \(transcript.count) 字符。")
+            return transcript
+        }
+
         logger.info("正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
         
         guard let adapter = adapters[model.provider.apiFormat] else {
