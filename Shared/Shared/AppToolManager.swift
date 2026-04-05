@@ -802,7 +802,11 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let chatToolsEnabledUserDefaultsKey = "appTools.chatToolsEnabled"
     private nonisolated static let enabledToolIDsUserDefaultsKey = "appTools.enabledToolIDs"
     private nonisolated static let toolApprovalPoliciesUserDefaultsKey = "appTools.toolApprovalPolicies"
+    #if os(watchOS)
+    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = []
+    #else
     private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget]
+    #endif
     private nonisolated static let builtInToolKinds: Set<AppToolKind> = [.showWidget]
 
     @Published public private(set) var chatToolsEnabled: Bool
