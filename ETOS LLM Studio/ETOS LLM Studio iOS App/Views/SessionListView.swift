@@ -2,8 +2,9 @@
 // SessionListView.swift
 // ============================================================================
 // 会话管理界面 (iOS)
-// - 展示所有会话并支持快速切换
-// - 支持内联重命名、分支与删除
+// - 以“文件管理”方式浏览会话文件夹与会话
+// - 支持新建/重命名/删除文件夹
+// - 支持将会话移动到不同文件夹
 // ============================================================================
 
 import SwiftUI
@@ -11,69 +12,149 @@ import Foundation
 import Shared
 
 struct SessionListView: View {
+    var body: some View {
+        SessionFolderBrowserView(folderID: nil, isRoot: true)
+    }
+}
+
+private struct SessionFolderBrowserView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @EnvironmentObject private var syncManager: WatchSyncManager
     @Environment(\.dismiss) private var dismiss
-    
+
+    let folderID: UUID?
+    let isRoot: Bool
+
     @State private var editingSessionID: UUID?
-    @State private var draftName: String = ""
+    @State private var draftSessionName: String = ""
     @State private var sessionToDelete: ChatSession?
     @State private var sessionInfo: SessionInfoPayload?
     @State private var showGhostSessionAlert = false
     @State private var ghostSession: ChatSession?
-    @State private var searchText: String = ""
-    @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
-    @State private var isSearching: Bool = false
-    @State private var latestSearchToken: Int = 0
-    @State private var pendingSearchWorkItem: DispatchWorkItem?
-    
-    var body: some View {
-        let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(searchText)
-        let displayedSessions = normalizedQuery.isEmpty
-            ? viewModel.chatSessions
-            : viewModel.chatSessions.filter { searchHits[$0.id] != nil }
 
-        List {
-            Section {
-                Button {
-                    viewModel.createNewSession()
-                    focusOnLatest()
-                    dismiss()
-                    NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-                } label: {
-                    Label("开启新对话", systemImage: "plus.circle.fill")
-                }
+    @State private var createFolderParentID: UUID?
+    @State private var createFolderName: String = ""
+    @State private var isShowingCreateFolderAlert = false
+
+    @State private var folderToRename: SessionFolder?
+    @State private var renameFolderName: String = ""
+    @State private var isShowingRenameFolderAlert = false
+
+    @State private var folderToDelete: SessionFolder?
+
+    private var folderByID: [UUID: SessionFolder] {
+        Dictionary(uniqueKeysWithValues: viewModel.sessionFolders.map { ($0.id, $0) })
+    }
+
+    private var currentFolder: SessionFolder? {
+        guard let folderID else { return nil }
+        return folderByID[folderID]
+    }
+
+    private var childFolders: [SessionFolder] {
+        let candidates = viewModel.sessionFolders.filter { normalizedParentID(of: $0) == folderID }
+        return candidates.sorted { lhs, rhs in
+            let leftRecency = recentActivityIndex(for: lhs.id)
+            let rightRecency = recentActivityIndex(for: rhs.id)
+            if leftRecency != rightRecency {
+                return leftRecency < rightRecency
             }
-            
-            Section("会话") {
-                if !normalizedQuery.isEmpty {
-                    if isSearching {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("正在搜索历史会话…")
-                                .etFont(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Text("匹配 \(displayedSessions.count) / \(viewModel.chatSessions.count) 个会话")
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private var directSessions: [ChatSession] {
+        viewModel.chatSessions.filter { normalizedFolderID(of: $0) == folderID }
+    }
+
+    private var moveFolderOptions: [SessionMoveFolderOption] {
+        viewModel.sessionFolders
+            .sorted { lhs, rhs in
+                let left = folderDisplayPath(lhs)
+                let right = folderDisplayPath(rhs)
+                return left.localizedStandardCompare(right) == .orderedAscending
+            }
+            .map { folder in
+                SessionMoveFolderOption(id: folder.id, title: folderDisplayPath(folder))
+            }
+    }
+
+    var body: some View {
+        List {
+            if isRoot {
+                Section {
+                    Button {
+                        viewModel.createNewSession()
+                        focusOnLatest()
+                        NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
+                    } label: {
+                        Label("开启新对话", systemImage: "plus.circle.fill")
+                    }
+
+                    Button {
+                        presentCreateFolder(parentID: nil)
+                    } label: {
+                        Label("新建文件夹", systemImage: "folder.badge.plus")
                     }
                 }
+            }
 
-                if displayedSessions.isEmpty {
-                    Text(normalizedQuery.isEmpty ? "暂无会话。" : (isSearching ? "正在搜索，请稍候…" : "未找到匹配的历史会话。"))
+            Section("文件夹") {
+                if childFolders.isEmpty {
+                    Text("暂无文件夹。")
                         .foregroundStyle(.secondary)
                 }
 
-                ForEach(displayedSessions) { session in
+                ForEach(childFolders) { folder in
+                    NavigationLink {
+                        SessionFolderBrowserView(folderID: folder.id, isRoot: false)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "folder")
+                                .foregroundStyle(.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(folder.name)
+                                    .etFont(.headline)
+                                let count = recursiveSessionCount(in: folder.id)
+                                Text("\(count) 个会话")
+                                    .etFont(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            startRenaming(folder)
+                        } label: {
+                            Label("重命名文件夹", systemImage: "pencil")
+                        }
+
+                        Button(role: .destructive) {
+                            folderToDelete = folder
+                        } label: {
+                            Label("删除文件夹", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+
+            Section(folderID == nil ? "未分类会话" : "会话") {
+                if directSessions.isEmpty {
+                    Text(folderID == nil ? "未分类会话为空。" : "当前文件夹暂无会话。")
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(directSessions) { session in
                     SessionRow(
                         session: session,
                         isCurrent: session.id == viewModel.currentSession?.id,
                         isEditing: editingSessionID == session.id,
-                        draftName: editingSessionID == session.id ? $draftName : .constant(session.name),
-                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: !normalizedQuery.isEmpty),
+                        draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
+                        currentFolderID: normalizedFolderID(of: session),
+                        moveOptions: moveFolderOptions,
                         onCommit: { newName in
                             viewModel.updateSessionName(session, newName: newName)
                             editingSessionID = nil
@@ -83,12 +164,15 @@ struct SessionListView: View {
                         },
                         onRename: {
                             editingSessionID = session.id
-                            draftName = session.name
+                            draftSessionName = session.name
                         },
                         onBranch: { copyHistory in
                             let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
                             viewModel.setCurrentSession(newSession)
                             focusOnLatest()
+                        },
+                        onMoveToFolder: { targetFolderID in
+                            viewModel.moveSession(session, toFolderID: targetFolderID)
                         },
                         onDeleteLastMessage: {
                             viewModel.deleteLastMessage(for: session)
@@ -98,7 +182,7 @@ struct SessionListView: View {
                         },
                         onCancelRename: {
                             editingSessionID = nil
-                            draftName = session.name
+                            draftSessionName = session.name
                         },
                         onInfo: {
                             sessionInfo = SessionInfoPayload(
@@ -114,35 +198,44 @@ struct SessionListView: View {
                 }
                 .onDelete { indexSet in
                     if let index = indexSet.first {
-                        sessionToDelete = displayedSessions[index]
+                        sessionToDelete = directSessions[index]
                     }
                 }
             }
         }
-        .navigationTitle("会话管理")
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: Text("搜索会话标题或消息")
-        )
-        .onAppear {
-            scheduleSearch(for: searchText)
+        .navigationTitle(isRoot ? "会话管理" : (currentFolder?.name ?? "文件夹"))
+        .toolbar {
+            if let currentFolder {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            presentCreateFolder(parentID: currentFolder.id)
+                        } label: {
+                            Label("新建子文件夹", systemImage: "folder.badge.plus")
+                        }
+
+                        Button {
+                            startRenaming(currentFolder)
+                        } label: {
+                            Label("重命名当前文件夹", systemImage: "pencil")
+                        }
+
+                        Button(role: .destructive) {
+                            folderToDelete = currentFolder
+                        } label: {
+                            Label("删除当前文件夹", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+            }
         }
-        .onChange(of: searchText) { _, newValue in
-            scheduleSearch(for: newValue)
-        }
-        .onChange(of: viewModel.chatSessions) { _, _ in
-            scheduleSearch(for: searchText)
-        }
-        .onChange(of: viewModel.currentSession?.id) { _, _ in
-            scheduleSearch(for: searchText)
-        }
-        .onChange(of: viewModel.allMessagesForSession) { _, _ in
-            scheduleSearch(for: searchText)
-        }
-        .onDisappear {
-            pendingSearchWorkItem?.cancel()
-            pendingSearchWorkItem = nil
+        .onChange(of: viewModel.sessionFolders) { _, _ in
+            guard folderID != nil else { return }
+            if currentFolder == nil {
+                dismiss()
+            }
         }
         .alert("确认删除会话", isPresented: Binding(
             get: { sessionToDelete != nil },
@@ -164,6 +257,72 @@ struct SessionListView: View {
         } message: {
             Text("删除后所有消息也将被移除，操作不可恢复。")
         }
+        .alert("新建文件夹", isPresented: $isShowingCreateFolderAlert) {
+            TextField("文件夹名称", text: $createFolderName)
+            Button("创建") {
+                let trimmed = createFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                _ = viewModel.createSessionFolder(name: trimmed, parentID: createFolderParentID)
+                createFolderName = ""
+                createFolderParentID = nil
+            }
+            Button("取消", role: .cancel) {
+                createFolderName = ""
+                createFolderParentID = nil
+            }
+        } message: {
+            if let createFolderParentID,
+               let parentFolder = folderByID[createFolderParentID] {
+                Text("将在“\(parentFolder.name)”下创建子文件夹。")
+            } else {
+                Text("请输入新的文件夹名称。")
+            }
+        }
+        .alert("重命名文件夹", isPresented: $isShowingRenameFolderAlert) {
+            TextField("文件夹名称", text: $renameFolderName)
+            Button("保存") {
+                guard let folderToRename else { return }
+                let trimmed = renameFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                viewModel.renameSessionFolder(folderToRename, newName: trimmed)
+                self.folderToRename = nil
+                renameFolderName = ""
+            }
+            Button("取消", role: .cancel) {
+                folderToRename = nil
+                renameFolderName = ""
+            }
+        } message: {
+            Text("请输入新的文件夹名称。")
+        }
+        .alert("确认删除文件夹", isPresented: Binding(
+            get: { folderToDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    folderToDelete = nil
+                }
+            }
+        )) {
+            Button("删除", role: .destructive) {
+                if let folderToDelete {
+                    viewModel.deleteSessionFolder(folderToDelete)
+                }
+                folderToDelete = nil
+            }
+            Button("取消", role: .cancel) {
+                folderToDelete = nil
+            }
+        } message: {
+            if let folderToDelete {
+                let descendantIDs = descendantFolderIDs(rootID: folderToDelete.id)
+                let folderCount = descendantIDs.count
+                let affectedSessions = viewModel.chatSessions.filter { session in
+                    guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
+                    return descendantIDs.contains(assignedFolderID)
+                }.count
+                Text("将删除 \(folderCount) 个文件夹。\(affectedSessions) 个会话将移回未分类。")
+            }
+        }
         .sheet(item: $sessionInfo) { info in
             SessionInfoSheet(payload: info)
         }
@@ -181,118 +340,123 @@ struct SessionListView: View {
             Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
         }
     }
-    
+
+    private func normalizedFolderID(of session: ChatSession) -> UUID? {
+        guard let folderID = session.folderID else { return nil }
+        return folderByID[folderID] == nil ? nil : folderID
+    }
+
+    private func normalizedParentID(of folder: SessionFolder) -> UUID? {
+        guard let parentID = folder.parentID else { return nil }
+        return folderByID[parentID] == nil ? nil : parentID
+    }
+
+    private func recentActivityIndex(for folderID: UUID) -> Int {
+        let sessions = viewModel.chatSessions
+        for (index, session) in sessions.enumerated() {
+            guard let assignedFolderID = normalizedFolderID(of: session) else { continue }
+            if folderHierarchyContains(descendantFolderID: assignedFolderID, ancestorFolderID: folderID) {
+                return index
+            }
+        }
+        return .max
+    }
+
+    private func folderHierarchyContains(descendantFolderID: UUID, ancestorFolderID: UUID) -> Bool {
+        var cursor: UUID? = descendantFolderID
+        var visited = Set<UUID>()
+        while let current = cursor {
+            if current == ancestorFolderID {
+                return true
+            }
+            guard visited.insert(current).inserted else {
+                return false
+            }
+            cursor = folderByID[current]?.parentID
+        }
+        return false
+    }
+
+    private func descendantFolderIDs(rootID: UUID) -> Set<UUID> {
+        var collected: Set<UUID> = [rootID]
+        var queue: [UUID] = [rootID]
+
+        while let current = queue.first {
+            queue.removeFirst()
+            let children = viewModel.sessionFolders.filter { normalizedParentID(of: $0) == current }
+            for child in children where collected.insert(child.id).inserted {
+                queue.append(child.id)
+            }
+        }
+
+        return collected
+    }
+
+    private func recursiveSessionCount(in folderID: UUID) -> Int {
+        let descendants = descendantFolderIDs(rootID: folderID)
+        return viewModel.chatSessions.filter { session in
+            guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
+            return descendants.contains(assignedFolderID)
+        }.count
+    }
+
+    private func folderDisplayPath(_ folder: SessionFolder) -> String {
+        var parts: [String] = [folder.name]
+        var cursor = folder.parentID
+        var visited = Set<UUID>()
+
+        while let current = cursor {
+            guard visited.insert(current).inserted else { break }
+            guard let parent = folderByID[current] else { break }
+            parts.append(parent.name)
+            cursor = parent.parentID
+        }
+
+        return parts.reversed().joined(separator: " /")
+    }
+
+    private func presentCreateFolder(parentID: UUID?) {
+        createFolderParentID = parentID
+        createFolderName = ""
+        isShowingCreateFolderAlert = true
+    }
+
+    private func startRenaming(_ folder: SessionFolder) {
+        folderToRename = folder
+        renameFolderName = folder.name
+        isShowingRenameFolderAlert = true
+    }
+
     /// 选择会话时检测是否为 Ghost Session
     private func selectSession(_ session: ChatSession) {
         if session.isTemporary {
             viewModel.setCurrentSession(session)
             dismiss()
+            NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
             return
         }
 
-        // 检查会话数据文件是否存在（兼容 V3 与 legacy）
         if !Persistence.sessionDataExists(sessionID: session.id) {
-            // 发现幽灵会话！
             ghostSession = session
             showGhostSessionAlert = true
         } else {
             viewModel.setCurrentSession(session)
             dismiss()
+            NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
         }
     }
-    
+
     private func focusOnLatest() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             editingSessionID = viewModel.currentSession?.id
-            draftName = viewModel.currentSession?.name ?? ""
+            draftSessionName = viewModel.currentSession?.name ?? ""
         }
     }
+}
 
-    private func searchSummary(
-        for session: ChatSession,
-        in hits: [UUID: SessionHistorySearchHit],
-        queryActive: Bool
-    ) -> String? {
-        guard queryActive, let hit = hits[session.id] else { return nil }
-        let detailLines = hit.matches.map { match in
-            let preview = compactSearchPreview(match.preview)
-            if let messageOrdinal = match.messageOrdinal {
-                return "• \(sourceLabel(for: match.source)) 第\(messageOrdinal)条：\(preview)"
-            }
-            return "• \(sourceLabel(for: match.source))：\(preview)"
-        }
-        if detailLines.count <= 1 {
-            return detailLines.first
-        }
-        return "共命中 \(hit.matchCount) 处\n" + detailLines.joined(separator: "\n")
-    }
-
-    private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
-        switch source {
-        case .sessionName:
-            return "标题"
-        case .topicPrompt:
-            return "主题提示"
-        case .enhancedPrompt:
-            return "增强提示词"
-        case .userMessage:
-            return "用户消息"
-        case .assistantMessage:
-            return "助手消息"
-        case .systemMessage:
-            return "系统消息"
-        case .toolMessage:
-            return "工具消息"
-        case .errorMessage:
-            return "错误消息"
-        }
-    }
-
-    private func compactSearchPreview(_ text: String, maxLength: Int = 48) -> String {
-        guard text.count > maxLength else { return text }
-        return String(text.prefix(maxLength)) + "…"
-    }
-
-    private func scheduleSearch(for query: String) {
-        pendingSearchWorkItem?.cancel()
-        pendingSearchWorkItem = nil
-
-        let normalized = SessionHistorySearchSupport.normalizedQuery(query)
-        guard !normalized.isEmpty else {
-            searchHits = [:]
-            isSearching = false
-            return
-        }
-
-        isSearching = true
-        latestSearchToken += 1
-        let searchToken = latestSearchToken
-        let sessionsSnapshot = viewModel.chatSessions
-        let currentSessionIDSnapshot = viewModel.currentSession?.id
-        let currentMessagesSnapshot = viewModel.allMessagesForSession
-        let querySnapshot = query
-
-        let workItem = DispatchWorkItem {
-            let hits = SessionHistorySearchSupport.searchHits(
-                sessions: sessionsSnapshot,
-                query: querySnapshot,
-                currentSessionID: currentSessionIDSnapshot,
-                currentSessionMessages: currentMessagesSnapshot,
-                messageLoader: { sessionID in
-                    Persistence.loadMessages(for: sessionID)
-                }
-            )
-            DispatchQueue.main.async {
-                guard searchToken == latestSearchToken else { return }
-                searchHits = hits
-                isSearching = false
-                pendingSearchWorkItem = nil
-            }
-        }
-
-        pendingSearchWorkItem = workItem
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
-    }
+private struct SessionMoveFolderOption: Identifiable {
+    let id: UUID
+    let title: String
 }
 
 // MARK: - Row
@@ -302,20 +466,22 @@ private struct SessionRow: View {
     let isCurrent: Bool
     let isEditing: Bool
     @Binding var draftName: String
-    let searchSummary: String?
-    
+    let currentFolderID: UUID?
+    let moveOptions: [SessionMoveFolderOption]
+
     let onCommit: (String) -> Void
     let onSelect: () -> Void
     let onRename: () -> Void
     let onBranch: (Bool) -> Void
+    let onMoveToFolder: (UUID?) -> Void
     let onDeleteLastMessage: () -> Void
     let onDelete: () -> Void
     let onCancelRename: () -> Void
     let onInfo: () -> Void
     let onSendToCompanion: () -> Void
-    
+
     @FocusState private var focused: Bool
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if isEditing {
@@ -326,13 +492,13 @@ private struct SessionRow: View {
                         commit()
                     }
                     .onAppear { focused = true }
-                
+
                 HStack {
                     Button("保存") {
                         commit()
                     }
                     .buttonStyle(.borderedProminent)
-                    
+
                     Button("取消") {
                         onCancelRename()
                     }
@@ -344,21 +510,16 @@ private struct SessionRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(session.name)
                             .etFont(.headline)
-                        if let searchSummary, !searchSummary.isEmpty {
-                            Text(searchSummary)
-                                .etFont(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(nil)
-                        } else if let topic = session.topicPrompt, !topic.isEmpty {
+                        if let topic = session.topicPrompt, !topic.isEmpty {
                             Text(topic)
                                 .etFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     if isCurrent {
                         Image(systemName: "checkmark")
                             .etFont(.footnote.bold())
@@ -378,31 +539,49 @@ private struct SessionRow: View {
             } label: {
                 Label("切换到此会话", systemImage: "checkmark.circle")
             }
-            
+
             Button {
                 onRename()
             } label: {
                 Label("重命名", systemImage: "pencil")
             }
-            
+
+            Menu {
+                Button {
+                    onMoveToFolder(nil)
+                } label: {
+                    Label("未分类", systemImage: currentFolderID == nil ? "checkmark" : "tray")
+                }
+
+                ForEach(moveOptions) { option in
+                    Button {
+                        onMoveToFolder(option.id)
+                    } label: {
+                        Label(option.title, systemImage: currentFolderID == option.id ? "checkmark" : "folder")
+                    }
+                }
+            } label: {
+                Label("移动到文件夹", systemImage: "folder")
+            }
+
             Button {
                 onBranch(false)
             } label: {
                 Label("创建提示词分支", systemImage: "arrow.branch")
             }
-            
+
             Button {
                 onBranch(true)
             } label: {
                 Label("复制历史创建分支", systemImage: "arrow.triangle.branch")
             }
-            
+
             Button {
                 onDeleteLastMessage()
             } label: {
                 Label("删除最后一条消息", systemImage: "delete.backward")
             }
-            
+
             Button {
                 onInfo()
             } label: {
@@ -415,7 +594,7 @@ private struct SessionRow: View {
                 Label("发送到 Apple Watch", systemImage: "applewatch")
             }
             .disabled(session.isTemporary)
-            
+
             Button(role: .destructive) {
                 onDelete()
             } label: {
@@ -423,7 +602,7 @@ private struct SessionRow: View {
             }
         }
     }
-    
+
     private func commit() {
         let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -445,7 +624,7 @@ private struct SessionInfoPayload: Identifiable {
 private struct SessionInfoSheet: View {
     let payload: SessionInfoPayload
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -461,7 +640,7 @@ private struct SessionInfoSheet: View {
                         Text(String(format: NSLocalizedString("%d 条", comment: ""), payload.messageCount))
                     }
                 }
-                
+
                 if let topic = payload.session.topicPrompt, !topic.isEmpty {
                     Section("主题提示") {
                         Text(topic)
@@ -469,7 +648,7 @@ private struct SessionInfoSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
                     Section("增强提示词") {
                         Text(enhanced)
@@ -477,7 +656,7 @@ private struct SessionInfoSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 Section("唯一标识") {
                     Text(payload.session.id.uuidString)
                         .etFont(.footnote.monospaced())

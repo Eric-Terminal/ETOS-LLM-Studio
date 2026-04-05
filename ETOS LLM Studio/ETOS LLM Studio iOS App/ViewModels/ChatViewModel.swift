@@ -39,6 +39,7 @@ final class ChatViewModel: ObservableObject {
     @Published var messageToEdit: ChatMessage?
     @Published var activeSheet: ActiveSheet?
     @Published var chatSessions: [ChatSession] = []
+    @Published var sessionFolders: [SessionFolder] = []
     @Published var currentSession: ChatSession?
     @Published var providers: [Provider] = []
     @Published var configuredModels: [RunnableModel] = []
@@ -80,6 +81,7 @@ final class ChatViewModel: ObservableObject {
     @Published var memoryEmbeddingErrorMessage: String = ""
     @Published var memoryRetryStoppedNoticeMessage: String?
     @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
+    @Published var activeAskUserInputRequest: AppToolAskUserInputRequest?
     
     // MARK: - User Preferences (AppStorage)
     
@@ -228,6 +230,7 @@ final class ChatViewModel: ObservableObject {
     private var lastMemoryEmbeddingErrorDate: Date = .distantPast
     private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
     private var memoryRetryStoppedNoticeTask: Task<Void, Never>?
+    private let iso8601Formatter = ISO8601DateFormatter()
 #if canImport(UIKit)
     private var activeBackgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
 #endif
@@ -415,6 +418,11 @@ final class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: \.chatSessions, on: self)
             .store(in: &cancellables)
+
+        chatService.sessionFoldersSubject
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.sessionFolders, on: self)
+            .store(in: &cancellables)
         
         chatService.currentSessionSubject
             .receive(on: DispatchQueue.main)
@@ -563,6 +571,14 @@ final class ChatViewModel: ObservableObject {
             .sink { [weak self] notification in
                 guard let request = AppToolInputDraftRequest.decode(from: notification.userInfo) else { return }
                 self?.applyToolInputDraftRequest(request)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .appToolAskUserInputRequested)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let request = AppToolAskUserInputRequest.decode(from: notification.userInfo) else { return }
+                self?.activeAskUserInputRequest = request
             }
             .store(in: &cancellables)
 
@@ -902,6 +918,67 @@ final class ChatViewModel: ObservableObject {
             }
         }
     }
+
+    func submitAskUserInputAnswers(_ answers: [AppToolAskUserInputQuestionAnswer]) {
+        guard let request = activeAskUserInputRequest else { return }
+        let submission = AppToolAskUserInputSubmission(
+            requestID: request.requestID,
+            cancelled: false,
+            submittedAt: iso8601Formatter.string(from: Date()),
+            answers: answers
+        )
+        activeAskUserInputRequest = nil
+        sendToolSupplementMessage(
+            AppToolAskUserInputSubmissionFormatter.messageContent(
+                request: request,
+                submission: submission
+            )
+        )
+    }
+
+    func cancelAskUserInputRequest() {
+        guard let request = activeAskUserInputRequest else { return }
+        let submission = AppToolAskUserInputSubmission(
+            requestID: request.requestID,
+            cancelled: true,
+            submittedAt: iso8601Formatter.string(from: Date()),
+            answers: []
+        )
+        activeAskUserInputRequest = nil
+        sendToolSupplementMessage(
+            AppToolAskUserInputSubmissionFormatter.messageContent(
+                request: request,
+                submission: submission
+            )
+        )
+    }
+
+    private func sendToolSupplementMessage(_ content: String) {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty, !isSendingMessage else { return }
+
+        Task {
+            await chatService.sendAndProcessMessage(
+                content: trimmedContent,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: currentSession?.enhancedPrompt,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                includeSystemTime: includeSystemTimeInPrompt,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                audioAttachment: nil,
+                imageAttachments: [],
+                fileAttachments: []
+            )
+        }
+    }
     
     private func syncSpeechModelSelection() {
         if let match = speechModels.first(where: { $0.id == speechModelIdentifier }) {
@@ -1199,6 +1276,23 @@ final class ChatViewModel: ObservableObject {
         var updated = session
         updated.name = newName
         chatService.updateSession(updated)
+    }
+
+    @discardableResult
+    func createSessionFolder(name: String, parentID: UUID? = nil) -> SessionFolder? {
+        chatService.createSessionFolder(name: name, parentID: parentID)
+    }
+
+    func renameSessionFolder(_ folder: SessionFolder, newName: String) {
+        chatService.renameSessionFolder(folderID: folder.id, newName: newName)
+    }
+
+    func deleteSessionFolder(_ folder: SessionFolder) {
+        chatService.deleteSessionFolder(folderID: folder.id)
+    }
+
+    func moveSession(_ session: ChatSession, toFolderID folderID: UUID?) {
+        chatService.moveSession(session, toFolderID: folderID)
     }
     
     func commitEditedMessage(_ updatedMessage: ChatMessage) {
