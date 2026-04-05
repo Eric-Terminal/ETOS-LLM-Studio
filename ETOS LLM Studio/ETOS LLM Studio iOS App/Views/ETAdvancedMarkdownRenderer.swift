@@ -446,9 +446,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       letter-spacing: 0.02em;
       opacity: 0.9;
     }
+    .et-code-actions {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35em;
+    }
     .et-code-copy {
       border: none;
-      margin-left: auto;
       padding: 0.18em 0.5em;
       border-radius: 6px;
       background: var(--code-copy-bg);
@@ -457,11 +462,33 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       line-height: 1.1;
       cursor: pointer;
     }
+    .et-code-toggle {
+      border: none;
+      padding: 0.18em 0.5em;
+      border-radius: 6px;
+      background: var(--code-copy-bg);
+      color: var(--text);
+      font-size: 0.72em;
+      line-height: 1.1;
+      cursor: pointer;
+      min-width: 2.8em;
+    }
     .et-code-copy[data-copied="true"] {
       background: var(--code-copy-active-bg);
     }
-    .et-code-copy:active {
+    .et-code-copy:active,
+    .et-code-toggle:active {
       transform: translateY(0.5px);
+    }
+    .et-code-content {
+      display: grid;
+      grid-template-rows: 1fr;
+      overflow: hidden;
+      opacity: 1;
+      transition: grid-template-rows 220ms ease, opacity 180ms ease;
+    }
+    .et-code-content > .et-code-body {
+      min-height: 0;
     }
     pre {
       margin: 0;
@@ -475,6 +502,16 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       max-width: 100%;
+    }
+    .et-code-block.is-collapsed .et-code-header {
+      border-bottom-color: transparent;
+    }
+    .et-code-block.is-collapsed .et-code-content {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+    .et-code-block.is-collapsed .et-code-copy {
+      display: none;
     }
     pre code {
       background: transparent;
@@ -594,6 +631,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       raw: "",
       availableWidth: 1
     };
+    const __codeCollapseState = Object.create(null);
 
     function __escapeHTML(input) {
       return input
@@ -765,9 +803,58 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       return button;
     }
 
+    function __hashText(source) {
+      let hash = 0;
+      for (let index = 0; index < source.length; index += 1) {
+        hash = ((hash << 5) - hash + source.charCodeAt(index)) | 0;
+      }
+      return String(hash >>> 0);
+    }
+
+    function __codeBlockStateKey(codeNode, index) {
+      const language = __languageLabelFromCodeElement(codeNode).toLowerCase();
+      const rawText = (codeNode && codeNode.textContent) ? codeNode.textContent : "";
+      const sampled = rawText.length > 2048 ? rawText.slice(0, 2048) : rawText;
+      return `${index}:${language}:${sampled.length}:${__hashText(sampled)}`;
+    }
+
+    function __setCodeBlockCollapsed(wrapper, collapsed, shouldNotify = true) {
+      if (!wrapper) {
+        return;
+      }
+
+      wrapper.dataset.collapsed = collapsed ? "true" : "false";
+      wrapper.classList.toggle("is-collapsed", collapsed);
+
+      const toggleButton = wrapper.querySelector(".et-code-toggle");
+      if (toggleButton) {
+        toggleButton.textContent = collapsed ? "展开" : "收起";
+        toggleButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      }
+
+      if (!shouldNotify) {
+        return;
+      }
+
+      requestAnimationFrame(() => __notifyHeightNow());
+      setTimeout(() => __notifyHeightNow(), 260);
+    }
+
+    function __createCodeToggleButton(wrapper, stateKey) {
+      const button = document.createElement("button");
+      button.className = "et-code-toggle";
+      button.type = "button";
+      button.addEventListener("click", () => {
+        const nextCollapsed = wrapper.dataset.collapsed !== "true";
+        __codeCollapseState[stateKey] = nextCollapsed;
+        __setCodeBlockCollapsed(wrapper, nextCollapsed);
+      });
+      return button;
+    }
+
     function __decorateCodeBlocks(container) {
       const codeNodes = container.querySelectorAll("pre > code");
-      codeNodes.forEach((codeNode) => {
+      codeNodes.forEach((codeNode, index) => {
         const preNode = codeNode.parentElement;
         if (!preNode || !preNode.parentNode) {
           return;
@@ -797,16 +884,37 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
           } catch (_) {}
         }
 
+        const stateKey = __codeBlockStateKey(codeNode, index);
+        const actions = document.createElement("div");
+        actions.className = "et-code-actions";
+
         const copyButton = __createCodeCopyButton(codeNode);
-        header.appendChild(copyButton);
+        actions.appendChild(copyButton);
+
+        const toggleButton = __createCodeToggleButton(wrapper, stateKey);
+        actions.appendChild(toggleButton);
+        header.appendChild(actions);
+
+        const content = document.createElement("div");
+        content.className = "et-code-content";
 
         const body = document.createElement("div");
         body.className = "et-code-body";
 
         preNode.parentNode.insertBefore(wrapper, preNode);
         wrapper.appendChild(header);
-        wrapper.appendChild(body);
+        wrapper.appendChild(content);
+        content.appendChild(body);
         body.appendChild(preNode);
+
+        const initialCollapsed = __codeCollapseState[stateKey] === true;
+        __setCodeBlockCollapsed(wrapper, initialCollapsed, false);
+
+        content.addEventListener("transitionend", (event) => {
+          if (event && (event.propertyName === "grid-template-rows" || event.propertyName === "opacity")) {
+            __notifyHeightNow();
+          }
+        });
       });
     }
 
@@ -1160,14 +1268,14 @@ private extension View {
                     .markdownMargin(top: .em(0.2), bottom: .em(0.75))
             }
             .markdownBlockStyle(\.codeBlock) { configuration in
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 8) {
-                        Text(configuration.language?.isEmpty == false ? (configuration.language ?? "代码") : "代码")
-                            .etFont(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(codeHeaderTextColor)
-
-                        Spacer(minLength: 8)
-
+                ETCollapsibleCodeBlockView(
+                    language: configuration.language,
+                    headerTextColor: codeHeaderTextColor,
+                    headerBackground: codeHeaderBackground,
+                    blockBackground: codeBlockBackground,
+                    borderColor: codeBorderColor
+                ) { isCollapsed in
+                    if !isCollapsed {
                         if ETCodePreviewSupport.canPreview(configuration.language) {
                             ETCodePreviewButton(
                                 content: configuration.content,
@@ -1184,16 +1292,7 @@ private extension View {
                             )
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background {
-                        ZStack {
-                            Rectangle().fill(.ultraThinMaterial)
-                            Rectangle().fill(codeHeaderBackground)
-                        }
-                    }
-
+                } bodyContent: {
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
                             .relativeLineSpacing(.em(0.15))
@@ -1210,19 +1309,6 @@ private extension View {
                             .padding(.vertical, 10)
                     }
                 }
-                .background {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .fill(codeBlockBackground)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(codeBorderColor, lineWidth: 1)
-                )
                 .markdownMargin(top: .em(0.2), bottom: .em(0.75))
             }
             .markdownBlockStyle(\.table) { configuration in
@@ -1232,6 +1318,90 @@ private extension View {
                 }
                 .markdownMargin(top: .zero, bottom: .em(1))
             }
+    }
+}
+
+private struct ETCollapsibleCodeBlockView<HeaderActions: View, BodyContent: View>: View {
+    let language: String?
+    let headerTextColor: Color
+    let headerBackground: Color
+    let blockBackground: Color
+    let borderColor: Color
+    @ViewBuilder let headerActions: (_ isCollapsed: Bool) -> HeaderActions
+    @ViewBuilder let bodyContent: () -> BodyContent
+
+    @State private var isCollapsed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(language?.isEmpty == false ? (language ?? "代码") : "代码")
+                    .etFont(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(headerTextColor)
+
+                Spacer(minLength: 8)
+
+                headerActions(isCollapsed)
+
+                ETCodeCollapseButton(
+                    isCollapsed: isCollapsed,
+                    tintColor: headerTextColor
+                ) {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isCollapsed.toggle()
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Rectangle().fill(headerBackground)
+                }
+            }
+
+            if !isCollapsed {
+                bodyContent()
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .move(edge: .top))
+                        )
+                    )
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: isCollapsed)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(blockBackground)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+    }
+}
+
+private struct ETCodeCollapseButton: View {
+    let isCollapsed: Bool
+    let tintColor: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
+                .etFont(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tintColor)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isCollapsed ? "展开代码块" : "折叠代码块")
     }
 }
 
