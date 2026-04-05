@@ -101,9 +101,10 @@ struct SettingsView: View {
 
                     NavigationLink(destination: SessionListView(
                         sessions: $viewModel.chatSessions,
+                        folders: $viewModel.sessionFolders,
                         currentSession: $viewModel.currentSession,
-                        deleteAction: { indexSet in
-                            viewModel.deleteSession(at: indexSet)
+                        deleteSessionAction: { session in
+                            viewModel.deleteSessions([session])
                         },
                         branchAction: { session, copyMessages in
                             let newSession = viewModel.branchSession(from: session, copyMessages: copyMessages)
@@ -121,6 +122,18 @@ struct SettingsView: View {
                         },
                         updateSessionAction: { session in
                             viewModel.updateSession(session)
+                        },
+                        createFolderAction: { name, parentID in
+                            viewModel.createSessionFolder(name: name, parentID: parentID)
+                        },
+                        renameFolderAction: { folder, newName in
+                            viewModel.renameSessionFolder(folder, newName: newName)
+                        },
+                        deleteFolderAction: { folder in
+                            viewModel.deleteSessionFolder(folder)
+                        },
+                        moveSessionToFolderAction: { session, folderID in
+                            viewModel.moveSession(session, toFolderID: folderID)
                         }
                     )) {
                         Label("历史会话管理", systemImage: "list.bullet.rectangle")

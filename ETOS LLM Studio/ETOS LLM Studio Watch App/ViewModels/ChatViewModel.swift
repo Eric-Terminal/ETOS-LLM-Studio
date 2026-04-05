@@ -42,6 +42,7 @@ class ChatViewModel: ObservableObject {
     @Published var activeSheet: ActiveSheet?
     
     @Published var chatSessions: [ChatSession] = []
+    @Published var sessionFolders: [SessionFolder] = []
     @Published var currentSession: ChatSession?
     
     @Published var providers: [Provider] = []
@@ -79,6 +80,7 @@ class ChatViewModel: ObservableObject {
     @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
     @Published var globalSystemPromptEntries: [GlobalSystemPromptEntry] = []
     @Published var selectedGlobalSystemPromptEntryID: UUID?
+    @Published var activeAskUserInputRequest: AppToolAskUserInputRequest?
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
@@ -248,6 +250,7 @@ class ChatViewModel: ObservableObject {
     private var lastMemoryEmbeddingErrorDate: Date = .distantPast
     private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
     private var memoryRetryStoppedNoticeTask: Task<Void, Never>?
+    private let iso8601Formatter = ISO8601DateFormatter()
     private let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 6
@@ -378,6 +381,11 @@ class ChatViewModel: ObservableObject {
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)
             .assign(to: \.chatSessions, on: self)
+            .store(in: &cancellables)
+
+        chatService.sessionFoldersSubject
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.sessionFolders, on: self)
             .store(in: &cancellables)
             
         chatService.currentSessionSubject
@@ -525,6 +533,14 @@ class ChatViewModel: ObservableObject {
             .sink { [weak self] notification in
                 guard let request = AppToolInputDraftRequest.decode(from: notification.userInfo) else { return }
                 self?.applyToolInputDraftRequest(request)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .appToolAskUserInputRequested)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let request = AppToolAskUserInputRequest.decode(from: notification.userInfo) else { return }
+                self?.activeAskUserInputRequest = request
             }
             .store(in: &cancellables)
 
@@ -890,6 +906,65 @@ class ChatViewModel: ObservableObject {
             } else {
                 userInput += "\n" + content
             }
+        }
+    }
+
+    func submitAskUserInputAnswers(_ answers: [AppToolAskUserInputQuestionAnswer]) {
+        guard let request = activeAskUserInputRequest else { return }
+        let submission = AppToolAskUserInputSubmission(
+            requestID: request.requestID,
+            cancelled: false,
+            submittedAt: iso8601Formatter.string(from: Date()),
+            answers: answers
+        )
+        activeAskUserInputRequest = nil
+        sendToolSupplementMessage(
+            AppToolAskUserInputSubmissionFormatter.messageContent(
+                request: request,
+                submission: submission
+            )
+        )
+    }
+
+    func cancelAskUserInputRequest() {
+        guard let request = activeAskUserInputRequest else { return }
+        let submission = AppToolAskUserInputSubmission(
+            requestID: request.requestID,
+            cancelled: true,
+            submittedAt: iso8601Formatter.string(from: Date()),
+            answers: []
+        )
+        activeAskUserInputRequest = nil
+        sendToolSupplementMessage(
+            AppToolAskUserInputSubmissionFormatter.messageContent(
+                request: request,
+                submission: submission
+            )
+        )
+    }
+
+    private func sendToolSupplementMessage(_ content: String) {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty, !isSendingMessage else { return }
+
+        Task {
+            await chatService.sendAndProcessMessage(
+                content: trimmedContent,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: currentSession?.enhancedPrompt,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                includeSystemTime: includeSystemTimeInPrompt,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                audioAttachment: nil
+            )
         }
     }
     
@@ -1539,6 +1614,23 @@ class ChatViewModel: ObservableObject {
     
     func updateSession(_ session: ChatSession) {
         chatService.updateSession(session)
+    }
+
+    @discardableResult
+    func createSessionFolder(name: String, parentID: UUID? = nil) -> SessionFolder? {
+        chatService.createSessionFolder(name: name, parentID: parentID)
+    }
+
+    func renameSessionFolder(_ folder: SessionFolder, newName: String) {
+        chatService.renameSessionFolder(folderID: folder.id, newName: newName)
+    }
+
+    func deleteSessionFolder(_ folder: SessionFolder) {
+        chatService.deleteSessionFolder(folderID: folder.id)
+    }
+
+    func moveSession(_ session: ChatSession, toFolderID folderID: UUID?) {
+        chatService.moveSession(session, toFolderID: folderID)
     }
     
     func canRetry(message: ChatMessage) -> Bool {
