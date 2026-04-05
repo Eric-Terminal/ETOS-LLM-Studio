@@ -34,6 +34,7 @@ struct SettingsView: View {
     // MARK: - 视图模型
     
     @ObservedObject var viewModel: ChatViewModel
+    @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     
@@ -96,6 +97,8 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("启动时打开历史会话", isOn: $restoreLastSessionOnLaunch)
+
                     NavigationLink(destination: SessionListView(
                         sessions: $viewModel.chatSessions,
                         currentSession: $viewModel.currentSession,

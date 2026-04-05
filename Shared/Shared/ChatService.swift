@@ -60,6 +60,8 @@ public class ChatService {
     private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
     private static let ttsModelStorageKey = "ttsModelIdentifier"
     private static let conversationSummaryModelStorageKey = "conversationSummaryModelIdentifier"
+    private static let lastActiveSessionIDStorageKey = "launch.lastActiveSessionID"
+    public static let restoreLastSessionOnLaunchEnabledStorageKey = "launch.restoreLastSessionOnLaunchEnabled"
     private static let conversationMemoryEnabledKey = "enableConversationMemoryAsync"
     private static let conversationMemoryRecentLimitKey = "conversationMemoryRecentLimit"
     private static let conversationMemoryRoundThresholdKey = "conversationMemoryRoundThreshold"
@@ -442,16 +444,30 @@ public class ChatService {
             "anthropic": AnthropicAdapter(),
         ]
         
-        var loadedSessions = Persistence.loadChatSessions()
+        let persistedSessions = Persistence.loadChatSessions()
+        var loadedSessions = persistedSessions
         let newTemporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
         loadedSessions.insert(newTemporarySession, at: 0)
+        let initialSession = ChatService.resolveInitialSession(
+            persistedSessions: persistedSessions,
+            loadedSessionsWithTemporary: loadedSessions,
+            newTemporarySession: newTemporarySession
+        )
+        let initialMessages = initialSession.id == newTemporarySession.id
+            ? []
+            : Persistence.loadMessages(for: initialSession.id)
         
         self.providersSubject = CurrentValueSubject(self.providers)
         self.selectedModelSubject = CurrentValueSubject(nil)
         self.chatSessionsSubject = CurrentValueSubject(loadedSessions)
-        self.currentSessionSubject = CurrentValueSubject(newTemporarySession)
-        self.messagesForSessionSubject = CurrentValueSubject([])
+        self.currentSessionSubject = CurrentValueSubject(initialSession)
+        self.messagesForSessionSubject = CurrentValueSubject(initialMessages)
         self.reconcileStoredModelOrder()
+        self.currentSessionSubject
+            .sink { [weak self] session in
+                self?.persistLastActiveSessionIDIfNeeded(session)
+            }
+            .store(in: &cancellables)
         
         let savedModelID = UserDefaults.standard.string(forKey: "selectedRunnableModelID")
         let allRunnable = activatedRunnableModels
@@ -481,6 +497,33 @@ public class ChatService {
             action: "初始化聊天服务",
             payload: ["providerCount": "\(self.providers.count)"]
         )
+    }
+
+    private static func resolveInitialSession(
+        persistedSessions: [ChatSession],
+        loadedSessionsWithTemporary: [ChatSession],
+        newTemporarySession: ChatSession
+    ) -> ChatSession {
+        let defaults = UserDefaults.standard
+        let shouldRestore = (defaults.object(forKey: restoreLastSessionOnLaunchEnabledStorageKey) as? Bool) ?? false
+        guard shouldRestore else { return newTemporarySession }
+
+        if let rawID = defaults.string(forKey: lastActiveSessionIDStorageKey),
+           let sessionID = UUID(uuidString: rawID),
+           let restored = loadedSessionsWithTemporary.first(where: { $0.id == sessionID }) {
+            return restored
+        }
+
+        if let mostRecentPersisted = persistedSessions.first {
+            return mostRecentPersisted
+        }
+
+        return newTemporarySession
+    }
+
+    private func persistLastActiveSessionIDIfNeeded(_ session: ChatSession?) {
+        guard let session, !session.isTemporary else { return }
+        UserDefaults.standard.set(session.id.uuidString, forKey: Self.lastActiveSessionIDStorageKey)
     }
     
     // MARK: - 公开方法 (配置管理)
