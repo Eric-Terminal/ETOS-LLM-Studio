@@ -2112,11 +2112,19 @@ private struct ToolWidgetWebView: UIViewRepresentable {
       width: 100%;
       min-height: 100%;
       background: transparent;
-      overflow-x: hidden;
+      overflow-x: visible;
     }
-    #et-widget-root {
+    #et-widget-scroll {
       width: min(100%, \(Int(stableWidth))px);
       max-width: 100%;
+      overflow-x: auto;
+      overflow-y: visible;
+      -webkit-overflow-scrolling: touch;
+    }
+    #et-widget-root {
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
       margin: 0;
       box-sizing: border-box;
       overflow: visible;
@@ -2124,19 +2132,27 @@ private struct ToolWidgetWebView: UIViewRepresentable {
   </style>
 </head>
 <body>
-  <div id="et-widget-root">
+  <div id="et-widget-scroll">
+    <div id="et-widget-root">
 \(widgetCode)
+    </div>
   </div>
   <script>
     (function () {
       function reportHeight() {
         var body = document.body;
         var root = document.documentElement;
+        var scroll = document.getElementById('et-widget-scroll');
+        var widgetRoot = document.getElementById('et-widget-root');
         var height = Math.max(
           body ? body.scrollHeight : 0,
           body ? body.offsetHeight : 0,
           root ? root.scrollHeight : 0,
-          root ? root.offsetHeight : 0
+          root ? root.offsetHeight : 0,
+          scroll ? scroll.scrollHeight : 0,
+          scroll ? scroll.offsetHeight : 0,
+          widgetRoot ? widgetRoot.scrollHeight : 0,
+          widgetRoot ? widgetRoot.offsetHeight : 0
         );
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etWidgetHeight) {
           window.webkit.messageHandlers.etWidgetHeight.postMessage(height);
@@ -2145,6 +2161,10 @@ private struct ToolWidgetWebView: UIViewRepresentable {
       window.__etReportSize = reportHeight;
       if (window.ResizeObserver) {
         var observer = new ResizeObserver(reportHeight);
+        var scrollContainer = document.getElementById('et-widget-scroll');
+        var widgetContainer = document.getElementById('et-widget-root');
+        if (scrollContainer) observer.observe(scrollContainer);
+        if (widgetContainer) observer.observe(widgetContainer);
         if (document.documentElement) observer.observe(document.documentElement);
         if (document.body) observer.observe(document.body);
       }
