@@ -82,126 +82,19 @@ private struct SessionFolderBrowserView: View {
             }
     }
 
+    private var sessionSectionTitle: String {
+        folderID == nil ? "未分类会话" : "会话"
+    }
+
+    private var emptySessionText: String {
+        folderID == nil ? "未分类会话为空。" : "当前文件夹暂无会话。"
+    }
+
     var body: some View {
         List {
-            if isRoot {
-                Section {
-                    Button {
-                        viewModel.createNewSession()
-                        focusOnLatest()
-                        NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-                    } label: {
-                        Label("开启新对话", systemImage: "plus.circle.fill")
-                    }
-
-                    Button {
-                        presentCreateFolder(parentID: nil)
-                    } label: {
-                        Label("新建文件夹", systemImage: "folder.badge.plus")
-                    }
-                }
-            }
-
-            Section("文件夹") {
-                if childFolders.isEmpty {
-                    Text("暂无文件夹。")
-                        .foregroundStyle(.secondary)
-                }
-
-                ForEach(childFolders) { folder in
-                    NavigationLink {
-                        SessionFolderBrowserView(folderID: folder.id, isRoot: false)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "folder")
-                                .foregroundStyle(.accent)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(folder.name)
-                                    .etFont(.headline)
-                                let count = recursiveSessionCount(in: folder.id)
-                                Text("\(count) 个会话")
-                                    .etFont(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .contextMenu {
-                        Button {
-                            startRenaming(folder)
-                        } label: {
-                            Label("重命名文件夹", systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            folderToDelete = folder
-                        } label: {
-                            Label("删除文件夹", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-
-            Section(folderID == nil ? "未分类会话" : "会话") {
-                if directSessions.isEmpty {
-                    Text(folderID == nil ? "未分类会话为空。" : "当前文件夹暂无会话。")
-                        .foregroundStyle(.secondary)
-                }
-
-                ForEach(directSessions) { session in
-                    SessionRow(
-                        session: session,
-                        isCurrent: session.id == viewModel.currentSession?.id,
-                        isEditing: editingSessionID == session.id,
-                        draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
-                        currentFolderID: normalizedFolderID(of: session),
-                        moveOptions: moveFolderOptions,
-                        onCommit: { newName in
-                            viewModel.updateSessionName(session, newName: newName)
-                            editingSessionID = nil
-                        },
-                        onSelect: {
-                            selectSession(session)
-                        },
-                        onRename: {
-                            editingSessionID = session.id
-                            draftSessionName = session.name
-                        },
-                        onBranch: { copyHistory in
-                            let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
-                            viewModel.setCurrentSession(newSession)
-                            focusOnLatest()
-                        },
-                        onMoveToFolder: { targetFolderID in
-                            viewModel.moveSession(session, toFolderID: targetFolderID)
-                        },
-                        onDeleteLastMessage: {
-                            viewModel.deleteLastMessage(for: session)
-                        },
-                        onDelete: {
-                            sessionToDelete = session
-                        },
-                        onCancelRename: {
-                            editingSessionID = nil
-                            draftSessionName = session.name
-                        },
-                        onInfo: {
-                            sessionInfo = SessionInfoPayload(
-                                session: session,
-                                messageCount: viewModel.messageCount(for: session),
-                                isCurrent: session.id == viewModel.currentSession?.id
-                            )
-                        },
-                        onSendToCompanion: {
-                            syncManager.sendSessionToCompanion(sessionID: session.id)
-                        }
-                    )
-                }
-                .onDelete { indexSet in
-                    if let index = indexSet.first {
-                        sessionToDelete = directSessions[index]
-                    }
-                }
-            }
+            rootActionSection
+            folderSection
+            sessionSection
         }
         .navigationTitle(isRoot ? "会话管理" : (currentFolder?.name ?? "文件夹"))
         .toolbar {
@@ -339,6 +232,137 @@ private struct SessionFolderBrowserView: View {
         } message: {
             Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
         }
+    }
+
+    @ViewBuilder
+    private var rootActionSection: some View {
+        if isRoot {
+            Section {
+                Button {
+                    viewModel.createNewSession()
+                    focusOnLatest()
+                    NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
+                } label: {
+                    Label("开启新对话", systemImage: "plus.circle.fill")
+                }
+
+                Button {
+                    presentCreateFolder(parentID: nil)
+                } label: {
+                    Label("新建文件夹", systemImage: "folder.badge.plus")
+                }
+            }
+        }
+    }
+
+    private var folderSection: some View {
+        Section("文件夹") {
+            if childFolders.isEmpty {
+                Text("暂无文件夹。")
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(childFolders) { folder in
+                NavigationLink {
+                    SessionFolderBrowserView(folderID: folder.id, isRoot: false)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "folder")
+                            .foregroundStyle(.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(folder.name)
+                                .etFont(.headline)
+                            let count = recursiveSessionCount(in: folder.id)
+                            Text("\(count) 个会话")
+                                .etFont(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .contextMenu {
+                    Button {
+                        startRenaming(folder)
+                    } label: {
+                        Label("重命名文件夹", systemImage: "pencil")
+                    }
+
+                    Button(role: .destructive) {
+                        folderToDelete = folder
+                    } label: {
+                        Label("删除文件夹", systemImage: "trash")
+                    }
+                }
+            }
+        }
+    }
+
+    private var sessionSection: some View {
+        Section(sessionSectionTitle) {
+            if directSessions.isEmpty {
+                Text(emptySessionText)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(directSessions) { session in
+                sessionRow(for: session)
+            }
+            .onDelete { indexSet in
+                if let index = indexSet.first {
+                    sessionToDelete = directSessions[index]
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionRow(for session: ChatSession) -> some View {
+        SessionRow(
+            session: session,
+            isCurrent: session.id == viewModel.currentSession?.id,
+            isEditing: editingSessionID == session.id,
+            draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
+            currentFolderID: normalizedFolderID(of: session),
+            moveOptions: moveFolderOptions,
+            onCommit: { newName in
+                viewModel.updateSessionName(session, newName: newName)
+                editingSessionID = nil
+            },
+            onSelect: {
+                selectSession(session)
+            },
+            onRename: {
+                editingSessionID = session.id
+                draftSessionName = session.name
+            },
+            onBranch: { copyHistory in
+                let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
+                viewModel.setCurrentSession(newSession)
+                focusOnLatest()
+            },
+            onMoveToFolder: { targetFolderID in
+                viewModel.moveSession(session, toFolderID: targetFolderID)
+            },
+            onDeleteLastMessage: {
+                viewModel.deleteLastMessage(for: session)
+            },
+            onDelete: {
+                sessionToDelete = session
+            },
+            onCancelRename: {
+                editingSessionID = nil
+                draftSessionName = session.name
+            },
+            onInfo: {
+                sessionInfo = SessionInfoPayload(
+                    session: session,
+                    messageCount: viewModel.messageCount(for: session),
+                    isCurrent: session.id == viewModel.currentSession?.id
+                )
+            },
+            onSendToCompanion: {
+                syncManager.sendSessionToCompanion(sessionID: session.id)
+            }
+        )
     }
 
     private func normalizedFolderID(of session: ChatSession) -> UUID? {

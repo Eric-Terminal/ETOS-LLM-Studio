@@ -87,6 +87,7 @@ private struct SessionFolderBrowserView: View {
     @State private var folderEditorName: String = ""
     @State private var folderEditorParentID: UUID?
     @State private var folderBeingRenamed: SessionFolder?
+    @State private var showCurrentFolderActions = false
 
     @State private var folderToDelete: SessionFolder?
 
@@ -169,19 +170,6 @@ private struct SessionFolderBrowserView: View {
                             }
                         }
                     }
-                    .contextMenu {
-                        Button {
-                            openRenameFolderEditor(folder)
-                        } label: {
-                            Label("重命名文件夹", systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            folderToDelete = folder
-                        } label: {
-                            Label("删除文件夹", systemImage: "trash")
-                        }
-                    }
                 }
             }
 
@@ -212,26 +200,10 @@ private struct SessionFolderBrowserView: View {
         }
         .navigationTitle(isRoot ? "历史会话" : (currentFolder?.name ?? "文件夹"))
         .toolbar {
-            if let currentFolder {
+            if currentFolder != nil {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            openCreateFolderEditor(parentID: currentFolder.id)
-                        } label: {
-                            Label("新建子文件夹", systemImage: "folder.badge.plus")
-                        }
-
-                        Button {
-                            openRenameFolderEditor(currentFolder)
-                        } label: {
-                            Label("重命名当前文件夹", systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            folderToDelete = currentFolder
-                        } label: {
-                            Label("删除当前文件夹", systemImage: "trash")
-                        }
+                    Button {
+                        showCurrentFolderActions = true
                     } label: {
                         Image(systemName: "ellipsis")
                     }
@@ -290,6 +262,23 @@ private struct SessionFolderBrowserView: View {
             if let session = sessionToBranch {
                 Text(String(format: NSLocalizedString("从“%@”创建新的分支对话。", comment: ""), session.name))
             }
+        }
+        .confirmationDialog("当前文件夹操作", isPresented: $showCurrentFolderActions, titleVisibility: .visible) {
+            if let currentFolder {
+                Button("新建子文件夹") {
+                    openCreateFolderEditor(parentID: currentFolder.id)
+                }
+
+                Button("重命名当前文件夹") {
+                    openRenameFolderEditor(currentFolder)
+                }
+
+                Button("删除当前文件夹", role: .destructive) {
+                    folderToDelete = currentFolder
+                }
+            }
+
+            Button("取消", role: .cancel) {}
         }
         .sheet(isPresented: $isShowingFolderEditor) {
             NavigationStack {
