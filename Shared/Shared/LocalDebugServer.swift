@@ -314,9 +314,16 @@ public class LocalDebugServer: ObservableObject {
     /// - host:wsPort:httpPort（显式声明双端口）
     private func parseDebugAddress(_ raw: String) -> ParsedDebugAddress {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: ":").map(String.init).filter { !$0.isEmpty }
+        let withoutScheme: String
+        if let range = trimmed.range(of: "://") {
+            withoutScheme = String(trimmed[range.upperBound...])
+        } else {
+            withoutScheme = trimmed
+        }
+        let hostPortOnly = withoutScheme.split(separator: "/").first.map(String.init) ?? withoutScheme
+        let parts = hostPortOnly.split(separator: ":").map(String.init).filter { !$0.isEmpty }
         
-        let host = parts.first ?? trimmed
+        let host = parts.first ?? hostPortOnly
         let defaultWSPort = "8765"
         let defaultHTTPPort = "7654"
         
@@ -349,9 +356,14 @@ public class LocalDebugServer: ObservableObject {
         if useHTTP {
             // HTTP 轮询模式，直接启动
             logger.info("使用 HTTP 轮询模式")
-            connectionStatus = "正在连接..."
             serverURL = "\(parsed.host):\(parsed.httpPort)"
-            performHTTPConnection(host: parsed.host, port: parsed.httpPort)
+            connectionStatus = "正在请求权限..."
+            triggerLocalNetworkPermission(host: "\(parsed.host):\(parsed.httpPort)") { [weak self] in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    self.performHTTPConnection(host: parsed.host, port: parsed.httpPort)
+                }
+            }
         } else {
             // WebSocket 优先，并在失败时自动回退 HTTP 轮询
             wsAutoFallbackEnabled = true
@@ -499,7 +511,7 @@ public class LocalDebugServer: ObservableObject {
         httpSession = URLSession(configuration: config)
         
         // 先测试连接
-        testHTTPConnection(host: host, port: port) { [weak self] success in
+        testHTTPConnection(host: host, port: port) { [weak self] success, error in
             guard let self = self else { return }
             Task { @MainActor in
                 if success {
@@ -512,7 +524,7 @@ public class LocalDebugServer: ObservableObject {
                 } else {
                     self.isRunning = false
                     self.connectionStatus = "连接失败"
-                    self.errorMessage = "无法连接到服务器，请检查地址和端口"
+                    self.errorMessage = self.describeHTTPConnectionFailure(error)
                     self.logger.error("HTTP 连接测试失败")
                 }
             }
@@ -520,9 +532,9 @@ public class LocalDebugServer: ObservableObject {
     }
     
     /// 测试 HTTP 连接
-    private func testHTTPConnection(host: String, port: String, completion: @escaping (Bool) -> Void) {
+    private func testHTTPConnection(host: String, port: String, completion: @escaping (Bool, Error?) -> Void) {
         guard let url = URL(string: "http://\(host):\(port)/ping") else {
-            completion(false)
+            completion(false, nil)
             return
         }
         
@@ -533,17 +545,43 @@ public class LocalDebugServer: ObservableObject {
         httpSession?.dataTask(with: request) { data, response, error in
             if let error = error {
                 self.logger.error("HTTP 测试失败: \(error.localizedDescription)")
-                completion(false)
+                completion(false, error)
                 return
             }
             
             if let httpResponse = response as? HTTPURLResponse,
                httpResponse.statusCode == 200 {
-                completion(true)
+                completion(true, nil)
             } else {
-                completion(false)
+                completion(false, nil)
             }
         }.resume()
+    }
+
+    /// 生成更易定位问题的 HTTP 连接失败提示
+    private func describeHTTPConnectionFailure(_ error: Error?) -> String {
+        guard let error else {
+            return "无法连接到服务器，请检查地址和端口"
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain,
+           nsError.code == NSURLErrorAppTransportSecurityRequiresSecureConnection {
+            return "HTTP 被系统安全策略拦截，请允许本地网络明文访问后重试"
+        }
+
+        let description = error.localizedDescription.lowercased()
+        if description.contains("connection refused") || description.contains("拒绝") {
+            return "连接被拒绝，请检查服务器是否已启动"
+        }
+        if description.contains("timed out") || description.contains("超时") {
+            return "连接超时，请检查 IP 地址和网络"
+        }
+        if description.contains("unreachable") || description.contains("不可达") {
+            return "网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络"
+        }
+
+        return "连接失败: \(error.localizedDescription)"
     }
     
     /// 启动 HTTP 轮询

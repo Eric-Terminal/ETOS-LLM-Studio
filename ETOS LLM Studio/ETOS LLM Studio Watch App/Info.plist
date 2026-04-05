@@ -28,5 +28,17 @@
 	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>语音输入需要访问语音识别</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>需要访问本地网络以连接到调试服务器,用于配置管理和文件传输</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+		<string>_ws._tcp</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

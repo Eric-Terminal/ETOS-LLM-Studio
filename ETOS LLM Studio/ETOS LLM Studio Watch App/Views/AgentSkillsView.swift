@@ -3,20 +3,48 @@
 // ============================================================================
 // Agent Skills 管理页（watchOS）
 // - 管理技能列表与启用状态
-// - 支持新增、删除、文件编辑、GitHub 导入
+// - 支持新增、删除、文件编辑、GitHub / URL 导入
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct AgentSkillsView: View {
     @StateObject private var manager = SkillManager.shared
     @State private var showAddSheet = false
     @State private var showImportSheet = false
+    @State private var showURLImportSheet = false
     @State private var deleteTarget: SkillMetadata?
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "Agent Skills",
+                    summary: "为模型提供自定义技能，通过 use_skill 在聊天中按需调用。",
+                    details: """
+                    怎么用
+                    1. 添加技能（粘贴 SKILL.md 或 GitHub 导入）。
+                    2. 确认技能已启用。
+                    3. 打开"向模型暴露 Agent Skills"总开关。
+                    4. 在聊天中让模型调用对应技能。
+
+                    SKILL.md 格式
+                    • frontmatter 必须包含 name 与 description。
+                    • 正文可写使用说明、参数等 Markdown 内容。
+
+                    常见问题
+                    • 模型不调用：检查总开关与技能启用状态。
+                    • 导入失败：确认仓库地址可访问。
+                    • 无法本地选文件：可使用链接导入 SKILL.md。
+                    • 需要更新内容：在技能详情里编辑 SKILL.md。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 Toggle(
                     "向模型暴露 Agent Skills",
@@ -41,6 +69,12 @@ struct AgentSkillsView: View {
                     showImportSheet = true
                 } label: {
                     Label("GitHub 导入", systemImage: "square.and.arrow.down")
+                }
+
+                Button {
+                    showURLImportSheet = true
+                } label: {
+                    Label("链接导入 SKILL.md", systemImage: "link.badge.plus")
                 }
             }
 
@@ -89,6 +123,9 @@ struct AgentSkillsView: View {
         .sheet(isPresented: $showImportSheet) {
             WatchImportSkillSheet(manager: manager)
         }
+        .sheet(isPresented: $showURLImportSheet) {
+            WatchImportSkillFromURLSheet(manager: manager)
+        }
         .alert(
             NSLocalizedString("删除技能", comment: ""),
             isPresented: Binding(
@@ -105,6 +142,150 @@ struct AgentSkillsView: View {
             }
         } message: {
             Text("确认删除“\(deleteTarget?.name ?? "")”？")
+        }
+    }
+}
+
+private struct WatchImportSkillFromURLSheet: View {
+    @ObservedObject var manager: SkillManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var fileURLText: String = ""
+    @State private var isImporting = false
+    @State private var localError: String?
+
+    var body: some View {
+        List {
+            Section("SKILL.md 链接") {
+                TextField("https://example.com/SKILL.md", text: $fileURLText.watchKeyboardNewlineBinding())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Text("支持 http/https 的文本链接，下载后按 SKILL.md 规则导入。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if isImporting {
+                Section {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("导入中…")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if let localError {
+                Section("错误") {
+                    Text(localError)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button("导入") {
+                    startImportFromURL()
+                }
+                .disabled(isImporting || fileURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .navigationTitle("链接导入")
+    }
+
+    private func startImportFromURL() {
+        let trimmed = fileURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            localError = "链接不能为空。"
+            return
+        }
+        guard let url = URL(string: trimmed) else {
+            localError = "链接格式无效，请输入完整 URL。"
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            localError = "仅支持 http/https 链接。"
+            return
+        }
+
+        isImporting = true
+        localError = nil
+
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 45
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    await MainActor.run {
+                        localError = "下载失败：HTTP \(httpResponse.statusCode)"
+                        isImporting = false
+                    }
+                    return
+                }
+
+                guard let content = String(data: data, encoding: .utf8), !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    await MainActor.run {
+                        localError = "下载内容为空或编码不受支持。"
+                        isImporting = false
+                    }
+                    return
+                }
+
+                let success = await MainActor.run {
+                    manager.saveSkillFromContent(content)
+                }
+
+                await MainActor.run {
+                    isImporting = false
+                    if success {
+                        dismiss()
+                    } else {
+                        localError = manager.lastErrorMessage ?? "导入失败：SKILL.md 内容无效。"
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    localError = error.localizedDescription
+                    isImporting = false
+                }
+            }
+        }
+    }
+}
+
+private extension AgentSkillsView {
+    func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         }
     }
 }

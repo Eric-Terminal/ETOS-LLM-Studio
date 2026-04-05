@@ -363,11 +363,15 @@ private struct WatchColorEditorView: View {
 }
 
 private struct WatchFontSettingsView: View {
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
     @State private var isShowingIntroDetails = false
     @State private var showAddAssetDialog = false
+    @State private var importURLText: String = ""
+    @State private var isImportingFromURL: Bool = false
+    @State private var importErrorMessage: String?
 
     var body: some View {
         List {
@@ -377,7 +381,7 @@ private struct WatchFontSettingsView: View {
                     summary: "按槽位管理字体顺序，越靠上优先级越高。",
                     details: """
                     快速上手
-                    1. 先在 iPhone 端导入字体并同步到手表。
+                    1. 可在手表粘贴字体链接直接导入，或在 iPhone 端导入后同步到手表。
                     2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
                     3. 用上下箭头调整顺序。
                     4. 点击“添加字体到当前槽位”补入缺失字体。
@@ -392,9 +396,51 @@ private struct WatchFontSettingsView: View {
                 )
             }
 
+            Section {
+                Toggle("启用自定义字体", isOn: $isCustomFontEnabled)
+            } footer: {
+                Text("关闭后会全局回退系统字体；已导入字体与优先级配置会保留。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("字体来源") {
+                TextField("字体文件链接", text: $importURLText.watchKeyboardNewlineBinding())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                Button {
+                    importFontsFromURL()
+                } label: {
+                    Label(isImportingFromURL ? "正在下载并导入..." : "从链接导入", systemImage: "link.badge.plus")
+                }
+                .disabled(isImportingFromURL || importURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if isImportingFromURL {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("正在下载并导入...")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("支持 http/https 的 TTF / OTF / TTC / WOFF / WOFF2 链接。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let importErrorMessage, !importErrorMessage.isEmpty {
+                Section("导入错误") {
+                    Text(importErrorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section("已导入字体") {
                 if assets.isEmpty {
-                    Text("暂无字体，请先在 iPhone 端导入并同步。")
+                    Text("暂无字体，可在手表上通过链接导入，或在 iPhone 导入后同步。")
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -493,6 +539,12 @@ private struct WatchFontSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             reloadData()
         }
+        .onChange(of: isCustomFontEnabled) { _, isEnabled in
+            if isEnabled {
+                FontLibrary.registerAllFontsIfNeeded()
+            }
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
         .confirmationDialog(
             "添加字体到当前槽位",
             isPresented: $showAddAssetDialog,
@@ -528,12 +580,8 @@ private struct WatchFontSettingsView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.gray.opacity(0.14))
-        )
+        .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
                 Text(details)
@@ -597,6 +645,96 @@ private struct WatchFontSettingsView: View {
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func importFontsFromURL() {
+        let trimmed = importURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            importErrorMessage = "链接不能为空。"
+            return
+        }
+        guard let url = URL(string: trimmed) else {
+            importErrorMessage = "链接格式无效，请输入完整 URL。"
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            importErrorMessage = "仅支持 http/https 链接。"
+            return
+        }
+
+        importErrorMessage = nil
+        isImportingFromURL = true
+
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 45
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    await MainActor.run {
+                        importErrorMessage = "下载失败：HTTP \(httpResponse.statusCode)"
+                        isImportingFromURL = false
+                    }
+                    return
+                }
+
+                let fileName = suggestedRemoteFontFileName(from: url, response: response, data: data)
+                _ = try FontLibrary.importFont(data: data, fileName: fileName)
+
+                await MainActor.run {
+                    FontLibrary.registerAllFontsIfNeeded()
+                    reloadData()
+                    NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+                    importURLText = ""
+                    importErrorMessage = nil
+                    isImportingFromURL = false
+                }
+            } catch {
+                await MainActor.run {
+                    importErrorMessage = error.localizedDescription
+                    isImportingFromURL = false
+                }
+            }
+        }
+    }
+
+    private func suggestedRemoteFontFileName(from url: URL, response: URLResponse, data: Data) -> String {
+        var fileName = response.suggestedFilename?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if fileName.isEmpty {
+            fileName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if fileName.isEmpty || fileName == "/" {
+            fileName = "font-from-url"
+        }
+
+        let lowercased = fileName.lowercased()
+        let allowedExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
+        if allowedExtensions.contains((lowercased as NSString).pathExtension) {
+            return fileName
+        }
+
+        let inferredExtension = inferredFontExtension(response: response, data: data) ?? "ttf"
+        return "\(fileName).\(inferredExtension)"
+    }
+
+    private func inferredFontExtension(response: URLResponse, data: Data) -> String? {
+        if let httpResponse = response as? HTTPURLResponse,
+           let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() {
+            if contentType.contains("woff2") { return "woff2" }
+            if contentType.contains("woff") { return "woff" }
+            if contentType.contains("ttc") || contentType.contains("collection") { return "ttc" }
+            if contentType.contains("otf") || contentType.contains("opentype") { return "otf" }
+            if contentType.contains("ttf") || contentType.contains("truetype") || contentType.contains("sfnt") { return "ttf" }
+        }
+
+        let header = [UInt8](data.prefix(4))
+        if header == [0x77, 0x4F, 0x46, 0x32] { return "woff2" } // wOF2
+        if header == [0x77, 0x4F, 0x46, 0x46] { return "woff" } // wOFF
+        if header == [0x74, 0x74, 0x63, 0x66] { return "ttc" } // ttcf
+        if header == [0x4F, 0x54, 0x54, 0x4F] { return "otf" } // OTTO
+        if header == [0x00, 0x01, 0x00, 0x00] { return "ttf" }
+        return nil
     }
 }
 

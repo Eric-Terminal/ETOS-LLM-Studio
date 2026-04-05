@@ -253,6 +253,43 @@ struct FontRouteSyncTests {
         }
     }
 
+    @Test("关闭全局自定义字体开关后会统一回退系统字体")
+    func testGlobalCustomFontSwitchDisablesFallbackAndResolve() async throws {
+        let defaults = UserDefaults.standard
+        let key = FontLibrary.customFontEnabledStorageKey
+        let previousValue = defaults.object(forKey: key)
+        defer {
+            if let previousValue {
+                defaults.set(previousValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        try await withIsolatedFontStore {
+            let assetID = UUID(uuidString: "31000000-0000-0000-0000-000000000001")!
+            #expect(FontLibrary.saveAssets([
+                FontAssetRecord(
+                    id: assetID,
+                    fileName: "global-switch.ttf",
+                    checksum: "global-switch-checksum",
+                    displayName: "全局开关测试字体",
+                    postScriptName: "GlobalSwitchPS",
+                    importedAt: Date(timeIntervalSince1970: 1_730_000_300),
+                    isEnabled: true
+                )
+            ]))
+            #expect(FontLibrary.saveRouteConfiguration(.init(body: [assetID], emphasis: [], strong: [], code: [])))
+
+            defaults.set(true, forKey: key)
+            #expect(FontLibrary.fallbackPostScriptNames(for: .body) == ["GlobalSwitchPS"])
+
+            defaults.set(false, forKey: key)
+            #expect(FontLibrary.fallbackPostScriptNames(for: .body).isEmpty)
+            #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == nil)
+        }
+    }
+
     @Test("旧版本同步包缺少 isEnabled 字段时默认按启用处理")
     func testDecodeLegacySyncedFontFileDefaultsIsEnabled() throws {
         let assetID = UUID(uuidString: "40000000-0000-0000-0000-000000000001")!

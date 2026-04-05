@@ -3,20 +3,53 @@
 // ============================================================================
 // Agent Skills 管理页（iOS）
 // - 管理技能列表与启用状态
-// - 支持新增、删除、文件编辑、GitHub 导入
+// - 支持新增、删除、文件编辑、GitHub/本地文件导入
 // ============================================================================
 
 import SwiftUI
 import Shared
+import UniformTypeIdentifiers
 
 struct AgentSkillsView: View {
     @StateObject private var manager = SkillManager.shared
     @State private var showAddSheet = false
     @State private var showImportSheet = false
+    @State private var showLocalImporter = false
+    @State private var localImportError: String?
     @State private var deleteTarget: SkillMetadata?
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "Agent Skills",
+                    summary: "为模型提供自定义技能文件，通过 use_skill 工具在聊天中按需调用。",
+                    details: """
+                    适用场景
+                    • 你想让模型在聊天时执行特定任务，例如格式化输出、代码检查、知识问答等。
+                    • 你希望将常用的提示词或操作封装为可复用的技能模块。
+
+                    怎么用（建议顺序）
+                    1. 点击"新增技能"粘贴 SKILL.md，或通过 GitHub / 本地文件导入。
+                    2. 确认技能列表中对应技能已启用（右侧开关为开）。
+                    3. 打开"向模型暴露 Agent Skills（use_skill）"总开关。
+                    4. 在聊天中告知模型你的需求，模型会在合适时机调用 use_skill。
+
+                    SKILL.md 格式说明
+                    • 文件头（frontmatter）必须包含 name 和 description 字段。
+                    • name 作为技能的唯一标识，不能与已有技能重名。
+                    • 正文可包含使用说明、参数说明、示例等任意 Markdown 内容。
+
+                    常见问题
+                    • 模型不调用技能：先检查总开关是否已开启，并确认对应技能已启用。
+                    • 导入失败：检查仓库地址是否可访问，或改用本地文件/手动粘贴 SKILL.md 内容。
+                    • 技能内容需更新：进入技能详情编辑 SKILL.md 文件即可。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 Toggle(
                     "向模型暴露 Agent Skills（use_skill）",
@@ -43,11 +76,24 @@ struct AgentSkillsView: View {
                 } label: {
                     Label("从 GitHub 导入", systemImage: "square.and.arrow.down")
                 }
+
+                Button {
+                    localImportError = nil
+                    showLocalImporter = true
+                } label: {
+                    Label("从本地文件导入", systemImage: "tray.and.arrow.down")
+                }
+
+                if let localImportError {
+                    Text(localImportError)
+                        .etFont(.footnote)
+                        .foregroundStyle(.red)
+                }
             }
 
             Section("已安装技能 (\(manager.skills.count))") {
                 if manager.skills.isEmpty {
-                    Text("暂无技能。可粘贴 SKILL.md 或从 GitHub 导入。")
+                    Text("暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地文件导入。")
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -102,6 +148,12 @@ struct AgentSkillsView: View {
         .sheet(isPresented: $showImportSheet) {
             ImportSkillSheet(manager: manager)
         }
+        .fileImporter(
+            isPresented: $showLocalImporter,
+            allowedContentTypes: AgentSkillsView.localImportContentTypes,
+            allowsMultipleSelection: false,
+            onCompletion: handleLocalImportResult
+        )
         .alert("删除技能", isPresented: Binding(
             get: { deleteTarget != nil },
             set: { if !$0 { deleteTarget = nil } }
@@ -115,6 +167,89 @@ struct AgentSkillsView: View {
             }
         } message: {
             Text("确认删除“\(deleteTarget?.name ?? "")”？此操作不可撤销。")
+        }
+    }
+}
+
+private extension AgentSkillsView {
+    static var localImportContentTypes: [UTType] {
+        var types: [UTType] = [.plainText, .text]
+        if let markdown = UTType(filenameExtension: "md") {
+            types.append(markdown)
+        }
+        return types
+    }
+
+    func handleLocalImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            localImportError = "无法读取本地文件：\(error.localizedDescription)"
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            Task {
+                let shouldStop = url.startAccessingSecurityScopedResource()
+                defer {
+                    if shouldStop {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+                do {
+                    let content = try String(contentsOf: url, encoding: .utf8)
+                    let success = await MainActor.run {
+                        manager.saveSkillFromContent(content)
+                    }
+                    await MainActor.run {
+                        if success {
+                            localImportError = nil
+                        } else {
+                            localImportError = manager.lastErrorMessage ?? "导入失败：SKILL.md 内容无效。"
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        localImportError = "导入失败：\(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+    }
+
+    func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.primary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 }

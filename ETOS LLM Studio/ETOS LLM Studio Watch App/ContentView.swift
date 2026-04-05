@@ -34,6 +34,7 @@ struct ContentView: View {
     @State private var suppressAutoScrollOnce = false
     @State private var pendingJumpRequest: MessageJumpRequest?
     @State private var rootBodyFont: Font = .body
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
@@ -136,6 +137,12 @@ struct ContentView: View {
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
+            refreshRootBodyFont()
+        }
+        .onChange(of: isCustomFontEnabled) { _, isEnabled in
+            if isEnabled {
+                FontLibrary.registerAllFontsIfNeeded()
+            }
             refreshRootBodyFont()
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)

@@ -312,6 +312,38 @@ struct ChatBubble: View {
         return hasCallResults || hasWidgetPayload
     }
 
+    private func isShowWidgetToolCall(_ call: InternalToolCall) -> Bool {
+        call.toolName == AppToolKind.showWidget.toolName
+    }
+
+    private func showWidgetPayload(for call: InternalToolCall) -> ToolWidgetPayload? {
+        guard isShowWidgetToolCall(call) else { return nil }
+
+        if let payload = ToolWidgetPayloadParser.parse(from: call.arguments) {
+            return payload
+        }
+
+        let resolved = resolvedToolResultText(for: call)
+        if let payload = ToolWidgetPayloadParser.parse(from: resolved) {
+            return payload
+        }
+
+        if message.role == .tool,
+           let payload = ToolWidgetPayloadParser.parse(from: message.content) {
+            return payload
+        }
+
+        return nil
+    }
+
+    private var standaloneShowWidgetPayload: ToolWidgetPayload? {
+        guard message.role == .tool,
+              (message.toolCalls?.isEmpty ?? true) else {
+            return nil
+        }
+        return ToolWidgetPayloadParser.parse(from: message.content)
+    }
+
     private var hasPendingToolResults: Bool {
         guard message.role != .tool else { return false }
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return false }
@@ -467,6 +499,11 @@ struct ChatBubble: View {
         static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
             value = max(value, nextValue())
         }
+    }
+
+    private struct WidgetToolCardItem: Identifiable {
+        let id: String
+        let payload: ToolWidgetPayload
     }
     
     // MARK: - 紧凑版本指示器 (Telegram 风格)
@@ -700,31 +737,35 @@ struct ChatBubble: View {
                 let isLast = position == (totalBubbleCount - 1)
 
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast) {
-                    ToolCallsInlineView(
-                        toolCalls: [call],
-                        isOutgoing: isOutgoing,
-                        customTextColor: customTextColorOverride
-                    )
-
-                    if let permissionRequest = activeToolPermissionRequest(for: call) {
-                        ToolPermissionInlineView(
-                            request: permissionRequest,
-                            onDecision: { decision in
-                                toolPermissionCenter.resolveActiveRequest(with: decision)
-                            }
-                        )
-                    }
-
-                    if shouldShowToolResult(for: call) {
-                        ToolResultsDisclosureView(
+                    if let payload = showWidgetPayload(for: call) {
+                        ToolWidgetRendererCard(payload: payload)
+                    } else {
+                        ToolCallsInlineView(
                             toolCalls: [call],
-                            resultText: message.role == .tool ? message.content : "",
-                            isExpanded: toolResultExpansionBinding(for: call.id),
                             isOutgoing: isOutgoing,
-                            isPending: isPendingToolResult(for: call),
-                            enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
                             customTextColor: customTextColorOverride
                         )
+
+                        if let permissionRequest = activeToolPermissionRequest(for: call) {
+                            ToolPermissionInlineView(
+                                request: permissionRequest,
+                                onDecision: { decision in
+                                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                                }
+                            )
+                        }
+
+                        if shouldShowToolResult(for: call) {
+                            ToolResultsDisclosureView(
+                                toolCalls: [call],
+                                resultText: message.role == .tool ? message.content : "",
+                                isExpanded: toolResultExpansionBinding(for: call.id),
+                                isOutgoing: isOutgoing,
+                                isPending: isPendingToolResult(for: call),
+                                enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                                customTextColor: customTextColorOverride
+                            )
+                        }
                     }
                 }
             }
@@ -751,7 +792,9 @@ struct ChatBubble: View {
         }
         
         // 消息正文
-        if !message.content.isEmpty, message.role != .tool || (message.toolCalls?.isEmpty ?? true) {
+        if let standaloneShowWidgetPayload {
+            ToolWidgetRendererCard(payload: standaloneShowWidgetPayload)
+        } else if !message.content.isEmpty, message.role != .tool || (message.toolCalls?.isEmpty ?? true) {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName)
             } else {
@@ -787,30 +830,42 @@ struct ChatBubble: View {
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
-            ToolCallsInlineView(
-                toolCalls: toolCalls,
-                isOutgoing: isOutgoing,
-                customTextColor: customTextColorOverride
-            )
-            if let activeToolPermissionRequest {
-                ToolPermissionInlineView(
-                    request: activeToolPermissionRequest,
-                    onDecision: { decision in
-                        toolPermissionCenter.resolveActiveRequest(with: decision)
-                    }
-                )
+            let nonWidgetToolCalls = toolCalls.filter { showWidgetPayload(for: $0) == nil }
+            let widgetCards = toolCalls.compactMap { call -> WidgetToolCardItem? in
+                guard let payload = showWidgetPayload(for: call) else { return nil }
+                return WidgetToolCardItem(id: call.id, payload: payload)
             }
-            let shouldShowResults = hasToolResults || hasPendingToolResults
-            if shouldShowResults {
-                ToolResultsDisclosureView(
-                    toolCalls: toolCalls,
-                    resultText: message.role == .tool ? message.content : "",
-                    isExpanded: $isToolCallsExpanded,
+
+            if !nonWidgetToolCalls.isEmpty {
+                ToolCallsInlineView(
+                    toolCalls: nonWidgetToolCalls,
                     isOutgoing: isOutgoing,
-                    isPending: hasPendingToolResults,
-                    enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
                     customTextColor: customTextColorOverride
                 )
+                if let activeToolPermissionRequest {
+                    ToolPermissionInlineView(
+                        request: activeToolPermissionRequest,
+                        onDecision: { decision in
+                            toolPermissionCenter.resolveActiveRequest(with: decision)
+                        }
+                    )
+                }
+                let shouldShowResults = nonWidgetToolCalls.contains { shouldShowToolResult(for: $0) }
+                if shouldShowResults {
+                    ToolResultsDisclosureView(
+                        toolCalls: nonWidgetToolCalls,
+                        resultText: message.role == .tool ? message.content : "",
+                        isExpanded: $isToolCallsExpanded,
+                        isOutgoing: isOutgoing,
+                        isPending: hasPendingToolResults,
+                        enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                        customTextColor: customTextColorOverride
+                    )
+                }
+            }
+
+            ForEach(widgetCards) { item in
+                ToolWidgetRendererCard(payload: item.payload)
             }
         }
     }
@@ -828,15 +883,15 @@ struct ChatBubble: View {
     }
 
     private func isPendingToolResult(for call: InternalToolCall) -> Bool {
-        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+        if showWidgetPayload(for: call) != nil {
             return false
         }
         return hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
     }
 
     private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
-        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
-            return true
+        if showWidgetPayload(for: call) != nil {
+            return false
         }
         return !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
     }
@@ -1733,10 +1788,14 @@ struct ToolResultsDisclosureView: View, Equatable {
         return nil
     }
 
+    @ViewBuilder
     private func widgetToolResultContent(for call: InternalToolCall, payload: ToolWidgetPayload) -> some View {
+        if call.toolName == AppToolKind.showWidget.toolName {
+            ToolWidgetRendererCard(payload: payload)
+        } else {
         let display = displayModel(for: call)
         let label = displayName(for: call.toolName)
-        return VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .etFont(.caption.weight(.semibold))
             ToolWidgetRendererCard(payload: payload)
@@ -1757,6 +1816,7 @@ struct ToolResultsDisclosureView: View, Equatable {
             RoundedRectangle(cornerRadius: 8)
                 .fill(sectionBackgroundColor)
         )
+        }
     }
 
     private func experimentalToolResultContent(for call: InternalToolCall) -> some View {
@@ -2052,10 +2112,21 @@ private struct ToolWidgetWebView: UIViewRepresentable {
       width: 100%;
       min-height: 100%;
       background: transparent;
-      overflow-x: hidden;
+      overflow: visible;
+    }
+    body {
+      position: relative;
+    }
+    #et-widget-host {
+      width: min(100%, \(Int(stableWidth))px);
+      max-width: 100%;
+      min-height: 1px;
+      box-sizing: border-box;
+      overflow: visible;
     }
     #et-widget-root {
-      width: min(100%, \(Int(stableWidth))px);
+      width: 100%;
+      min-width: 0;
       max-width: 100%;
       margin: 0;
       box-sizing: border-box;
@@ -2064,35 +2135,133 @@ private struct ToolWidgetWebView: UIViewRepresentable {
   </style>
 </head>
 <body>
-  <div id="et-widget-root">
+  <div id="et-widget-host">
+    <div id="et-widget-root">
 \(widgetCode)
+    </div>
   </div>
   <script>
     (function () {
-      function reportHeight() {
-        var body = document.body;
-        var root = document.documentElement;
-        var height = Math.max(
-          body ? body.scrollHeight : 0,
-          body ? body.offsetHeight : 0,
-          root ? root.scrollHeight : 0,
-          root ? root.offsetHeight : 0
-        );
+      var lastPostedHeight = 0;
+      var sampleCount = 0;
+
+      function isFiniteNumber(value) {
+        return typeof value === 'number' && isFinite(value);
+      }
+
+      function walkElements(rootNode, visitor) {
+        if (!rootNode || typeof rootNode.querySelectorAll !== 'function') return;
+        var elements = rootNode.querySelectorAll('*');
+        for (var index = 0; index < elements.length; index += 1) {
+          var element = elements[index];
+          visitor(element);
+          if (element && element.shadowRoot) {
+            walkElements(element.shadowRoot, visitor);
+          }
+        }
+      }
+
+      function syncSameOriginIframeHeight() {
+        var iframes = document.querySelectorAll('iframe');
+        for (var index = 0; index < iframes.length; index += 1) {
+          var frame = iframes[index];
+          if (!frame) continue;
+          try {
+            var frameDocument = frame.contentDocument;
+            if (!frameDocument) continue;
+            var frameBody = frameDocument.body;
+            var frameRoot = frameDocument.documentElement;
+            var frameHeight = Math.max(
+              frameBody ? frameBody.scrollHeight : 0,
+              frameBody ? frameBody.offsetHeight : 0,
+              frameRoot ? frameRoot.scrollHeight : 0,
+              frameRoot ? frameRoot.offsetHeight : 0
+            );
+            if (frameHeight > 0) {
+              frame.style.height = frameHeight + 'px';
+            }
+          } catch (_) {
+            // 跨域 iframe 无法读取高度，保持默认行为。
+          }
+        }
+      }
+
+      function visualBoundsHeight() {
+        var minTop = 0;
+        var maxBottom = 0;
+        walkElements(document, function (element) {
+          if (!element || typeof element.getBoundingClientRect !== 'function') return;
+          var rect = element.getBoundingClientRect();
+          if (!rect) return;
+          if (!isFiniteNumber(rect.top) || !isFiniteNumber(rect.bottom)) return;
+          if (rect.width <= 0 && rect.height <= 0) return;
+          if (rect.top < minTop) minTop = rect.top;
+          if (rect.bottom > maxBottom) maxBottom = rect.bottom;
+        });
+        return Math.max(0, Math.ceil(maxBottom - minTop));
+      }
+
+      function postHeight(height) {
+        if (!isFiniteNumber(height)) return;
+        if (Math.abs(height - lastPostedHeight) < 0.5) return;
+        lastPostedHeight = height;
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etWidgetHeight) {
           window.webkit.messageHandlers.etWidgetHeight.postMessage(height);
         }
       }
+
+      function reportHeight() {
+        syncSameOriginIframeHeight();
+        var body = document.body;
+        var root = document.documentElement;
+        var host = document.getElementById('et-widget-host');
+        var widgetRoot = document.getElementById('et-widget-root');
+        var flowHeight = Math.max(
+          body ? body.scrollHeight : 0,
+          body ? body.offsetHeight : 0,
+          root ? root.scrollHeight : 0,
+          root ? root.offsetHeight : 0,
+          host ? host.scrollHeight : 0,
+          host ? host.offsetHeight : 0,
+          widgetRoot ? widgetRoot.scrollHeight : 0,
+          widgetRoot ? widgetRoot.offsetHeight : 0
+        );
+        var visualHeight = visualBoundsHeight();
+        var height = Math.max(1, flowHeight, visualHeight);
+        postHeight(height);
+      }
       window.__etReportSize = reportHeight;
       if (window.ResizeObserver) {
         var observer = new ResizeObserver(reportHeight);
+        var hostContainer = document.getElementById('et-widget-host');
+        var widgetContainer = document.getElementById('et-widget-root');
+        if (hostContainer) observer.observe(hostContainer);
+        if (widgetContainer) observer.observe(widgetContainer);
         if (document.documentElement) observer.observe(document.documentElement);
         if (document.body) observer.observe(document.body);
+      }
+      if (window.MutationObserver && document.documentElement) {
+        var mutationObserver = new MutationObserver(reportHeight);
+        mutationObserver.observe(document.documentElement, {
+          attributes: true,
+          characterData: true,
+          childList: true,
+          subtree: true
+        });
       }
       window.addEventListener('load', reportHeight);
       window.addEventListener('resize', reportHeight);
       setTimeout(reportHeight, 0);
       setTimeout(reportHeight, 120);
       setTimeout(reportHeight, 360);
+      function sampleAnimatedLayout() {
+        reportHeight();
+        sampleCount += 1;
+        if (sampleCount < 20) {
+          setTimeout(sampleAnimatedLayout, 100);
+        }
+      }
+      sampleAnimatedLayout();
     })();
   </script>
 </body>

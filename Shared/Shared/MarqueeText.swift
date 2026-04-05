@@ -15,6 +15,7 @@ public struct MarqueeText: View {
     
     let content: String
     let uiFont: UIFont
+    let customFont: Font?
     let speed: Double // 速度，单位：像素/秒
     let delay: TimeInterval
     let spacing: CGFloat
@@ -23,7 +24,9 @@ public struct MarqueeText: View {
     
     @State private var containerWidth: CGFloat = 0
     @State private var textWidth: CGFloat = 0
+    @State private var textHeight: CGFloat = 0
     @State private var isAnimating = false
+    @Environment(\.font) private var environmentFont
     
     private var isScrollNeeded: Bool {
         textWidth > containerWidth
@@ -38,9 +41,10 @@ public struct MarqueeText: View {
     
     // MARK: - 初始化
     
-    public init(content: String, uiFont: UIFont = .preferredFont(forTextStyle: .headline), speed: Double = 40.0, delay: TimeInterval = 1.0, spacing: CGFloat = 40.0) {
+    public init(content: String, uiFont: UIFont = .preferredFont(forTextStyle: .headline), font: Font? = nil, speed: Double = 40.0, delay: TimeInterval = 1.0, spacing: CGFloat = 40.0) {
         self.content = content
         self.uiFont = uiFont
+        self.customFont = font
         self.speed = speed
         self.delay = delay
         self.spacing = spacing
@@ -55,7 +59,7 @@ public struct MarqueeText: View {
                 .onAppear {
                     containerWidth = geometry.size.width
                 }
-                .onChange(of: geometry.size.width) { oldWidth, newWidth in
+                .onChange(of: geometry.size.width) { _, newWidth in
                     containerWidth = newWidth
                 }
             
@@ -83,14 +87,24 @@ public struct MarqueeText: View {
                 textToScroll
             }
         }
-        .frame(height: uiFont.lineHeight)
+        .frame(height: max(uiFont.lineHeight, textHeight))
     }
     
     // MARK: - 辅助视图
+
+    private var resolvedFont: Font {
+        if let customFont {
+            return customFont
+        }
+        if let environmentFont {
+            return environmentFont
+        }
+        return Font(uiFont)
+    }
     
     private var textToScroll: some View {
         Text(content)
-            .font(Font(uiFont))
+            .font(resolvedFont)
             .fixedSize(horizontal: true, vertical: false)
             .background(
                 // 使用一个不可见的视图来测量文本宽度
@@ -98,10 +112,16 @@ public struct MarqueeText: View {
                     Color.clear
                         .onAppear {
                             textWidth = geometry.size.width
+                            textHeight = geometry.size.height
                         }
-                        .onChange(of: content) { oldContent, newContent in
+                        .onChange(of: geometry.size) { _, newSize in
+                            textWidth = newSize.width
+                            textHeight = newSize.height
+                        }
+                        .onChange(of: content) { _, _ in
                             // 当文本内容变化时重新测量
                             textWidth = geometry.size.width
+                            textHeight = geometry.size.height
                         }
                 }
             )

@@ -53,6 +53,39 @@ private let appLocalNotificationDailyPulseSaveActionIdentifier = "dailyPulse.act
 private let appLocalNotificationDailyPulseContinueActionIdentifier = "dailyPulse.action.continue"
 private let appLocalNotificationDailyPulseTaskActionIdentifier = "dailyPulse.action.task"
 
+private struct AppLocalNotificationPayload: Sendable {
+    let route: AppLocalNotificationRoute?
+    let dayKey: String?
+    let runID: UUID?
+    let cardID: UUID?
+    let issueNumber: Int?
+
+    init(userInfo: [AnyHashable: Any]) {
+        if let routeRawValue = userInfo[appLocalNotificationRouteUserInfoKey] as? String {
+            route = AppLocalNotificationRoute(rawValue: routeRawValue)
+        } else {
+            route = nil
+        }
+        dayKey = userInfo[appLocalNotificationDayKeyUserInfoKey] as? String
+        runID = (userInfo[appLocalNotificationRunIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
+        cardID = (userInfo[appLocalNotificationCardIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
+        issueNumber = AppLocalNotificationPayload.parseIssueNumber(from: userInfo)
+    }
+
+    private static func parseIssueNumber(from userInfo: [AnyHashable: Any]) -> Int? {
+        if let intValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? Int {
+            return intValue
+        }
+        if let numberValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? NSNumber {
+            return numberValue.intValue
+        }
+        if let stringValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? String {
+            return Int(stringValue)
+        }
+        return nil
+    }
+}
+
 @MainActor
 public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     public static let shared = AppLocalNotificationCenter()
@@ -229,19 +262,11 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         UNUserNotificationCenter.current().setNotificationCategories([reminderCategory, readyCategory])
     }
 
-    private func dailyPulseIdentifiers(from userInfo: [AnyHashable: Any]) -> (dayKey: String?, runID: UUID?, cardID: UUID?) {
-        let dayKey = userInfo[appLocalNotificationDayKeyUserInfoKey] as? String
-        let runID = (userInfo[appLocalNotificationRunIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
-        let cardID = (userInfo[appLocalNotificationCardIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
-        return (dayKey, runID, cardID)
-    }
-
-    private func dailyPulseTarget(from userInfo: [AnyHashable: Any]) -> (runID: UUID, card: DailyPulseCard)? {
-        let identifiers = dailyPulseIdentifiers(from: userInfo)
+    private func dailyPulseTarget(from payload: AppLocalNotificationPayload) -> (runID: UUID, card: DailyPulseCard)? {
         return DailyPulseManager.shared.notificationTarget(
-            runID: identifiers.runID,
-            cardID: identifiers.cardID,
-            dayKey: identifiers.dayKey
+            runID: payload.runID,
+            cardID: payload.cardID,
+            dayKey: payload.dayKey
         )
     }
 
@@ -250,14 +275,14 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
     }
 
-    private func openFeedbackFromNotification(userInfo: [AnyHashable: Any]) {
+    private func openFeedbackFromNotification(payload: AppLocalNotificationPayload) {
         pendingRoute = .feedback
-        pendingFeedbackIssueNumber = parseIssueNumber(from: userInfo)
+        pendingFeedbackIssueNumber = payload.issueNumber
         NotificationCenter.default.post(name: .requestOpenFeedback, object: nil)
     }
 
-    private func continueDailyPulseFromNotification(userInfo: [AnyHashable: Any]) {
-        guard let target = dailyPulseTarget(from: userInfo),
+    private func continueDailyPulseFromNotification(payload: AppLocalNotificationPayload) {
+        guard let target = dailyPulseTarget(from: payload),
               let session = DailyPulseManager.shared.saveCardAsSession(cardID: target.card.id, runID: target.runID) else {
             openDailyPulseFromNotification()
             return
@@ -273,21 +298,21 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
 
     private func handleDailyPulseAction(
         actionIdentifier: String,
-        userInfo: [AnyHashable: Any]
+        payload: AppLocalNotificationPayload
     ) {
         switch actionIdentifier {
         case UNNotificationDefaultActionIdentifier, appLocalNotificationDailyPulseOpenActionIdentifier:
             openDailyPulseFromNotification()
         case appLocalNotificationDailyPulseLikeActionIdentifier:
-            guard let target = dailyPulseTarget(from: userInfo) else { return }
+            guard let target = dailyPulseTarget(from: payload) else { return }
             DailyPulseManager.shared.applyFeedback(.liked, cardID: target.card.id, runID: target.runID)
         case appLocalNotificationDailyPulseSaveActionIdentifier:
-            guard let target = dailyPulseTarget(from: userInfo) else { return }
+            guard let target = dailyPulseTarget(from: payload) else { return }
             _ = DailyPulseManager.shared.saveCardAsSession(cardID: target.card.id, runID: target.runID)
         case appLocalNotificationDailyPulseContinueActionIdentifier:
-            continueDailyPulseFromNotification(userInfo: userInfo)
+            continueDailyPulseFromNotification(payload: payload)
         case appLocalNotificationDailyPulseTaskActionIdentifier:
-            guard let target = dailyPulseTarget(from: userInfo) else { return }
+            guard let target = dailyPulseTarget(from: payload) else { return }
             _ = DailyPulseManager.shared.addTaskFromCard(cardID: target.card.id, runID: target.runID)
         default:
             break
@@ -302,18 +327,6 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         }
     }
 
-    private func parseIssueNumber(from userInfo: [AnyHashable: Any]) -> Int? {
-        if let intValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? Int {
-            return intValue
-        }
-        if let numberValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? NSNumber {
-            return numberValue.intValue
-        }
-        if let stringValue = userInfo[appLocalNotificationIssueNumberUserInfoKey] as? String {
-            return Int(stringValue)
-        }
-        return nil
-    }
 }
 
 extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
@@ -340,17 +353,18 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let userInfo = response.notification.request.content.userInfo
-        if Self.notificationTargetsDailyPulse(userInfo: userInfo) {
+        let payload = AppLocalNotificationPayload(userInfo: response.notification.request.content.userInfo)
+        let actionIdentifier = response.actionIdentifier
+        if payload.route == .dailyPulse {
             Task { @MainActor in
                 AppLocalNotificationCenter.shared.handleDailyPulseAction(
-                    actionIdentifier: response.actionIdentifier,
-                    userInfo: userInfo
+                    actionIdentifier: actionIdentifier,
+                    payload: payload
                 )
             }
-        } else if Self.notificationTargetsFeedback(userInfo: userInfo) {
+        } else if payload.route == .feedback {
             Task { @MainActor in
-                AppLocalNotificationCenter.shared.openFeedbackFromNotification(userInfo: userInfo)
+                AppLocalNotificationCenter.shared.openFeedbackFromNotification(payload: payload)
             }
         }
         completionHandler()

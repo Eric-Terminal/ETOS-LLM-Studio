@@ -285,39 +285,22 @@ private extension View {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .isEmpty
                     && onCodeBlockHeaderTap != nil
-                VStack(alignment: .leading, spacing: 0) {
-                    Group {
-                        if canAppendCodeBlock {
-                            Button {
-                                onCodeBlockHeaderTap?(codeBlockContent)
-                            } label: {
-                                codeBlockHeaderRow(
-                                    language: configuration.language,
-                                    content: configuration.content,
-                                    headerTextColor: codeHeaderTextColor,
-                                    isOutgoing: isOutgoing
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            codeBlockHeaderRow(
-                                language: configuration.language,
-                                content: configuration.content,
-                                headerTextColor: codeHeaderTextColor,
-                                isOutgoing: isOutgoing
-                            )
-                        }
+                ETWatchCollapsibleCodeBlockView(
+                    language: configuration.language,
+                    headerTextColor: codeHeaderTextColor,
+                    headerBackground: codeHeaderBackground,
+                    blockBackground: codeBlockBackground,
+                    borderColor: codeBorderColor,
+                    onHeaderTap: canAppendCodeBlock ? { onCodeBlockHeaderTap?(codeBlockContent) } : nil
+                ) { isCollapsed in
+                    if !isCollapsed, ETCodeClipboard.supportsCopy {
+                        ETCodeCopyButton(
+                            content: configuration.content,
+                            normalColor: codeHeaderTextColor,
+                            successColor: isOutgoing ? Color.white : Color.green
+                        )
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background {
-                        ZStack {
-                            Rectangle().fill(.ultraThinMaterial)
-                            Rectangle().fill(codeHeaderBackground)
-                        }
-                    }
-
+                } bodyContent: {
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
                             .relativeLineSpacing(.em(0.12))
@@ -334,19 +317,6 @@ private extension View {
                             .padding(.vertical, 8)
                     }
                 }
-                .background {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(codeBlockBackground)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(codeBorderColor, lineWidth: 1)
-                )
                 .markdownMargin(top: .em(0.2), bottom: .em(0.7))
             }
             .markdownBlockStyle(\.table) { configuration in
@@ -357,30 +327,107 @@ private extension View {
                 .markdownMargin(top: .zero, bottom: .em(1))
             }
     }
+}
 
-    @ViewBuilder
-    private func codeBlockHeaderRow(
-        language: String?,
-        content: String,
-        headerTextColor: Color,
-        isOutgoing: Bool
-    ) -> some View {
-        HStack(spacing: 8) {
-            Text(language?.isEmpty == false ? (language ?? "代码") : "代码")
-                .etFont(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(headerTextColor)
+private struct ETWatchCollapsibleCodeBlockView<HeaderActions: View, BodyContent: View>: View {
+    let language: String?
+    let headerTextColor: Color
+    let headerBackground: Color
+    let blockBackground: Color
+    let borderColor: Color
+    let onHeaderTap: (() -> Void)?
+    @ViewBuilder let headerActions: (_ isCollapsed: Bool) -> HeaderActions
+    @ViewBuilder let bodyContent: () -> BodyContent
 
-            Spacer(minLength: 8)
+    @State private var isCollapsed = false
 
-            if ETCodeClipboard.supportsCopy {
-                ETCodeCopyButton(
-                    content: content,
-                    normalColor: headerTextColor,
-                    successColor: isOutgoing ? Color.white : Color.green
-                )
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                codeBlockTitle
+
+                Spacer(minLength: 8)
+
+                headerActions(isCollapsed)
+
+                ETCodeCollapseButton(
+                    isCollapsed: isCollapsed,
+                    tintColor: headerTextColor
+                ) {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isCollapsed.toggle()
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Rectangle().fill(headerBackground)
+                }
+            }
+
+            if !isCollapsed {
+                bodyContent()
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .move(edge: .top))
+                        )
+                    )
             }
         }
-        .contentShape(Rectangle())
+        .animation(.easeInOut(duration: 0.22), value: isCollapsed)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(blockBackground)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var codeBlockTitle: some View {
+        if let onHeaderTap {
+            Button(action: onHeaderTap) {
+                codeBlockTitleLabel
+            }
+            .buttonStyle(.plain)
+        } else {
+            codeBlockTitleLabel
+        }
+    }
+
+    private var codeBlockTitleLabel: some View {
+        Text(language?.isEmpty == false ? (language ?? "代码") : "代码")
+            .etFont(.system(size: 10, weight: .semibold, design: .monospaced))
+            .foregroundStyle(headerTextColor)
+            .contentShape(Rectangle())
+    }
+}
+
+private struct ETCodeCollapseButton: View {
+    let isCollapsed: Bool
+    let tintColor: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
+                .etFont(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tintColor)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isCollapsed ? "展开代码块" : "折叠代码块")
     }
 }
 

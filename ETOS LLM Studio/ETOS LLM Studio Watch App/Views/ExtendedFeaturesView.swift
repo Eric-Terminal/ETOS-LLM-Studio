@@ -206,7 +206,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("请在 iPhone 端完成第三方数据导入。")
+                Text("可在手表上通过链接导入，也可在 iPhone 导入后同步。")
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
