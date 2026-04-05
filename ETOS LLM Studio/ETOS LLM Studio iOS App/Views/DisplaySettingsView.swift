@@ -210,6 +210,7 @@ struct DisplaySettingsView: View {
 
 private struct FontSettingsView: View {
     @Environment(\.editMode) private var editMode
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -239,6 +240,14 @@ private struct FontSettingsView: View {
                     """,
                     isExpanded: $isShowingIntroDetails
                 )
+            }
+
+            Section {
+                Toggle("启用自定义字体", isOn: $isCustomFontEnabled)
+            } footer: {
+                Text("关闭后全局回退为系统字体；已导入字体与优先级配置会保留。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("字体文件") {
@@ -347,6 +356,12 @@ private struct FontSettingsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             reloadData()
+        }
+        .onChange(of: isCustomFontEnabled) { _, isEnabled in
+            if isEnabled {
+                FontLibrary.registerAllFontsIfNeeded()
+            }
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
         .fileImporter(
             isPresented: $showImporter,

@@ -1850,6 +1850,7 @@ public enum FontLibrary {
     private static let manifestFileName = "font-manifest-v1.json"
     private static let routeConfigFileName = "font-routes-v1.json"
     private static let supportedFontFileExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
+    public static let customFontEnabledStorageKey = "font.useCustomFonts"
 
     private static var manifestURL: URL {
         Persistence.getFontDirectory().appendingPathComponent(manifestFileName)
@@ -1857,6 +1858,11 @@ public enum FontLibrary {
 
     private static var routeConfigURL: URL {
         Persistence.getFontDirectory().appendingPathComponent(routeConfigFileName)
+    }
+
+    /// 全局开关：是否启用自定义字体（默认启用）。
+    public static var isCustomFontEnabled: Bool {
+        (UserDefaults.standard.object(forKey: customFontEnabledStorageKey) as? Bool) ?? true
     }
 
     public static func loadAssets() -> [FontAssetRecord] {
@@ -2023,6 +2029,7 @@ public enum FontLibrary {
     }
 
     public static func registerAllFontsIfNeeded() {
+        guard isCustomFontEnabled else { return }
         let assets = loadAssets()
         for asset in assets where asset.isEnabled {
             registerFontFileIfNeeded(fileName: asset.fileName)
@@ -2030,6 +2037,7 @@ public enum FontLibrary {
     }
 
     public static func fallbackPostScriptNames(for role: FontSemanticRole) -> [String] {
+        guard isCustomFontEnabled else { return [] }
         let assets = loadAssets()
         let enabledMap = Dictionary(uniqueKeysWithValues: assets.filter(\.isEnabled).map { ($0.id, $0) })
         let route = loadRouteConfiguration().chain(for: role)
@@ -2041,6 +2049,7 @@ public enum FontLibrary {
         for role: FontSemanticRole,
         sampleText: String
     ) -> String? {
+        guard isCustomFontEnabled else { return nil }
         let candidates = fallbackPostScriptNames(for: role)
         guard !candidates.isEmpty else { return nil }
 

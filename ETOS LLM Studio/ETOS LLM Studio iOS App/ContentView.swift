@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var rootBodyFont: Font = .body
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     
     enum Tab: Hashable {
         case chat
@@ -62,6 +63,12 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
+            refreshRootBodyFont()
+        }
+        .onChange(of: isCustomFontEnabled) { _, isEnabled in
+            if isEnabled {
+                FontLibrary.registerAllFontsIfNeeded()
+            }
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
