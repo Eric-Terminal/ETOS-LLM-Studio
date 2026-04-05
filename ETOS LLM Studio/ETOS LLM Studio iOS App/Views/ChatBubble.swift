@@ -2112,19 +2112,22 @@ private struct ToolWidgetWebView: UIViewRepresentable {
       width: 100%;
       min-height: 100%;
       background: transparent;
-      overflow-x: visible;
+      overflow: visible;
     }
-    #et-widget-scroll {
+    body {
+      position: relative;
+    }
+    #et-widget-host {
       width: min(100%, \(Int(stableWidth))px);
       max-width: 100%;
-      overflow-x: auto;
-      overflow-y: visible;
-      -webkit-overflow-scrolling: touch;
+      min-height: 1px;
+      box-sizing: border-box;
+      overflow: visible;
     }
     #et-widget-root {
-      width: max-content;
-      min-width: 100%;
-      max-width: none;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       margin: 0;
       box-sizing: border-box;
       overflow: visible;
@@ -2132,47 +2135,133 @@ private struct ToolWidgetWebView: UIViewRepresentable {
   </style>
 </head>
 <body>
-  <div id="et-widget-scroll">
+  <div id="et-widget-host">
     <div id="et-widget-root">
 \(widgetCode)
     </div>
   </div>
   <script>
     (function () {
-      function reportHeight() {
-        var body = document.body;
-        var root = document.documentElement;
-        var scroll = document.getElementById('et-widget-scroll');
-        var widgetRoot = document.getElementById('et-widget-root');
-        var height = Math.max(
-          body ? body.scrollHeight : 0,
-          body ? body.offsetHeight : 0,
-          root ? root.scrollHeight : 0,
-          root ? root.offsetHeight : 0,
-          scroll ? scroll.scrollHeight : 0,
-          scroll ? scroll.offsetHeight : 0,
-          widgetRoot ? widgetRoot.scrollHeight : 0,
-          widgetRoot ? widgetRoot.offsetHeight : 0
-        );
+      var lastPostedHeight = 0;
+      var sampleCount = 0;
+
+      function isFiniteNumber(value) {
+        return typeof value === 'number' && isFinite(value);
+      }
+
+      function walkElements(rootNode, visitor) {
+        if (!rootNode || typeof rootNode.querySelectorAll !== 'function') return;
+        var elements = rootNode.querySelectorAll('*');
+        for (var index = 0; index < elements.length; index += 1) {
+          var element = elements[index];
+          visitor(element);
+          if (element && element.shadowRoot) {
+            walkElements(element.shadowRoot, visitor);
+          }
+        }
+      }
+
+      function syncSameOriginIframeHeight() {
+        var iframes = document.querySelectorAll('iframe');
+        for (var index = 0; index < iframes.length; index += 1) {
+          var frame = iframes[index];
+          if (!frame) continue;
+          try {
+            var frameDocument = frame.contentDocument;
+            if (!frameDocument) continue;
+            var frameBody = frameDocument.body;
+            var frameRoot = frameDocument.documentElement;
+            var frameHeight = Math.max(
+              frameBody ? frameBody.scrollHeight : 0,
+              frameBody ? frameBody.offsetHeight : 0,
+              frameRoot ? frameRoot.scrollHeight : 0,
+              frameRoot ? frameRoot.offsetHeight : 0
+            );
+            if (frameHeight > 0) {
+              frame.style.height = frameHeight + 'px';
+            }
+          } catch (_) {
+            // 跨域 iframe 无法读取高度，保持默认行为。
+          }
+        }
+      }
+
+      function visualBoundsHeight() {
+        var minTop = 0;
+        var maxBottom = 0;
+        walkElements(document, function (element) {
+          if (!element || typeof element.getBoundingClientRect !== 'function') return;
+          var rect = element.getBoundingClientRect();
+          if (!rect) return;
+          if (!isFiniteNumber(rect.top) || !isFiniteNumber(rect.bottom)) return;
+          if (rect.width <= 0 && rect.height <= 0) return;
+          if (rect.top < minTop) minTop = rect.top;
+          if (rect.bottom > maxBottom) maxBottom = rect.bottom;
+        });
+        return Math.max(0, Math.ceil(maxBottom - minTop));
+      }
+
+      function postHeight(height) {
+        if (!isFiniteNumber(height)) return;
+        if (Math.abs(height - lastPostedHeight) < 0.5) return;
+        lastPostedHeight = height;
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etWidgetHeight) {
           window.webkit.messageHandlers.etWidgetHeight.postMessage(height);
         }
       }
+
+      function reportHeight() {
+        syncSameOriginIframeHeight();
+        var body = document.body;
+        var root = document.documentElement;
+        var host = document.getElementById('et-widget-host');
+        var widgetRoot = document.getElementById('et-widget-root');
+        var flowHeight = Math.max(
+          body ? body.scrollHeight : 0,
+          body ? body.offsetHeight : 0,
+          root ? root.scrollHeight : 0,
+          root ? root.offsetHeight : 0,
+          host ? host.scrollHeight : 0,
+          host ? host.offsetHeight : 0,
+          widgetRoot ? widgetRoot.scrollHeight : 0,
+          widgetRoot ? widgetRoot.offsetHeight : 0
+        );
+        var visualHeight = visualBoundsHeight();
+        var height = Math.max(1, flowHeight, visualHeight);
+        postHeight(height);
+      }
       window.__etReportSize = reportHeight;
       if (window.ResizeObserver) {
         var observer = new ResizeObserver(reportHeight);
-        var scrollContainer = document.getElementById('et-widget-scroll');
+        var hostContainer = document.getElementById('et-widget-host');
         var widgetContainer = document.getElementById('et-widget-root');
-        if (scrollContainer) observer.observe(scrollContainer);
+        if (hostContainer) observer.observe(hostContainer);
         if (widgetContainer) observer.observe(widgetContainer);
         if (document.documentElement) observer.observe(document.documentElement);
         if (document.body) observer.observe(document.body);
+      }
+      if (window.MutationObserver && document.documentElement) {
+        var mutationObserver = new MutationObserver(reportHeight);
+        mutationObserver.observe(document.documentElement, {
+          attributes: true,
+          characterData: true,
+          childList: true,
+          subtree: true
+        });
       }
       window.addEventListener('load', reportHeight);
       window.addEventListener('resize', reportHeight);
       setTimeout(reportHeight, 0);
       setTimeout(reportHeight, 120);
       setTimeout(reportHeight, 360);
+      function sampleAnimatedLayout() {
+        reportHeight();
+        sampleCount += 1;
+        if (sampleCount < 20) {
+          setTimeout(sampleAnimatedLayout, 100);
+        }
+      }
+      sampleAnimatedLayout();
     })();
   </script>
 </body>
