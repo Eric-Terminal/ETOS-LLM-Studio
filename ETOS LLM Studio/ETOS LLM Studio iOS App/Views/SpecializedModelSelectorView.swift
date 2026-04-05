@@ -19,7 +19,7 @@ struct SpecializedModelSelectorView: View {
                 title: "语音模型",
                 options: viewModel.speechModels,
                 selectionID: speechModelIdentifierBinding,
-                footer: "用于语音转文字；也可在“高级模型设置”中修改。"
+                footer: "用于语音转文字；也可在“偏好设置”中修改。"
             )
 
             modelPickerSection(

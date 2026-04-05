@@ -157,7 +157,7 @@
 "重命名" = "Rename";
 "重试" = "Retry";
 "错误" = "Error";
-"高级模型设置" = "Advanced model settings";
+"高级模型设置" = "Preferences";
 "MCP +%d" = "MCP +%d";
 "图片 +%d" = "Images +%d";
 "，" = ", ";
@@ -428,7 +428,7 @@
 "模型信息" = "Model info";
 "模型名称" = "Model name";
 "模型名称 (可选)" = "Model name (optional)";
-"模型高级设置" = "Advanced model settings";
+"模型高级设置" = "Preferences";
 "正在发送…" = "Sending…";
 "正在同步 MCP 状态…" = "Syncing MCP status…";
 "正在录音…" = "Recording…";
@@ -510,7 +510,7 @@
 "语音识别模型" = "Speech recognition model";
 "语音识别模型 (可选)" = "Speech recognition model (optional)";
 "语音输入" = "Voice input";
-"请先在高级设置中开启语言输入功能。" = "Enable voice input in Advanced Settings first.";
+"请先在高级设置中开启语言输入功能。" = "Enable voice input in Preferences first.";
 "请在 GitHub Issues 提交问题或功能建议" = "Submit issues or feature requests via GitHub Issues";
 "请在 iPhone 上访问以上链接" = "Please open the link on iPhone";
 "请提供合法的 HTTP 或 HTTPS 地址。" = "Please provide a valid HTTP or HTTPS address.";
