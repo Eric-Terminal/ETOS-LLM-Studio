@@ -156,12 +156,8 @@ private extension AgentSkillsView {
             }
             .buttonStyle(.plain)
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.gray.opacity(0.14))
-        )
+        .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
                 Text(details)
