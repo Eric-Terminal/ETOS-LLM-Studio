@@ -19,6 +19,7 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persist
 
 public enum Persistence {
     private static let sessionStoreSchemaVersion = 3
+    private static let sessionFoldersFileSchemaVersion = 1
     private static let messagesFileSchemaVersion = 2
     private static let requestLogSchemaVersion = 1
     private static let defaultRequestLogRetentionLimit = 10_000
@@ -30,6 +31,7 @@ public enum Persistence {
     private static var hasLoggedCompatibilityReminder = false
 
     private static let sessionIndexFileName = "index.json"
+    private static let sessionFoldersFileName = "folders.json"
     private static let sessionRecordsDirectoryName = "sessions"
     private static let requestLogsDirectoryName = "RequestLogs"
     private static let requestLogsFileName = "index.json"
@@ -59,6 +61,12 @@ public enum Persistence {
         let updatedAt: String
     }
 
+    private struct SessionFoldersFileEnvelope: Codable {
+        let schemaVersion: Int
+        let updatedAt: String
+        let folders: [SessionFolder]
+    }
+
     private struct SessionPromptsV3: Codable {
         let topicPrompt: String?
         let enhancedPrompt: String?
@@ -67,6 +75,7 @@ public enum Persistence {
     private struct SessionMetaV3: Codable {
         let id: UUID
         let name: String
+        let folderID: UUID?
         let lorebookIDs: [UUID]
         let worldbookContextIsolationEnabled: Bool?
         let conversationSummary: String?
@@ -175,6 +184,55 @@ public enum Persistence {
         } catch {
             logger.error("\(migrationLogPrefix) 迁移失败，回退旧会话列表: \(error.localizedDescription)")
             return legacySessions
+        }
+    }
+
+    // MARK: - 会话文件夹持久化
+
+    /// 保存会话文件夹列表。
+    public static func saveSessionFolders(_ folders: [SessionFolder]) {
+        migrateLegacyV3StoreToCurrentLayoutIfNeeded()
+
+        let normalizedFolders = normalizeSessionFoldersForPersistence(folders)
+        let envelope = SessionFoldersFileEnvelope(
+            schemaVersion: sessionFoldersFileSchemaVersion,
+            updatedAt: iso8601Timestamp(),
+            folders: normalizedFolders
+        )
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(envelope)
+            try data.write(to: sessionFoldersFileURL(), options: .atomic)
+            logger.info("会话文件夹保存成功，共 \(normalizedFolders.count) 个。")
+        } catch {
+            logger.error("保存会话文件夹失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 加载会话文件夹列表。
+    public static func loadSessionFolders() -> [SessionFolder] {
+        migrateLegacyV3StoreToCurrentLayoutIfNeeded()
+
+        let fileURL = sessionFoldersFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return []
+        }
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let envelope = try JSONDecoder().decode(SessionFoldersFileEnvelope.self, from: data)
+            let normalizedFolders = normalizeSessionFoldersForPersistence(envelope.folders)
+            let shouldRewrite = envelope.schemaVersion != sessionFoldersFileSchemaVersion
+                || normalizedFolders != envelope.folders
+            if shouldRewrite {
+                saveSessionFolders(normalizedFolders)
+            }
+            return normalizedFolders
+        } catch {
+            logger.warning("读取会话文件夹失败: \(error.localizedDescription)")
+            return []
         }
     }
 
@@ -669,6 +727,7 @@ public enum Persistence {
             let updatedMeta = SessionMetaV3(
                 id: baseRecord.session.id,
                 name: baseRecord.session.name,
+                folderID: baseRecord.session.folderID,
                 lorebookIDs: baseRecord.session.lorebookIDs,
                 worldbookContextIsolationEnabled: baseRecord.session.worldbookContextIsolationEnabled,
                 conversationSummary: finalSummary,
@@ -879,6 +938,7 @@ public enum Persistence {
             session: SessionMetaV3(
                 id: session.id,
                 name: session.name,
+                folderID: session.folderID,
                 lorebookIDs: session.lorebookIDs,
                 worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil,
                 conversationSummary: preservedSummary?.conversationSummary,
@@ -900,6 +960,7 @@ public enum Persistence {
             enhancedPrompt: summary.prompts.enhancedPrompt,
             lorebookIDs: summary.session.lorebookIDs,
             worldbookContextIsolationEnabled: summary.session.worldbookContextIsolationEnabled ?? false,
+            folderID: summary.session.folderID,
             isTemporary: false
         )
     }
@@ -925,10 +986,66 @@ public enum Persistence {
     private static func isSamePersistedSession(summary: SessionRecordSummaryV3, session: ChatSession) -> Bool {
         summary.session.id == session.id &&
         summary.session.name == session.name &&
+        summary.session.folderID == session.folderID &&
         summary.session.lorebookIDs == session.lorebookIDs &&
         (summary.session.worldbookContextIsolationEnabled ?? false) == session.worldbookContextIsolationEnabled &&
         summary.prompts.topicPrompt == session.topicPrompt &&
         summary.prompts.enhancedPrompt == session.enhancedPrompt
+    }
+
+    private static func normalizeSessionFoldersForPersistence(_ folders: [SessionFolder]) -> [SessionFolder] {
+        var uniqueFolders: [SessionFolder] = []
+        uniqueFolders.reserveCapacity(folders.count)
+        var seenIDs = Set<UUID>()
+
+        for folder in folders {
+            guard seenIDs.insert(folder.id).inserted else { continue }
+            let normalizedName = folder.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            uniqueFolders.append(
+                SessionFolder(
+                    id: folder.id,
+                    name: normalizedName.isEmpty ? "未命名文件夹" : normalizedName,
+                    parentID: folder.parentID,
+                    updatedAt: folder.updatedAt
+                )
+            )
+        }
+
+        let parentByID = Dictionary(uniqueKeysWithValues: uniqueFolders.map { ($0.id, $0.parentID) })
+        for index in uniqueFolders.indices {
+            let folderID = uniqueFolders[index].id
+            let candidateParentID = uniqueFolders[index].parentID
+            guard isValidSessionFolderParent(candidateParentID, for: folderID, parentByID: parentByID) else {
+                uniqueFolders[index].parentID = nil
+                continue
+            }
+        }
+
+        return uniqueFolders
+    }
+
+    private static func isValidSessionFolderParent(
+        _ parentID: UUID?,
+        for folderID: UUID,
+        parentByID: [UUID: UUID?]
+    ) -> Bool {
+        guard let parentID else { return true }
+        guard parentID != folderID else { return false }
+        guard parentByID[parentID] != nil else { return false }
+
+        var cursor: UUID? = parentID
+        var visited = Set<UUID>()
+        while let current = cursor {
+            guard visited.insert(current).inserted else { return false }
+            if current == folderID { return false }
+            if let nextParent = parentByID[current] {
+                cursor = nextParent
+            } else {
+                cursor = nil
+            }
+        }
+
+        return true
     }
 
     private static func accumulateRequestTokens(_ usage: MessageTokenUsage?, to totals: inout RequestLogTokenTotals) {
@@ -1216,6 +1333,10 @@ public enum Persistence {
 
     private static func sessionIndexFileURLV3() -> URL {
         getChatsDirectory().appendingPathComponent(sessionIndexFileName)
+    }
+
+    private static func sessionFoldersFileURL() -> URL {
+        getChatsDirectory().appendingPathComponent(sessionFoldersFileName)
     }
 
     private static func requestLogsFileURL() -> URL {

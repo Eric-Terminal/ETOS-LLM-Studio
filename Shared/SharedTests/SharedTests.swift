@@ -3209,6 +3209,7 @@ fileprivate struct ChatSessionTests {
         // For these tests, we can use a standard ChatService instance
         // as session management does not have complex external dependencies.
         chatService = ChatService()
+        Persistence.saveSessionFolders([])
         // Clear any persisted sessions from previous runs to ensure a clean state
         let sessions = chatService.chatSessionsSubject.value
         if !sessions.isEmpty {
@@ -3368,6 +3369,35 @@ fileprivate struct ChatSessionTests {
         #expect(newSessionMessages.count == 1)
         #expect(newSessionMessages.first?.content == message.content)
     }
+
+    @Test("删除文件夹时会递归删除子文件夹并将会话回到未分类")
+    func testDeleteFolderRecursivelyReassignsSessionsToUncategorized() {
+        guard let rootFolder = chatService.createSessionFolder(name: "项目", parentID: nil) else {
+            Issue.record("创建根文件夹失败")
+            return
+        }
+        guard let childFolder = chatService.createSessionFolder(name: "子目录", parentID: rootFolder.id) else {
+            Issue.record("创建子文件夹失败")
+            return
+        }
+
+        let savedSession = chatService.createSavedSession(
+            name: "分类会话",
+            initialMessages: [],
+            folderID: childFolder.id
+        )
+        #expect(savedSession.folderID == childFolder.id)
+        #expect(chatService.sessionFoldersSubject.value.count == 2)
+
+        chatService.deleteSessionFolder(folderID: rootFolder.id)
+
+        let folders = chatService.sessionFoldersSubject.value
+        #expect(folders.isEmpty)
+
+        let updatedSession = chatService.chatSessionsSubject.value.first(where: { $0.id == savedSession.id })
+        #expect(updatedSession != nil)
+        #expect(updatedSession?.folderID == nil)
+    }
 }
 
 // MARK: - Persistence & Config Tests
@@ -3379,6 +3409,7 @@ fileprivate struct PersistenceTests {
         struct SessionMeta: Decodable {
             let id: UUID
             let name: String
+            let folderID: UUID?
             let lorebookIDs: [UUID]
         }
 
@@ -3403,6 +3434,10 @@ fileprivate struct PersistenceTests {
 
     private var currentIndexFileURL: URL {
         chatsDirectory.appendingPathComponent("index.json")
+    }
+
+    private var foldersFileURL: URL {
+        chatsDirectory.appendingPathComponent("folders.json")
     }
 
     private var legacyV3Directory: URL {
@@ -3453,6 +3488,7 @@ fileprivate struct PersistenceTests {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
         removeIfExists(currentIndexFileURL)
+        removeIfExists(foldersFileURL)
         removeIfExists(currentSessionsDirectory)
         removeIfExists(requestLogsDirectory)
         removeIfExists(legacyV3Directory)
@@ -3482,6 +3518,30 @@ fileprivate struct PersistenceTests {
         
         // Teardown
         cleanup(sessions: sessionsToSave)
+    }
+
+    @Test("Save and Load Session Folders with Session Assignment")
+    func testSaveAndLoadSessionFoldersWithSessionAssignment() {
+        let folder = SessionFolder(name: "工作")
+        Persistence.saveSessionFolders([folder])
+
+        let session = ChatSession(
+            id: UUID(),
+            name: "Folder Session",
+            folderID: folder.id,
+            isTemporary: false
+        )
+        Persistence.saveChatSessions([session])
+
+        let loadedFolders = Persistence.loadSessionFolders()
+        let loadedSessions = Persistence.loadChatSessions()
+
+        #expect(loadedFolders.count == 1)
+        #expect(loadedFolders.first?.id == folder.id)
+        #expect(loadedSessions.count == 1)
+        #expect(loadedSessions.first?.folderID == folder.id)
+
+        cleanup(sessions: [session])
     }
 
     @Test("Save and Load Messages")

@@ -1026,6 +1026,8 @@ public struct ChatSession: Identifiable, Codable, Hashable {
     public var name: String
     public var topicPrompt: String?
     public var enhancedPrompt: String?
+    /// 会话所属文件夹，nil 表示未分类。
+    public var folderID: UUID?
     public var lorebookIDs: [UUID]
     /// 开启后，仅在当前会话已绑定世界书时生效，发送时会屏蔽记忆与工具上下文。
     public var worldbookContextIsolationEnabled: Bool
@@ -1049,12 +1051,14 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         worldbookIDs: [UUID] = [],
         lorebookIDs: [UUID]? = nil,
         worldbookContextIsolationEnabled: Bool = false,
+        folderID: UUID? = nil,
         isTemporary: Bool = false
     ) {
         self.id = id
         self.name = name
         self.topicPrompt = topicPrompt
         self.enhancedPrompt = enhancedPrompt
+        self.folderID = folderID
         self.lorebookIDs = lorebookIDs ?? worldbookIDs
         self.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
         self.isTemporary = isTemporary
@@ -1065,6 +1069,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         case name
         case topicPrompt
         case enhancedPrompt
+        case folderID
         case worldbookIDs
         case lorebookIDs
         case lorebookIds
@@ -1077,6 +1082,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         self.name = try container.decode(String.self, forKey: .name)
         self.topicPrompt = try container.decodeIfPresent(String.self, forKey: .topicPrompt)
         self.enhancedPrompt = try container.decodeIfPresent(String.self, forKey: .enhancedPrompt)
+        self.folderID = try container.decodeIfPresent(UUID.self, forKey: .folderID)
         if let ids = try container.decodeIfPresent([UUID].self, forKey: .lorebookIDs) {
             self.lorebookIDs = ids
         } else if let ids = try container.decodeIfPresent([UUID].self, forKey: .lorebookIds) {
@@ -1096,6 +1102,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         try container.encode(name, forKey: .name)
         try container.encodeIfPresent(topicPrompt, forKey: .topicPrompt)
         try container.encodeIfPresent(enhancedPrompt, forKey: .enhancedPrompt)
+        try container.encodeIfPresent(folderID, forKey: .folderID)
         if !lorebookIDs.isEmpty {
             try container.encode(lorebookIDs, forKey: .lorebookIDs)
             // 兼容旧版本持久化字段，避免多端混用时丢失绑定。
@@ -1104,6 +1111,28 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         if worldbookContextIsolationEnabled {
             try container.encode(worldbookContextIsolationEnabled, forKey: .worldbookContextIsolationEnabled)
         }
+    }
+}
+
+/// 会话文件夹数据结构
+public struct SessionFolder: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var name: String
+    /// 父文件夹 ID，nil 表示根目录。
+    public var parentID: UUID?
+    /// 用于记录文件夹元数据最近更新时间。
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        parentID: UUID? = nil,
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.parentID = parentID
+        self.updatedAt = updatedAt
     }
 }
 
