@@ -14,9 +14,34 @@ struct AgentSkillsView: View {
     @State private var showAddSheet = false
     @State private var showImportSheet = false
     @State private var deleteTarget: SkillMetadata?
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "Agent Skills",
+                    summary: "为模型提供自定义技能，通过 use_skill 在聊天中按需调用。",
+                    details: """
+                    怎么用
+                    1. 添加技能（粘贴 SKILL.md 或 GitHub 导入）。
+                    2. 确认技能已启用。
+                    3. 打开"向模型暴露 Agent Skills"总开关。
+                    4. 在聊天中让模型调用对应技能。
+
+                    SKILL.md 格式
+                    • frontmatter 必须包含 name 与 description。
+                    • 正文可写使用说明、参数等 Markdown 内容。
+
+                    常见问题
+                    • 模型不调用：检查总开关与技能启用状态。
+                    • 导入失败：确认仓库地址可访问。
+                    • 需要更新内容：在技能详情里编辑 SKILL.md。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 Toggle(
                     "向模型暴露 Agent Skills",
@@ -105,6 +130,46 @@ struct AgentSkillsView: View {
             }
         } message: {
             Text("确认删除“\(deleteTarget?.name ?? "")”？")
+        }
+    }
+}
+
+private extension AgentSkillsView {
+    func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.footnote.weight(.semibold))
+            Text(summary)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text("进一步了解…")
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+        )
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         }
     }
 }
