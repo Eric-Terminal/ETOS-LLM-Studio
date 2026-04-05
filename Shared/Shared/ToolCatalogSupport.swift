@@ -12,6 +12,7 @@ public enum ToolCatalogBuiltInToolKind: String, CaseIterable, Identifiable, Send
     case memoryWrite
     case memorySearch
     case widgetCard
+    case askUserInput
 
     public var id: String { rawValue }
 }
@@ -24,6 +25,7 @@ public enum ToolCatalogBuiltInToolStatusReason: String, Equatable, Sendable {
     case zeroTopK
     case isolatedByWorldbook
     case widgetDisabled
+    case askUserInputDisabled
 }
 
 public struct ToolCatalogBuiltInToolState: Identifiable, Equatable, Sendable {
@@ -57,6 +59,7 @@ public enum ToolCatalogSupport {
         enableMemoryActiveRetrieval: Bool,
         memoryTopK: Int,
         enableWidgetTool: Bool,
+        enableAskUserInputTool: Bool,
         isIsolatedSession: Bool
     ) -> [ToolCatalogBuiltInToolState] {
         let memoryWriteConfiguredEnabled = enableMemory && enableMemoryWrite
@@ -89,6 +92,7 @@ public enum ToolCatalogSupport {
         }
 
         let widgetReason: ToolCatalogBuiltInToolStatusReason = enableWidgetTool ? .enabled : .widgetDisabled
+        let askUserInputReason: ToolCatalogBuiltInToolStatusReason = enableAskUserInputTool ? .enabled : .askUserInputDisabled
 
         return [
             ToolCatalogBuiltInToolState(
@@ -109,6 +113,12 @@ public enum ToolCatalogSupport {
                 isConfiguredEnabled: enableWidgetTool,
                 isAvailableInCurrentSession: enableWidgetTool,
                 statusReason: widgetReason
+            ),
+            ToolCatalogBuiltInToolState(
+                kind: .askUserInput,
+                isConfiguredEnabled: enableAskUserInputTool,
+                isAvailableInCurrentSession: enableAskUserInputTool,
+                statusReason: askUserInputReason
             )
         ]
     }

@@ -39,6 +39,7 @@ struct AppToolManagerTests {
         let kinds = Set(AppToolKind.allCases)
 
         #expect(kinds.contains(.showWidget))
+        #expect(kinds.contains(.askUserInput))
         #expect(kinds.contains(.editMemory))
         #expect(kinds.contains(.submitFeedbackTicket))
         #expect(kinds.contains(.fillUserInput))
@@ -286,6 +287,95 @@ struct AppToolManagerTests {
             argumentsJSON: #"{"widget_code":"<div>ok</div>"}"#
         )
         #expect(result.contains("\"widget_code\""))
+    }
+
+    @MainActor
+    @Test("询问用户选项工具默认免审批并通过内置工具通道暴露")
+    func testAskUserInputToolAlwaysAllowWithoutApproval() {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.askUserInput],
+            approvalPolicies: [.askUserInput: .alwaysDeny]
+        )
+
+        #expect(manager.approvalPolicy(for: .askUserInput) == .alwaysAllow)
+        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.askUserInput.toolName }) == false)
+        #expect(manager.builtInToolsForLLM().contains(where: { $0.name == AppToolKind.askUserInput.toolName }))
+    }
+
+    @MainActor
+    @Test("询问用户选项工具会广播问答请求")
+    func testExecuteAskUserInputToolPostsNotification() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.askUserInput]
+        )
+
+        var latestRequest: AppToolAskUserInputRequest?
+        let observer = NotificationCenter.default.addObserver(
+            forName: .appToolAskUserInputRequested,
+            object: nil,
+            queue: nil
+        ) { notification in
+            latestRequest = AppToolAskUserInputRequest.decode(from: notification.userInfo)
+        }
+        defer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        _ = try await manager.executeToolFromChat(
+            toolName: AppToolKind.askUserInput.toolName,
+            argumentsJSON: #"""
+            {
+              "request_id": "clarify-user",
+              "title": "补充问题",
+              "submit_label": "继续",
+              "questions": [
+                {
+                  "id": "q1",
+                  "question": "你主要要哪一类？",
+                  "type": "multi_select",
+                  "allow_other": true,
+                  "options": [
+                    { "id": "o1", "label": "A" },
+                    { "id": "o2", "label": "B" }
+                  ]
+                }
+              ]
+            }
+            """#
+        )
+
+        #expect(latestRequest?.requestID == "clarify-user")
+        #expect(latestRequest?.title == "补充问题")
+        #expect(latestRequest?.submitLabel == "继续")
+        #expect(latestRequest?.questions.count == 1)
+        #expect(latestRequest?.questions.first?.type == .multiSelect)
+        #expect(latestRequest?.questions.first?.allowOther == true)
     }
 
     @MainActor

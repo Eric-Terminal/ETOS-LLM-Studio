@@ -919,15 +919,20 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func submitAskUserInputAnswers(_ answers: [AppToolAskUserInputQuestionAnswer]) {
-        guard let request = activeAskUserInputRequest else { return }
+    func submitAskUserInputAnswers(
+        _ answers: [AppToolAskUserInputQuestionAnswer],
+        for requestOverride: AppToolAskUserInputRequest? = nil
+    ) {
+        guard let request = requestOverride ?? activeAskUserInputRequest else { return }
         let submission = AppToolAskUserInputSubmission(
             requestID: request.requestID,
             cancelled: false,
             submittedAt: iso8601Formatter.string(from: Date()),
             answers: answers
         )
-        activeAskUserInputRequest = nil
+        if activeAskUserInputRequest?.requestID == request.requestID {
+            activeAskUserInputRequest = nil
+        }
         sendToolSupplementMessage(
             AppToolAskUserInputSubmissionFormatter.messageContent(
                 request: request,
@@ -936,15 +941,17 @@ final class ChatViewModel: ObservableObject {
         )
     }
 
-    func cancelAskUserInputRequest() {
-        guard let request = activeAskUserInputRequest else { return }
+    func cancelAskUserInputRequest(using requestOverride: AppToolAskUserInputRequest? = nil) {
+        guard let request = requestOverride ?? activeAskUserInputRequest else { return }
         let submission = AppToolAskUserInputSubmission(
             requestID: request.requestID,
             cancelled: true,
             submittedAt: iso8601Formatter.string(from: Date()),
             answers: []
         )
-        activeAskUserInputRequest = nil
+        if activeAskUserInputRequest?.requestID == request.requestID {
+            activeAskUserInputRequest = nil
+        }
         sendToolSupplementMessage(
             AppToolAskUserInputSubmissionFormatter.messageContent(
                 request: request,

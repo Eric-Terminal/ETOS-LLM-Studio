@@ -1410,29 +1410,47 @@ struct ChatView: View {
     /// Telegram 风格输入栏
     @ViewBuilder
     private var telegramInputBar: some View {
-        TelegramMessageComposer(
-            text: Binding(
-                get: { draftText },
-                set: { newValue in
-                    draftText = newValue
-                    viewModel.userInput = newValue
+        if let request = viewModel.activeAskUserInputRequest {
+            AskUserInputComposerPanel(
+                request: request,
+                submitAction: { answers in
+                    composerFocused = false
+                    draftText = ""
+                    viewModel.submitAskUserInputAnswers(answers, for: request)
+                },
+                cancelAction: {
+                    composerFocused = false
+                    draftText = ""
+                    viewModel.cancelAskUserInputRequest(using: request)
                 }
-            ),
-            isSending: viewModel.isSendingMessage,
-            sendAction: {
-                guard viewModel.canSendMessage else { return }
-                viewModel.sendMessage()
-                draftText = ""
-            },
-            stopAction: {
-                viewModel.cancelSending()
-            },
-            focus: $composerFocused
-        )
-        .onAppear {
-            viewModel.userInput = draftText
+            )
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6 - tabBarCompensation)
+        } else {
+            TelegramMessageComposer(
+                text: Binding(
+                    get: { draftText },
+                    set: { newValue in
+                        draftText = newValue
+                        viewModel.userInput = newValue
+                    }
+                ),
+                isSending: viewModel.isSendingMessage,
+                sendAction: {
+                    guard viewModel.canSendMessage else { return }
+                    viewModel.sendMessage()
+                    draftText = ""
+                },
+                stopAction: {
+                    viewModel.cancelSending()
+                },
+                focus: $composerFocused
+            )
+            .onAppear {
+                viewModel.userInput = draftText
+            }
+            .padding(.bottom, -tabBarCompensation)
         }
-        .padding(.bottom, -tabBarCompensation)
     }
     
     /// Telegram 风格滚动到底部按钮
@@ -2012,6 +2030,237 @@ private struct TelegramPatternView: View {
 private enum AudioRecorderEntryMode {
     case attachment
     case speechInput
+}
+
+private struct AskUserInputComposerPanel: View {
+    let request: AppToolAskUserInputRequest
+    let submitAction: ([AppToolAskUserInputQuestionAnswer]) -> Void
+    let cancelAction: () -> Void
+
+    @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
+    @State private var otherEnabledByQuestion: [String: Bool] = [:]
+    @State private var otherTextByQuestion: [String: String] = [:]
+
+    private var panelHeight: CGFloat {
+        let raw = UIScreen.main.bounds.height * 0.5
+        return min(max(raw, 260), 460)
+    }
+
+    private var canSubmit: Bool {
+        request.questions.allSatisfy { question in
+            guard question.required else { return true }
+            let selected = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
+            let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let otherSelected = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
+            return selected || otherSelected
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(request.title ?? "请补充信息")
+                        .etFont(.headline)
+                    if let description = request.description, !description.isEmpty {
+                        Text(description)
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                Button("取消", action: cancelAction)
+                    .etFont(.footnote)
+                    .buttonStyle(.bordered)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(request.questions) { question in
+                        questionBlock(question)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+
+            Button(action: submit) {
+                Text(request.submitLabel)
+                    .etFont(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canSubmit)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .frame(height: panelHeight, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 2)
+        .onAppear {
+            resetSelectionState()
+        }
+        .onChange(of: request) {
+            resetSelectionState()
+        }
+    }
+
+    @ViewBuilder
+    private func questionBlock(_ question: AppToolAskUserInputQuestion) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(question.question)
+                    .etFont(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                if question.required {
+                    Text("*")
+                        .foregroundStyle(.red)
+                        .etFont(.subheadline.weight(.bold))
+                }
+            }
+
+            ForEach(question.options) { option in
+                Button {
+                    toggleOption(question: question, optionID: option.id)
+                } label: {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: optionIconName(question: question, optionID: option.id))
+                            .foregroundStyle(.blue)
+                            .frame(width: 20, alignment: .center)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(option.label)
+                                .etFont(.subheadline)
+                                .foregroundStyle(.primary)
+                            if let description = option.description, !description.isEmpty {
+                                Text(description)
+                                    .etFont(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 2)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if question.allowOther {
+                Button {
+                    toggleOther(question: question)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: otherEnabledByQuestion[question.id] == true ? "checkmark.square.fill" : "square")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20, alignment: .center)
+                        Text("其他")
+                            .etFont(.subheadline)
+                            .foregroundStyle(.primary)
+                        Spacer(minLength: 0)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if otherEnabledByQuestion[question.id] == true {
+                    TextField(
+                        "请输入其他内容",
+                        text: Binding(
+                            get: { otherTextByQuestion[question.id, default: ""] },
+                            set: { otherTextByQuestion[question.id] = $0 }
+                        ),
+                        axis: .vertical
+                    )
+                    .lineLimit(1...4)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.leading, 28)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func optionIconName(question: AppToolAskUserInputQuestion, optionID: String) -> String {
+        let isSelected = selectedOptionIDsByQuestion[question.id, default: []].contains(optionID)
+        switch question.type {
+        case .singleSelect:
+            return isSelected ? "largecircle.fill.circle" : "circle"
+        case .multiSelect:
+            return isSelected ? "checkmark.square.fill" : "square"
+        }
+    }
+
+    private func toggleOption(question: AppToolAskUserInputQuestion, optionID: String) {
+        switch question.type {
+        case .singleSelect:
+            let current = selectedOptionIDsByQuestion[question.id, default: []]
+            if current.contains(optionID) {
+                selectedOptionIDsByQuestion[question.id] = []
+            } else {
+                selectedOptionIDsByQuestion[question.id] = [optionID]
+                otherEnabledByQuestion[question.id] = false
+            }
+        case .multiSelect:
+            var current = selectedOptionIDsByQuestion[question.id, default: []]
+            if current.contains(optionID) {
+                current.remove(optionID)
+            } else {
+                current.insert(optionID)
+            }
+            selectedOptionIDsByQuestion[question.id] = current
+        }
+    }
+
+    private func toggleOther(question: AppToolAskUserInputQuestion) {
+        let enabled = otherEnabledByQuestion[question.id] == true
+        otherEnabledByQuestion[question.id] = !enabled
+        if enabled {
+            otherTextByQuestion[question.id] = ""
+            return
+        }
+        if question.type == .singleSelect {
+            selectedOptionIDsByQuestion[question.id] = []
+        }
+    }
+
+    private func submit() {
+        let answers = request.questions.map { question -> AppToolAskUserInputQuestionAnswer in
+            let selectedIDs = question.options
+                .map(\.id)
+                .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0) }
+            let selectedLabels = question.options
+                .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0.id) }
+                .map(\.label)
+            let rawOtherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let otherText: String?
+            if otherEnabledByQuestion[question.id] == true, let rawOtherText, !rawOtherText.isEmpty {
+                otherText = rawOtherText
+            } else {
+                otherText = nil
+            }
+
+            return AppToolAskUserInputQuestionAnswer(
+                questionID: question.id,
+                question: question.question,
+                type: question.type,
+                selectedOptionIDs: selectedIDs,
+                selectedOptionLabels: selectedLabels,
+                otherText: otherText
+            )
+        }
+        submitAction(answers)
+    }
+
+    private func resetSelectionState() {
+        selectedOptionIDsByQuestion = [:]
+        otherEnabledByQuestion = [:]
+        otherTextByQuestion = [:]
+    }
 }
 
 /// Telegram 风格的消息输入框

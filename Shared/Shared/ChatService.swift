@@ -2530,6 +2530,9 @@ public class ChatService {
                     )
                     content = result
                     displayResult = result
+                    if toolCall.toolName == AppToolKind.askUserInput.toolName {
+                        shouldAwaitUserSupplement = true
+                    }
                     logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
                 } catch {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
@@ -2560,6 +2563,9 @@ public class ChatService {
                         )
                         content = result
                         displayResult = result
+                        if toolCall.toolName == AppToolKind.askUserInput.toolName {
+                            shouldAwaitUserSupplement = true
+                        }
                         logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
                     } catch {
                         content = "\(toolLabel) 调用失败：\(error.localizedDescription)"

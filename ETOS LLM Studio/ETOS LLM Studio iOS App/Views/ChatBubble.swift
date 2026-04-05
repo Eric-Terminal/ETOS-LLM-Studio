@@ -1433,6 +1433,9 @@ struct ToolCallsInlineView: View, Equatable {
         if let label = SkillManager.shared.displayLabel(for: toolName) {
             return label
         }
+        if let label = AppToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
         return toolName
     }
 
@@ -1636,6 +1639,9 @@ struct ToolResultsDisclosureView: View, Equatable {
             return label
         }
         if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = AppToolManager.shared.displayLabel(for: toolName) {
             return label
         }
         return toolName
