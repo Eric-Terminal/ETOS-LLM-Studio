@@ -697,7 +697,7 @@
   }
 
   async function loadFiles(path = null) {
-    const target = path ?? el('filesPath').value.trim() || '.'
+    const target = path ?? (el('filesPath').value.trim() || '.')
     const data = await api('/api/files/list', 'POST', { path: target })
     state.currentPath = data.path || target
     state.files = Array.isArray(data.items) ? data.items.sort((a,b) => {
