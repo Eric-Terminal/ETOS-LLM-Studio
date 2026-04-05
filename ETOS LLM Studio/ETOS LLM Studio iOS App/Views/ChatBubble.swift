@@ -312,6 +312,38 @@ struct ChatBubble: View {
         return hasCallResults || hasWidgetPayload
     }
 
+    private func isShowWidgetToolCall(_ call: InternalToolCall) -> Bool {
+        call.toolName == AppToolKind.showWidget.toolName
+    }
+
+    private func showWidgetPayload(for call: InternalToolCall) -> ToolWidgetPayload? {
+        guard isShowWidgetToolCall(call) else { return nil }
+
+        if let payload = ToolWidgetPayloadParser.parse(from: call.arguments) {
+            return payload
+        }
+
+        let resolved = resolvedToolResultText(for: call)
+        if let payload = ToolWidgetPayloadParser.parse(from: resolved) {
+            return payload
+        }
+
+        if message.role == .tool,
+           let payload = ToolWidgetPayloadParser.parse(from: message.content) {
+            return payload
+        }
+
+        return nil
+    }
+
+    private var standaloneShowWidgetPayload: ToolWidgetPayload? {
+        guard message.role == .tool,
+              (message.toolCalls?.isEmpty ?? true) else {
+            return nil
+        }
+        return ToolWidgetPayloadParser.parse(from: message.content)
+    }
+
     private var hasPendingToolResults: Bool {
         guard message.role != .tool else { return false }
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return false }
@@ -467,6 +499,11 @@ struct ChatBubble: View {
         static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
             value = max(value, nextValue())
         }
+    }
+
+    private struct WidgetToolCardItem: Identifiable {
+        let id: String
+        let payload: ToolWidgetPayload
     }
     
     // MARK: - 紧凑版本指示器 (Telegram 风格)
@@ -700,31 +737,35 @@ struct ChatBubble: View {
                 let isLast = position == (totalBubbleCount - 1)
 
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast) {
-                    ToolCallsInlineView(
-                        toolCalls: [call],
-                        isOutgoing: isOutgoing,
-                        customTextColor: customTextColorOverride
-                    )
-
-                    if let permissionRequest = activeToolPermissionRequest(for: call) {
-                        ToolPermissionInlineView(
-                            request: permissionRequest,
-                            onDecision: { decision in
-                                toolPermissionCenter.resolveActiveRequest(with: decision)
-                            }
-                        )
-                    }
-
-                    if shouldShowToolResult(for: call) {
-                        ToolResultsDisclosureView(
+                    if let payload = showWidgetPayload(for: call) {
+                        ToolWidgetRendererCard(payload: payload)
+                    } else {
+                        ToolCallsInlineView(
                             toolCalls: [call],
-                            resultText: message.role == .tool ? message.content : "",
-                            isExpanded: toolResultExpansionBinding(for: call.id),
                             isOutgoing: isOutgoing,
-                            isPending: isPendingToolResult(for: call),
-                            enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
                             customTextColor: customTextColorOverride
                         )
+
+                        if let permissionRequest = activeToolPermissionRequest(for: call) {
+                            ToolPermissionInlineView(
+                                request: permissionRequest,
+                                onDecision: { decision in
+                                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                                }
+                            )
+                        }
+
+                        if shouldShowToolResult(for: call) {
+                            ToolResultsDisclosureView(
+                                toolCalls: [call],
+                                resultText: message.role == .tool ? message.content : "",
+                                isExpanded: toolResultExpansionBinding(for: call.id),
+                                isOutgoing: isOutgoing,
+                                isPending: isPendingToolResult(for: call),
+                                enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                                customTextColor: customTextColorOverride
+                            )
+                        }
                     }
                 }
             }
@@ -751,7 +792,9 @@ struct ChatBubble: View {
         }
         
         // 消息正文
-        if !message.content.isEmpty, message.role != .tool || (message.toolCalls?.isEmpty ?? true) {
+        if let standaloneShowWidgetPayload {
+            ToolWidgetRendererCard(payload: standaloneShowWidgetPayload)
+        } else if !message.content.isEmpty, message.role != .tool || (message.toolCalls?.isEmpty ?? true) {
             if let audioFileName = message.audioFileName {
                 audioPlayerView(fileName: audioFileName)
             } else {
@@ -787,30 +830,42 @@ struct ChatBubble: View {
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
-            ToolCallsInlineView(
-                toolCalls: toolCalls,
-                isOutgoing: isOutgoing,
-                customTextColor: customTextColorOverride
-            )
-            if let activeToolPermissionRequest {
-                ToolPermissionInlineView(
-                    request: activeToolPermissionRequest,
-                    onDecision: { decision in
-                        toolPermissionCenter.resolveActiveRequest(with: decision)
-                    }
-                )
+            let nonWidgetToolCalls = toolCalls.filter { showWidgetPayload(for: $0) == nil }
+            let widgetCards = toolCalls.compactMap { call -> WidgetToolCardItem? in
+                guard let payload = showWidgetPayload(for: call) else { return nil }
+                return WidgetToolCardItem(id: call.id, payload: payload)
             }
-            let shouldShowResults = hasToolResults || hasPendingToolResults
-            if shouldShowResults {
-                ToolResultsDisclosureView(
-                    toolCalls: toolCalls,
-                    resultText: message.role == .tool ? message.content : "",
-                    isExpanded: $isToolCallsExpanded,
+
+            if !nonWidgetToolCalls.isEmpty {
+                ToolCallsInlineView(
+                    toolCalls: nonWidgetToolCalls,
                     isOutgoing: isOutgoing,
-                    isPending: hasPendingToolResults,
-                    enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
                     customTextColor: customTextColorOverride
                 )
+                if let activeToolPermissionRequest {
+                    ToolPermissionInlineView(
+                        request: activeToolPermissionRequest,
+                        onDecision: { decision in
+                            toolPermissionCenter.resolveActiveRequest(with: decision)
+                        }
+                    )
+                }
+                let shouldShowResults = nonWidgetToolCalls.contains { shouldShowToolResult(for: $0) }
+                if shouldShowResults {
+                    ToolResultsDisclosureView(
+                        toolCalls: nonWidgetToolCalls,
+                        resultText: message.role == .tool ? message.content : "",
+                        isExpanded: $isToolCallsExpanded,
+                        isOutgoing: isOutgoing,
+                        isPending: hasPendingToolResults,
+                        enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
+                        customTextColor: customTextColorOverride
+                    )
+                }
+            }
+
+            ForEach(widgetCards) { item in
+                ToolWidgetRendererCard(payload: item.payload)
             }
         }
     }
@@ -828,15 +883,15 @@ struct ChatBubble: View {
     }
 
     private func isPendingToolResult(for call: InternalToolCall) -> Bool {
-        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+        if showWidgetPayload(for: call) != nil {
             return false
         }
         return hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
     }
 
     private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
-        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
-            return true
+        if showWidgetPayload(for: call) != nil {
+            return false
         }
         return !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
     }
@@ -1733,10 +1788,14 @@ struct ToolResultsDisclosureView: View, Equatable {
         return nil
     }
 
+    @ViewBuilder
     private func widgetToolResultContent(for call: InternalToolCall, payload: ToolWidgetPayload) -> some View {
+        if call.toolName == AppToolKind.showWidget.toolName {
+            ToolWidgetRendererCard(payload: payload)
+        } else {
         let display = displayModel(for: call)
         let label = displayName(for: call.toolName)
-        return VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .etFont(.caption.weight(.semibold))
             ToolWidgetRendererCard(payload: payload)
@@ -1757,6 +1816,7 @@ struct ToolResultsDisclosureView: View, Equatable {
             RoundedRectangle(cornerRadius: 8)
                 .fill(sectionBackgroundColor)
         )
+        }
     }
 
     private func experimentalToolResultContent(for call: InternalToolCall) -> some View {

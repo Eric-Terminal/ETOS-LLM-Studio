@@ -200,6 +200,38 @@ struct ChatBubble: View {
         return hasCallResults || hasWidgetPayload
     }
 
+    private func isShowWidgetToolCall(_ call: InternalToolCall) -> Bool {
+        call.toolName == AppToolKind.showWidget.toolName
+    }
+
+    private func showWidgetPayload(for call: InternalToolCall) -> ToolWidgetPayload? {
+        guard isShowWidgetToolCall(call) else { return nil }
+
+        if let payload = ToolWidgetPayloadParser.parse(from: call.arguments) {
+            return payload
+        }
+
+        let resolved = resolvedToolResultText(for: call)
+        if let payload = ToolWidgetPayloadParser.parse(from: resolved) {
+            return payload
+        }
+
+        if message.role == .tool,
+           let payload = ToolWidgetPayloadParser.parse(from: message.content) {
+            return payload
+        }
+
+        return nil
+    }
+
+    private var standaloneShowWidgetPayload: ToolWidgetPayload? {
+        guard message.role == .tool,
+              (message.toolCalls?.isEmpty ?? true) else {
+            return nil
+        }
+        return ToolWidgetPayloadParser.parse(from: message.content)
+    }
+
     private var hasPendingToolResults: Bool {
         guard message.role != .tool else { return false }
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return false }
@@ -505,21 +537,25 @@ struct ChatBubble: View {
                 let isLast = position == (totalBubbleCount - 1)
 
                 let content = VStack(alignment: .leading, spacing: 6) {
-                    toolCallsInlineView([call])
+                    if let payload = showWidgetPayload(for: call) {
+                        widgetInlineSummaryView(payload: payload)
+                    } else {
+                        toolCallsInlineView([call])
 
-                    if let permissionRequest = activeToolPermissionRequest(for: call) {
-                        toolPermissionInlineView(request: permissionRequest, onDecision: { decision in
-                            toolPermissionCenter.resolveActiveRequest(with: decision)
-                        })
-                    }
+                        if let permissionRequest = activeToolPermissionRequest(for: call) {
+                            toolPermissionInlineView(request: permissionRequest, onDecision: { decision in
+                                toolPermissionCenter.resolveActiveRequest(with: decision)
+                            })
+                        }
 
-                    if shouldShowToolResult(for: call) {
-                        toolResultsDisclosureView(
-                            [call],
-                            resultText: message.role == .tool ? message.content : "",
-                            isPending: isPendingToolResult(for: call),
-                            expanded: toolResultExpansionBinding(for: call.id)
-                        )
+                        if shouldShowToolResult(for: call) {
+                            toolResultsDisclosureView(
+                                [call],
+                                resultText: message.role == .tool ? message.content : "",
+                                isPending: isPendingToolResult(for: call),
+                                expanded: toolResultExpansionBinding(for: call.id)
+                            )
+                        }
                     }
                 }
                 .padding(10)
@@ -537,20 +573,31 @@ struct ChatBubble: View {
         if message.role == .tool {
             let content = VStack(alignment: .leading, spacing: 6) {
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-                    toolCallsInlineView(toolCalls)
-                    if let activeToolPermissionRequest {
-                        toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
-                            toolPermissionCenter.resolveActiveRequest(with: decision)
-                        })
+                    let nonWidgetToolCalls = toolCalls.filter { showWidgetPayload(for: $0) == nil }
+                    let widgetPayloads = toolCalls.compactMap { showWidgetPayload(for: $0) }
+
+                    if !nonWidgetToolCalls.isEmpty {
+                        toolCallsInlineView(nonWidgetToolCalls)
+                        if let activeToolPermissionRequest {
+                            toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
+                                toolPermissionCenter.resolveActiveRequest(with: decision)
+                            })
+                        }
+                        let shouldShowResults = nonWidgetToolCalls.contains { shouldShowToolResult(for: $0) }
+                        if shouldShowResults {
+                            toolResultsDisclosureView(
+                                nonWidgetToolCalls,
+                                resultText: message.content,
+                                isPending: hasPendingToolResults
+                            )
+                        }
                     }
-                    let shouldShowResults = hasToolResults || hasPendingToolResults
-                    if shouldShowResults {
-                        toolResultsDisclosureView(
-                            toolCalls,
-                            resultText: message.content,
-                            isPending: hasPendingToolResults
-                        )
+
+                    ForEach(Array(widgetPayloads.enumerated()), id: \.offset) { _, payload in
+                        widgetInlineSummaryView(payload: payload)
                     }
+                } else if let standaloneShowWidgetPayload {
+                    widgetInlineSummaryView(payload: standaloneShowWidgetPayload)
                 } else if hasNonPlaceholderText {
                     renderContent(message.content)
                 }
@@ -614,19 +661,28 @@ struct ChatBubble: View {
     @ViewBuilder
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-            toolCallsInlineView(toolCalls)
-            if let activeToolPermissionRequest {
-                toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
-                    toolPermissionCenter.resolveActiveRequest(with: decision)
-                })
+            let nonWidgetToolCalls = toolCalls.filter { showWidgetPayload(for: $0) == nil }
+            let widgetPayloads = toolCalls.compactMap { showWidgetPayload(for: $0) }
+
+            if !nonWidgetToolCalls.isEmpty {
+                toolCallsInlineView(nonWidgetToolCalls)
+                if let activeToolPermissionRequest {
+                    toolPermissionInlineView(request: activeToolPermissionRequest, onDecision: { decision in
+                        toolPermissionCenter.resolveActiveRequest(with: decision)
+                    })
+                }
+                let shouldShowResults = nonWidgetToolCalls.contains { shouldShowToolResult(for: $0) }
+                if shouldShowResults {
+                    toolResultsDisclosureView(
+                        nonWidgetToolCalls,
+                        resultText: "",
+                        isPending: hasPendingToolResults
+                    )
+                }
             }
-            let shouldShowResults = hasToolResults || hasPendingToolResults
-            if shouldShowResults {
-                toolResultsDisclosureView(
-                    toolCalls,
-                    resultText: "",
-                    isPending: hasPendingToolResults
-                )
+
+            ForEach(Array(widgetPayloads.enumerated()), id: \.offset) { _, payload in
+                widgetInlineSummaryView(payload: payload)
             }
         }
     }
@@ -644,15 +700,15 @@ struct ChatBubble: View {
     }
 
     private func isPendingToolResult(for call: InternalToolCall) -> Bool {
-        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
+        if showWidgetPayload(for: call) != nil {
             return false
         }
         return hasPendingToolResults && resolvedToolResultText(for: call).isEmpty
     }
 
     private func shouldShowToolResult(for call: InternalToolCall) -> Bool {
-        if ToolWidgetPayloadParser.parse(from: call.arguments) != nil {
-            return true
+        if showWidgetPayload(for: call) != nil {
+            return false
         }
         return !resolvedToolResultText(for: call).isEmpty || isPendingToolResult(for: call)
     }
@@ -750,6 +806,25 @@ struct ChatBubble: View {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    @ViewBuilder
+    private func widgetInlineSummaryView(payload: ToolWidgetPayload) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("可视化 Widget")
+                .etFont(.caption2.weight(.semibold))
+                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
+            if let title = payload.title,
+               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(title)
+                    .etFont(.caption2)
+                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
+            }
+            Text("已生成 HTML 卡片，请在 iPhone 端查看完整渲染。")
+                .etFont(.caption2)
+                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+        }
+        .padding(.leading, 4)
     }
 
     @ViewBuilder
