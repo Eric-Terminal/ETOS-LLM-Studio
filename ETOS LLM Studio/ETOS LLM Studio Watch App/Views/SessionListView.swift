@@ -172,6 +172,10 @@ private struct SessionFolderBrowserView: View {
     }
 
     var body: some View {
+        applyDialogs(to: applySheets(to: applyStateHandlers(to: listScaffold)))
+    }
+
+    private var listScaffold: some View {
         List {
             if mergedEntries.isEmpty {
                 Text(emptyStateText)
@@ -198,154 +202,170 @@ private struct SessionFolderBrowserView: View {
                 batchActionBar
             }
         }
-        .onChange(of: folders) { _, _ in
-            guard folderID != nil else { return }
-            if currentFolder == nil {
-                dismiss()
-            }
-        }
-        .onChange(of: directSessions.map(\.id)) { _, visibleIDs in
-            selectedSessionIDs.formIntersection(Set(visibleIDs))
-        }
-        .sheet(item: $sessionToEdit) { sessionToEdit in
-            if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionToEdit.id }) {
-                let sessionBinding = $sessions[sessionIndex]
-                EditSessionNameView(session: sessionBinding, onSave: { updatedSession in
-                    updateSessionAction(updatedSession)
-                })
-            }
-        }
-        .confirmationDialog("确认删除会话", isPresented: $showDeleteSessionConfirm, titleVisibility: .visible) {
-            Button("删除会话", role: .destructive) {
-                if let sessionToDelete {
-                    deleteSessionAction(sessionToDelete)
+    }
+
+    private var directSessionIDs: [UUID] {
+        directSessions.map(\.id)
+    }
+
+    private func applyStateHandlers<Content: View>(to content: Content) -> some View {
+        content
+            .onChange(of: folders) { _, _ in
+                guard folderID != nil else { return }
+                if currentFolder == nil {
+                    dismiss()
                 }
-                self.sessionToDelete = nil
             }
-            Button("取消", role: .cancel) {
-                sessionToDelete = nil
+            .onChange(of: directSessionIDs) { _, visibleIDs in
+                selectedSessionIDs.formIntersection(Set(visibleIDs))
             }
-        } message: {
-            Text("您确定要删除这个会话及其所有消息吗？此操作无法撤销。")
-        }
-        .confirmationDialog("创建分支", isPresented: $showBranchOptions, titleVisibility: .visible) {
-            Button("仅分支提示词") {
-                if let session = sessionToBranch {
-                    if let newSession = branchAction(session, false) {
-                        onSessionSelected(newSession)
+    }
+
+    private func applySheets<Content: View>(to content: Content) -> some View {
+        content
+            .sheet(item: $sessionToEdit) { sessionToEdit in
+                if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionToEdit.id }) {
+                    let sessionBinding = $sessions[sessionIndex]
+                    EditSessionNameView(session: sessionBinding, onSave: { updatedSession in
+                        updateSessionAction(updatedSession)
+                    })
+                }
+            }
+            .sheet(isPresented: $isShowingFolderEditor) {
+                NavigationStack {
+                    Form {
+                        TextField("文件夹名称", text: $folderEditorName)
                     }
-                    sessionToBranch = nil
-                }
-            }
-            Button("分支提示词和对话记录") {
-                if let session = sessionToBranch {
-                    if let newSession = branchAction(session, true) {
-                        onSessionSelected(newSession)
-                    }
-                    sessionToBranch = nil
-                }
-            }
-            Button("取消", role: .cancel) {
-                sessionToBranch = nil
-            }
-        } message: {
-            if let session = sessionToBranch {
-                Text(String(format: NSLocalizedString("从“%@”创建新的分支对话。", comment: ""), session.name))
-            }
-        }
-        .confirmationDialog("会话列表操作", isPresented: $showMoreActions, titleVisibility: .visible) {
-            Button(folderID == nil ? "新建文件夹" : "新建子文件夹") {
-                openCreateFolderEditor(parentID: folderID)
-            }
-
-            Button(isBatchSelecting ? "结束批量选中" : "批量选中") {
-                toggleBatchMode()
-            }
-
-            if let currentFolder {
-                Button("重命名当前文件夹") {
-                    openRenameFolderEditor(currentFolder)
-                }
-
-                Button("删除当前文件夹", role: .destructive) {
-                    folderToDelete = currentFolder
-                }
-            }
-
-            Button("取消", role: .cancel) {}
-        }
-        .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
-            Button("删除所选会话", role: .destructive) {
-                performBatchDelete()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("将删除 \(selectedSessionIDs.count) 个会话，操作不可恢复。")
-        }
-        .sheet(isPresented: $isShowingFolderEditor) {
-            NavigationStack {
-                Form {
-                    TextField("文件夹名称", text: $folderEditorName)
-                }
-                .navigationTitle(folderBeingRenamed == nil ? "新建文件夹" : "重命名文件夹")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") {
-                            resetFolderEditorState()
-                            isShowingFolderEditor = false
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("保存") {
-                            let trimmed = folderEditorName.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty else { return }
-                            if let folderBeingRenamed {
-                                renameFolderAction(folderBeingRenamed, trimmed)
-                            } else {
-                                _ = createFolderAction(trimmed, folderEditorParentID)
+                    .navigationTitle(folderBeingRenamed == nil ? "新建文件夹" : "重命名文件夹")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("取消") {
+                                resetFolderEditorState()
+                                isShowingFolderEditor = false
                             }
-                            resetFolderEditorState()
-                            isShowingFolderEditor = false
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("保存") {
+                                let trimmed = folderEditorName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else { return }
+                                if let folderBeingRenamed {
+                                    renameFolderAction(folderBeingRenamed, trimmed)
+                                } else {
+                                    _ = createFolderAction(trimmed, folderEditorParentID)
+                                }
+                                resetFolderEditorState()
+                                isShowingFolderEditor = false
+                            }
                         }
                     }
                 }
             }
-        }
-        .sheet(isPresented: $showBatchMovePicker) {
-            NavigationStack {
-                BatchMoveDestinationPickerView(moveTargets: moveTargets) { targetFolderID in
-                    applyBatchMove(toFolderID: targetFolderID)
+            .sheet(isPresented: $showBatchMovePicker) {
+                NavigationStack {
+                    BatchMoveDestinationPickerView(moveTargets: moveTargets) { targetFolderID in
+                        applyBatchMove(toFolderID: targetFolderID)
+                    }
                 }
             }
-        }
-        .confirmationDialog("确认删除文件夹", isPresented: Binding(
-            get: { folderToDelete != nil },
-            set: { isPresented in
-                if !isPresented {
+    }
+
+    private func applyDialogs<Content: View>(to content: Content) -> some View {
+        content
+            .confirmationDialog("确认删除会话", isPresented: $showDeleteSessionConfirm, titleVisibility: .visible) {
+                Button("删除会话", role: .destructive) {
+                    if let sessionToDelete {
+                        deleteSessionAction(sessionToDelete)
+                    }
+                    self.sessionToDelete = nil
+                }
+                Button("取消", role: .cancel) {
+                    sessionToDelete = nil
+                }
+            } message: {
+                Text("您确定要删除这个会话及其所有消息吗？此操作无法撤销。")
+            }
+            .confirmationDialog("创建分支", isPresented: $showBranchOptions, titleVisibility: .visible) {
+                Button("仅分支提示词") {
+                    if let session = sessionToBranch {
+                        if let newSession = branchAction(session, false) {
+                            onSessionSelected(newSession)
+                        }
+                        sessionToBranch = nil
+                    }
+                }
+                Button("分支提示词和对话记录") {
+                    if let session = sessionToBranch {
+                        if let newSession = branchAction(session, true) {
+                            onSessionSelected(newSession)
+                        }
+                        sessionToBranch = nil
+                    }
+                }
+                Button("取消", role: .cancel) {
+                    sessionToBranch = nil
+                }
+            } message: {
+                if let session = sessionToBranch {
+                    Text(String(format: NSLocalizedString("从“%@”创建新的分支对话。", comment: ""), session.name))
+                }
+            }
+            .confirmationDialog("会话列表操作", isPresented: $showMoreActions, titleVisibility: .visible) {
+                Button(folderID == nil ? "新建文件夹" : "新建子文件夹") {
+                    openCreateFolderEditor(parentID: folderID)
+                }
+
+                Button(isBatchSelecting ? "结束批量选中" : "批量选中") {
+                    toggleBatchMode()
+                }
+
+                if let currentFolder {
+                    Button("重命名当前文件夹") {
+                        openRenameFolderEditor(currentFolder)
+                    }
+
+                    Button("删除当前文件夹", role: .destructive) {
+                        folderToDelete = currentFolder
+                    }
+                }
+
+                Button("取消", role: .cancel) {}
+            }
+            .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
+                Button("删除所选会话", role: .destructive) {
+                    performBatchDelete()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("将删除 \(selectedSessionIDs.count) 个会话，操作不可恢复。")
+            }
+            .confirmationDialog("确认删除文件夹", isPresented: Binding(
+                get: { folderToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        folderToDelete = nil
+                    }
+                }
+            ), titleVisibility: .visible) {
+                Button("删除文件夹", role: .destructive) {
+                    if let folderToDelete {
+                        deleteFolderAction(folderToDelete)
+                    }
                     folderToDelete = nil
                 }
-            }
-        ), titleVisibility: .visible) {
-            Button("删除文件夹", role: .destructive) {
-                if let folderToDelete {
-                    deleteFolderAction(folderToDelete)
+                Button("取消", role: .cancel) {
+                    folderToDelete = nil
                 }
-                folderToDelete = nil
+            } message: {
+                if let folderToDelete {
+                    let descendants = descendantFolderIDs(rootID: folderToDelete.id)
+                    let folderCount = descendants.count
+                    let sessionCount = sessions.filter { session in
+                        guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
+                        return descendants.contains(assignedFolderID)
+                    }.count
+                    Text("将删除 \(folderCount) 个文件夹。\(sessionCount) 个会话将回到未分类。")
+                }
             }
-            Button("取消", role: .cancel) {
-                folderToDelete = nil
-            }
-        } message: {
-            if let folderToDelete {
-                let descendants = descendantFolderIDs(rootID: folderToDelete.id)
-                let folderCount = descendants.count
-                let sessionCount = sessions.filter { session in
-                    guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
-                    return descendants.contains(assignedFolderID)
-                }.count
-                Text("将删除 \(folderCount) 个文件夹。\(sessionCount) 个会话将回到未分类。")
-            }
-        }
     }
 
     private var batchActionBar: some View {
