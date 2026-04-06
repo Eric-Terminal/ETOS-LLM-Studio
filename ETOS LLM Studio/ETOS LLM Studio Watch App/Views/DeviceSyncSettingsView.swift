@@ -30,6 +30,9 @@ struct DeviceSyncSettingsView: View {
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
     @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
+    @State private var exportFileURL: URL?
+    @State private var exportErrorMessage: String?
+    @State private var isExporting: Bool = false
     
     var body: some View {
         List {
@@ -47,6 +50,39 @@ struct DeviceSyncSettingsView: View {
                 Toggle("每日脉冲", isOn: $syncDailyPulse)
                 Toggle("字体文件与规则", isOn: $syncFontFiles)
                 Toggle("软件设置", isOn: $syncAppStorage)
+            }
+
+            Section("导出备份") {
+                Button {
+                    exportDataPackage()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isExporting {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label("生成导出文件", systemImage: "square.and.arrow.up")
+                        Spacer()
+                    }
+                }
+                .disabled(selectedSyncOptions.isEmpty || isExporting)
+
+                if let exportFileURL {
+                    if #available(watchOS 9.0, *) {
+                        ShareLink(item: exportFileURL) {
+                            Label("分享导出文件", systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        Text("当前系统暂不支持直接分享导出文件。")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Apple Watch 同步") {
@@ -98,6 +134,14 @@ struct DeviceSyncSettingsView: View {
 
             Section("iCloud 状态") {
                 cloudSyncStatusView
+            }
+
+            if let exportErrorMessage, !exportErrorMessage.isEmpty {
+                Section("导出错误") {
+                    Text(exportErrorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
             }
         }
         .navigationTitle("设备同步")
@@ -257,6 +301,28 @@ struct DeviceSyncSettingsView: View {
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
+    }
+
+    private func exportDataPackage() {
+        isExporting = true
+        defer { isExporting = false }
+
+        do {
+            let package = SyncEngine.buildPackage(options: selectedSyncOptions)
+            let output = try SyncPackageTransferService.exportPackage(package)
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+            try output.data.write(to: fileURL, options: .atomic)
+
+            if let existing = exportFileURL {
+                try? FileManager.default.removeItem(at: existing)
+            }
+
+            exportFileURL = fileURL
+            exportErrorMessage = nil
+        } catch {
+            exportErrorMessage = "导出失败：\(error.localizedDescription)"
+        }
     }
 
     private func migrateLegacyAppStorageOptionIfNeeded() {

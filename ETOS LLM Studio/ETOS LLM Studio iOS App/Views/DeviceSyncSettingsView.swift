@@ -9,6 +9,22 @@
 import SwiftUI
 import Foundation
 import Shared
+import UIKit
+
+private struct DeviceSyncExportSharePayload: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
+private struct DeviceSyncActivityShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
 
 struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
@@ -30,6 +46,9 @@ struct DeviceSyncSettingsView: View {
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
     @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
+    @State private var exportSharePayload: DeviceSyncExportSharePayload?
+    @State private var exportErrorMessage: String?
+    @State private var isExporting: Bool = false
     
     var body: some View {
         List {
@@ -47,6 +66,28 @@ struct DeviceSyncSettingsView: View {
                 Toggle("每日脉冲", isOn: $syncDailyPulse)
                 Toggle("字体文件与字体规则", isOn: $syncFontFiles)
                 Toggle("软件设置（AppStorage）", isOn: $syncAppStorage)
+            }
+
+            Section {
+                Button {
+                    exportDataPackage()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isExporting {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        Label("导出数据", systemImage: "square.and.arrow.up")
+                            .etFont(.headline)
+                        Spacer()
+                    }
+                }
+                .disabled(selectedSyncOptions.isEmpty || isExporting)
+            } header: {
+                Text("导出备份")
+            } footer: {
+                Text("导出内容与上方同步勾选项一致。导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。")
             }
 
             Section {
@@ -112,6 +153,17 @@ struct DeviceSyncSettingsView: View {
         }
         .navigationTitle("设备同步")
         .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
+        .sheet(item: $exportSharePayload) { payload in
+            DeviceSyncActivityShareSheet(activityItems: [payload.fileURL])
+        }
+        .alert("导出失败", isPresented: Binding(
+            get: { exportErrorMessage != nil },
+            set: { if !$0 { exportErrorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(exportErrorMessage ?? "未知错误")
+        }
     }
     
     private var selectedSyncOptions: SyncOptions {
@@ -274,6 +326,31 @@ struct DeviceSyncSettingsView: View {
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
+    }
+
+    private func exportDataPackage() {
+        isExporting = true
+        defer { isExporting = false }
+
+        do {
+            let package = SyncEngine.buildPackage(options: selectedSyncOptions)
+            let output = try SyncPackageTransferService.exportPackage(package)
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+            try output.data.write(to: fileURL, options: .atomic)
+
+            if let existing = exportSharePayload?.fileURL {
+                try? FileManager.default.removeItem(at: existing)
+            }
+
+            exportSharePayload = DeviceSyncExportSharePayload(fileURL: fileURL)
+            exportErrorMessage = nil
+        } catch {
+            exportErrorMessage = String(
+                format: "导出失败：%@",
+                error.localizedDescription
+            )
+        }
     }
 
     private func migrateLegacyAppStorageOptionIfNeeded() {
