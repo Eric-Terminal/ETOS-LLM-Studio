@@ -127,6 +127,9 @@ public struct GeneratedImageResult: Sendable {
 /// `APIAdapter` 协议定义了一个标准接口，用于处理不同 LLM 提供商的 API 请求构建和响应解析。
 /// 这使得 `ChatService` 无需关心特定 API 的细节，从而轻松支持多种后端。
 public protocol APIAdapter {
+    /// 最近一次构建聊天请求失败时的详细错误（可选）。
+    /// 用于向上层暴露本地参数预校验等失败原因，避免只看到笼统的“构建失败”。
+    var lastRequestBuildErrorMessage: String? { get }
     
     /// 构建一个用于发送聊天消息的网络请求。
     /// - Parameters:
@@ -179,6 +182,8 @@ public protocol APIAdapter {
 }
 
 public extension APIAdapter {
+    var lastRequestBuildErrorMessage: String? { nil }
+
     func buildTranscriptionRequest(for model: RunnableModel, audioData: Data, fileName: String, mimeType: String, language: String?) -> URLRequest? {
         nil
     }
@@ -209,6 +214,274 @@ public extension APIAdapter {
     }
 }
 
+private enum ToolSchemaPreflight {
+    private static let validTypes: Set<String> = ["string", "number", "integer", "boolean", "object", "array", "null"]
+    private static let combinatorKeys: [String] = ["anyOf", "oneOf", "allOf"]
+
+    static func normalizeAndValidate(schema: [String: Any], toolName: String) -> Result<[String: Any], String> {
+        let normalized = normalizeSchemaValue(schema) as? [String: Any] ?? schema
+        var issues: [String] = []
+        validateSchemaNode(normalized, path: "$", issues: &issues)
+        guard !issues.isEmpty else {
+            return .success(normalized)
+        }
+
+        let visible = Array(issues.prefix(3))
+        var message = String(
+            format: NSLocalizedString("错误：工具 %@ 的参数 Schema 校验失败，请先修正后再发送：", comment: "Tool schema preflight failed prefix"),
+            toolName
+        )
+        for line in visible {
+            message.append("\n- \(line)")
+        }
+        if issues.count > visible.count {
+            message.append(
+                String(
+                    format: NSLocalizedString("\n- 其余 %d 条问题已省略。", comment: "Tool schema preflight omitted issues"),
+                    issues.count - visible.count
+                )
+            )
+        }
+        return .failure(message)
+    }
+
+    private static func normalizeSchemaValue(_ value: Any) -> Any {
+        if let dictionary = value as? [String: Any] {
+            return normalizeSchemaObject(dictionary)
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizeSchemaValue($0) }
+        }
+        return value
+    }
+
+    private static func normalizeSchemaObject(_ object: [String: Any]) -> [String: Any] {
+        var normalized = object.mapValues { normalizeSchemaValue($0) }
+
+        for key in combinatorKeys {
+            if let options = normalized[key] as? [Any] {
+                normalized[key] = normalizeCombinatorOptions(options)
+            }
+        }
+
+        if let properties = normalized["properties"] as? [String: Any] {
+            var normalizedProperties: [String: Any] = [:]
+            normalizedProperties.reserveCapacity(properties.count)
+            for (key, value) in properties {
+                if let schema = value as? [String: Any] {
+                    normalizedProperties[key] = normalizeSchemaObject(schema)
+                } else if let normalizedType = normalizedSchemaTypeValue(value) {
+                    normalizedProperties[key] = ["type": normalizedType]
+                } else if let inferred = inferredSchemaType(fromValue: value) {
+                    normalizedProperties[key] = ["type": inferred]
+                } else {
+                    normalizedProperties[key] = value
+                }
+            }
+            normalized["properties"] = normalizedProperties
+        }
+
+        if let normalizedType = normalizedSchemaTypeValue(normalized["type"]) {
+            normalized["type"] = normalizedType
+        } else if normalized["type"] != nil {
+            normalized.removeValue(forKey: "type")
+        }
+
+        if normalized["type"] == nil {
+            if normalized["properties"] is [String: Any]
+                || normalized["required"] is [Any]
+                || normalized["additionalProperties"] != nil {
+                normalized["type"] = "object"
+            } else if normalized["items"] != nil {
+                normalized["type"] = "array"
+            } else if let enumValues = normalized["enum"] as? [Any],
+                      let inferred = inferredSchemaType(fromEnum: enumValues) {
+                normalized["type"] = inferred
+            } else if let constValue = normalized["const"],
+                      let inferred = inferredSchemaType(fromValue: constValue) {
+                normalized["type"] = inferred
+            } else if let inferred = inferredSchemaTypeFromCombinators(normalized) {
+                normalized["type"] = inferred
+            }
+        }
+
+        return normalized
+    }
+
+    private static func normalizeCombinatorOptions(_ options: [Any]) -> [Any] {
+        options.compactMap { raw in
+            if let schema = raw as? [String: Any] {
+                return normalizeSchemaObject(schema)
+            }
+            if let normalizedType = normalizedSchemaTypeValue(raw) {
+                return ["type": normalizedType]
+            }
+            if let inferred = inferredSchemaType(fromValue: raw) {
+                return ["type": inferred]
+            }
+            return nil
+        }
+    }
+
+    private static func normalizedSchemaTypeKeyword(_ type: String) -> String? {
+        let lowered = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard validTypes.contains(lowered) else { return nil }
+        if lowered == "null" { return nil }
+        return lowered
+    }
+
+    private static func normalizedSchemaTypeValue(_ rawType: Any?) -> String? {
+        if let type = rawType as? String {
+            return normalizedSchemaTypeKeyword(type)
+        }
+        if let typeArray = rawType as? [Any] {
+            for item in typeArray {
+                if let type = item as? String,
+                   let normalized = normalizedSchemaTypeKeyword(type) {
+                    return normalized
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func inferredSchemaType(fromEnum values: [Any]) -> String? {
+        let nonNullValues = values.filter { !($0 is NSNull) }
+        guard let first = nonNullValues.first,
+              let inferred = inferredSchemaType(fromValue: first) else { return nil }
+        for value in nonNullValues.dropFirst() where inferredSchemaType(fromValue: value) != inferred {
+            return nil
+        }
+        return inferred
+    }
+
+    private static func inferredSchemaType(fromValue value: Any) -> String? {
+        if value is NSNull { return nil }
+        if value is Bool { return "boolean" }
+        if value is String { return "string" }
+        if value is Int || value is Int8 || value is Int16 || value is Int32 || value is Int64 ||
+            value is UInt || value is UInt8 || value is UInt16 || value is UInt32 || value is UInt64 {
+            return "integer"
+        }
+        if value is Double || value is Float {
+            return "number"
+        }
+        if value is [Any] {
+            return "array"
+        }
+        if value is [String: Any] {
+            return "object"
+        }
+        return nil
+    }
+
+    private static func inferredSchemaTypeFromCombinators(_ object: [String: Any]) -> String? {
+        for key in combinatorKeys {
+            guard let options = object[key] as? [Any] else { continue }
+            for option in options {
+                if let schema = option as? [String: Any] {
+                    if let directType = normalizedSchemaTypeValue(schema["type"]) {
+                        return directType
+                    }
+                    if let enumValues = schema["enum"] as? [Any],
+                       let inferred = inferredSchemaType(fromEnum: enumValues) {
+                        return inferred
+                    }
+                    if let constValue = schema["const"],
+                       let inferred = inferredSchemaType(fromValue: constValue) {
+                        return inferred
+                    }
+                } else if let normalizedType = normalizedSchemaTypeValue(option) {
+                    return normalizedType
+                } else if let inferred = inferredSchemaType(fromValue: option) {
+                    return inferred
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func validateSchemaNode(_ rawNode: Any, path: String, issues: inout [String]) {
+        guard let node = rawNode as? [String: Any] else {
+            issues.append("\(path)：Schema 节点必须是对象。")
+            return
+        }
+
+        let hasType = normalizedSchemaTypeValue(node["type"]) != nil
+        let hasRef = (node["$ref"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        let hasCombinator = combinatorKeys.contains { key in
+            if let options = node[key] as? [Any] {
+                return !options.isEmpty
+            }
+            return false
+        }
+        if !hasType && !hasRef && !hasCombinator {
+            issues.append("\(path)：缺少 type 字段。")
+        }
+
+        if let required = node["required"] {
+            guard let requiredArray = required as? [Any] else {
+                issues.append("\(path).required：必须是字符串数组。")
+                return
+            }
+            for (index, item) in requiredArray.enumerated() where !(item is String) {
+                issues.append("\(path).required[\(index)]：必须是字符串。")
+            }
+        }
+
+        if let properties = node["properties"] {
+            guard let propertyMap = properties as? [String: Any] else {
+                issues.append("\(path).properties：必须是对象。")
+                return
+            }
+            for (key, value) in propertyMap {
+                validateSchemaNode(value, path: pathByAppending(path, component: "properties.\(key)"), issues: &issues)
+            }
+        }
+
+        if let items = node["items"] {
+            if let itemSchema = items as? [String: Any] {
+                validateSchemaNode(itemSchema, path: pathByAppending(path, component: "items"), issues: &issues)
+            } else if let tupleSchemas = items as? [Any] {
+                for (index, tupleSchema) in tupleSchemas.enumerated() {
+                    validateSchemaNode(tupleSchema, path: "\(pathByAppending(path, component: "items"))[\(index)]", issues: &issues)
+                }
+            } else {
+                issues.append("\(path).items：必须是对象或对象数组。")
+            }
+        }
+
+        if let additionalProperties = node["additionalProperties"] {
+            if additionalProperties is Bool {
+                // 合法，忽略
+            } else if let schema = additionalProperties as? [String: Any] {
+                validateSchemaNode(schema, path: pathByAppending(path, component: "additionalProperties"), issues: &issues)
+            } else {
+                issues.append("\(path).additionalProperties：必须是布尔值或对象。")
+            }
+        }
+
+        for key in combinatorKeys {
+            guard let rawValue = node[key] else { continue }
+            guard let options = rawValue as? [Any] else {
+                issues.append("\(path).\(key)：必须是数组。")
+                continue
+            }
+            if options.isEmpty {
+                issues.append("\(path).\(key)：数组不能为空。")
+                continue
+            }
+            for (index, option) in options.enumerated() {
+                validateSchemaNode(option, path: "\(pathByAppending(path, component: key))[\(index)]", issues: &issues)
+            }
+        }
+    }
+
+    private static func pathByAppending(_ base: String, component: String) -> String {
+        "\(base).\(component)"
+    }
+}
+
 
 // MARK: - OpenAI 适配器实现 (已重构)
 
@@ -216,6 +489,7 @@ public extension APIAdapter {
 public class OpenAIAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
+    public private(set) var lastRequestBuildErrorMessage: String?
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
     static let streamIncludeUsageControlKey = "openai_stream_include_usage"
     private static let responsesModeSignalKeys: Set<String> = [
@@ -1117,6 +1391,7 @@ public class OpenAIAdapter: APIAdapter {
     // MARK: - 协议方法实现
 
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
+        lastRequestBuildErrorMessage = nil
         let rawOverrides = model.model.overrideParameters.mapValues { $0.toAny() }
         let conversationAPI = resolvedConversationAPI(for: rawOverrides)
 
@@ -1290,11 +1565,33 @@ public class OpenAIAdapter: APIAdapter {
         }
 
         if let tools, !tools.isEmpty {
-            let apiTools = tools.map { tool -> [String: Any] in
-                let rawParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
-                let functionParams = normalizedOpenAIToolParameters(rawParams)
-                let function: [String: Any] = ["name": sanitizedToolName(tool.name), "description": tool.description, "parameters": functionParams]
-                return ["type": "function", "function": function]
+            var schemaErrors: [String] = []
+            let apiTools = tools.compactMap { tool -> [String: Any]? in
+                let safeName = sanitizedToolName(tool.name)
+                guard let rawParams = tool.parameters.toAny() as? [String: Any] else {
+                    schemaErrors.append(
+                        String(
+                            format: NSLocalizedString("错误：工具 %@ 的 parameters 必须是对象。", comment: "Tool schema parameters must be object"),
+                            safeName
+                        )
+                    )
+                    return nil
+                }
+                switch ToolSchemaPreflight.normalizeAndValidate(schema: rawParams, toolName: safeName) {
+                case .success(let normalizedSchema):
+                    let functionParams = normalizedOpenAIToolParameters(normalizedSchema)
+                    let function: [String: Any] = ["name": safeName, "description": tool.description, "parameters": functionParams]
+                    return ["type": "function", "function": function]
+                case .failure(let message):
+                    schemaErrors.append(message)
+                    return nil
+                }
+            }
+            if !schemaErrors.isEmpty {
+                let message = schemaErrors.joined(separator: "\n")
+                lastRequestBuildErrorMessage = message
+                logger.error("OpenAI 工具 Schema 预校验失败：\(message, privacy: .public)")
+                return nil
             }
             finalPayload["tools"] = apiTools
             finalPayload["tool_choice"] = "auto"
@@ -1407,16 +1704,38 @@ public class OpenAIAdapter: APIAdapter {
         finalPayload["input"] = inputItems
 
         if let tools, !tools.isEmpty {
-            let apiTools = tools.map { tool -> [String: Any] in
-                let rawParams: [String: Any] = tool.parameters.toAny() as? [String: Any] ?? [:]
-                let functionParams = normalizedOpenAIToolParameters(rawParams)
-                return [
-                    "type": "function",
-                    "name": sanitizedToolName(tool.name),
-                    "description": tool.description,
-                    "parameters": functionParams,
-                    "strict": false
-                ]
+            var schemaErrors: [String] = []
+            let apiTools = tools.compactMap { tool -> [String: Any]? in
+                let safeName = sanitizedToolName(tool.name)
+                guard let rawParams = tool.parameters.toAny() as? [String: Any] else {
+                    schemaErrors.append(
+                        String(
+                            format: NSLocalizedString("错误：工具 %@ 的 parameters 必须是对象。", comment: "Tool schema parameters must be object"),
+                            safeName
+                        )
+                    )
+                    return nil
+                }
+                switch ToolSchemaPreflight.normalizeAndValidate(schema: rawParams, toolName: safeName) {
+                case .success(let normalizedSchema):
+                    let functionParams = normalizedOpenAIToolParameters(normalizedSchema)
+                    return [
+                        "type": "function",
+                        "name": safeName,
+                        "description": tool.description,
+                        "parameters": functionParams,
+                        "strict": false
+                    ]
+                case .failure(let message):
+                    schemaErrors.append(message)
+                    return nil
+                }
+            }
+            if !schemaErrors.isEmpty {
+                let message = schemaErrors.joined(separator: "\n")
+                lastRequestBuildErrorMessage = message
+                logger.error("OpenAI Responses 工具 Schema 预校验失败：\(message, privacy: .public)")
+                return nil
             }
             finalPayload["tools"] = apiTools
             if finalPayload["tool_choice"] == nil {
@@ -1863,6 +2182,7 @@ private func applyHeaderOverrides(_ overrides: [String: String], apiKey: String?
 public class GeminiAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "GeminiAdapter")
+    public private(set) var lastRequestBuildErrorMessage: String?
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
@@ -2361,6 +2681,7 @@ public class GeminiAdapter: APIAdapter {
     // MARK: - 协议方法实现
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
+        lastRequestBuildErrorMessage = nil
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -2569,16 +2890,36 @@ public class GeminiAdapter: APIAdapter {
         
         // 工具定义
         if let tools = tools, !tools.isEmpty {
-            let functionDeclarations = tools.map { tool -> [String: Any] in
+            var schemaErrors: [String] = []
+            let functionDeclarations = tools.compactMap { tool -> [String: Any]? in
                 let sanitizedName = sanitizedToolName(tool.name)
                 var funcDef: [String: Any] = [
                     "name": sanitizedName,
                     "description": tool.description
                 ]
-                if let params = tool.parameters.toAny() as? [String: Any] {
-                    funcDef["parameters"] = normalizedGeminiToolParameters(params)
+                guard let rawParams = tool.parameters.toAny() as? [String: Any] else {
+                    schemaErrors.append(
+                        String(
+                            format: NSLocalizedString("错误：工具 %@ 的 parameters 必须是对象。", comment: "Tool schema parameters must be object"),
+                            sanitizedName
+                        )
+                    )
+                    return nil
                 }
-                return funcDef
+                switch ToolSchemaPreflight.normalizeAndValidate(schema: rawParams, toolName: sanitizedName) {
+                case .success(let normalizedSchema):
+                    funcDef["parameters"] = normalizedGeminiToolParameters(normalizedSchema)
+                    return funcDef
+                case .failure(let message):
+                    schemaErrors.append(message)
+                    return nil
+                }
+            }
+            if !schemaErrors.isEmpty {
+                let message = schemaErrors.joined(separator: "\n")
+                lastRequestBuildErrorMessage = message
+                logger.error("Gemini 工具 Schema 预校验失败：\(message, privacy: .public)")
+                return nil
             }
             let validDeclarations = functionDeclarations.filter { !($0["name"] as? String ?? "").isEmpty }
             if validDeclarations.isEmpty {
@@ -3027,6 +3368,7 @@ public class GeminiAdapter: APIAdapter {
 public class AnthropicAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AnthropicAdapter")
+    public private(set) var lastRequestBuildErrorMessage: String?
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
 
     private func sanitizedToolName(_ name: String) -> String {
@@ -3150,6 +3492,7 @@ public class AnthropicAdapter: APIAdapter {
     // MARK: - 协议方法实现
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
+        lastRequestBuildErrorMessage = nil
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -3342,15 +3685,36 @@ public class AnthropicAdapter: APIAdapter {
         
         // 工具定义
         if let tools = tools, !tools.isEmpty {
-            let anthropicTools = tools.map { tool -> [String: Any] in
+            var schemaErrors: [String] = []
+            let anthropicTools = tools.compactMap { tool -> [String: Any]? in
+                let safeName = sanitizedToolName(tool.name)
                 var toolDef: [String: Any] = [
-                    "name": sanitizedToolName(tool.name),
+                    "name": safeName,
                     "description": tool.description
                 ]
-                if let params = tool.parameters.toAny() as? [String: Any] {
-                    toolDef["input_schema"] = params
+                guard let rawParams = tool.parameters.toAny() as? [String: Any] else {
+                    schemaErrors.append(
+                        String(
+                            format: NSLocalizedString("错误：工具 %@ 的 parameters 必须是对象。", comment: "Tool schema parameters must be object"),
+                            safeName
+                        )
+                    )
+                    return nil
                 }
-                return toolDef
+                switch ToolSchemaPreflight.normalizeAndValidate(schema: rawParams, toolName: safeName) {
+                case .success(let normalizedSchema):
+                    toolDef["input_schema"] = normalizedSchema
+                    return toolDef
+                case .failure(let message):
+                    schemaErrors.append(message)
+                    return nil
+                }
+            }
+            if !schemaErrors.isEmpty {
+                let message = schemaErrors.joined(separator: "\n")
+                lastRequestBuildErrorMessage = message
+                logger.error("Anthropic 工具 Schema 预校验失败：\(message, privacy: .public)")
+                return nil
             }
             payload["tools"] = anthropicTools
         }

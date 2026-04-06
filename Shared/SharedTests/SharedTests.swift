@@ -1003,6 +1003,59 @@ struct OpenAIAdapterTests {
         #expect(!(properties["type"] is String))
     }
 
+    @Test("OpenAI 工具 schema 校验失败时会在本地拦截并返回具体路径")
+    func testOpenAIToolSchemaPreflightFailureProvidesPath() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "ask_user_input",
+                description: "测试工具",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "questions": .dictionary([
+                            "type": .string("array"),
+                            "items": .dictionary([
+                                "type": .string("object"),
+                                "properties": .dictionary([
+                                    "question": .dictionary([
+                                        "type": .string("string")
+                                    ]),
+                                    "options": .dictionary([
+                                        "type": .string("array"),
+                                        "items": .dictionary([
+                                            "type": .string("object"),
+                                            "properties": .dictionary([
+                                                "label": .dictionary([
+                                                    "type": .string("string")
+                                                ])
+                                            ]),
+                                            "required": .array([.int(1)])
+                                        ])
+                                    ])
+                                ])
+                            ])
+                        ])
+                    ]),
+                    "required": .array([.string("questions")])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        )
+
+        #expect(request == nil)
+        #expect(adapter.lastRequestBuildErrorMessage?.contains("$.properties.questions.items.properties.options.items.required[0]") == true)
+    }
+
     @Test("OpenAI 解析保留 provider_specific_fields")
     func testParseResponsePreservesProviderSpecificFields() throws {
         let json = """
@@ -1950,6 +2003,16 @@ struct GeminiAdapterTests {
 @Suite("AnthropicAdapter Tests")
 struct AnthropicAdapterTests {
     private let adapter = AnthropicAdapter()
+    private let dummyModel = RunnableModel(
+        provider: Provider(
+            id: UUID(),
+            name: "Anthropic Test Provider",
+            baseURL: "https://api.anthropic.test",
+            apiKeys: ["anthropic-key"],
+            apiFormat: "anthropic"
+        ),
+        model: Model(modelName: "claude-test")
+    )
 
     @Test("Anthropic 响应可解析缓存 Token 字段")
     func testAnthropicResponseParsesCacheTokens() throws {
@@ -1975,6 +2038,68 @@ struct AnthropicAdapterTests {
         #expect(usage.cacheWriteTokens == 3)
         #expect(usage.cacheReadTokens == 5)
         #expect(usage.totalTokens == nil)
+    }
+
+    @Test("Anthropic 工具 schema 缺失 type 会在本地补全，避免上游 400")
+    func testAnthropicToolSchemaMissingTypeGetsNormalized() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "ask_user_input",
+                description: "测试 ask_user_input",
+                parameters: .dictionary([
+                    "properties": .dictionary([
+                        "questions": .dictionary([
+                            "type": .string("array"),
+                            "items": .dictionary([
+                                "properties": .dictionary([
+                                    "question": .dictionary([
+                                        "type": .string("string")
+                                    ]),
+                                    "options": .dictionary([
+                                        "type": .string("array"),
+                                        "items": .dictionary([
+                                            "properties": .dictionary([
+                                                "label": .dictionary([
+                                                    "type": .string("string")
+                                                ])
+                                            ]),
+                                            "required": .array([.string("label")])
+                                        ])
+                                    ])
+                                ]),
+                                "required": .array([.string("question"), .string("options")])
+                            ])
+                        ])
+                    ]),
+                    "required": .array([.string("questions")])
+                ])
+            )
+        ]
+
+        let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "测试")],
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        )
+
+        let body = try #require(request?.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let toolPayload = try #require((payload["tools"] as? [[String: Any]])?.first)
+        let inputSchema = try #require(toolPayload["input_schema"] as? [String: Any])
+        let properties = try #require(inputSchema["properties"] as? [String: Any])
+        let questions = try #require(properties["questions"] as? [String: Any])
+        let questionItems = try #require(questions["items"] as? [String: Any])
+        let optionItems = try #require((questionItems["properties"] as? [String: Any])?["options"] as? [String: Any])
+        let optionItemSchema = try #require(optionItems["items"] as? [String: Any])
+
+        #expect(inputSchema["type"] as? String == "object")
+        #expect(questionItems["type"] as? String == "object")
+        #expect(optionItemSchema["type"] as? String == "object")
+        #expect(adapter.lastRequestBuildErrorMessage == nil)
     }
 }
 
