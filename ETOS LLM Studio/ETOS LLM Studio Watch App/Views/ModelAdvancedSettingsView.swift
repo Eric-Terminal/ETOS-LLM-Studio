@@ -14,6 +14,7 @@ import Shared
 
 /// 高级模型设置视图
 struct ModelAdvancedSettingsView: View {
+    @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
 
     // MARK: - 绑定
 
@@ -151,6 +152,7 @@ struct ModelAdvancedSettingsView: View {
             }
 
             Section(header: Text("会话设置")) {
+                Toggle("启动时打开历史会话", isOn: $restoreLastSessionOnLaunch)
                 Toggle("自动生成话题标题", isOn: $enableAutoSessionNaming)
             }
 

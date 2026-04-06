@@ -30,7 +30,6 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
@@ -77,8 +76,6 @@ struct SettingsView: View {
             }
             
             Section("对话行为") {
-                Toggle("启动时打开历史会话", isOn: $restoreLastSessionOnLaunch)
-
                 NavigationLink {
                     SessionListView().environmentObject(viewModel)
                 } label: {
