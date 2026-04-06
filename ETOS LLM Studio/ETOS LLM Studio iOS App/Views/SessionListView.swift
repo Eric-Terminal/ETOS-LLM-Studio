@@ -134,7 +134,7 @@ private struct SessionFolderBrowserView: View {
 
     private var listScaffold: some View {
         let entries = mergedEntries
-        List {
+        return List {
             if entries.isEmpty {
                 Text(emptyStateText)
                     .foregroundStyle(.secondary)
