@@ -201,12 +201,12 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     ThirdPartyImportWatchHintView()
                 } label: {
-                    Label("第三方导入", systemImage: "square.and.arrow.down.on.square")
+                    Label("导入数据", systemImage: "square.and.arrow.down.on.square")
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("可在手表上通过链接导入，也可在 iPhone 导入后同步。")
+                Text("支持导入 ETOS 数据包，也可通过第三方来源迁移。")
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
