@@ -319,13 +319,15 @@ struct ChatBubble: View {
     }
 
     private var rowHorizontalPadding: CGFloat {
-        16
+        usesNoBubbleStyle ? 4 : 16
     }
 
     private var bubbleMaxWidth: CGFloat {
         let rowWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
-        let widthRatio = usesNoBubbleStyle ? 0.96 : 0.86
-        return rowWidth * widthRatio
+        if usesNoBubbleStyle {
+            return max(rowWidth - rowHorizontalPadding * 2, 1)
+        }
+        return rowWidth * 0.86
     }
 
     private var shouldForceMergedWidth: Bool {
@@ -337,6 +339,13 @@ struct ChatBubble: View {
 
     private var rowVerticalPadding: CGFloat {
         4
+    }
+
+    private var assistantContentInsets: EdgeInsets {
+        if usesNoBubbleStyle {
+            return EdgeInsets(top: 6, leading: 2, bottom: 6, trailing: 2)
+        }
+        return EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
@@ -518,7 +527,7 @@ struct ChatBubble: View {
                             )
                     }
                 }
-                .padding(10)
+                .padding(assistantContentInsets)
 
                 connectedToolBubbleContainer(
                     isFirst: true,
@@ -557,7 +566,7 @@ struct ChatBubble: View {
                         }
                     }
                 }
-                .padding(10)
+                .padding(assistantContentInsets)
 
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast, isError: false) {
                     content
@@ -601,7 +610,7 @@ struct ChatBubble: View {
                     renderContent(message.content)
                 }
             }
-            .padding(10)
+            .padding(assistantContentInsets)
             
             assistantBubbleContainer(content, isError: false)
             .contentShape(Rectangle())
@@ -650,7 +659,7 @@ struct ChatBubble: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(assistantContentInsets)
 
             assistantBubbleContainer(content, isError: isErrorVersion)
             .contentShape(Rectangle())
