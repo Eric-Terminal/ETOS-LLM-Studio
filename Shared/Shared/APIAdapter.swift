@@ -215,15 +215,15 @@ public extension APIAdapter {
 }
 
 private enum ToolSchemaPreflight {
-    private struct ValidationError: LocalizedError {
-        let message: String
-        var errorDescription: String? { message }
+    enum ValidationOutcome {
+        case success([String: Any])
+        case failure(String)
     }
 
     private static let validTypes: Set<String> = ["string", "number", "integer", "boolean", "object", "array", "null"]
     private static let combinatorKeys: [String] = ["anyOf", "oneOf", "allOf"]
 
-    static func normalizeAndValidate(schema: [String: Any], toolName: String) -> Result<[String: Any], ValidationError> {
+    static func normalizeAndValidate(schema: [String: Any], toolName: String) -> ValidationOutcome {
         let normalized = normalizeSchemaValue(schema) as? [String: Any] ?? schema
         var issues: [String] = []
         validateSchemaNode(normalized, path: "$", issues: &issues)
@@ -247,7 +247,7 @@ private enum ToolSchemaPreflight {
                 )
             )
         }
-        return .failure(ValidationError(message: message))
+        return .failure(message)
     }
 
     private static func normalizeSchemaValue(_ value: Any) -> Any {
@@ -1587,8 +1587,8 @@ public class OpenAIAdapter: APIAdapter {
                     let functionParams = normalizedOpenAIToolParameters(normalizedSchema)
                     let function: [String: Any] = ["name": safeName, "description": tool.description, "parameters": functionParams]
                     return ["type": "function", "function": function]
-                case .failure(let error):
-                    schemaErrors.append(error.localizedDescription)
+                case .failure(let message):
+                    schemaErrors.append(message)
                     return nil
                 }
             }
@@ -1731,8 +1731,8 @@ public class OpenAIAdapter: APIAdapter {
                         "parameters": functionParams,
                         "strict": false
                     ]
-                case .failure(let error):
-                    schemaErrors.append(error.localizedDescription)
+                case .failure(let message):
+                    schemaErrors.append(message)
                     return nil
                 }
             }
@@ -2915,8 +2915,8 @@ public class GeminiAdapter: APIAdapter {
                 case .success(let normalizedSchema):
                     funcDef["parameters"] = normalizedGeminiToolParameters(normalizedSchema)
                     return funcDef
-                case .failure(let error):
-                    schemaErrors.append(error.localizedDescription)
+                case .failure(let message):
+                    schemaErrors.append(message)
                     return nil
                 }
             }
@@ -3710,8 +3710,8 @@ public class AnthropicAdapter: APIAdapter {
                 case .success(let normalizedSchema):
                     toolDef["input_schema"] = normalizedSchema
                     return toolDef
-                case .failure(let error):
-                    schemaErrors.append(error.localizedDescription)
+                case .failure(let message):
+                    schemaErrors.append(message)
                     return nil
                 }
             }
