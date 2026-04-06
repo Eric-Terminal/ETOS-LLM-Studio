@@ -324,9 +324,8 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let rowWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
-        let contentWidth = max(rowWidth - rowHorizontalPadding * 2, 1)
         let widthRatio = usesNoBubbleStyle ? 0.96 : 0.86
-        return contentWidth * widthRatio
+        return rowWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
