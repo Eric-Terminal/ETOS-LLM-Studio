@@ -121,13 +121,26 @@ private struct SessionFolderBrowserView: View {
     }
 
     var body: some View {
+        applySheetAndGhostAlert(
+            to: applyDeleteFolderAlert(
+                to: applyFolderEditingAlerts(
+                    to: applySessionAlerts(
+                        to: applyStateHandlers(to: listScaffold)
+                    )
+                )
+            )
+        )
+    }
+
+    private var listScaffold: some View {
+        let entries = mergedEntries
         List {
-            if mergedEntries.isEmpty {
+            if entries.isEmpty {
                 Text(emptyStateText)
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(mergedEntries) { entry in
+            ForEach(entries) { entry in
                 mergedEntryRow(entry)
             }
         }
@@ -152,125 +165,149 @@ private struct SessionFolderBrowserView: View {
                 batchActionBar
             }
         }
-        .onChange(of: viewModel.sessionFolders) { _, _ in
-            guard folderID != nil else { return }
-            if currentFolder == nil {
-                dismiss()
+    }
+
+    private var directSessionIDs: [UUID] {
+        directSessions.map(\.id)
+    }
+
+    private func applyStateHandlers<Content: View>(to content: Content) -> some View {
+        content
+            .onChange(of: viewModel.sessionFolders) { _, _ in
+                guard folderID != nil else { return }
+                if currentFolder == nil {
+                    dismiss()
+                }
             }
-        }
-        .onChange(of: directSessions.map(\.id)) { _, visibleIDs in
-            selectedSessionIDs.formIntersection(Set(visibleIDs))
-        }
-        .alert("确认删除会话", isPresented: Binding(
-            get: { sessionToDelete != nil },
-            set: { isPresented in
-                if !isPresented {
+            .onChange(of: directSessionIDs) { _, visibleIDs in
+                selectedSessionIDs.formIntersection(Set(visibleIDs))
+            }
+    }
+
+    private func applySessionAlerts<Content: View>(to content: Content) -> some View {
+        content
+            .alert("确认删除会话", isPresented: Binding(
+                get: { sessionToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        sessionToDelete = nil
+                    }
+                }
+            )) {
+                Button("删除", role: .destructive) {
+                    if let session = sessionToDelete {
+                        viewModel.deleteSessions([session])
+                    }
                     sessionToDelete = nil
                 }
-            }
-        )) {
-            Button("删除", role: .destructive) {
-                if let session = sessionToDelete {
-                    viewModel.deleteSessions([session])
+                Button("取消", role: .cancel) {
+                    sessionToDelete = nil
                 }
-                sessionToDelete = nil
+            } message: {
+                Text("删除后所有消息也将被移除，操作不可恢复。")
             }
-            Button("取消", role: .cancel) {
-                sessionToDelete = nil
+            .alert("确认批量删除", isPresented: $showBatchDeleteConfirm) {
+                Button("删除", role: .destructive) {
+                    performBatchDelete()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("将删除 \(selectedSessionIDs.count) 个会话，操作不可恢复。")
             }
-        } message: {
-            Text("删除后所有消息也将被移除，操作不可恢复。")
-        }
-        .alert("确认批量删除", isPresented: $showBatchDeleteConfirm) {
-            Button("删除", role: .destructive) {
-                performBatchDelete()
+    }
+
+    private func applyFolderEditingAlerts<Content: View>(to content: Content) -> some View {
+        content
+            .alert("新建文件夹", isPresented: $isShowingCreateFolderAlert) {
+                TextField("文件夹名称", text: $createFolderName)
+                Button("创建") {
+                    let trimmed = createFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+                    _ = viewModel.createSessionFolder(name: trimmed, parentID: createFolderParentID)
+                    createFolderName = ""
+                    createFolderParentID = nil
+                }
+                Button("取消", role: .cancel) {
+                    createFolderName = ""
+                    createFolderParentID = nil
+                }
+            } message: {
+                if let createFolderParentID,
+                   let parentFolder = folderByID[createFolderParentID] {
+                    Text("将在“\(parentFolder.name)”下创建子文件夹。")
+                } else {
+                    Text("请输入新的文件夹名称。")
+                }
             }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("将删除 \(selectedSessionIDs.count) 个会话，操作不可恢复。")
-        }
-        .alert("新建文件夹", isPresented: $isShowingCreateFolderAlert) {
-            TextField("文件夹名称", text: $createFolderName)
-            Button("创建") {
-                let trimmed = createFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                _ = viewModel.createSessionFolder(name: trimmed, parentID: createFolderParentID)
-                createFolderName = ""
-                createFolderParentID = nil
-            }
-            Button("取消", role: .cancel) {
-                createFolderName = ""
-                createFolderParentID = nil
-            }
-        } message: {
-            if let createFolderParentID,
-               let parentFolder = folderByID[createFolderParentID] {
-                Text("将在“\(parentFolder.name)”下创建子文件夹。")
-            } else {
+            .alert("重命名文件夹", isPresented: $isShowingRenameFolderAlert) {
+                TextField("文件夹名称", text: $renameFolderName)
+                Button("保存") {
+                    guard let folderToRename else { return }
+                    let trimmed = renameFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+                    viewModel.renameSessionFolder(folderToRename, newName: trimmed)
+                    self.folderToRename = nil
+                    renameFolderName = ""
+                }
+                Button("取消", role: .cancel) {
+                    folderToRename = nil
+                    renameFolderName = ""
+                }
+            } message: {
                 Text("请输入新的文件夹名称。")
             }
-        }
-        .alert("重命名文件夹", isPresented: $isShowingRenameFolderAlert) {
-            TextField("文件夹名称", text: $renameFolderName)
-            Button("保存") {
-                guard let folderToRename else { return }
-                let trimmed = renameFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                viewModel.renameSessionFolder(folderToRename, newName: trimmed)
-                self.folderToRename = nil
-                renameFolderName = ""
-            }
-            Button("取消", role: .cancel) {
-                folderToRename = nil
-                renameFolderName = ""
-            }
-        } message: {
-            Text("请输入新的文件夹名称。")
-        }
-        .alert("确认删除文件夹", isPresented: Binding(
-            get: { folderToDelete != nil },
-            set: { isPresented in
-                if !isPresented {
+    }
+
+    private func applyDeleteFolderAlert<Content: View>(to content: Content) -> some View {
+        content
+            .alert("确认删除文件夹", isPresented: Binding(
+                get: { folderToDelete != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        folderToDelete = nil
+                    }
+                }
+            )) {
+                Button("删除", role: .destructive) {
+                    if let folderToDelete {
+                        viewModel.deleteSessionFolder(folderToDelete)
+                    }
                     folderToDelete = nil
                 }
-            }
-        )) {
-            Button("删除", role: .destructive) {
+                Button("取消", role: .cancel) {
+                    folderToDelete = nil
+                }
+            } message: {
                 if let folderToDelete {
-                    viewModel.deleteSessionFolder(folderToDelete)
+                    let descendantIDs = descendantFolderIDs(rootID: folderToDelete.id)
+                    let folderCount = descendantIDs.count
+                    let affectedSessions = viewModel.chatSessions.filter { session in
+                        guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
+                        return descendantIDs.contains(assignedFolderID)
+                    }.count
+                    Text("将删除 \(folderCount) 个文件夹。\(affectedSessions) 个会话将移回未分类。")
                 }
-                folderToDelete = nil
             }
-            Button("取消", role: .cancel) {
-                folderToDelete = nil
+    }
+
+    private func applySheetAndGhostAlert<Content: View>(to content: Content) -> some View {
+        content
+            .sheet(item: $sessionInfo) { info in
+                SessionInfoSheet(payload: info)
             }
-        } message: {
-            if let folderToDelete {
-                let descendantIDs = descendantFolderIDs(rootID: folderToDelete.id)
-                let folderCount = descendantIDs.count
-                let affectedSessions = viewModel.chatSessions.filter { session in
-                    guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
-                    return descendantIDs.contains(assignedFolderID)
-                }.count
-                Text("将删除 \(folderCount) 个文件夹。\(affectedSessions) 个会话将移回未分类。")
-            }
-        }
-        .sheet(item: $sessionInfo) { info in
-            SessionInfoSheet(payload: info)
-        }
-        .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
-            Button("删除幽灵", role: .destructive) {
-                if let session = ghostSession {
-                    viewModel.deleteSessions([session])
+            .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
+                Button("删除幽灵", role: .destructive) {
+                    if let session = ghostSession {
+                        viewModel.deleteSessions([session])
+                    }
+                    ghostSession = nil
                 }
-                ghostSession = nil
+                Button("稍后处理", role: .cancel) {
+                    ghostSession = nil
+                }
+            } message: {
+                Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
             }
-            Button("稍后处理", role: .cancel) {
-                ghostSession = nil
-            }
-        } message: {
-            Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
-        }
     }
 
     private var batchActionBar: some View {
