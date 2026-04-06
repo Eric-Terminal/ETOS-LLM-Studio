@@ -88,10 +88,12 @@ private struct SessionFolderBrowserView: View {
     @State private var folderEditorParentID: UUID?
     @State private var folderBeingRenamed: SessionFolder?
     @State private var folderToDelete: SessionFolder?
+    @State private var showMoreActions = false
 
     @State private var isBatchSelecting = false
     @State private var selectedSessionIDs: Set<UUID> = []
     @State private var showBatchDeleteConfirm = false
+    @State private var showBatchMovePicker = false
 
     private var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
@@ -165,54 +167,27 @@ private struct SessionFolderBrowserView: View {
         directSessions.filter { selectedSessionIDs.contains($0.id) }
     }
 
+    private var emptyStateText: String {
+        folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
+    }
+
     var body: some View {
         List {
             if mergedEntries.isEmpty {
-                Text(folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。")
+                Text(emptyStateText)
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             ForEach(mergedEntries) { entry in
-                switch entry {
-                case .folder(let folder):
-                    folderRow(folder)
-                case .session(let session):
-                    sessionRow(session)
-                }
+                mergedEntryRow(entry)
             }
         }
         .navigationTitle(isRoot ? "历史会话" : (currentFolder?.name ?? "文件夹"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        openCreateFolderEditor(parentID: folderID)
-                    } label: {
-                        Label(folderID == nil ? "新建文件夹" : "新建子文件夹", systemImage: "plus")
-                    }
-
-                    Button {
-                        toggleBatchMode()
-                    } label: {
-                        Label(isBatchSelecting ? "结束批量选中" : "批量选中", systemImage: isBatchSelecting ? "checkmark.circle.fill" : "pencil")
-                    }
-
-                    if let currentFolder {
-                        Divider()
-
-                        Button {
-                            openRenameFolderEditor(currentFolder)
-                        } label: {
-                            Label("重命名当前文件夹", systemImage: "pencil.and.scribble")
-                        }
-
-                        Button(role: .destructive) {
-                            folderToDelete = currentFolder
-                        } label: {
-                            Label("删除当前文件夹", systemImage: "trash")
-                        }
-                    }
+                Button {
+                    showMoreActions = true
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -278,6 +253,27 @@ private struct SessionFolderBrowserView: View {
                 Text(String(format: NSLocalizedString("从“%@”创建新的分支对话。", comment: ""), session.name))
             }
         }
+        .confirmationDialog("会话列表操作", isPresented: $showMoreActions, titleVisibility: .visible) {
+            Button(folderID == nil ? "新建文件夹" : "新建子文件夹") {
+                openCreateFolderEditor(parentID: folderID)
+            }
+
+            Button(isBatchSelecting ? "结束批量选中" : "批量选中") {
+                toggleBatchMode()
+            }
+
+            if let currentFolder {
+                Button("重命名当前文件夹") {
+                    openRenameFolderEditor(currentFolder)
+                }
+
+                Button("删除当前文件夹", role: .destructive) {
+                    folderToDelete = currentFolder
+                }
+            }
+
+            Button("取消", role: .cancel) {}
+        }
         .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
             Button("删除所选会话", role: .destructive) {
                 performBatchDelete()
@@ -312,6 +308,13 @@ private struct SessionFolderBrowserView: View {
                             isShowingFolderEditor = false
                         }
                     }
+                }
+            }
+        }
+        .sheet(isPresented: $showBatchMovePicker) {
+            NavigationStack {
+                BatchMoveDestinationPickerView(moveTargets: moveTargets) { targetFolderID in
+                    applyBatchMove(toFolderID: targetFolderID)
                 }
             }
         }
@@ -352,20 +355,8 @@ private struct SessionFolderBrowserView: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
-                Menu {
-                    Button {
-                        applyBatchMove(toFolderID: nil)
-                    } label: {
-                        Label("未分类", systemImage: "tray")
-                    }
-
-                    ForEach(moveTargets) { target in
-                        Button {
-                            applyBatchMove(toFolderID: target.id)
-                        } label: {
-                            Label(target.title, systemImage: "folder")
-                        }
-                    }
+                Button {
+                    showBatchMovePicker = true
                 } label: {
                     Label("移动", systemImage: "folder")
                         .frame(maxWidth: .infinity)
@@ -386,6 +377,15 @@ private struct SessionFolderBrowserView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(.ultraThinMaterial)
+    }
+
+    private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
+        switch entry {
+        case .folder(let folder):
+            return AnyView(folderRow(folder))
+        case .session(let session):
+            return AnyView(sessionRow(session))
+        }
     }
 
     @ViewBuilder
@@ -624,6 +624,34 @@ private struct BatchSelectableSessionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct BatchMoveDestinationPickerView: View {
+    let moveTargets: [SessionMoveTarget]
+    let onSelect: (UUID?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Button {
+                onSelect(nil)
+                dismiss()
+            } label: {
+                Label("未分类", systemImage: "tray")
+            }
+
+            ForEach(moveTargets) { target in
+                Button {
+                    onSelect(target.id)
+                    dismiss()
+                } label: {
+                    Label(target.title, systemImage: "folder")
+                }
+            }
+        }
+        .navigationTitle("移动到文件夹")
     }
 }
 

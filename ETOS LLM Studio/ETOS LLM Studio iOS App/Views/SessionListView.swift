@@ -116,20 +116,19 @@ private struct SessionFolderBrowserView: View {
         directSessions.filter { selectedSessionIDs.contains($0.id) }
     }
 
+    private var emptyStateText: String {
+        folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
+    }
+
     var body: some View {
         List {
             if mergedEntries.isEmpty {
-                Text(folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。")
+                Text(emptyStateText)
                     .foregroundStyle(.secondary)
             }
 
             ForEach(mergedEntries) { entry in
-                switch entry {
-                case .folder(let folder):
-                    folderRow(folder)
-                case .session(let session):
-                    sessionRow(session)
-                }
+                mergedEntryRow(entry)
             }
         }
         .navigationTitle(isRoot ? "会话管理" : (currentFolder?.name ?? "文件夹"))
@@ -309,6 +308,15 @@ private struct SessionFolderBrowserView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial)
+    }
+
+    private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
+        switch entry {
+        case .folder(let folder):
+            return AnyView(folderRow(folder))
+        case .session(let session):
+            return AnyView(sessionRow(session))
+        }
     }
 
     @ViewBuilder
