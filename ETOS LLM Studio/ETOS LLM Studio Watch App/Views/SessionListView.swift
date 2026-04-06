@@ -4,14 +4,14 @@
 // ETOS LLM Studio Watch App 会话历史列表视图
 //
 // 功能特性:
-// - 以“文件管理”方式浏览会话文件夹
-// - 支持会话移动、删除、分支与重命名
-// - 支持文件夹新建、重命名、删除
+// - 文件夹与会话在同一列表混合展示
+// - 顶部三点菜单支持新建文件夹与批量选中
+// - 支持会话批量移动、批量删除
 // ============================================================================
 
-import SwiftUI
 import Foundation
 import Shared
+import SwiftUI
 
 /// 会话历史列表视图
 struct SessionListView: View {
@@ -87,9 +87,11 @@ private struct SessionFolderBrowserView: View {
     @State private var folderEditorName: String = ""
     @State private var folderEditorParentID: UUID?
     @State private var folderBeingRenamed: SessionFolder?
-    @State private var showCurrentFolderActions = false
-
     @State private var folderToDelete: SessionFolder?
+
+    @State private var isBatchSelecting = false
+    @State private var selectedSessionIDs: Set<UUID> = []
+    @State private var showBatchDeleteConfirm = false
 
     private var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
@@ -101,113 +103,124 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var childFolders: [SessionFolder] {
-        let candidates = folders.filter { normalizedParentID(of: $0) == folderID }
-        return candidates.sorted { lhs, rhs in
-            let leftRecency = recentActivityIndex(for: lhs.id)
-            let rightRecency = recentActivityIndex(for: rhs.id)
-            if leftRecency != rightRecency {
-                return leftRecency < rightRecency
-            }
-            if lhs.updatedAt != rhs.updatedAt {
-                return lhs.updatedAt > rhs.updatedAt
-            }
-            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-        }
+        folders.filter { normalizedParentID(of: $0) == folderID }
     }
 
     private var directSessions: [ChatSession] {
         sessions.filter { normalizedFolderID(of: $0) == folderID }
     }
 
+    private var sessionOrderByID: [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: sessions.enumerated().map { ($1.id, $0) })
+    }
+
+    private var mergedEntries: [SessionMergedEntry] {
+        let folderEntries = childFolders.map {
+            SessionMergedEntryWithRank(
+                rank: recentActivityIndex(for: $0.id),
+                entry: .folder($0)
+            )
+        }
+
+        let sessionEntries = directSessions.map {
+            SessionMergedEntryWithRank(
+                rank: sessionOrderByID[$0.id] ?? .max,
+                entry: .session($0)
+            )
+        }
+
+        return (folderEntries + sessionEntries)
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank {
+                    return lhs.rank < rhs.rank
+                }
+
+                switch (lhs.entry, rhs.entry) {
+                case (.folder(let left), .folder(let right)):
+                    return left.name.localizedStandardCompare(right.name) == .orderedAscending
+                case (.session(let left), .session(let right)):
+                    return left.name.localizedStandardCompare(right.name) == .orderedAscending
+                case (.folder, .session):
+                    return true
+                case (.session, .folder):
+                    return false
+                }
+            }
+            .map(\.entry)
+    }
+
+    private var moveTargets: [SessionMoveTarget] {
+        folders
+            .sorted { lhs, rhs in
+                let left = folderPath(lhs)
+                let right = folderPath(rhs)
+                return left.localizedStandardCompare(right) == .orderedAscending
+            }
+            .map { folder in
+                SessionMoveTarget(id: folder.id, title: folderPath(folder))
+            }
+    }
+
+    private var selectedSessions: [ChatSession] {
+        directSessions.filter { selectedSessionIDs.contains($0.id) }
+    }
+
     var body: some View {
         List {
-            if isRoot {
-                Section {
-                    Button {
-                        openCreateFolderEditor(parentID: nil)
-                    } label: {
-                        Label("新建文件夹", systemImage: "folder.badge.plus")
-                    }
-                }
+            if mergedEntries.isEmpty {
+                Text(folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
-            Section("文件夹") {
-                if childFolders.isEmpty {
-                    Text("暂无文件夹。")
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                ForEach(childFolders) { folder in
-                    NavigationLink {
-                        SessionFolderBrowserView(
-                            folderID: folder.id,
-                            sessions: $sessions,
-                            folders: $folders,
-                            currentSession: $currentSession,
-                            deleteSessionAction: deleteSessionAction,
-                            branchAction: branchAction,
-                            deleteLastMessageAction: deleteLastMessageAction,
-                            sendSessionToCompanionAction: sendSessionToCompanionAction,
-                            onSessionSelected: onSessionSelected,
-                            updateSessionAction: updateSessionAction,
-                            createFolderAction: createFolderAction,
-                            renameFolderAction: renameFolderAction,
-                            deleteFolderAction: deleteFolderAction,
-                            moveSessionToFolderAction: moveSessionToFolderAction,
-                            isRoot: false
-                        )
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "folder")
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(folder.name)
-                                    .etFont(.footnote)
-                                    .lineLimit(1)
-                                Text("\(recursiveSessionCount(in: folder.id)) 个会话")
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section(folderID == nil ? "未分类会话" : "会话") {
-                if directSessions.isEmpty {
-                    Text(folderID == nil ? "未分类会话为空。" : "当前文件夹暂无会话。")
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                ForEach(directSessions) { session in
-                    SessionRowView(
-                        session: session,
-                        currentSession: $currentSession,
-                        folders: $folders,
-                        sessionToEdit: $sessionToEdit,
-                        sessionToBranch: $sessionToBranch,
-                        showBranchOptions: $showBranchOptions,
-                        sessionToDelete: $sessionToDelete,
-                        showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                        onSessionSelected: onSessionSelected,
-                        deleteLastMessageAction: deleteLastMessageAction,
-                        sendSessionToCompanionAction: sendSessionToCompanionAction,
-                        moveSessionToFolderAction: moveSessionToFolderAction
-                    )
+            ForEach(mergedEntries) { entry in
+                switch entry {
+                case .folder(let folder):
+                    folderRow(folder)
+                case .session(let session):
+                    sessionRow(session)
                 }
             }
         }
         .navigationTitle(isRoot ? "历史会话" : (currentFolder?.name ?? "文件夹"))
         .toolbar {
-            if currentFolder != nil {
-                ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
                     Button {
-                        showCurrentFolderActions = true
+                        openCreateFolderEditor(parentID: folderID)
                     } label: {
-                        Image(systemName: "ellipsis")
+                        Label(folderID == nil ? "新建文件夹" : "新建子文件夹", systemImage: "plus")
                     }
+
+                    Button {
+                        toggleBatchMode()
+                    } label: {
+                        Label(isBatchSelecting ? "结束批量选中" : "批量选中", systemImage: isBatchSelecting ? "checkmark.circle.fill" : "pencil")
+                    }
+
+                    if let currentFolder {
+                        Divider()
+
+                        Button {
+                            openRenameFolderEditor(currentFolder)
+                        } label: {
+                            Label("重命名当前文件夹", systemImage: "pencil.and.scribble")
+                        }
+
+                        Button(role: .destructive) {
+                            folderToDelete = currentFolder
+                        } label: {
+                            Label("删除当前文件夹", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
                 }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if isBatchSelecting {
+                batchActionBar
             }
         }
         .onChange(of: folders) { _, _ in
@@ -216,8 +229,10 @@ private struct SessionFolderBrowserView: View {
                 dismiss()
             }
         }
-        .sheet(item: $sessionToEdit) {
-            sessionToEdit in
+        .onChange(of: directSessions.map(\.id)) { _, visibleIDs in
+            selectedSessionIDs.formIntersection(Set(visibleIDs))
+        }
+        .sheet(item: $sessionToEdit) { sessionToEdit in
             if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionToEdit.id }) {
                 let sessionBinding = $sessions[sessionIndex]
                 EditSessionNameView(session: sessionBinding, onSave: { updatedSession in
@@ -263,22 +278,13 @@ private struct SessionFolderBrowserView: View {
                 Text(String(format: NSLocalizedString("从“%@”创建新的分支对话。", comment: ""), session.name))
             }
         }
-        .confirmationDialog("当前文件夹操作", isPresented: $showCurrentFolderActions, titleVisibility: .visible) {
-            if let currentFolder {
-                Button("新建子文件夹") {
-                    openCreateFolderEditor(parentID: currentFolder.id)
-                }
-
-                Button("重命名当前文件夹") {
-                    openRenameFolderEditor(currentFolder)
-                }
-
-                Button("删除当前文件夹", role: .destructive) {
-                    folderToDelete = currentFolder
-                }
+        .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
+            Button("删除所选会话", role: .destructive) {
+                performBatchDelete()
             }
-
             Button("取消", role: .cancel) {}
+        } message: {
+            Text("将删除 \(selectedSessionIDs.count) 个会话，操作不可恢复。")
         }
         .sheet(isPresented: $isShowingFolderEditor) {
             NavigationStack {
@@ -337,6 +343,150 @@ private struct SessionFolderBrowserView: View {
                 Text("将删除 \(folderCount) 个文件夹。\(sessionCount) 个会话将回到未分类。")
             }
         }
+    }
+
+    private var batchActionBar: some View {
+        VStack(spacing: 8) {
+            Text("已选 \(selectedSessionIDs.count) 个会话")
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Menu {
+                    Button {
+                        applyBatchMove(toFolderID: nil)
+                    } label: {
+                        Label("未分类", systemImage: "tray")
+                    }
+
+                    ForEach(moveTargets) { target in
+                        Button {
+                            applyBatchMove(toFolderID: target.id)
+                        } label: {
+                            Label(target.title, systemImage: "folder")
+                        }
+                    }
+                } label: {
+                    Label("移动", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(selectedSessionIDs.isEmpty)
+
+                Button(role: .destructive) {
+                    showBatchDeleteConfirm = true
+                } label: {
+                    Label("删除", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(selectedSessionIDs.isEmpty)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
+    }
+
+    @ViewBuilder
+    private func folderRow(_ folder: SessionFolder) -> some View {
+        if isBatchSelecting {
+            folderLabel(for: folder)
+        } else {
+            NavigationLink {
+                SessionFolderBrowserView(
+                    folderID: folder.id,
+                    sessions: $sessions,
+                    folders: $folders,
+                    currentSession: $currentSession,
+                    deleteSessionAction: deleteSessionAction,
+                    branchAction: branchAction,
+                    deleteLastMessageAction: deleteLastMessageAction,
+                    sendSessionToCompanionAction: sendSessionToCompanionAction,
+                    onSessionSelected: onSessionSelected,
+                    updateSessionAction: updateSessionAction,
+                    createFolderAction: createFolderAction,
+                    renameFolderAction: renameFolderAction,
+                    deleteFolderAction: deleteFolderAction,
+                    moveSessionToFolderAction: moveSessionToFolderAction,
+                    isRoot: false
+                )
+            } label: {
+                folderLabel(for: folder)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionRow(_ session: ChatSession) -> some View {
+        if isBatchSelecting {
+            BatchSelectableSessionRow(
+                session: session,
+                isSelected: selectedSessionIDs.contains(session.id),
+                onToggle: {
+                    toggleSessionSelection(session.id)
+                }
+            )
+        } else {
+            SessionRowView(
+                session: session,
+                currentSession: $currentSession,
+                folders: $folders,
+                sessionToEdit: $sessionToEdit,
+                sessionToBranch: $sessionToBranch,
+                showBranchOptions: $showBranchOptions,
+                sessionToDelete: $sessionToDelete,
+                showDeleteSessionConfirm: $showDeleteSessionConfirm,
+                onSessionSelected: onSessionSelected,
+                deleteLastMessageAction: deleteLastMessageAction,
+                sendSessionToCompanionAction: sendSessionToCompanionAction,
+                moveSessionToFolderAction: moveSessionToFolderAction
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func folderLabel(for folder: SessionFolder) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(folder.name)
+                    .etFont(.footnote)
+                    .lineLimit(1)
+                Text("\(recursiveSessionCount(in: folder.id)) 个会话")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func toggleBatchMode() {
+        isBatchSelecting.toggle()
+        if !isBatchSelecting {
+            selectedSessionIDs.removeAll()
+        }
+    }
+
+    private func toggleSessionSelection(_ sessionID: UUID) {
+        if selectedSessionIDs.contains(sessionID) {
+            selectedSessionIDs.remove(sessionID)
+        } else {
+            selectedSessionIDs.insert(sessionID)
+        }
+    }
+
+    private func applyBatchMove(toFolderID folderID: UUID?) {
+        for session in selectedSessions {
+            moveSessionToFolderAction(session, folderID)
+        }
+        selectedSessionIDs.removeAll()
+    }
+
+    private func performBatchDelete() {
+        let targets = selectedSessions
+        guard !targets.isEmpty else { return }
+        targets.forEach { deleteSessionAction($0) }
+        selectedSessionIDs.removeAll()
     }
 
     private func openCreateFolderEditor(parentID: UUID?) {
@@ -413,6 +563,67 @@ private struct SessionFolderBrowserView: View {
             guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
             return descendants.contains(assignedFolderID)
         }.count
+    }
+
+    private func folderPath(_ folder: SessionFolder) -> String {
+        var parts: [String] = [folder.name]
+        var cursor = folder.parentID
+        var visited = Set<UUID>()
+
+        while let current = cursor {
+            guard visited.insert(current).inserted else { break }
+            guard let parent = folderByID[current] else { break }
+            parts.append(parent.name)
+            cursor = parent.parentID
+        }
+
+        return parts.reversed().joined(separator: " /")
+    }
+}
+
+private struct SessionMergedEntryWithRank {
+    let rank: Int
+    let entry: SessionMergedEntry
+}
+
+private enum SessionMergedEntry: Identifiable {
+    case folder(SessionFolder)
+    case session(ChatSession)
+
+    var id: String {
+        switch self {
+        case .folder(let folder):
+            return "folder-\(folder.id.uuidString)"
+        case .session(let session):
+            return "session-\(session.id.uuidString)"
+        }
+    }
+}
+
+private struct SessionMoveTarget: Identifiable {
+    let id: UUID
+    let title: String
+}
+
+private struct BatchSelectableSessionRow: View {
+    let session: ChatSession
+    let isSelected: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                Text(session.name)
+                    .etFont(.footnote)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
