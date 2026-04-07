@@ -71,7 +71,11 @@ struct DeviceSyncSettingsView: View {
                 if let exportFileURL {
                     if #available(watchOS 9.0, *) {
                         ShareLink(item: exportFileURL) {
-                            Label("分享导出文件", systemImage: "square.and.arrow.up")
+                            HStack {
+                                Spacer()
+                                Label("分享导出文件", systemImage: "square.and.arrow.up")
+                                Spacer()
+                            }
                         }
                     } else {
                         Text("当前系统暂不支持直接分享导出文件。")
