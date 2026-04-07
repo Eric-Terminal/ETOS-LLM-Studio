@@ -346,7 +346,7 @@ struct ChatBubble: View {
         if usesNoBubbleStyle {
             return EdgeInsets(top: 6, leading: 2, bottom: 6, trailing: 2)
         }
-        return EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+        return EdgeInsets(top: 10, leading: 8, bottom: 10, trailing: 8)
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
