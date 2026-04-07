@@ -2898,12 +2898,7 @@ public class ChatService {
         )
         
         guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: effectiveTools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
-            let detail = adapter.lastRequestBuildErrorMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let detail, !detail.isEmpty {
-                addErrorMessage(detail)
-            } else {
-                addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
-            }
+            addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
             requestStatusSubject.send(.error)
             persistRequestLog(
                 context: requestLogContext,
