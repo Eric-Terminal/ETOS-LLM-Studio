@@ -2038,7 +2038,6 @@ private struct AskUserInputComposerPanel: View {
     let cancelAction: () -> Void
 
     @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
-    @State private var otherEnabledByQuestion: [String: Bool] = [:]
     @State private var otherTextByQuestion: [String: String] = [:]
     @State private var currentQuestionIndex = 0
 
@@ -2173,37 +2172,12 @@ private struct AskUserInputComposerPanel: View {
                     .padding(.vertical, 2)
                 }
                 .buttonStyle(.plain)
-            }
-
-            if question.allowOther {
-                Button {
-                    toggleOther(question: question)
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: otherEnabledByQuestion[question.id] == true ? "checkmark.square.fill" : "square")
-                            .foregroundStyle(.blue)
-                            .frame(width: 20, alignment: .center)
-                        Text("其他")
-                            .etFont(.subheadline)
-                            .foregroundStyle(.primary)
-                        Spacer(minLength: 0)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                if otherEnabledByQuestion[question.id] == true {
-                    TextField(
-                        "请输入其他内容",
-                        text: Binding(
-                            get: { otherTextByQuestion[question.id, default: ""] },
-                            set: { otherTextByQuestion[question.id] = $0 }
-                        ),
-                        axis: .vertical
+                .disabled(
+                    !AppToolAskUserInputAnswerPolicy.canSelectOption(
+                        type: question.type,
+                        customText: otherTextByQuestion[question.id]
                     )
-                    .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.leading, 28)
-                }
+                )
             }
         }
         .padding(.vertical, 2)
@@ -2214,26 +2188,24 @@ private struct AskUserInputComposerPanel: View {
             Image(systemName: "square.and.pencil")
                 .foregroundStyle(.secondary)
 
-            if question.allowOther {
-                TextField(
-                    "请输入其他内容",
-                    text: Binding(
-                        get: { otherTextByQuestion[question.id, default: ""] },
-                        set: { newValue in
-                            otherTextByQuestion[question.id] = newValue
-                            let normalized = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                            otherEnabledByQuestion[question.id] = !normalized.isEmpty
+            TextField(
+                "请输入自定义偏好",
+                text: Binding(
+                    get: { otherTextByQuestion[question.id, default: ""] },
+                    set: { newValue in
+                        otherTextByQuestion[question.id] = newValue
+                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                            type: question.type,
+                            customText: newValue
+                        ) {
+                            selectedOptionIDsByQuestion[question.id] = []
                         }
-                    ),
-                    axis: .vertical
-                )
-                .lineLimit(1...3)
-                .textFieldStyle(.plain)
-            } else {
-                TextField("此题不支持自定义输入", text: .constant(""))
-                    .disabled(true)
-                    .foregroundStyle(.secondary)
-            }
+                    }
+                ),
+                axis: .vertical
+            )
+            .lineLimit(1...3)
+            .textFieldStyle(.plain)
 
             Button(skipButtonTitle(for: question)) {
                 handleSkipOrSubmit(for: question)
@@ -2260,6 +2232,12 @@ private struct AskUserInputComposerPanel: View {
     }
 
     private func toggleOption(question: AppToolAskUserInputQuestion, optionID: String) {
+        guard AppToolAskUserInputAnswerPolicy.canSelectOption(
+            type: question.type,
+            customText: otherTextByQuestion[question.id]
+        ) else {
+            return
+        }
         switch question.type {
         case .singleSelect:
             let current = selectedOptionIDsByQuestion[question.id, default: []]
@@ -2267,8 +2245,6 @@ private struct AskUserInputComposerPanel: View {
                 selectedOptionIDsByQuestion[question.id] = []
             } else {
                 selectedOptionIDsByQuestion[question.id] = [optionID]
-                otherEnabledByQuestion[question.id] = false
-                otherTextByQuestion[question.id] = ""
                 autoAdvanceIfNeeded(afterSelecting: question)
             }
         case .multiSelect:
@@ -2279,18 +2255,6 @@ private struct AskUserInputComposerPanel: View {
                 current.insert(optionID)
             }
             selectedOptionIDsByQuestion[question.id] = current
-        }
-    }
-
-    private func toggleOther(question: AppToolAskUserInputQuestion) {
-        let enabled = otherEnabledByQuestion[question.id] == true
-        otherEnabledByQuestion[question.id] = !enabled
-        if enabled {
-            otherTextByQuestion[question.id] = ""
-            return
-        }
-        if question.type == .singleSelect {
-            selectedOptionIDsByQuestion[question.id] = []
         }
     }
 
@@ -2327,10 +2291,11 @@ private struct AskUserInputComposerPanel: View {
     }
 
     private func isQuestionAnswered(_ question: AppToolAskUserInputQuestion) -> Bool {
-        let selected = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
-        let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let otherSelected = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
-        return selected || otherSelected
+        let selected = selectedOptionIDsByQuestion[question.id] ?? []
+        return AppToolAskUserInputAnswerPolicy.hasAnswer(
+            selectedOptionIDs: selected,
+            customText: otherTextByQuestion[question.id]
+        )
     }
 
     private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
@@ -2362,13 +2327,9 @@ private struct AskUserInputComposerPanel: View {
             let selectedLabels = question.options
                 .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0.id) }
                 .map(\.label)
-            let rawOtherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let otherText: String?
-            if otherEnabledByQuestion[question.id] == true, let rawOtherText, !rawOtherText.isEmpty {
-                otherText = rawOtherText
-            } else {
-                otherText = nil
-            }
+            let otherText = AppToolAskUserInputAnswerPolicy.normalizedCustomText(
+                otherTextByQuestion[question.id]
+            )
 
             return AppToolAskUserInputQuestionAnswer(
                 questionID: question.id,
@@ -2384,7 +2345,6 @@ private struct AskUserInputComposerPanel: View {
 
     private func resetSelectionState() {
         selectedOptionIDsByQuestion = [:]
-        otherEnabledByQuestion = [:]
         otherTextByQuestion = [:]
         currentQuestionIndex = 0
     }

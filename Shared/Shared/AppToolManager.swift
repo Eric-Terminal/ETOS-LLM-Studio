@@ -50,6 +50,34 @@ public enum AppToolAskUserInputQuestionType: String, Codable, Hashable, Sendable
     case multiSelect = "multi_select"
 }
 
+public enum AppToolAskUserInputAnswerPolicy {
+    public static func normalizedCustomText(_ rawText: String?) -> String? {
+        guard let rawText else { return nil }
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    public static func hasAnswer(selectedOptionIDs: Set<String>, customText: String?) -> Bool {
+        !selectedOptionIDs.isEmpty || normalizedCustomText(customText) != nil
+    }
+
+    public static func canSelectOption(type: AppToolAskUserInputQuestionType, customText: String?) -> Bool {
+        switch type {
+        case .singleSelect:
+            return normalizedCustomText(customText) == nil
+        case .multiSelect:
+            return true
+        }
+    }
+
+    public static func shouldClearSelectedOptionsAfterTypingCustomText(
+        type: AppToolAskUserInputQuestionType,
+        customText: String?
+    ) -> Bool {
+        type == .singleSelect && normalizedCustomText(customText) != nil
+    }
+}
+
 public struct AppToolAskUserInputOption: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let label: String

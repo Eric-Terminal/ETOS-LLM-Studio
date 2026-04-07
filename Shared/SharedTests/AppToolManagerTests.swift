@@ -378,6 +378,50 @@ struct AppToolManagerTests {
         #expect(latestRequest?.questions.first?.allowOther == true)
     }
 
+    @Test("结构化问答策略：单选题输入自定义内容后会锁定选项")
+    func testAskUserInputAnswerPolicySingleSelectCustomTextLocksOptions() {
+        #expect(
+            AppToolAskUserInputAnswerPolicy.canSelectOption(
+                type: .singleSelect,
+                customText: "  我自己写  "
+            ) == false
+        )
+        #expect(
+            AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                type: .singleSelect,
+                customText: "自定义答案"
+            )
+        )
+        #expect(
+            AppToolAskUserInputAnswerPolicy.hasAnswer(
+                selectedOptionIDs: [],
+                customText: "自定义答案"
+            )
+        )
+    }
+
+    @Test("结构化问答策略：多选题可同时保留选项与自定义内容")
+    func testAskUserInputAnswerPolicyMultiSelectSupportsCombinedAnswer() {
+        #expect(
+            AppToolAskUserInputAnswerPolicy.canSelectOption(
+                type: .multiSelect,
+                customText: "我也想补充"
+            )
+        )
+        #expect(
+            !AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                type: .multiSelect,
+                customText: "我也想补充"
+            )
+        )
+        #expect(
+            AppToolAskUserInputAnswerPolicy.hasAnswer(
+                selectedOptionIDs: ["option-a"],
+                customText: "我也想补充"
+            )
+        )
+    }
+
     @MainActor
     @Test("填充输入框工具会广播输入框填充请求")
     func testExecuteFillUserInputToolPostsNotification() async throws {

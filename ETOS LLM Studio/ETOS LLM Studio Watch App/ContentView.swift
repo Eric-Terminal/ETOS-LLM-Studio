@@ -833,7 +833,6 @@ private struct WatchAskUserInputView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
-    @State private var otherEnabledByQuestion: [String: Bool] = [:]
     @State private var otherTextByQuestion: [String: String] = [:]
     @State private var currentQuestionIndex = 0
     @State private var hasHandledAction = false
@@ -897,20 +896,12 @@ private struct WatchAskUserInputView: View {
                                 }
                             }
                             .buttonStyle(.plain)
-                        }
-
-                        if question.allowOther {
-                            Button {
-                                toggleOther(question: question)
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: otherEnabledByQuestion[question.id] == true ? "checkmark.square.fill" : "square")
-                                        .foregroundStyle(.blue)
-                                    Text("其他")
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                            .buttonStyle(.plain)
+                            .disabled(
+                                !AppToolAskUserInputAnswerPolicy.canSelectOption(
+                                    type: question.type,
+                                    customText: otherTextByQuestion[question.id]
+                                )
+                            )
                         }
                     } header: {
                         HStack(spacing: 4) {
@@ -924,22 +915,21 @@ private struct WatchAskUserInputView: View {
 
                     Section {
                         HStack(spacing: 6) {
-                            if question.allowOther {
-                                TextField(
-                                    "请输入其他内容",
-                                    text: Binding(
-                                        get: { otherTextByQuestion[question.id, default: ""] },
-                                        set: { newValue in
-                                            otherTextByQuestion[question.id] = newValue
-                                            let normalized = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                                            otherEnabledByQuestion[question.id] = !normalized.isEmpty
+                            TextField(
+                                "请输入自定义偏好",
+                                text: Binding(
+                                    get: { otherTextByQuestion[question.id, default: ""] },
+                                    set: { newValue in
+                                        otherTextByQuestion[question.id] = newValue
+                                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                                            type: question.type,
+                                            customText: newValue
+                                        ) {
+                                            selectedOptionIDsByQuestion[question.id] = []
                                         }
-                                    )
+                                    }
                                 )
-                            } else {
-                                TextField("此题不支持自定义输入", text: .constant(""))
-                                    .disabled(true)
-                            }
+                            )
 
                             Button(skipButtonTitle(for: question)) {
                                 handleSkipOrSubmit(for: question)
@@ -998,6 +988,12 @@ private struct WatchAskUserInputView: View {
     }
 
     private func toggleOption(question: AppToolAskUserInputQuestion, optionID: String) {
+        guard AppToolAskUserInputAnswerPolicy.canSelectOption(
+            type: question.type,
+            customText: otherTextByQuestion[question.id]
+        ) else {
+            return
+        }
         switch question.type {
         case .singleSelect:
             let current = selectedOptionIDsByQuestion[question.id, default: []]
@@ -1005,8 +1001,6 @@ private struct WatchAskUserInputView: View {
                 selectedOptionIDsByQuestion[question.id] = []
             } else {
                 selectedOptionIDsByQuestion[question.id] = [optionID]
-                otherEnabledByQuestion[question.id] = false
-                otherTextByQuestion[question.id] = ""
                 autoAdvanceIfNeeded(afterSelecting: question)
             }
         case .multiSelect:
@@ -1017,18 +1011,6 @@ private struct WatchAskUserInputView: View {
                 current.insert(optionID)
             }
             selectedOptionIDsByQuestion[question.id] = current
-        }
-    }
-
-    private func toggleOther(question: AppToolAskUserInputQuestion) {
-        let enabled = otherEnabledByQuestion[question.id] == true
-        otherEnabledByQuestion[question.id] = !enabled
-        if enabled {
-            otherTextByQuestion[question.id] = ""
-            return
-        }
-        if question.type == .singleSelect {
-            selectedOptionIDsByQuestion[question.id] = []
         }
     }
 
@@ -1059,10 +1041,11 @@ private struct WatchAskUserInputView: View {
     }
 
     private func isQuestionAnswered(_ question: AppToolAskUserInputQuestion) -> Bool {
-        let hasSelectedOption = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
-        let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let hasOtherText = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
-        return hasSelectedOption || hasOtherText
+        let selected = selectedOptionIDsByQuestion[question.id] ?? []
+        return AppToolAskUserInputAnswerPolicy.hasAnswer(
+            selectedOptionIDs: selected,
+            customText: otherTextByQuestion[question.id]
+        )
     }
 
     private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
@@ -1094,13 +1077,9 @@ private struct WatchAskUserInputView: View {
             let selectedLabels = question.options
                 .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0.id) }
                 .map(\.label)
-            let rawOtherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let otherText: String?
-            if otherEnabledByQuestion[question.id] == true, let rawOtherText, !rawOtherText.isEmpty {
-                otherText = rawOtherText
-            } else {
-                otherText = nil
-            }
+            let otherText = AppToolAskUserInputAnswerPolicy.normalizedCustomText(
+                otherTextByQuestion[question.id]
+            )
             return AppToolAskUserInputQuestionAnswer(
                 questionID: question.id,
                 question: question.question,
@@ -1123,7 +1102,6 @@ private struct WatchAskUserInputView: View {
 
     private func resetSelectionState() {
         selectedOptionIDsByQuestion = [:]
-        otherEnabledByQuestion = [:]
         otherTextByQuestion = [:]
         currentQuestionIndex = 0
     }
