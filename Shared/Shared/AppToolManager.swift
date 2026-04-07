@@ -50,6 +50,34 @@ public enum AppToolAskUserInputQuestionType: String, Codable, Hashable, Sendable
     case multiSelect = "multi_select"
 }
 
+public enum AppToolAskUserInputAnswerPolicy {
+    public static func normalizedCustomText(_ rawText: String?) -> String? {
+        guard let rawText else { return nil }
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    public static func hasAnswer(selectedOptionIDs: Set<String>, customText: String?) -> Bool {
+        !selectedOptionIDs.isEmpty || normalizedCustomText(customText) != nil
+    }
+
+    public static func canSelectOption(type: AppToolAskUserInputQuestionType, customText: String?) -> Bool {
+        switch type {
+        case .singleSelect:
+            return normalizedCustomText(customText) == nil
+        case .multiSelect:
+            return true
+        }
+    }
+
+    public static func shouldClearSelectedOptionsAfterTypingCustomText(
+        type: AppToolAskUserInputQuestionType,
+        customText: String?
+    ) -> Bool {
+        type == .singleSelect && normalizedCustomText(customText) != nil
+    }
+}
+
 public struct AppToolAskUserInputOption: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let label: String
@@ -184,42 +212,55 @@ public enum AppToolAskUserInputSubmissionFormatter {
         request: AppToolAskUserInputRequest,
         submission: AppToolAskUserInputSubmission
     ) -> String {
-        var lines: [String] = []
-        if let title = request.title, !title.isEmpty {
-            lines.append("问答标题：\(title)")
-        }
         if submission.cancelled {
-            lines.append("问答结果：用户取消了本次问答。")
-        } else {
-            lines.append("问答结果：")
-            for answer in submission.answers {
-                var segments: [String] = []
-                if !answer.selectedOptionLabels.isEmpty {
-                    segments.append("已选：\(answer.selectedOptionLabels.joined(separator: "、"))")
+            return "用户取消了本次问答。"
+        }
+
+        let questionByID = Dictionary(uniqueKeysWithValues: request.questions.map { ($0.id, $0) })
+        var blocks: [String] = []
+        for answer in submission.answers {
+            let answerText = formattedAnswerText(answer, question: questionByID[answer.questionID])
+            blocks.append("Q: \(answer.question)\nA: \(answerText)")
+        }
+
+        if blocks.isEmpty {
+            return "用户未提供回答。"
+        }
+        return blocks.joined(separator: "\n\n")
+    }
+
+    private static func formattedAnswerText(
+        _ answer: AppToolAskUserInputQuestionAnswer,
+        question: AppToolAskUserInputQuestion?
+    ) -> String {
+        var segments: [String] = []
+
+        if let question {
+            let labelByOptionID = Dictionary(
+                uniqueKeysWithValues: question.options.map { option in
+                    (option.id, option.label)
                 }
-                if let other = answer.otherText?.trimmingCharacters(in: .whitespacesAndNewlines), !other.isEmpty {
-                    segments.append("其他：\(other)")
-                }
-                let detail = segments.isEmpty ? "未填写" : segments.joined(separator: "；")
-                lines.append("- \(answer.question)：\(detail)")
+            )
+            let selectedLabels = answer.selectedOptionIDs.compactMap { optionID in
+                labelByOptionID[optionID]
             }
+            if !selectedLabels.isEmpty {
+                segments.append(selectedLabels.joined(separator: ","))
+            } else if !answer.selectedOptionLabels.isEmpty {
+                segments.append(answer.selectedOptionLabels.joined(separator: ","))
+            }
+        } else if !answer.selectedOptionLabels.isEmpty {
+            segments.append(answer.selectedOptionLabels.joined(separator: ","))
         }
 
-        let payload: String
-        if let data = try? JSONEncoder().encode(submission),
-           let jsonObject = try? JSONSerialization.jsonObject(with: data),
-           let pretty = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
-           let text = String(data: pretty, encoding: .utf8) {
-            payload = text
-        } else {
-            payload = "{}"
+        if let other = AppToolAskUserInputAnswerPolicy.normalizedCustomText(answer.otherText) {
+            segments.append(other)
         }
-        lines.append("")
-        lines.append("```json")
-        lines.append(payload)
-        lines.append("```")
 
-        return lines.joined(separator: "\n")
+        if segments.isEmpty {
+            return "未填写"
+        }
+        return segments.joined(separator: ",")
     }
 }
 

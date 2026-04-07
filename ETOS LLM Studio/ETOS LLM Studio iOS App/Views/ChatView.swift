@@ -2038,63 +2038,55 @@ private struct AskUserInputComposerPanel: View {
     let cancelAction: () -> Void
 
     @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
-    @State private var otherEnabledByQuestion: [String: Bool] = [:]
     @State private var otherTextByQuestion: [String: String] = [:]
-
-    private var panelHeight: CGFloat {
-        let raw = UIScreen.main.bounds.height * 0.5
-        return min(max(raw, 260), 460)
-    }
+    @State private var currentQuestionIndex = 0
+    @State private var measuredQuestionContentHeight: CGFloat = 0
 
     private var canSubmit: Bool {
         request.questions.allSatisfy { question in
-            guard question.required else { return true }
-            let selected = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
-            let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let otherSelected = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
-            return selected || otherSelected
+            !question.required || isQuestionAnswered(question)
         }
+    }
+
+    private var currentQuestion: AppToolAskUserInputQuestion? {
+        guard request.questions.indices.contains(currentQuestionIndex) else { return nil }
+        return request.questions[currentQuestionIndex]
+    }
+
+    private var progressText: String {
+        let total = max(request.questions.count, 1)
+        let current = min(currentQuestionIndex + 1, total)
+        return "\(current) / \(total)"
+    }
+
+    private var questionContentMaxHeight: CGFloat {
+        min(UIScreen.main.bounds.height * 0.42, 340)
+    }
+
+    private var questionContentFrameHeight: CGFloat {
+        let measured = measuredQuestionContentHeight
+        guard measured > 1 else { return 180 }
+        return min(max(measured + 4, 120), questionContentMaxHeight)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(request.title ?? "请补充信息")
-                        .etFont(.headline)
-                    if let description = request.description, !description.isEmpty {
-                        Text(description)
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer(minLength: 8)
-                Button("取消", action: cancelAction)
-                    .etFont(.footnote)
-                    .buttonStyle(.bordered)
-            }
+            topBar
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(request.questions) { question in
-                        questionBlock(question)
-                    }
+            if let question = currentQuestion {
+                questionContent(for: question)
+                navigationInputBar(for: question)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("暂无可填写问题")
+                        .etFont(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-
-            Button(action: submit) {
-                Text(request.submitLabel)
-                    .etFont(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canSubmit)
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .frame(height: panelHeight, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(.ultraThinMaterial)
@@ -2109,6 +2101,65 @@ private struct AskUserInputComposerPanel: View {
         }
         .onChange(of: request) {
             resetSelectionState()
+        }
+        .onChange(of: currentQuestionIndex) {
+            measuredQuestionContentHeight = 0
+        }
+    }
+
+    private var topBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Button(action: goToPreviousQuestion) {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.bordered)
+                .disabled(currentQuestionIndex == 0)
+                .opacity(currentQuestionIndex == 0 ? 0.45 : 1)
+
+                Spacer(minLength: 6)
+
+                HStack(spacing: 8) {
+                    Text(progressText)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("取消", action: cancelAction)
+                        .etFont(.footnote)
+                        .buttonStyle(.bordered)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(request.title ?? "请补充信息")
+                    .etFont(.headline)
+                if let description = request.description, !description.isEmpty {
+                    Text(description)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.top, 2)
+            .padding(.leading, 2)
+        }
+    }
+
+    private func questionContent(for question: AppToolAskUserInputQuestion) -> some View {
+        ScrollView {
+            questionBlock(question)
+                .padding(.vertical, 2)
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: AskUserInputQuestionContentHeightPreferenceKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                )
+        }
+        .frame(height: questionContentFrameHeight, alignment: .top)
+        .onPreferenceChange(AskUserInputQuestionContentHeightPreferenceKey.self) { newHeight in
+            measuredQuestionContentHeight = newHeight
         }
     }
 
@@ -2149,40 +2200,53 @@ private struct AskUserInputComposerPanel: View {
                     .padding(.vertical, 2)
                 }
                 .buttonStyle(.plain)
-            }
-
-            if question.allowOther {
-                Button {
-                    toggleOther(question: question)
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: otherEnabledByQuestion[question.id] == true ? "checkmark.square.fill" : "square")
-                            .foregroundStyle(.blue)
-                            .frame(width: 20, alignment: .center)
-                        Text("其他")
-                            .etFont(.subheadline)
-                            .foregroundStyle(.primary)
-                        Spacer(minLength: 0)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                if otherEnabledByQuestion[question.id] == true {
-                    TextField(
-                        "请输入其他内容",
-                        text: Binding(
-                            get: { otherTextByQuestion[question.id, default: ""] },
-                            set: { otherTextByQuestion[question.id] = $0 }
-                        ),
-                        axis: .vertical
+                .disabled(
+                    !AppToolAskUserInputAnswerPolicy.canSelectOption(
+                        type: question.type,
+                        customText: otherTextByQuestion[question.id]
                     )
-                    .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.leading, 28)
-                }
+                )
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private func navigationInputBar(for question: AppToolAskUserInputQuestion) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "square.and.pencil")
+                .foregroundStyle(.secondary)
+
+            TextField(
+                "请输入自定义偏好",
+                text: Binding(
+                    get: { otherTextByQuestion[question.id, default: ""] },
+                    set: { newValue in
+                        otherTextByQuestion[question.id] = newValue
+                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                            type: question.type,
+                            customText: newValue
+                        ) {
+                            selectedOptionIDsByQuestion[question.id] = []
+                        }
+                    }
+                ),
+                axis: .vertical
+            )
+            .lineLimit(1...3)
+            .textFieldStyle(.plain)
+
+            Button(skipButtonTitle(for: question)) {
+                handleSkipOrSubmit(for: question)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canContinue(from: question))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.primary.opacity(0.07))
+        )
     }
 
     private func optionIconName(question: AppToolAskUserInputQuestion, optionID: String) -> String {
@@ -2196,6 +2260,12 @@ private struct AskUserInputComposerPanel: View {
     }
 
     private func toggleOption(question: AppToolAskUserInputQuestion, optionID: String) {
+        guard AppToolAskUserInputAnswerPolicy.canSelectOption(
+            type: question.type,
+            customText: otherTextByQuestion[question.id]
+        ) else {
+            return
+        }
         switch question.type {
         case .singleSelect:
             let current = selectedOptionIDsByQuestion[question.id, default: []]
@@ -2203,7 +2273,7 @@ private struct AskUserInputComposerPanel: View {
                 selectedOptionIDsByQuestion[question.id] = []
             } else {
                 selectedOptionIDsByQuestion[question.id] = [optionID]
-                otherEnabledByQuestion[question.id] = false
+                autoAdvanceIfNeeded(afterSelecting: question)
             }
         case .multiSelect:
             var current = selectedOptionIDsByQuestion[question.id, default: []]
@@ -2216,16 +2286,62 @@ private struct AskUserInputComposerPanel: View {
         }
     }
 
-    private func toggleOther(question: AppToolAskUserInputQuestion) {
-        let enabled = otherEnabledByQuestion[question.id] == true
-        otherEnabledByQuestion[question.id] = !enabled
-        if enabled {
-            otherTextByQuestion[question.id] = ""
+    private func autoAdvanceIfNeeded(afterSelecting question: AppToolAskUserInputQuestion) {
+        guard question.type == .singleSelect else { return }
+        if isLastQuestion(question) {
+            if canSubmit {
+                submit()
+            }
             return
         }
-        if question.type == .singleSelect {
-            selectedOptionIDsByQuestion[question.id] = []
+        guard canContinue(from: question) else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
         }
+    }
+
+    private func goToPreviousQuestion() {
+        guard currentQuestionIndex > 0 else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentQuestionIndex -= 1
+        }
+    }
+
+    private func handleSkipOrSubmit(for question: AppToolAskUserInputQuestion) {
+        guard canContinue(from: question) else { return }
+        if isLastQuestion(question) {
+            submit()
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
+        }
+    }
+
+    private func isQuestionAnswered(_ question: AppToolAskUserInputQuestion) -> Bool {
+        let selected = selectedOptionIDsByQuestion[question.id] ?? []
+        return AppToolAskUserInputAnswerPolicy.hasAnswer(
+            selectedOptionIDs: selected,
+            customText: otherTextByQuestion[question.id]
+        )
+    }
+
+    private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
+        if isLastQuestion(question) {
+            return canSubmit
+        }
+        return true
+    }
+
+    private func isLastQuestion(_ question: AppToolAskUserInputQuestion) -> Bool {
+        request.questions.last?.id == question.id
+    }
+
+    private func skipButtonTitle(for question: AppToolAskUserInputQuestion) -> String {
+        if isLastQuestion(question) {
+            return request.submitLabel
+        }
+        return isQuestionAnswered(question) ? "下一题" : "跳过"
     }
 
     private func submit() {
@@ -2236,13 +2352,9 @@ private struct AskUserInputComposerPanel: View {
             let selectedLabels = question.options
                 .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0.id) }
                 .map(\.label)
-            let rawOtherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let otherText: String?
-            if otherEnabledByQuestion[question.id] == true, let rawOtherText, !rawOtherText.isEmpty {
-                otherText = rawOtherText
-            } else {
-                otherText = nil
-            }
+            let otherText = AppToolAskUserInputAnswerPolicy.normalizedCustomText(
+                otherTextByQuestion[question.id]
+            )
 
             return AppToolAskUserInputQuestionAnswer(
                 questionID: question.id,
@@ -2258,8 +2370,17 @@ private struct AskUserInputComposerPanel: View {
 
     private func resetSelectionState() {
         selectedOptionIDsByQuestion = [:]
-        otherEnabledByQuestion = [:]
         otherTextByQuestion = [:]
+        currentQuestionIndex = 0
+        measuredQuestionContentHeight = 0
+    }
+}
+
+private struct AskUserInputQuestionContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
