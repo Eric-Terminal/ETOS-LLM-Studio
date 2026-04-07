@@ -2040,11 +2040,7 @@ private struct AskUserInputComposerPanel: View {
     @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
     @State private var otherTextByQuestion: [String: String] = [:]
     @State private var currentQuestionIndex = 0
-
-    private var panelHeight: CGFloat {
-        let raw = UIScreen.main.bounds.height * 0.58
-        return min(max(raw, 300), 520)
-    }
+    @State private var measuredQuestionContentHeight: CGFloat = 0
 
     private var canSubmit: Bool {
         request.questions.allSatisfy { question in
@@ -2063,15 +2059,26 @@ private struct AskUserInputComposerPanel: View {
         return "\(current) / \(total)"
     }
 
+    private var questionContentMaxHeight: CGFloat {
+        min(UIScreen.main.bounds.height * 0.42, 340)
+    }
+
+    private var questionContentFrameHeight: CGFloat {
+        let measured = measuredQuestionContentHeight
+        guard measured > 1 else { return 180 }
+        return min(max(measured + 4, 120), questionContentMaxHeight)
+    }
+
+    private var panelMaxHeight: CGFloat {
+        min(UIScreen.main.bounds.height * 0.72, 560)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             topBar
 
             if let question = currentQuestion {
-                ScrollView {
-                    questionBlock(question)
-                        .padding(.vertical, 2)
-                }
+                questionContent(for: question)
                 navigationInputBar(for: question)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -2084,7 +2091,7 @@ private struct AskUserInputComposerPanel: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .frame(height: panelHeight, alignment: .top)
+        .frame(maxHeight: panelMaxHeight, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(.ultraThinMaterial)
@@ -2100,17 +2107,33 @@ private struct AskUserInputComposerPanel: View {
         .onChange(of: request) {
             resetSelectionState()
         }
+        .onChange(of: currentQuestionIndex) {
+            measuredQuestionContentHeight = 0
+        }
     }
 
     private var topBar: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Button(action: goToPreviousQuestion) {
-                Image(systemName: "chevron.left")
-                    .frame(width: 30, height: 30)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Button(action: goToPreviousQuestion) {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.bordered)
+                .disabled(currentQuestionIndex == 0)
+                .opacity(currentQuestionIndex == 0 ? 0.45 : 1)
+
+                Spacer(minLength: 6)
+
+                HStack(spacing: 8) {
+                    Text(progressText)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("取消", action: cancelAction)
+                        .etFont(.footnote)
+                        .buttonStyle(.bordered)
+                }
             }
-            .buttonStyle(.bordered)
-            .disabled(currentQuestionIndex == 0)
-            .opacity(currentQuestionIndex == 0 ? 0.45 : 1)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(request.title ?? "请补充信息")
@@ -2121,17 +2144,27 @@ private struct AskUserInputComposerPanel: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .padding(.top, 2)
+            .padding(.leading, 2)
+        }
+    }
 
-            Spacer(minLength: 6)
-
-            HStack(spacing: 8) {
-                Text(progressText)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                Button("取消", action: cancelAction)
-                    .etFont(.footnote)
-                    .buttonStyle(.bordered)
-            }
+    private func questionContent(for question: AppToolAskUserInputQuestion) -> some View {
+        ScrollView {
+            questionBlock(question)
+                .padding(.vertical, 2)
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: AskUserInputQuestionContentHeightPreferenceKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                )
+        }
+        .frame(height: questionContentFrameHeight, alignment: .top)
+        .onPreferenceChange(AskUserInputQuestionContentHeightPreferenceKey.self) { newHeight in
+            measuredQuestionContentHeight = newHeight
         }
     }
 
@@ -2302,9 +2335,6 @@ private struct AskUserInputComposerPanel: View {
         if isLastQuestion(question) {
             return canSubmit
         }
-        if question.required {
-            return isQuestionAnswered(question)
-        }
         return true
     }
 
@@ -2347,6 +2377,15 @@ private struct AskUserInputComposerPanel: View {
         selectedOptionIDsByQuestion = [:]
         otherTextByQuestion = [:]
         currentQuestionIndex = 0
+        measuredQuestionContentHeight = 0
+    }
+}
+
+private struct AskUserInputQuestionContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

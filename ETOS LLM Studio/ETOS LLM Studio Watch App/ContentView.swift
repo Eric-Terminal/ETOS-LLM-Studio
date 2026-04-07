@@ -1052,9 +1052,6 @@ private struct WatchAskUserInputView: View {
         if isLastQuestion(question) {
             return canSubmit
         }
-        if question.required {
-            return isQuestionAnswered(question)
-        }
         return true
     }
 
