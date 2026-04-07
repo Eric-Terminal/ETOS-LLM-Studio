@@ -236,16 +236,16 @@ public enum AppToolAskUserInputSubmissionFormatter {
         var segments: [String] = []
 
         if let question {
-            let indexByOptionID = Dictionary(
-                uniqueKeysWithValues: question.options.enumerated().map { index, option in
-                    (option.id, index + 1)
+            let labelByOptionID = Dictionary(
+                uniqueKeysWithValues: question.options.map { option in
+                    (option.id, option.label)
                 }
             )
-            let selectedIndexes = answer.selectedOptionIDs.compactMap { optionID in
-                indexByOptionID[optionID].map(String.init)
+            let selectedLabels = answer.selectedOptionIDs.compactMap { optionID in
+                labelByOptionID[optionID]
             }
-            if !selectedIndexes.isEmpty {
-                segments.append(selectedIndexes.joined(separator: ","))
+            if !selectedLabels.isEmpty {
+                segments.append(selectedLabels.joined(separator: ","))
             } else if !answer.selectedOptionLabels.isEmpty {
                 segments.append(answer.selectedOptionLabels.joined(separator: ","))
             }
