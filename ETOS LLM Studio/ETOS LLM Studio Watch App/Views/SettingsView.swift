@@ -199,7 +199,7 @@ struct SettingsView: View {
                     }
                     
                     NavigationLink(destination: DeviceSyncSettingsView()) {
-                        Label("设备同步", systemImage: "arrow.triangle.2.circlepath")
+                        Label("同步与备份", systemImage: "arrow.triangle.2.circlepath")
                     }
                     
                     NavigationLink(destination: AboutView()) {

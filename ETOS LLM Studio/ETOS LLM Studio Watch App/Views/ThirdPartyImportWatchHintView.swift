@@ -168,7 +168,7 @@ struct ThirdPartyImportWatchHintView: View {
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
         case .etosBackup:
-            return "支持导入 ETOS 导出的 JSON 数据包（含设备同步导出）。"
+            return "支持导入 ETOS 导出的 JSON 数据包（含“同步与备份”导出）。"
         case .cherryStudio:
             return "支持 Cherry Studio 的 .json；若是 .zip / .bak，请先解压后再导入。"
         case .rikkahub:

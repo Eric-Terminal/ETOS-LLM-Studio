@@ -151,7 +151,7 @@ struct DeviceSyncSettingsView: View {
                 cloudSyncStatusView
             }
         }
-        .navigationTitle("设备同步")
+        .navigationTitle("同步与备份")
         .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
         .sheet(item: $exportSharePayload) { payload in
             DeviceSyncActivityShareSheet(activityItems: [payload.fileURL])

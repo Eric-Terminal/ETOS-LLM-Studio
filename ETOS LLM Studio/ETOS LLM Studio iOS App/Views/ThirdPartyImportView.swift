@@ -139,7 +139,7 @@ struct ThirdPartyImportView: View {
                     Text(NSLocalizedString("导入范围", comment: "Import scope section title"))
                 } footer: {
                     if preparedResult.source == .etosBackup {
-                        Text("导入后会立即执行与设备同步一致的合并策略。")
+                        Text("导入后会立即执行与“同步与备份”一致的合并策略。")
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
@@ -263,7 +263,7 @@ struct ThirdPartyImportView: View {
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
         case .etosBackup:
-            return NSLocalizedString("支持导入 ETOS 导出的 JSON 数据包（包含设备同步页导出的备份）。", comment: "ETOS source hint")
+            return NSLocalizedString("支持导入 ETOS 导出的 JSON 数据包（包含“同步与备份”页导出的备份）。", comment: "ETOS source hint")
         case .cherryStudio:
             return NSLocalizedString("支持 Cherry Studio 的 .json 或解压后的备份目录；若是 .zip / .bak，请先解压后再导入。", comment: "Cherry source hint")
         case .rikkahub:

@@ -144,7 +144,7 @@ struct DeviceSyncSettingsView: View {
                 }
             }
         }
-        .navigationTitle("设备同步")
+        .navigationTitle("同步与备份")
         .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
     }
     
