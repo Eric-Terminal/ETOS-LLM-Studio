@@ -2040,57 +2040,48 @@ private struct AskUserInputComposerPanel: View {
     @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
     @State private var otherEnabledByQuestion: [String: Bool] = [:]
     @State private var otherTextByQuestion: [String: String] = [:]
+    @State private var currentQuestionIndex = 0
 
     private var panelHeight: CGFloat {
-        let raw = UIScreen.main.bounds.height * 0.5
-        return min(max(raw, 260), 460)
+        let raw = UIScreen.main.bounds.height * 0.58
+        return min(max(raw, 300), 520)
     }
 
     private var canSubmit: Bool {
         request.questions.allSatisfy { question in
-            guard question.required else { return true }
-            let selected = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
-            let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let otherSelected = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
-            return selected || otherSelected
+            !question.required || isQuestionAnswered(question)
         }
+    }
+
+    private var currentQuestion: AppToolAskUserInputQuestion? {
+        guard request.questions.indices.contains(currentQuestionIndex) else { return nil }
+        return request.questions[currentQuestionIndex]
+    }
+
+    private var progressText: String {
+        let total = max(request.questions.count, 1)
+        let current = min(currentQuestionIndex + 1, total)
+        return "\(current) / \(total)"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(request.title ?? "请补充信息")
-                        .etFont(.headline)
-                    if let description = request.description, !description.isEmpty {
-                        Text(description)
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer(minLength: 8)
-                Button("取消", action: cancelAction)
-                    .etFont(.footnote)
-                    .buttonStyle(.bordered)
-            }
+            topBar
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(request.questions) { question in
-                        questionBlock(question)
-                    }
+            if let question = currentQuestion {
+                ScrollView {
+                    questionBlock(question)
+                        .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
+                navigationInputBar(for: question)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("暂无可填写问题")
+                        .etFont(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-
-            Button(action: submit) {
-                Text(request.submitLabel)
-                    .etFont(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canSubmit)
         }
         .padding(14)
         .frame(maxWidth: .infinity)
@@ -2109,6 +2100,39 @@ private struct AskUserInputComposerPanel: View {
         }
         .onChange(of: request) {
             resetSelectionState()
+        }
+    }
+
+    private var topBar: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button(action: goToPreviousQuestion) {
+                Image(systemName: "chevron.left")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.bordered)
+            .disabled(currentQuestionIndex == 0)
+            .opacity(currentQuestionIndex == 0 ? 0.45 : 1)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(request.title ?? "请补充信息")
+                    .etFont(.headline)
+                if let description = request.description, !description.isEmpty {
+                    Text(description)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 8) {
+                Text(progressText)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                Button("取消", action: cancelAction)
+                    .etFont(.footnote)
+                    .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -2185,6 +2209,46 @@ private struct AskUserInputComposerPanel: View {
         .padding(.vertical, 2)
     }
 
+    private func navigationInputBar(for question: AppToolAskUserInputQuestion) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "square.and.pencil")
+                .foregroundStyle(.secondary)
+
+            if question.allowOther {
+                TextField(
+                    "请输入其他内容",
+                    text: Binding(
+                        get: { otherTextByQuestion[question.id, default: ""] },
+                        set: { newValue in
+                            otherTextByQuestion[question.id] = newValue
+                            let normalized = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                            otherEnabledByQuestion[question.id] = !normalized.isEmpty
+                        }
+                    ),
+                    axis: .vertical
+                )
+                .lineLimit(1...3)
+                .textFieldStyle(.plain)
+            } else {
+                TextField("此题不支持自定义输入", text: .constant(""))
+                    .disabled(true)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(skipButtonTitle(for: question)) {
+                handleSkipOrSubmit(for: question)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canContinue(from: question))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.primary.opacity(0.07))
+        )
+    }
+
     private func optionIconName(question: AppToolAskUserInputQuestion, optionID: String) -> String {
         let isSelected = selectedOptionIDsByQuestion[question.id, default: []].contains(optionID)
         switch question.type {
@@ -2204,6 +2268,8 @@ private struct AskUserInputComposerPanel: View {
             } else {
                 selectedOptionIDsByQuestion[question.id] = [optionID]
                 otherEnabledByQuestion[question.id] = false
+                otherTextByQuestion[question.id] = ""
+                autoAdvanceIfNeeded(afterSelecting: question)
             }
         case .multiSelect:
             var current = selectedOptionIDsByQuestion[question.id, default: []]
@@ -2226,6 +2292,66 @@ private struct AskUserInputComposerPanel: View {
         if question.type == .singleSelect {
             selectedOptionIDsByQuestion[question.id] = []
         }
+    }
+
+    private func autoAdvanceIfNeeded(afterSelecting question: AppToolAskUserInputQuestion) {
+        guard question.type == .singleSelect else { return }
+        if isLastQuestion(question) {
+            if canSubmit {
+                submit()
+            }
+            return
+        }
+        guard canContinue(from: question) else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
+        }
+    }
+
+    private func goToPreviousQuestion() {
+        guard currentQuestionIndex > 0 else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentQuestionIndex -= 1
+        }
+    }
+
+    private func handleSkipOrSubmit(for question: AppToolAskUserInputQuestion) {
+        guard canContinue(from: question) else { return }
+        if isLastQuestion(question) {
+            submit()
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
+        }
+    }
+
+    private func isQuestionAnswered(_ question: AppToolAskUserInputQuestion) -> Bool {
+        let selected = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
+        let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let otherSelected = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
+        return selected || otherSelected
+    }
+
+    private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
+        if isLastQuestion(question) {
+            return canSubmit
+        }
+        if question.required {
+            return isQuestionAnswered(question)
+        }
+        return true
+    }
+
+    private func isLastQuestion(_ question: AppToolAskUserInputQuestion) -> Bool {
+        request.questions.last?.id == question.id
+    }
+
+    private func skipButtonTitle(for question: AppToolAskUserInputQuestion) -> String {
+        if isLastQuestion(question) {
+            return request.submitLabel
+        }
+        return isQuestionAnswered(question) ? "下一题" : "跳过"
     }
 
     private func submit() {
@@ -2260,6 +2386,7 @@ private struct AskUserInputComposerPanel: View {
         selectedOptionIDsByQuestion = [:]
         otherEnabledByQuestion = [:]
         otherTextByQuestion = [:]
+        currentQuestionIndex = 0
     }
 }
 

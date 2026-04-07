@@ -835,16 +835,24 @@ private struct WatchAskUserInputView: View {
     @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
     @State private var otherEnabledByQuestion: [String: Bool] = [:]
     @State private var otherTextByQuestion: [String: String] = [:]
+    @State private var currentQuestionIndex = 0
     @State private var hasHandledAction = false
 
     private var canSubmit: Bool {
         request.questions.allSatisfy { question in
-            guard question.required else { return true }
-            let hasSelectedOption = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
-            let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let hasOtherText = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
-            return hasSelectedOption || hasOtherText
+            !question.required || isQuestionAnswered(question)
         }
+    }
+
+    private var currentQuestion: AppToolAskUserInputQuestion? {
+        guard request.questions.indices.contains(currentQuestionIndex) else { return nil }
+        return request.questions[currentQuestionIndex]
+    }
+
+    private var progressText: String {
+        let total = max(request.questions.count, 1)
+        let current = min(currentQuestionIndex + 1, total)
+        return "\(current) / \(total)"
     }
 
     var body: some View {
@@ -863,9 +871,12 @@ private struct WatchAskUserInputView: View {
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                    Text(progressText)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
-                ForEach(request.questions) { question in
+                if let question = currentQuestion {
                     Section {
                         ForEach(question.options) { option in
                             Button {
@@ -900,16 +911,6 @@ private struct WatchAskUserInputView: View {
                                 }
                             }
                             .buttonStyle(.plain)
-
-                            if otherEnabledByQuestion[question.id] == true {
-                                TextField(
-                                    "请输入其他内容",
-                                    text: Binding(
-                                        get: { otherTextByQuestion[question.id, default: ""] },
-                                        set: { otherTextByQuestion[question.id] = $0 }
-                                    )
-                                )
-                            }
                         }
                     } header: {
                         HStack(spacing: 4) {
@@ -920,19 +921,51 @@ private struct WatchAskUserInputView: View {
                             }
                         }
                     }
-                }
 
-                Section {
-                    Button(action: submit) {
-                        Text(request.submitLabel)
-                            .frame(maxWidth: .infinity)
+                    Section {
+                        HStack(spacing: 6) {
+                            if question.allowOther {
+                                TextField(
+                                    "请输入其他内容",
+                                    text: Binding(
+                                        get: { otherTextByQuestion[question.id, default: ""] },
+                                        set: { newValue in
+                                            otherTextByQuestion[question.id] = newValue
+                                            let normalized = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                            otherEnabledByQuestion[question.id] = !normalized.isEmpty
+                                        }
+                                    )
+                                )
+                            } else {
+                                TextField("此题不支持自定义输入", text: .constant(""))
+                                    .disabled(true)
+                            }
+
+                            Button(skipButtonTitle(for: question)) {
+                                handleSkipOrSubmit(for: question)
+                            }
+                            .disabled(!canContinue(from: question))
+                        }
                     }
-                    .disabled(!canSubmit)
+                } else {
+                    Section {
+                        Text("暂无可填写问题")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("结构化问答")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        goToPreviousQuestion()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .disabled(currentQuestionIndex == 0)
+                    .opacity(currentQuestionIndex == 0 ? 0.45 : 1)
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
                         handleCancelAndDismiss()
@@ -973,6 +1006,8 @@ private struct WatchAskUserInputView: View {
             } else {
                 selectedOptionIDsByQuestion[question.id] = [optionID]
                 otherEnabledByQuestion[question.id] = false
+                otherTextByQuestion[question.id] = ""
+                autoAdvanceIfNeeded(afterSelecting: question)
             }
         case .multiSelect:
             var current = selectedOptionIDsByQuestion[question.id, default: []]
@@ -995,6 +1030,60 @@ private struct WatchAskUserInputView: View {
         if question.type == .singleSelect {
             selectedOptionIDsByQuestion[question.id] = []
         }
+    }
+
+    private func autoAdvanceIfNeeded(afterSelecting question: AppToolAskUserInputQuestion) {
+        guard question.type == .singleSelect else { return }
+        if isLastQuestion(question) {
+            if canSubmit {
+                submit()
+            }
+            return
+        }
+        guard canContinue(from: question) else { return }
+        currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
+    }
+
+    private func goToPreviousQuestion() {
+        guard currentQuestionIndex > 0 else { return }
+        currentQuestionIndex -= 1
+    }
+
+    private func handleSkipOrSubmit(for question: AppToolAskUserInputQuestion) {
+        guard canContinue(from: question) else { return }
+        if isLastQuestion(question) {
+            submit()
+            return
+        }
+        currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
+    }
+
+    private func isQuestionAnswered(_ question: AppToolAskUserInputQuestion) -> Bool {
+        let hasSelectedOption = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
+        let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let hasOtherText = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
+        return hasSelectedOption || hasOtherText
+    }
+
+    private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
+        if isLastQuestion(question) {
+            return canSubmit
+        }
+        if question.required {
+            return isQuestionAnswered(question)
+        }
+        return true
+    }
+
+    private func isLastQuestion(_ question: AppToolAskUserInputQuestion) -> Bool {
+        request.questions.last?.id == question.id
+    }
+
+    private func skipButtonTitle(for question: AppToolAskUserInputQuestion) -> String {
+        if isLastQuestion(question) {
+            return request.submitLabel
+        }
+        return isQuestionAnswered(question) ? "下一题" : "跳过"
     }
 
     private func submit() {
@@ -1036,6 +1125,7 @@ private struct WatchAskUserInputView: View {
         selectedOptionIDsByQuestion = [:]
         otherEnabledByQuestion = [:]
         otherTextByQuestion = [:]
+        currentQuestionIndex = 0
     }
 }
 
