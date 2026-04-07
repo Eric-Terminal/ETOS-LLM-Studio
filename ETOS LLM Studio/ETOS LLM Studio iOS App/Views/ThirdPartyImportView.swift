@@ -1,7 +1,7 @@
 // ============================================================================
 // ThirdPartyImportView.swift
 // ============================================================================
-// 第三方导入页面 (iOS)
+// 导入数据页面 (iOS)
 // - 提供来源选择 + 文件解析预览 + 勾选导入
 // - 导入后展示合并摘要
 // ============================================================================
@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 import Shared
 
 struct ThirdPartyImportView: View {
-    @State private var selectedSource: ThirdPartyImportSource = .cherryStudio
+    @State private var selectedSource: ThirdPartyImportSource = .etosBackup
     @State private var isFileImporterPresented: Bool = false
     @State private var isPreparing: Bool = false
     @State private var isImporting: Bool = false
@@ -71,6 +71,12 @@ struct ThirdPartyImportView: View {
 
             if let preparedResult {
                 Section(NSLocalizedString("解析预览", comment: "Prepared import preview title")) {
+                    if preparedResult.source == .etosBackup {
+                        row(
+                            title: NSLocalizedString("导出同步项", comment: "ETOS package sync options row"),
+                            value: syncOptionSummary(preparedResult.package.options)
+                        )
+                    }
                     row(
                         title: NSLocalizedString("识别到提供商", comment: "Parsed providers row"),
                         value: "\(preparedResult.parsedProvidersCount)"
@@ -79,37 +85,45 @@ struct ThirdPartyImportView: View {
                         title: NSLocalizedString("识别到会话", comment: "Parsed sessions row"),
                         value: "\(preparedResult.parsedSessionsCount)"
                     )
-                    row(
-                        title: NSLocalizedString("可能冲突提供商", comment: "Potential provider conflicts"),
-                        value: "\(conflictPreview.providerConflicts)"
-                    )
-                    row(
-                        title: NSLocalizedString("可能冲突会话", comment: "Potential session conflicts"),
-                        value: "\(conflictPreview.sessionConflicts)"
-                    )
-                    row(
-                        title: NSLocalizedString("预计新增提供商", comment: "Estimated new providers"),
-                        value: "\(conflictPreview.providerAdds)"
-                    )
-                    row(
-                        title: NSLocalizedString("预计新增会话", comment: "Estimated new sessions"),
-                        value: "\(conflictPreview.sessionAdds)"
-                    )
+                    if preparedResult.source != .etosBackup {
+                        row(
+                            title: NSLocalizedString("可能冲突提供商", comment: "Potential provider conflicts"),
+                            value: "\(conflictPreview.providerConflicts)"
+                        )
+                        row(
+                            title: NSLocalizedString("可能冲突会话", comment: "Potential session conflicts"),
+                            value: "\(conflictPreview.sessionConflicts)"
+                        )
+                        row(
+                            title: NSLocalizedString("预计新增提供商", comment: "Estimated new providers"),
+                            value: "\(conflictPreview.providerAdds)"
+                        )
+                        row(
+                            title: NSLocalizedString("预计新增会话", comment: "Estimated new sessions"),
+                            value: "\(conflictPreview.sessionAdds)"
+                        )
+                    }
                 }
 
                 Section {
-                    if preparedResult.parsedProvidersCount > 0 {
-                        Toggle(
-                            NSLocalizedString("导入提供商配置", comment: "Import providers toggle"),
-                            isOn: $includeProviders
-                        )
-                    }
+                    if preparedResult.source == .etosBackup {
+                        Text("ETOS 数据包会按导出时勾选的同步项执行全量导入。")
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        if preparedResult.parsedProvidersCount > 0 {
+                            Toggle(
+                                NSLocalizedString("导入提供商配置", comment: "Import providers toggle"),
+                                isOn: $includeProviders
+                            )
+                        }
 
-                    if preparedResult.parsedSessionsCount > 0 {
-                        Toggle(
-                            NSLocalizedString("导入会话记录", comment: "Import sessions toggle"),
-                            isOn: $includeSessions
-                        )
+                        if preparedResult.parsedSessionsCount > 0 {
+                            Toggle(
+                                NSLocalizedString("导入会话记录", comment: "Import sessions toggle"),
+                                isOn: $includeSessions
+                            )
+                        }
                     }
 
                     Button {
@@ -124,9 +138,15 @@ struct ThirdPartyImportView: View {
                 } header: {
                     Text(NSLocalizedString("导入范围", comment: "Import scope section title"))
                 } footer: {
-                    Text(NSLocalizedString("冲突预览为本地启发式估算，最终结果以导入完成后的统计为准。", comment: "Import scope footer"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
+                    if preparedResult.source == .etosBackup {
+                        Text("导入后会立即执行与“同步与备份”一致的合并策略。")
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(NSLocalizedString("冲突预览为本地启发式估算，最终结果以导入完成后的统计为准。", comment: "Import scope footer"))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if !preparedResult.warnings.isEmpty {
@@ -187,7 +207,7 @@ struct ThirdPartyImportView: View {
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("第三方导入", comment: "Third-party import nav title"))
+        .navigationTitle(NSLocalizedString("导入数据", comment: "Import data nav title"))
         .fileImporter(
             isPresented: $isFileImporterPresented,
             allowedContentTypes: allowedContentTypes,
@@ -205,9 +225,12 @@ struct ThirdPartyImportView: View {
     }
 
     private var canStartImport: Bool {
-        if preparedResult == nil { return false }
-        let hasProviderSelection = includeProviders && (preparedResult?.parsedProvidersCount ?? 0) > 0
-        let hasSessionSelection = includeSessions && (preparedResult?.parsedSessionsCount ?? 0) > 0
+        guard let preparedResult else { return false }
+        if preparedResult.source == .etosBackup {
+            return !preparedResult.package.options.isEmpty
+        }
+        let hasProviderSelection = includeProviders && preparedResult.parsedProvidersCount > 0
+        let hasSessionSelection = includeSessions && preparedResult.parsedSessionsCount > 0
         return hasProviderSelection || hasSessionSelection
     }
 
@@ -225,7 +248,7 @@ struct ThirdPartyImportView: View {
         append(.data)
         append(.folder)
 
-        if selectedSource != .chatgpt {
+        if selectedSource == .cherryStudio || selectedSource == .rikkahub || selectedSource == .kelivo {
             if let zipType = UTType(filenameExtension: "zip") {
                 append(zipType)
             }
@@ -239,6 +262,8 @@ struct ThirdPartyImportView: View {
 
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
+        case .etosBackup:
+            return NSLocalizedString("支持导入 ETOS 导出的 JSON 数据包（包含“同步与备份”页导出的备份）。", comment: "ETOS source hint")
         case .cherryStudio:
             return NSLocalizedString("支持 Cherry Studio 的 .json 或解压后的备份目录；若是 .zip / .bak，请先解压后再导入。", comment: "Cherry source hint")
         case .rikkahub:
@@ -278,8 +303,8 @@ struct ThirdPartyImportView: View {
                 let preview = buildConflictPreview(for: prepared.package)
                 await MainActor.run {
                     preparedResult = prepared
-                    includeProviders = prepared.parsedProvidersCount > 0
-                    includeSessions = prepared.parsedSessionsCount > 0
+                    includeProviders = prepared.package.options.contains(.providers)
+                    includeSessions = prepared.package.options.contains(.sessions)
                     conflictPreview = preview
                     isPreparing = false
                 }
@@ -294,6 +319,33 @@ struct ThirdPartyImportView: View {
 
     private func startImport() {
         guard let preparedResult else { return }
+
+        if preparedResult.source == .etosBackup {
+            guard !preparedResult.package.options.isEmpty else {
+                importError = NSLocalizedString("导出包没有包含可导入的数据。", comment: "ETOS package empty options")
+                return
+            }
+
+            isImporting = true
+            importError = nil
+
+            Task {
+                let summary = await SyncEngine.apply(package: preparedResult.package)
+                let report = ThirdPartyImportReport(
+                    source: preparedResult.source,
+                    parsedProvidersCount: preparedResult.parsedProvidersCount,
+                    parsedSessionsCount: preparedResult.parsedSessionsCount,
+                    summary: summary,
+                    warnings: preparedResult.warnings
+                )
+
+                await MainActor.run {
+                    importReport = report
+                    isImporting = false
+                }
+            }
+            return
+        }
 
         var options: SyncOptions = []
         let providers: [Provider]
@@ -351,6 +403,25 @@ struct ThirdPartyImportView: View {
         conflictPreview = .empty
         includeProviders = true
         includeSessions = true
+    }
+
+    private func syncOptionSummary(_ options: SyncOptions) -> String {
+        var items: [String] = []
+        if options.contains(.providers) { items.append("提供商配置") }
+        if options.contains(.sessions) { items.append("会话记录") }
+        if options.contains(.backgrounds) { items.append("背景图片") }
+        if options.contains(.memories) { items.append("记忆") }
+        if options.contains(.mcpServers) { items.append("MCP 服务器") }
+        if options.contains(.audioFiles) { items.append("音频文件") }
+        if options.contains(.imageFiles) { items.append("图片文件") }
+        if options.contains(.skills) { items.append("Agent Skills") }
+        if options.contains(.shortcutTools) { items.append("快捷指令工具") }
+        if options.contains(.worldbooks) { items.append("世界书") }
+        if options.contains(.feedbackTickets) { items.append("反馈工单") }
+        if options.contains(.dailyPulse) { items.append("每日脉冲") }
+        if options.contains(.fontFiles) { items.append("字体文件与规则") }
+        if options.contains(.appStorage) { items.append("软件设置") }
+        return items.isEmpty ? "无" : items.joined(separator: "、")
     }
 
     private func buildConflictPreview(for package: SyncPackage) -> ConflictPreview {

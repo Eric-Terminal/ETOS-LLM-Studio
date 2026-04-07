@@ -45,12 +45,192 @@ public struct AppToolInputDraftRequest: Equatable, Sendable {
     }
 }
 
+public enum AppToolAskUserInputQuestionType: String, Codable, Hashable, Sendable {
+    case singleSelect = "single_select"
+    case multiSelect = "multi_select"
+}
+
+public struct AppToolAskUserInputOption: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+    public let description: String?
+
+    public init(id: String, label: String, description: String? = nil) {
+        self.id = id
+        self.label = label
+        self.description = description
+    }
+}
+
+public struct AppToolAskUserInputQuestion: Codable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let question: String
+    public let type: AppToolAskUserInputQuestionType
+    public let options: [AppToolAskUserInputOption]
+    public let allowOther: Bool
+    public let required: Bool
+
+    public init(
+        id: String,
+        question: String,
+        type: AppToolAskUserInputQuestionType,
+        options: [AppToolAskUserInputOption],
+        allowOther: Bool,
+        required: Bool
+    ) {
+        self.id = id
+        self.question = question
+        self.type = type
+        self.options = options
+        self.allowOther = allowOther
+        self.required = required
+    }
+}
+
+public struct AppToolAskUserInputRequest: Codable, Identifiable, Equatable, Sendable {
+    public static let payloadUserInfoKey = "payload"
+
+    public let requestID: String
+    public let title: String?
+    public let description: String?
+    public let submitLabel: String
+    public let questions: [AppToolAskUserInputQuestion]
+
+    public init(
+        requestID: String,
+        title: String?,
+        description: String?,
+        submitLabel: String,
+        questions: [AppToolAskUserInputQuestion]
+    ) {
+        self.requestID = requestID
+        self.title = title
+        self.description = description
+        self.submitLabel = submitLabel
+        self.questions = questions
+    }
+
+    public var id: String { requestID }
+
+    public var userInfo: [AnyHashable: Any] {
+        [Self.payloadUserInfoKey: encodedJSONString]
+    }
+
+    public static func decode(from userInfo: [AnyHashable: Any]?) -> AppToolAskUserInputRequest? {
+        guard let userInfo,
+              let payload = userInfo[payloadUserInfoKey] as? String,
+              let data = payload.data(using: .utf8),
+              let request = try? JSONDecoder().decode(Self.self, from: data) else {
+            return nil
+        }
+        return request
+    }
+
+    private var encodedJSONString: String {
+        guard let data = try? JSONEncoder().encode(self),
+              let text = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return text
+    }
+}
+
+public struct AppToolAskUserInputQuestionAnswer: Codable, Equatable, Sendable {
+    public let questionID: String
+    public let question: String
+    public let type: AppToolAskUserInputQuestionType
+    public let selectedOptionIDs: [String]
+    public let selectedOptionLabels: [String]
+    public let otherText: String?
+
+    public init(
+        questionID: String,
+        question: String,
+        type: AppToolAskUserInputQuestionType,
+        selectedOptionIDs: [String],
+        selectedOptionLabels: [String],
+        otherText: String?
+    ) {
+        self.questionID = questionID
+        self.question = question
+        self.type = type
+        self.selectedOptionIDs = selectedOptionIDs
+        self.selectedOptionLabels = selectedOptionLabels
+        self.otherText = otherText
+    }
+}
+
+public struct AppToolAskUserInputSubmission: Codable, Equatable, Sendable {
+    public let requestID: String
+    public let cancelled: Bool
+    public let submittedAt: String
+    public let answers: [AppToolAskUserInputQuestionAnswer]
+
+    public init(
+        requestID: String,
+        cancelled: Bool,
+        submittedAt: String,
+        answers: [AppToolAskUserInputQuestionAnswer]
+    ) {
+        self.requestID = requestID
+        self.cancelled = cancelled
+        self.submittedAt = submittedAt
+        self.answers = answers
+    }
+}
+
+public enum AppToolAskUserInputSubmissionFormatter {
+    public static func messageContent(
+        request: AppToolAskUserInputRequest,
+        submission: AppToolAskUserInputSubmission
+    ) -> String {
+        var lines: [String] = []
+        if let title = request.title, !title.isEmpty {
+            lines.append("问答标题：\(title)")
+        }
+        if submission.cancelled {
+            lines.append("问答结果：用户取消了本次问答。")
+        } else {
+            lines.append("问答结果：")
+            for answer in submission.answers {
+                var segments: [String] = []
+                if !answer.selectedOptionLabels.isEmpty {
+                    segments.append("已选：\(answer.selectedOptionLabels.joined(separator: "、"))")
+                }
+                if let other = answer.otherText?.trimmingCharacters(in: .whitespacesAndNewlines), !other.isEmpty {
+                    segments.append("其他：\(other)")
+                }
+                let detail = segments.isEmpty ? "未填写" : segments.joined(separator: "；")
+                lines.append("- \(answer.question)：\(detail)")
+            }
+        }
+
+        let payload: String
+        if let data = try? JSONEncoder().encode(submission),
+           let jsonObject = try? JSONSerialization.jsonObject(with: data),
+           let pretty = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
+           let text = String(data: pretty, encoding: .utf8) {
+            payload = text
+        } else {
+            payload = "{}"
+        }
+        lines.append("")
+        lines.append("```json")
+        lines.append(payload)
+        lines.append("```")
+
+        return lines.joined(separator: "\n")
+    }
+}
+
 public extension Notification.Name {
     static let appToolFillUserInputRequested = Notification.Name("com.ETOS.LLM.Studio.appTool.fillUserInput")
+    static let appToolAskUserInputRequested = Notification.Name("com.ETOS.LLM.Studio.appTool.askUserInput")
 }
 
 public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable {
     case showWidget = "show_widget"
+    case askUserInput = "ask_user_input"
     case echoText = "echo_text"
     case fillUserInput = "fill_user_input"
     case editMemory = "edit_memory"
@@ -74,7 +254,7 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var requiresApproval: Bool {
         switch self {
-        case .showWidget:
+        case .showWidget, .askUserInput:
             return false
         default:
             return true
@@ -85,6 +265,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .showWidget:
             return "app_show_widget"
+        case .askUserInput:
+            return "app_ask_user_input"
         case .echoText:
             return "app_echo_text"
         case .fillUserInput:
@@ -128,6 +310,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .showWidget:
             return NSLocalizedString("显示网页卡片", comment: "Show widget tool name")
+        case .askUserInput:
+            return NSLocalizedString("询问用户选项", comment: "Ask user input tool name")
         case .echoText:
             return NSLocalizedString("示例：文本回显", comment: "Example echo tool name")
         case .fillUserInput:
@@ -171,6 +355,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .showWidget:
             return NSLocalizedString("在聊天中渲染可视化网页卡片（Widget）。", comment: "Show widget tool summary")
+        case .askUserInput:
+            return NSLocalizedString("弹出结构化问答面板，支持单选、多选和“其他输入”。", comment: "Ask user input tool summary")
         case .echoText:
             return NSLocalizedString("把传入文本原样返回，用于验证拓展工具链路是否正常。", comment: "Example echo tool summary")
         case .fillUserInput:
@@ -214,6 +400,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .showWidget:
             return NSLocalizedString("工具详情：显示网页卡片", comment: "Show widget tool detail description")
+        case .askUserInput:
+            return NSLocalizedString("工具详情：询问用户选项", comment: "Ask user input tool detail description")
         case .echoText:
             return NSLocalizedString("示例工具详情：文本回显", comment: "Example echo tool detail description")
         case .fillUserInput:
@@ -276,6 +464,82 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                     ])
                 ]),
                 "required": .array([.string("widget_code")])
+            ])
+        case .askUserInput:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "title": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("问答标题（可选）。", comment: "Ask user input title parameter description"))
+                    ]),
+                    "description": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("问答说明（可选）。", comment: "Ask user input description parameter description"))
+                    ]),
+                    "submit_label": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("提交按钮文案（可选，默认“提交”）。", comment: "Ask user input submit label parameter description"))
+                    ]),
+                    "request_id": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("问答请求 ID（可选，不传会自动生成）。", comment: "Ask user input request id parameter description"))
+                    ]),
+                    "questions": .dictionary([
+                        "type": .string("array"),
+                        "description": .string(NSLocalizedString("问题数组，每题支持 single_select 或 multi_select。", comment: "Ask user input questions parameter description")),
+                        "items": .dictionary([
+                            "type": .string("object"),
+                            "properties": .dictionary([
+                                "id": .dictionary([
+                                    "type": .string("string"),
+                                    "description": .string(NSLocalizedString("问题 ID（可选，不传会自动生成）。", comment: "Ask user input question id parameter description"))
+                                ]),
+                                "question": .dictionary([
+                                    "type": .string("string"),
+                                    "description": .string(NSLocalizedString("问题文案。", comment: "Ask user input question text parameter description"))
+                                ]),
+                                "type": .dictionary([
+                                    "type": .string("string"),
+                                    "description": .string(NSLocalizedString("问题类型：single_select 或 multi_select。", comment: "Ask user input question type parameter description")),
+                                    "enum": .array([.string("single_select"), .string("multi_select")])
+                                ]),
+                                "allow_other": .dictionary([
+                                    "type": .string("boolean"),
+                                    "description": .string(NSLocalizedString("是否允许“其他输入”，默认 false。", comment: "Ask user input allow other parameter description"))
+                                ]),
+                                "required": .dictionary([
+                                    "type": .string("boolean"),
+                                    "description": .string(NSLocalizedString("是否必填，默认 true。", comment: "Ask user input required parameter description"))
+                                ]),
+                                "options": .dictionary([
+                                    "type": .string("array"),
+                                    "description": .string(NSLocalizedString("选项数组。", comment: "Ask user input options parameter description")),
+                                    "items": .dictionary([
+                                        "type": .string("object"),
+                                        "properties": .dictionary([
+                                            "id": .dictionary([
+                                                "type": .string("string"),
+                                                "description": .string(NSLocalizedString("选项 ID（可选，不传会自动生成）。", comment: "Ask user input option id parameter description"))
+                                            ]),
+                                            "label": .dictionary([
+                                                "type": .string("string"),
+                                                "description": .string(NSLocalizedString("选项显示文本。", comment: "Ask user input option label parameter description"))
+                                            ]),
+                                            "description": .dictionary([
+                                                "type": .string("string"),
+                                                "description": .string(NSLocalizedString("选项说明（可选）。", comment: "Ask user input option description parameter description"))
+                                            ])
+                                        ]),
+                                        "required": .array([.string("label")])
+                                    ])
+                                ])
+                            ]),
+                            "required": .array([.string("question"), .string("type"), .string("options")])
+                        ])
+                    ])
+                ]),
+                "required": .array([.string("questions")])
             ])
         case .echoText:
             return JSONValue.dictionary([
@@ -636,6 +900,11 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                 "把传入的 HTML Widget 渲染为聊天内联网页卡片。title 可选，widget_code 必填，loading_messages 可选。",
                 comment: "Show widget tool description sent to model"
             )
+        case .askUserInput:
+            return NSLocalizedString(
+                "向用户展示结构化问答面板。支持 single_select / multi_select、可选的“其他输入”、必填校验与自定义提交按钮文案。此工具用于在回答前收集关键信息，调用后应等待用户补充。",
+                comment: "Ask user input tool description sent to model"
+            )
         case .echoText:
             return NSLocalizedString(
                 "示例工具：把 text 参数中的文本原样返回，仅用于验证本地拓展工具链路与参数生成是否正常。",
@@ -803,11 +1072,11 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let enabledToolIDsUserDefaultsKey = "appTools.enabledToolIDs"
     private nonisolated static let toolApprovalPoliciesUserDefaultsKey = "appTools.toolApprovalPolicies"
     #if os(watchOS)
-    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = []
+    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.askUserInput]
     #else
-    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget]
+    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput]
     #endif
-    private nonisolated static let builtInToolKinds: Set<AppToolKind> = [.showWidget]
+    private nonisolated static let builtInToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput]
 
     @Published public private(set) var chatToolsEnabled: Bool
     @Published private var enabledToolIDs: Set<String>
@@ -914,8 +1183,14 @@ public final class AppToolManager: ObservableObject {
     }
 
     public func builtInToolsForLLM() -> [InternalToolDefinition] {
-        guard isToolEnabled(.showWidget) else { return [] }
-        return [toolDefinition(for: .showWidget)]
+        var tools: [InternalToolDefinition] = []
+        if isToolEnabled(.showWidget) {
+            tools.append(toolDefinition(for: .showWidget))
+        }
+        if isToolEnabled(.askUserInput) {
+            tools.append(toolDefinition(for: .askUserInput))
+        }
+        return tools
     }
 
     public func displayLabel(for toolName: String) -> String? {
@@ -967,6 +1242,97 @@ public final class AppToolManager: ObservableObject {
                 "title": normalizedTitle as Any,
                 "widget_code": widgetCode,
                 "loading_messages": normalizedLoadingMessages
+            ]
+            return prettyPrintedJSONString(from: payload)
+        case .askUserInput:
+            struct AskUserInputArgs: Decodable {
+                struct Question: Decodable {
+                    struct Option: Decodable {
+                        let id: String?
+                        let label: String
+                        let description: String?
+                    }
+
+                    let id: String?
+                    let question: String
+                    let type: String
+                    let options: [Option]
+                    let allow_other: Bool?
+                    let required: Bool?
+                }
+
+                let request_id: String?
+                let title: String?
+                let description: String?
+                let submit_label: String?
+                let questions: [Question]
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(AskUserInputArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 ask_user_input 的参数，请提供 questions。", comment: "Ask user input tool invalid arguments")
+                )
+            }
+
+            let normalizedQuestions = args.questions.enumerated().compactMap { questionIndex, question -> AppToolAskUserInputQuestion? in
+                let questionText = question.question.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !questionText.isEmpty else { return nil }
+
+                let normalizedTypeRaw = question.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard let type = AppToolAskUserInputQuestionType(rawValue: normalizedTypeRaw) else { return nil }
+
+                let questionID = Self.normalizedQuestionID(question.id, fallbackIndex: questionIndex)
+                var seenOptionIDs: Set<String> = []
+                let normalizedOptions = question.options.enumerated().compactMap { optionIndex, option -> AppToolAskUserInputOption? in
+                    let label = option.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !label.isEmpty else { return nil }
+                    let baseID = Self.normalizedOptionalText(option.id) ?? "option_\(optionIndex + 1)"
+                    let optionID = Self.uniqueIdentifier(from: baseID, seen: &seenOptionIDs)
+                    return AppToolAskUserInputOption(
+                        id: optionID,
+                        label: label,
+                        description: Self.normalizedOptionalText(option.description)
+                    )
+                }
+                guard !normalizedOptions.isEmpty else { return nil }
+
+                return AppToolAskUserInputQuestion(
+                    id: questionID,
+                    question: questionText,
+                    type: type,
+                    options: normalizedOptions,
+                    allowOther: question.allow_other ?? false,
+                    required: question.required ?? true
+                )
+            }
+
+            guard !normalizedQuestions.isEmpty else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：ask_user_input 至少需要一个有效问题，且每个问题都要包含非空 question、合法 type 和非空 options。", comment: "Ask user input tool invalid normalized questions")
+                )
+            }
+
+            let requestID = Self.normalizedRequestID(args.request_id)
+            let request = AppToolAskUserInputRequest(
+                requestID: requestID,
+                title: Self.normalizedOptionalText(args.title),
+                description: Self.normalizedOptionalText(args.description),
+                submitLabel: Self.normalizedOptionalText(args.submit_label) ?? NSLocalizedString("提交", comment: "Ask user input default submit label"),
+                questions: normalizedQuestions
+            )
+
+            NotificationCenter.default.post(
+                name: .appToolAskUserInputRequested,
+                object: nil,
+                userInfo: request.userInfo
+            )
+
+            let payload: [String: Any] = [
+                "request_id": request.requestID,
+                "question_count": request.questions.count,
+                "displayed": true,
+                "await_user_supplement": true
             ]
             return prettyPrintedJSONString(from: payload)
         case .echoText:
@@ -1668,6 +2034,39 @@ public final class AppToolManager: ObservableObject {
             parameters: kind.parameters,
             isBlocking: true
         )
+    }
+
+    private nonisolated static func normalizedRequestID(_ rawValue: String?) -> String {
+        if let normalized = normalizedOptionalText(rawValue) {
+            return normalized
+        }
+        return UUID().uuidString
+    }
+
+    private nonisolated static func normalizedQuestionID(_ rawValue: String?, fallbackIndex: Int) -> String {
+        normalizedOptionalText(rawValue) ?? "question_\(fallbackIndex + 1)"
+    }
+
+    private nonisolated static func uniqueIdentifier(from candidate: String, seen: inout Set<String>) -> String {
+        if !seen.contains(candidate) {
+            seen.insert(candidate)
+            return candidate
+        }
+        var suffix = 2
+        while true {
+            let next = "\(candidate)_\(suffix)"
+            if !seen.contains(next) {
+                seen.insert(next)
+                return next
+            }
+            suffix += 1
+        }
+    }
+
+    private nonisolated static func normalizedOptionalText(_ rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func prettyPrintedJSONString(from payload: [String: Any]) -> String {

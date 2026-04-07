@@ -97,6 +97,7 @@ public class ChatService {
     // MARK: - 用于 UI 订阅的公开 Subjects
     
     public let chatSessionsSubject: CurrentValueSubject<[ChatSession], Never>
+    public let sessionFoldersSubject: CurrentValueSubject<[SessionFolder], Never>
     public let currentSessionSubject: CurrentValueSubject<ChatSession?, Never>
     public let messagesForSessionSubject: CurrentValueSubject<[ChatMessage], Never>
     
@@ -444,6 +445,7 @@ public class ChatService {
             "anthropic": AnthropicAdapter(),
         ]
         
+        let sessionFolders = Persistence.loadSessionFolders()
         let persistedSessions = Persistence.loadChatSessions()
         var loadedSessions = persistedSessions
         let newTemporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
@@ -460,6 +462,7 @@ public class ChatService {
         self.providersSubject = CurrentValueSubject(self.providers)
         self.selectedModelSubject = CurrentValueSubject(nil)
         self.chatSessionsSubject = CurrentValueSubject(loadedSessions)
+        self.sessionFoldersSubject = CurrentValueSubject(sessionFolders)
         self.currentSessionSubject = CurrentValueSubject(initialSession)
         self.messagesForSessionSubject = CurrentValueSubject(initialMessages)
         self.reconcileStoredModelOrder()
@@ -887,7 +890,8 @@ public class ChatService {
         topicPrompt: String? = nil,
         enhancedPrompt: String? = nil,
         lorebookIDs: [UUID] = [],
-        worldbookContextIsolationEnabled: Bool = false
+        worldbookContextIsolationEnabled: Bool = false,
+        folderID: UUID? = nil
     ) -> ChatSession {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let sessionName = trimmedName.isEmpty ? "新的对话" : trimmedName
@@ -898,6 +902,7 @@ public class ChatService {
             enhancedPrompt: enhancedPrompt,
             lorebookIDs: lorebookIDs,
             worldbookContextIsolationEnabled: worldbookContextIsolationEnabled,
+            folderID: folderID,
             isTemporary: false
         )
 
@@ -966,6 +971,7 @@ public class ChatService {
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
             worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
+            folderID: sourceSession.folderID,
             isTemporary: false
         )
         logger.info("创建了分支会话: \(newSession.name)")
@@ -1028,6 +1034,7 @@ public class ChatService {
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             lorebookIDs: sourceSession.lorebookIDs,
             worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
+            folderID: sourceSession.folderID,
             isTemporary: false
         )
         logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
@@ -1246,6 +1253,94 @@ public class ChatService {
         logger.info("已强制保存所有会话。")
     }
 
+    // MARK: - 会话文件夹管理
+
+    public func createSessionFolder(name: String, parentID: UUID? = nil) -> SessionFolder? {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return nil }
+
+        var folders = sessionFoldersSubject.value
+        if let parentID, !folders.contains(where: { $0.id == parentID }) {
+            return nil
+        }
+
+        let folder = SessionFolder(name: trimmedName, parentID: parentID, updatedAt: Date())
+        folders.append(folder)
+        sessionFoldersSubject.send(folders)
+        Persistence.saveSessionFolders(folders)
+        logger.info("已创建会话文件夹: \(trimmedName)")
+        return folder
+    }
+
+    public func renameSessionFolder(folderID: UUID, newName: String) {
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        var folders = sessionFoldersSubject.value
+        guard let index = folders.firstIndex(where: { $0.id == folderID }) else { return }
+        guard folders[index].name != trimmedName else { return }
+        folders[index].name = trimmedName
+        folders[index].updatedAt = Date()
+        sessionFoldersSubject.send(folders)
+        Persistence.saveSessionFolders(folders)
+        logger.info("已重命名会话文件夹: \(trimmedName)")
+    }
+
+    public func deleteSessionFolder(folderID: UUID) {
+        let folders = sessionFoldersSubject.value
+        guard folders.contains(where: { $0.id == folderID }) else { return }
+
+        let removedIDs = collectSessionFolderDescendantIDs(rootID: folderID, folders: folders)
+        let retainedFolders = folders.filter { !removedIDs.contains($0.id) }
+        sessionFoldersSubject.send(retainedFolders)
+        Persistence.saveSessionFolders(retainedFolders)
+
+        var sessions = chatSessionsSubject.value
+        var didUpdateSessions = false
+        for index in sessions.indices {
+            guard let assignedFolderID = sessions[index].folderID else { continue }
+            guard removedIDs.contains(assignedFolderID) else { continue }
+            sessions[index].folderID = nil
+            didUpdateSessions = true
+        }
+
+        if didUpdateSessions {
+            chatSessionsSubject.send(sessions)
+            if let current = currentSessionSubject.value,
+               let updatedCurrent = sessions.first(where: { $0.id == current.id }),
+               updatedCurrent != current {
+                currentSessionSubject.send(updatedCurrent)
+            }
+            Persistence.saveChatSessions(sessions)
+        }
+
+        logger.info("已删除会话文件夹及子目录，共 \(removedIDs.count) 个。")
+    }
+
+    public func moveSession(sessionID: UUID, toFolderID folderID: UUID?) {
+        var sessions = chatSessionsSubject.value
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+
+        if let folderID,
+           !sessionFoldersSubject.value.contains(where: { $0.id == folderID }) {
+            return
+        }
+        guard sessions[sessionIndex].folderID != folderID else { return }
+        sessions[sessionIndex].folderID = folderID
+        chatSessionsSubject.send(sessions)
+
+        if let current = currentSessionSubject.value, current.id == sessionID {
+            currentSessionSubject.send(sessions[sessionIndex])
+        }
+
+        Persistence.saveChatSessions(sessions)
+        logger.info("已移动会话到文件夹。")
+    }
+
+    public func moveSession(_ session: ChatSession, toFolderID folderID: UUID?) {
+        moveSession(sessionID: session.id, toFolderID: folderID)
+    }
+
     /// 从持久化层重新加载当前会话消息并刷新 UI，不会触发写盘。
     public func reloadCurrentSessionMessagesFromPersistence() {
         guard let currentSession = currentSessionSubject.value else { return }
@@ -1297,6 +1392,22 @@ public class ChatService {
         chatSessionsSubject.send(sessions)
         Persistence.saveChatSessions(sessions)
         logger.info("已将会话移动到列表顶部: \(session.name)")
+    }
+
+    private func collectSessionFolderDescendantIDs(rootID: UUID, folders: [SessionFolder]) -> Set<UUID> {
+        let childrenByParent = Dictionary(grouping: folders, by: \.parentID)
+        var collected: Set<UUID> = [rootID]
+        var queue: [UUID] = [rootID]
+
+        while let current = queue.first {
+            queue.removeFirst()
+            let children = childrenByParent[current] ?? []
+            for child in children where collected.insert(child.id).inserted {
+                queue.append(child.id)
+            }
+        }
+
+        return collected
     }
     
     // MARK: - 公开方法 (消息处理)
@@ -2419,6 +2530,9 @@ public class ChatService {
                     )
                     content = result
                     displayResult = result
+                    if toolCall.toolName == AppToolKind.askUserInput.toolName {
+                        shouldAwaitUserSupplement = true
+                    }
                     logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
                 } catch {
                     content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
@@ -2449,6 +2563,9 @@ public class ChatService {
                         )
                         content = result
                         displayResult = result
+                        if toolCall.toolName == AppToolKind.askUserInput.toolName {
+                            shouldAwaitUserSupplement = true
+                        }
                         logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
                     } catch {
                         content = "\(toolLabel) 调用失败：\(error.localizedDescription)"

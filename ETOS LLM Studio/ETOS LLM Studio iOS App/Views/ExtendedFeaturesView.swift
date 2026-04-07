@@ -27,7 +27,7 @@ struct ExtendedFeaturesView: View {
                     • 反馈助手：提交问题和追踪处理进度。
                     • 远程文件访问：在局域网内访问 Documents 做排查或批量处理。
                     • 存储管理：清理模型、文件、缓存，回收空间。
-                    • 第三方导入：从外部应用迁移配置和会话。
+                    • 导入数据：导入 ETOS 导出包或第三方应用迁移数据。
 
                     使用建议
                     • 不常用的功能可按需开启，避免主流程过载。
@@ -77,10 +77,10 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     ThirdPartyImportView()
                 } label: {
-                    Label("第三方导入", systemImage: "square.and.arrow.down.on.square")
+                    Label("导入数据", systemImage: "square.and.arrow.down.on.square")
                 }
             } footer: {
-                Text("从 Cherry Studio 等第三方应用导入提供商与会话。")
+                Text("支持导入 ETOS 数据包，也可从 Cherry Studio 等来源迁移。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

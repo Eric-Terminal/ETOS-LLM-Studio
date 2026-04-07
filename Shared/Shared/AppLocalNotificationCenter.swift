@@ -356,14 +356,14 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
         let payload = AppLocalNotificationPayload(userInfo: response.notification.request.content.userInfo)
         let actionIdentifier = response.actionIdentifier
         if payload.route == .dailyPulse {
-            Task { @MainActor in
+            Task { @MainActor [payload, actionIdentifier] in
                 AppLocalNotificationCenter.shared.handleDailyPulseAction(
                     actionIdentifier: actionIdentifier,
                     payload: payload
                 )
             }
         } else if payload.route == .feedback {
-            Task { @MainActor in
+            Task { @MainActor [payload] in
                 AppLocalNotificationCenter.shared.openFeedbackFromNotification(payload: payload)
             }
         }

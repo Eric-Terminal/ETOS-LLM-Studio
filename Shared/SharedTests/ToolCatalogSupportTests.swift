@@ -21,6 +21,7 @@ struct ToolCatalogSupportTests {
             enableMemoryActiveRetrieval: true,
             memoryTopK: 5,
             enableWidgetTool: true,
+            enableAskUserInputTool: true,
             isIsolatedSession: true
         )
 
@@ -43,6 +44,7 @@ struct ToolCatalogSupportTests {
             enableMemoryActiveRetrieval: true,
             memoryTopK: 0,
             enableWidgetTool: true,
+            enableAskUserInputTool: true,
             isIsolatedSession: false
         )
 
@@ -61,6 +63,7 @@ struct ToolCatalogSupportTests {
             enableMemoryActiveRetrieval: true,
             memoryTopK: 3,
             enableWidgetTool: false,
+            enableAskUserInputTool: true,
             isIsolatedSession: false
         )
 
@@ -68,6 +71,24 @@ struct ToolCatalogSupportTests {
         #expect(widgetTool?.isConfiguredEnabled == false)
         #expect(widgetTool?.isAvailableInCurrentSession == false)
         #expect(widgetTool?.statusReason == .widgetDisabled)
+    }
+
+    @Test("询问用户选项工具关闭时应标记为未启用")
+    func testBuiltInToolStatesReflectAskUserInputDisabled() {
+        let states = ToolCatalogSupport.builtInToolStates(
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true,
+            memoryTopK: 3,
+            enableWidgetTool: true,
+            enableAskUserInputTool: false,
+            isIsolatedSession: false
+        )
+
+        let askTool = states.first(where: { $0.kind == .askUserInput })
+        #expect(askTool?.isConfiguredEnabled == false)
+        #expect(askTool?.isAvailableInCurrentSession == false)
+        #expect(askTool?.statusReason == .askUserInputDisabled)
     }
 
     @Test("Schema 摘要会提取字段与必填项")

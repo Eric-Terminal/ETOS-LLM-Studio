@@ -27,9 +27,17 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.fontFiles") private var syncFontFiles = true
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
+    @AppStorage("sync.backup.uploadEndpoint") private var backupUploadEndpoint = ""
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
     @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
+    @State private var exportFileURL: URL?
+    @State private var exportErrorMessage: String?
+    @State private var isExporting: Bool = false
+    @State private var isUploading: Bool = false
+    @State private var uploadErrorMessage: String?
+    @State private var uploadSuccessMessage: String?
+    @State private var uploadResponsePreview: String?
     
     var body: some View {
         List {
@@ -47,6 +55,81 @@ struct DeviceSyncSettingsView: View {
                 Toggle("每日脉冲", isOn: $syncDailyPulse)
                 Toggle("字体文件与规则", isOn: $syncFontFiles)
                 Toggle("软件设置", isOn: $syncAppStorage)
+            }
+
+            Section("导出备份") {
+                Button {
+                    exportDataPackage()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isExporting {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label("生成导出文件", systemImage: "square.and.arrow.up")
+                        Spacer()
+                    }
+                }
+                .disabled(selectedSyncOptions.isEmpty || isExporting)
+
+                if let exportFileURL {
+                    if #available(watchOS 9.0, *) {
+                        ShareLink(item: exportFileURL) {
+                            HStack {
+                                Spacer()
+                                Label("分享导出文件", systemImage: "square.and.arrow.up")
+                                Spacer()
+                            }
+                        }
+                    } else {
+                        Text("当前系统暂不支持直接分享导出文件。")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("上传备份（POST）") {
+                TextField("https://example.com/backup", text: $backupUploadEndpoint.watchKeyboardNewlineBinding())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                Button {
+                    uploadDataPackage()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isUploading {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label("上传到地址", systemImage: "icloud.and.arrow.up")
+                        Spacer()
+                    }
+                }
+                .disabled(selectedSyncOptions.isEmpty || isUploading)
+
+                if let uploadSuccessMessage, !uploadSuccessMessage.isEmpty {
+                    Text(uploadSuccessMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.green)
+                }
+
+                if let uploadResponsePreview, !uploadResponsePreview.isEmpty {
+                    Text("响应：\(uploadResponsePreview)")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+
+                Text("会向输入地址发送 POST(JSON)，请确认地址可信。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Apple Watch 同步") {
@@ -99,8 +182,24 @@ struct DeviceSyncSettingsView: View {
             Section("iCloud 状态") {
                 cloudSyncStatusView
             }
+
+            if let exportErrorMessage, !exportErrorMessage.isEmpty {
+                Section("导出错误") {
+                    Text(exportErrorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if let uploadErrorMessage, !uploadErrorMessage.isEmpty {
+                Section("上传错误") {
+                    Text(uploadErrorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
         }
-        .navigationTitle("设备同步")
+        .navigationTitle("同步与备份")
         .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
     }
     
@@ -257,6 +356,64 @@ struct DeviceSyncSettingsView: View {
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
+    }
+
+    private func exportDataPackage() {
+        isExporting = true
+        defer { isExporting = false }
+
+        do {
+            let package = SyncEngine.buildPackage(options: selectedSyncOptions)
+            let output = try SyncPackageTransferService.exportPackage(package)
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+            try output.data.write(to: fileURL, options: .atomic)
+
+            if let existing = exportFileURL {
+                try? FileManager.default.removeItem(at: existing)
+            }
+
+            exportFileURL = fileURL
+            exportErrorMessage = nil
+        } catch {
+            exportErrorMessage = "导出失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func uploadDataPackage() {
+        let trimmed = backupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            uploadErrorMessage = "请先输入上传地址。"
+            return
+        }
+        guard let endpoint = URL(string: trimmed),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            uploadErrorMessage = "上传地址格式无效，请输入完整的 http/https URL。"
+            return
+        }
+
+        isUploading = true
+        uploadErrorMessage = nil
+        uploadSuccessMessage = nil
+        uploadResponsePreview = nil
+
+        Task {
+            do {
+                let package = SyncEngine.buildPackage(options: selectedSyncOptions)
+                let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
+                await MainActor.run {
+                    isUploading = false
+                    uploadSuccessMessage = "上传成功（HTTP \(result.statusCode)）"
+                    uploadResponsePreview = result.responseBodyPreview
+                }
+            } catch {
+                await MainActor.run {
+                    isUploading = false
+                    uploadErrorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func migrateLegacyAppStorageOptionIfNeeded() {

@@ -1003,6 +1003,74 @@ struct OpenAIAdapterTests {
         #expect(!(properties["type"] is String))
     }
 
+    @Test("OpenAI 工具 schema 中属性名 type 不会被误当关键字移除")
+    func testOpenAISchemaPropertyNamedTypeKeepsInPropertiesMap() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "ask_user_input",
+                description: "测试 ask_user_input",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "questions": .dictionary([
+                            "type": .string("array"),
+                            "items": .dictionary([
+                                "type": .string("object"),
+                                "properties": .dictionary([
+                                    "question": .dictionary([
+                                        "type": .string("string")
+                                    ]),
+                                    "type": .dictionary([
+                                        "type": .string("string"),
+                                        "enum": .array([.string("single_select"), .string("multi_select")])
+                                    ]),
+                                    "options": .dictionary([
+                                        "type": .string("array"),
+                                        "items": .dictionary([
+                                            "type": .string("string")
+                                        ])
+                                    ])
+                                ]),
+                                "required": .array([.string("question"), .string("type"), .string("options")])
+                            ])
+                        ])
+                    ]),
+                    "required": .array([.string("questions")])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstTool = toolsPayload.first,
+        let function = firstTool["function"] as? [String: Any],
+        let parameters = function["parameters"] as? [String: Any],
+        let rootProperties = parameters["properties"] as? [String: Any],
+        let questionsSchema = rootProperties["questions"] as? [String: Any],
+        let questionItemsSchema = questionsSchema["items"] as? [String: Any],
+        let questionProperties = questionItemsSchema["properties"] as? [String: Any],
+        let typeSchema = questionProperties["type"] as? [String: Any],
+        let required = questionItemsSchema["required"] as? [String] else {
+            Issue.record("OpenAI 请求体中未找到 ask_user_input 的 type 字段 schema。")
+            return
+        }
+
+        #expect(typeSchema["type"] as? String == "string")
+        #expect((typeSchema["enum"] as? [String]) == ["single_select", "multi_select"])
+        #expect(required.contains("type"))
+    }
+
     @Test("OpenAI 解析保留 provider_specific_fields")
     func testParseResponsePreservesProviderSpecificFields() throws {
         let json = """
@@ -3209,6 +3277,7 @@ fileprivate struct ChatSessionTests {
         // For these tests, we can use a standard ChatService instance
         // as session management does not have complex external dependencies.
         chatService = ChatService()
+        Persistence.saveSessionFolders([])
         // Clear any persisted sessions from previous runs to ensure a clean state
         let sessions = chatService.chatSessionsSubject.value
         if !sessions.isEmpty {
@@ -3368,6 +3437,35 @@ fileprivate struct ChatSessionTests {
         #expect(newSessionMessages.count == 1)
         #expect(newSessionMessages.first?.content == message.content)
     }
+
+    @Test("删除文件夹时会递归删除子文件夹并将会话回到未分类")
+    func testDeleteFolderRecursivelyReassignsSessionsToUncategorized() {
+        guard let rootFolder = chatService.createSessionFolder(name: "项目", parentID: nil) else {
+            Issue.record("创建根文件夹失败")
+            return
+        }
+        guard let childFolder = chatService.createSessionFolder(name: "子目录", parentID: rootFolder.id) else {
+            Issue.record("创建子文件夹失败")
+            return
+        }
+
+        let savedSession = chatService.createSavedSession(
+            name: "分类会话",
+            initialMessages: [],
+            folderID: childFolder.id
+        )
+        #expect(savedSession.folderID == childFolder.id)
+        #expect(chatService.sessionFoldersSubject.value.count == 2)
+
+        chatService.deleteSessionFolder(folderID: rootFolder.id)
+
+        let folders = chatService.sessionFoldersSubject.value
+        #expect(folders.isEmpty)
+
+        let updatedSession = chatService.chatSessionsSubject.value.first(where: { $0.id == savedSession.id })
+        #expect(updatedSession != nil)
+        #expect(updatedSession?.folderID == nil)
+    }
 }
 
 // MARK: - Persistence & Config Tests
@@ -3379,6 +3477,7 @@ fileprivate struct PersistenceTests {
         struct SessionMeta: Decodable {
             let id: UUID
             let name: String
+            let folderID: UUID?
             let lorebookIDs: [UUID]
         }
 
@@ -3403,6 +3502,10 @@ fileprivate struct PersistenceTests {
 
     private var currentIndexFileURL: URL {
         chatsDirectory.appendingPathComponent("index.json")
+    }
+
+    private var foldersFileURL: URL {
+        chatsDirectory.appendingPathComponent("folders.json")
     }
 
     private var legacyV3Directory: URL {
@@ -3453,6 +3556,7 @@ fileprivate struct PersistenceTests {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
         removeIfExists(currentIndexFileURL)
+        removeIfExists(foldersFileURL)
         removeIfExists(currentSessionsDirectory)
         removeIfExists(requestLogsDirectory)
         removeIfExists(legacyV3Directory)
@@ -3482,6 +3586,30 @@ fileprivate struct PersistenceTests {
         
         // Teardown
         cleanup(sessions: sessionsToSave)
+    }
+
+    @Test("Save and Load Session Folders with Session Assignment")
+    func testSaveAndLoadSessionFoldersWithSessionAssignment() {
+        let folder = SessionFolder(name: "工作")
+        Persistence.saveSessionFolders([folder])
+
+        let session = ChatSession(
+            id: UUID(),
+            name: "Folder Session",
+            folderID: folder.id,
+            isTemporary: false
+        )
+        Persistence.saveChatSessions([session])
+
+        let loadedFolders = Persistence.loadSessionFolders()
+        let loadedSessions = Persistence.loadChatSessions()
+
+        #expect(loadedFolders.count == 1)
+        #expect(loadedFolders.first?.id == folder.id)
+        #expect(loadedSessions.count == 1)
+        #expect(loadedSessions.first?.folderID == folder.id)
+
+        cleanup(sessions: [session])
     }
 
     @Test("Save and Load Messages")

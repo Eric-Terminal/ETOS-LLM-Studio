@@ -311,7 +311,15 @@ public class OpenAIAdapter: APIAdapter {
     }
 
     private func normalizedOpenAISchemaObject(_ object: [String: Any]) -> [String: Any] {
-        var normalized = object.mapValues { normalizedOpenAISchemaValue($0) }
+        var normalized: [String: Any] = [:]
+        normalized.reserveCapacity(object.count)
+        for (key, value) in object {
+            if key == "properties", let properties = value as? [String: Any] {
+                normalized[key] = properties
+            } else {
+                normalized[key] = normalizedOpenAISchemaValue(value)
+            }
+        }
         normalized = flattenedOpenAISchemaCombinators(normalized)
         if let properties = normalized["properties"] as? [String: Any] {
             normalized["properties"] = normalizedOpenAISchemaPropertiesMap(properties)

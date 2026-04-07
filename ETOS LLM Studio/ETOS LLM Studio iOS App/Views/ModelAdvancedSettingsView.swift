@@ -10,6 +10,8 @@ import SwiftUI
 import Shared
 
 struct ModelAdvancedSettingsView: View {
+    @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
+
     @Binding var aiTemperature: Double
     @Binding var aiTopP: Double
     @Binding var globalSystemPromptEntries: [GlobalSystemPromptEntry]
@@ -133,8 +135,12 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
 
-            Section("输出样式") {
+            Section("会话设置") {
+                Toggle("启动时打开历史会话", isOn: $restoreLastSessionOnLaunch)
                 Toggle("自动生成话题标题", isOn: $enableAutoSessionNaming)
+            }
+
+            Section("输出样式") {
                 Toggle("启用流式输出", isOn: $enableStreaming)
             }
 

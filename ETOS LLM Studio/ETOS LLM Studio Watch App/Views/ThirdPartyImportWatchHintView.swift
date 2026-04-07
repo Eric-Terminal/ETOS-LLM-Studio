@@ -1,7 +1,7 @@
 // ============================================================================
 // ThirdPartyImportWatchHintView.swift
 // ============================================================================
-// 第三方导入页面 (watchOS)
+// 导入数据页面 (watchOS)
 // - 支持通过 URL 下载导出文件并在手表端解析导入
 // ============================================================================
 
@@ -10,7 +10,7 @@ import Foundation
 import Shared
 
 struct ThirdPartyImportWatchHintView: View {
-    @State private var selectedSource: ThirdPartyImportSource = .cherryStudio
+    @State private var selectedSource: ThirdPartyImportSource = .etosBackup
     @State private var importURLText: String = ""
     @State private var isPreparing: Bool = false
     @State private var isImporting: Bool = false
@@ -69,21 +69,32 @@ struct ThirdPartyImportWatchHintView: View {
 
             if let preparedResult {
                 Section("解析预览") {
+                    if preparedResult.source == .etosBackup {
+                        row(title: "导出同步项", value: syncOptionSummary(preparedResult.package.options))
+                    }
                     row(title: "识别到提供商", value: "\(preparedResult.parsedProvidersCount)")
                     row(title: "识别到会话", value: "\(preparedResult.parsedSessionsCount)")
-                    row(title: "可能冲突提供商", value: "\(conflictPreview.providerConflicts)")
-                    row(title: "可能冲突会话", value: "\(conflictPreview.sessionConflicts)")
-                    row(title: "预计新增提供商", value: "\(conflictPreview.providerAdds)")
-                    row(title: "预计新增会话", value: "\(conflictPreview.sessionAdds)")
+                    if preparedResult.source != .etosBackup {
+                        row(title: "可能冲突提供商", value: "\(conflictPreview.providerConflicts)")
+                        row(title: "可能冲突会话", value: "\(conflictPreview.sessionConflicts)")
+                        row(title: "预计新增提供商", value: "\(conflictPreview.providerAdds)")
+                        row(title: "预计新增会话", value: "\(conflictPreview.sessionAdds)")
+                    }
                 }
 
                 Section("导入范围") {
-                    if preparedResult.parsedProvidersCount > 0 {
-                        Toggle("导入提供商配置", isOn: $includeProviders)
-                    }
+                    if preparedResult.source == .etosBackup {
+                        Text("ETOS 数据包会按导出时勾选的同步项全量导入。")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        if preparedResult.parsedProvidersCount > 0 {
+                            Toggle("导入提供商配置", isOn: $includeProviders)
+                        }
 
-                    if preparedResult.parsedSessionsCount > 0 {
-                        Toggle("导入会话记录", isOn: $includeSessions)
+                        if preparedResult.parsedSessionsCount > 0 {
+                            Toggle("导入会话记录", isOn: $includeSessions)
+                        }
                     }
 
                     Button {
@@ -134,7 +145,7 @@ struct ThirdPartyImportWatchHintView: View {
                 }
             }
         }
-        .navigationTitle("第三方导入")
+        .navigationTitle("导入数据")
         .onChange(of: selectedSource) { _, _ in
             resetPreparedState()
         }
@@ -145,14 +156,19 @@ struct ThirdPartyImportWatchHintView: View {
     }
 
     private var canStartImport: Bool {
-        if preparedResult == nil { return false }
-        let hasProviderSelection = includeProviders && (preparedResult?.parsedProvidersCount ?? 0) > 0
-        let hasSessionSelection = includeSessions && (preparedResult?.parsedSessionsCount ?? 0) > 0
+        guard let preparedResult else { return false }
+        if preparedResult.source == .etosBackup {
+            return !preparedResult.package.options.isEmpty
+        }
+        let hasProviderSelection = includeProviders && preparedResult.parsedProvidersCount > 0
+        let hasSessionSelection = includeSessions && preparedResult.parsedSessionsCount > 0
         return hasProviderSelection || hasSessionSelection
     }
 
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
+        case .etosBackup:
+            return "支持导入 ETOS 导出的 JSON 数据包（含“同步与备份”导出）。"
         case .cherryStudio:
             return "支持 Cherry Studio 的 .json；若是 .zip / .bak，请先解压后再导入。"
         case .rikkahub:
@@ -212,8 +228,8 @@ struct ThirdPartyImportWatchHintView: View {
                 await MainActor.run {
                     selectedFileName = fileName
                     preparedResult = prepared
-                    includeProviders = prepared.parsedProvidersCount > 0
-                    includeSessions = prepared.parsedSessionsCount > 0
+                    includeProviders = prepared.package.options.contains(.providers)
+                    includeSessions = prepared.package.options.contains(.sessions)
                     conflictPreview = preview
                     isPreparing = false
                 }
@@ -228,6 +244,33 @@ struct ThirdPartyImportWatchHintView: View {
 
     private func startImport() {
         guard let preparedResult else { return }
+
+        if preparedResult.source == .etosBackup {
+            guard !preparedResult.package.options.isEmpty else {
+                importError = "导出包没有包含可导入的数据。"
+                return
+            }
+
+            isImporting = true
+            importError = nil
+
+            Task {
+                let summary = await SyncEngine.apply(package: preparedResult.package)
+                let report = ThirdPartyImportReport(
+                    source: preparedResult.source,
+                    parsedProvidersCount: preparedResult.parsedProvidersCount,
+                    parsedSessionsCount: preparedResult.parsedSessionsCount,
+                    summary: summary,
+                    warnings: preparedResult.warnings
+                )
+
+                await MainActor.run {
+                    importReport = report
+                    isImporting = false
+                }
+            }
+            return
+        }
 
         var options: SyncOptions = []
         let providers: [Provider]
@@ -309,7 +352,7 @@ struct ThirdPartyImportWatchHintView: View {
             fileName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if fileName.isEmpty || fileName == "/" {
-            fileName = "third-party-import"
+            fileName = "import-data"
         }
 
         if !(fileName as NSString).pathExtension.isEmpty {
@@ -330,7 +373,7 @@ struct ThirdPartyImportWatchHintView: View {
             return "\(fileName).zip"
         }
 
-        if source == .chatgpt {
+        if source == .chatgpt || source == .etosBackup {
             return "\(fileName).json"
         }
         return "\(fileName).json"
@@ -433,6 +476,25 @@ struct ThirdPartyImportWatchHintView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
+    }
+
+    private func syncOptionSummary(_ options: SyncOptions) -> String {
+        var items: [String] = []
+        if options.contains(.providers) { items.append("提供商配置") }
+        if options.contains(.sessions) { items.append("会话记录") }
+        if options.contains(.backgrounds) { items.append("背景图片") }
+        if options.contains(.memories) { items.append("记忆") }
+        if options.contains(.mcpServers) { items.append("MCP 服务器") }
+        if options.contains(.audioFiles) { items.append("音频文件") }
+        if options.contains(.imageFiles) { items.append("图片文件") }
+        if options.contains(.skills) { items.append("Agent Skills") }
+        if options.contains(.shortcutTools) { items.append("快捷指令工具") }
+        if options.contains(.worldbooks) { items.append("世界书") }
+        if options.contains(.feedbackTickets) { items.append("反馈工单") }
+        if options.contains(.dailyPulse) { items.append("每日脉冲") }
+        if options.contains(.fontFiles) { items.append("字体文件与规则") }
+        if options.contains(.appStorage) { items.append("软件设置") }
+        return items.isEmpty ? "无" : items.joined(separator: "、")
     }
 }
 

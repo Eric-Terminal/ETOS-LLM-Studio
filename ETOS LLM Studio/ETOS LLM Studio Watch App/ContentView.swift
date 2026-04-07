@@ -98,6 +98,17 @@ struct ContentView: View {
                 )) { wrapper in
                     FullErrorContentView(content: wrapper.content)
                 }
+                .sheet(item: $viewModel.activeAskUserInputRequest) { request in
+                    WatchAskUserInputView(
+                        request: request,
+                        onSubmit: { answers in
+                            viewModel.submitAskUserInputAnswers(answers, for: request)
+                        },
+                        onCancel: {
+                            viewModel.cancelAskUserInputRequest(using: request)
+                        }
+                    )
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 openDailyPulse()
@@ -242,12 +253,20 @@ struct ContentView: View {
                 )
             }
 
-            inputBubble
-                .id(bottomAnchorID)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .onAppear { isAtBottom = true; showScrollToBottomButton = false }
-                .onDisappear { isAtBottom = false; showScrollToBottomButton = true }
+            if viewModel.activeAskUserInputRequest == nil {
+                inputBubble
+                    .id(bottomAnchorID)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .onAppear { isAtBottom = true; showScrollToBottomButton = false }
+                    .onDisappear { isAtBottom = false; showScrollToBottomButton = true }
+            } else {
+                Color.clear
+                    .frame(height: 1)
+                    .id(bottomAnchorID)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
         }
         .listStyle(.plain)
         .background(Color.clear)
@@ -805,6 +824,219 @@ struct ContentView: View {
         dailyPulsePreparationTask = nil
     }
 
+}
+
+private struct WatchAskUserInputView: View {
+    let request: AppToolAskUserInputRequest
+    let onSubmit: ([AppToolAskUserInputQuestionAnswer]) -> Void
+    let onCancel: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
+    @State private var otherEnabledByQuestion: [String: Bool] = [:]
+    @State private var otherTextByQuestion: [String: String] = [:]
+    @State private var hasHandledAction = false
+
+    private var canSubmit: Bool {
+        request.questions.allSatisfy { question in
+            guard question.required else { return true }
+            let hasSelectedOption = !(selectedOptionIDsByQuestion[question.id] ?? []).isEmpty
+            let otherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let hasOtherText = otherEnabledByQuestion[question.id] == true && !otherText.isEmpty
+            return hasSelectedOption || hasOtherText
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if let title = request.title, !title.isEmpty {
+                        Text(title)
+                            .etFont(.headline)
+                    } else {
+                        Text("请补充信息")
+                            .etFont(.headline)
+                    }
+                    if let description = request.description, !description.isEmpty {
+                        Text(description)
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                ForEach(request.questions) { question in
+                    Section {
+                        ForEach(question.options) { option in
+                            Button {
+                                toggleOption(question: question, optionID: option.id)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: optionIconName(question: question, optionID: option.id))
+                                        .foregroundStyle(.blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(option.label)
+                                            .foregroundStyle(.primary)
+                                        if let description = option.description, !description.isEmpty {
+                                            Text(description)
+                                                .etFont(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if question.allowOther {
+                            Button {
+                                toggleOther(question: question)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: otherEnabledByQuestion[question.id] == true ? "checkmark.square.fill" : "square")
+                                        .foregroundStyle(.blue)
+                                    Text("其他")
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            if otherEnabledByQuestion[question.id] == true {
+                                TextField(
+                                    "请输入其他内容",
+                                    text: Binding(
+                                        get: { otherTextByQuestion[question.id, default: ""] },
+                                        set: { otherTextByQuestion[question.id] = $0 }
+                                    )
+                                )
+                            }
+                        }
+                    } header: {
+                        HStack(spacing: 4) {
+                            Text(question.question)
+                            if question.required {
+                                Text("*")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Button(action: submit) {
+                        Text(request.submitLabel)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canSubmit)
+                }
+            }
+            .navigationTitle("结构化问答")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        handleCancelAndDismiss()
+                    }
+                }
+            }
+            .onAppear {
+                resetSelectionState()
+                hasHandledAction = false
+            }
+            .onChange(of: request) {
+                resetSelectionState()
+                hasHandledAction = false
+            }
+            .onDisappear {
+                guard !hasHandledAction else { return }
+                onCancel()
+            }
+        }
+    }
+
+    private func optionIconName(question: AppToolAskUserInputQuestion, optionID: String) -> String {
+        let isSelected = selectedOptionIDsByQuestion[question.id, default: []].contains(optionID)
+        switch question.type {
+        case .singleSelect:
+            return isSelected ? "largecircle.fill.circle" : "circle"
+        case .multiSelect:
+            return isSelected ? "checkmark.square.fill" : "square"
+        }
+    }
+
+    private func toggleOption(question: AppToolAskUserInputQuestion, optionID: String) {
+        switch question.type {
+        case .singleSelect:
+            let current = selectedOptionIDsByQuestion[question.id, default: []]
+            if current.contains(optionID) {
+                selectedOptionIDsByQuestion[question.id] = []
+            } else {
+                selectedOptionIDsByQuestion[question.id] = [optionID]
+                otherEnabledByQuestion[question.id] = false
+            }
+        case .multiSelect:
+            var current = selectedOptionIDsByQuestion[question.id, default: []]
+            if current.contains(optionID) {
+                current.remove(optionID)
+            } else {
+                current.insert(optionID)
+            }
+            selectedOptionIDsByQuestion[question.id] = current
+        }
+    }
+
+    private func toggleOther(question: AppToolAskUserInputQuestion) {
+        let enabled = otherEnabledByQuestion[question.id] == true
+        otherEnabledByQuestion[question.id] = !enabled
+        if enabled {
+            otherTextByQuestion[question.id] = ""
+            return
+        }
+        if question.type == .singleSelect {
+            selectedOptionIDsByQuestion[question.id] = []
+        }
+    }
+
+    private func submit() {
+        let answers = request.questions.map { question -> AppToolAskUserInputQuestionAnswer in
+            let selectedIDs = question.options
+                .map(\.id)
+                .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0) }
+            let selectedLabels = question.options
+                .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0.id) }
+                .map(\.label)
+            let rawOtherText = otherTextByQuestion[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let otherText: String?
+            if otherEnabledByQuestion[question.id] == true, let rawOtherText, !rawOtherText.isEmpty {
+                otherText = rawOtherText
+            } else {
+                otherText = nil
+            }
+            return AppToolAskUserInputQuestionAnswer(
+                questionID: question.id,
+                question: question.question,
+                type: question.type,
+                selectedOptionIDs: selectedIDs,
+                selectedOptionLabels: selectedLabels,
+                otherText: otherText
+            )
+        }
+        hasHandledAction = true
+        onSubmit(answers)
+        dismiss()
+    }
+
+    private func handleCancelAndDismiss() {
+        hasHandledAction = true
+        onCancel()
+        dismiss()
+    }
+
+    private func resetSelectionState() {
+        selectedOptionIDsByQuestion = [:]
+        otherEnabledByQuestion = [:]
+        otherTextByQuestion = [:]
+    }
 }
 
 // MARK: - 完整错误响应辅助类型

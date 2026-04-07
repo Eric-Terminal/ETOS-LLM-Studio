@@ -1,9 +1,9 @@
 // ============================================================================
 // ThirdPartyImportService.swift
 // ============================================================================
-// 第三方导入服务
-// - 统一解析 Cherry Studio / RikkaHub / Kelivo / ChatGPT 的导出文件
-// - 标准化转换为 SyncPackage（Provider + Session）
+// 数据导入服务
+// - 统一解析 ETOS / Cherry Studio / RikkaHub / Kelivo / ChatGPT 的导出文件
+// - 标准化转换为 SyncPackage（ETOS 全量 + 第三方 provider/session）
 // - 复用 SyncEngine.apply 执行去重合并
 // ============================================================================
 
@@ -14,6 +14,7 @@ import CryptoKit
 #endif
 
 public enum ThirdPartyImportSource: String, CaseIterable, Codable, Sendable {
+    case etosBackup
     case cherryStudio
     case rikkahub
     case kelivo
@@ -21,6 +22,7 @@ public enum ThirdPartyImportSource: String, CaseIterable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
+        case .etosBackup: return "ETOS 数据包"
         case .cherryStudio: return "Cherry Studio"
         case .rikkahub: return "RikkaHub"
         case .kelivo: return "Kelivo"
@@ -30,6 +32,8 @@ public enum ThirdPartyImportSource: String, CaseIterable, Codable, Sendable {
 
     public var suggestedFileExtensions: [String] {
         switch self {
+        case .etosBackup:
+            return ["json"]
         case .cherryStudio:
             return ["json", "zip", "bak"]
         case .rikkahub:
@@ -105,6 +109,15 @@ public enum ThirdPartyImportService {
         fileURL: URL
     ) throws -> ThirdPartyImportPreparedResult {
         try withSecurityScopedAccess(to: fileURL) {
+            if source == .etosBackup {
+                let package = try parseETOSBackup(fileURL: fileURL)
+                return ThirdPartyImportPreparedResult(
+                    source: source,
+                    package: package,
+                    warnings: []
+                )
+            }
+
             let parsed: ParsedPayload
             switch source {
             case .cherryStudio:
@@ -115,6 +128,9 @@ public enum ThirdPartyImportService {
                 parsed = try parseKelivo(fileURL: fileURL)
             case .chatgpt:
                 parsed = try parseChatGPT(fileURL: fileURL)
+            case .etosBackup:
+                // 已在前置分支返回，这里仅为穷尽匹配。
+                throw ThirdPartyImportError.unsupportedBackupFormat(reason: "导入来源未实现。")
             }
 
             let package = try makePackage(from: parsed)
@@ -181,6 +197,45 @@ private extension ThirdPartyImportService {
             providers: parsed.providers,
             sessions: parsed.sessions
         )
+    }
+
+    // MARK: ETOS
+
+    static func parseETOSBackup(fileURL: URL) throws -> SyncPackage {
+        let rootURL: URL
+        if isDirectory(fileURL) {
+            guard let foundURL = findETOSJSONFile(inDirectory: fileURL) else {
+                throw ThirdPartyImportError.unsupportedBackupFormat(
+                    reason: "未在目录中找到 ETOS 可识别的 JSON 导出包。"
+                )
+            }
+            rootURL = foundURL
+        } else {
+            rootURL = fileURL
+        }
+
+        if isLikelyCompressedBackup(rootURL) {
+            throw ThirdPartyImportError.unsupportedBackupFormat(
+                reason: "ETOS 数据包请直接选择 .json 文件，不支持压缩包。"
+            )
+        }
+
+        guard let data = try? Data(contentsOf: rootURL) else {
+            throw ThirdPartyImportError.fileNotReadable
+        }
+        guard (try? JSONSerialization.jsonObject(with: data)) != nil else {
+            throw ThirdPartyImportError.invalidJSON
+        }
+
+        guard let package = try? SyncPackageTransferService.decodePackage(from: data) else {
+            throw ThirdPartyImportError.unsupportedBackupFormat(
+                reason: "文件不是可识别的 ETOS 导出数据包。"
+            )
+        }
+        guard !package.options.isEmpty else {
+            throw ThirdPartyImportError.noImportableContent
+        }
+        return package
     }
 
     // MARK: Cherry Studio
@@ -1013,6 +1068,27 @@ private extension ThirdPartyImportService {
         }
 
         return nil
+    }
+
+    static func findETOSJSONFile(inDirectory directoryURL: URL) -> URL? {
+        guard isDirectory(directoryURL) else { return nil }
+        let enumerator = FileManager.default.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        var fallback: URL?
+        while let fileURL = enumerator?.nextObject() as? URL {
+            if isDirectory(fileURL) { continue }
+            guard fileURL.pathExtension.lowercased() == "json" else { continue }
+            if fileURL.lastPathComponent.hasPrefix("ETOS-数据导出-") {
+                return fileURL
+            }
+            fallback = fallback ?? fileURL
+        }
+
+        return fallback
     }
 
     static func isDirectory(_ url: URL) -> Bool {

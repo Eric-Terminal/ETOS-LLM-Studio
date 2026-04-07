@@ -36,6 +36,7 @@ struct ToolCenterView: View {
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             memoryTopK: memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
+            enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             isIsolatedSession: currentSessionIsolationActive
         )
     }
@@ -258,7 +259,7 @@ struct ToolCenterView: View {
 
             Section(
                 header: Text(NSLocalizedString("内置工具", comment: "Built-in tools section title")),
-                footer: Text(NSLocalizedString("内置工具会直接影响聊天时是否向模型暴露记忆能力与网页卡片渲染能力。", comment: "Built-in tools footer"))
+                footer: Text(NSLocalizedString("内置工具会直接影响聊天时是否向模型暴露记忆能力、网页卡片渲染能力与结构化问答能力。", comment: "Built-in tools footer"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
@@ -492,6 +493,8 @@ struct ToolCenterView: View {
             return NSLocalizedString("记忆系统主动检索", comment: "Memory search tool title")
         case .widgetCard:
             return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
+        case .askUserInput:
+            return NSLocalizedString("询问用户选项", comment: "Built-in ask user input tool title")
         @unknown default:
             return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
         }
@@ -509,7 +512,7 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled:
+            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled, .askUserInputDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
@@ -529,7 +532,7 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前 Top K 为 0，聊天时不会暴露检索工具。", comment: "Memory search top k zero")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .memoryWriteDisabled, .widgetDisabled:
+            case .memoryWriteDisabled, .widgetDisabled, .askUserInputDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
@@ -540,10 +543,21 @@ struct ToolCenterView: View {
                 return NSLocalizedString("已启用网页卡片渲染能力。", comment: "Built-in widget enabled status")
             case .widgetDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status")
-            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook:
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .askUserInputDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status fallback")
             @unknown default:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget unknown status fallback")
+            }
+        case .askUserInput:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已启用结构化问答能力。", comment: "Built-in ask user input enabled status")
+            case .askUserInputDisabled:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status")
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status fallback")
+            @unknown default:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input unknown status fallback")
             }
         @unknown default:
             return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")
@@ -907,6 +921,7 @@ private struct WatchBuiltInToolDetailView: View {
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             memoryTopK: memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
+            enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             isIsolatedSession: currentSessionIsolationActive
         ).first(where: { $0.kind == kind }) ?? ToolCatalogBuiltInToolState(
             kind: kind,
@@ -977,6 +992,16 @@ private struct WatchBuiltInToolDetailView: View {
                         )
                     )
                 }
+            case .askUserInput:
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                    Toggle(
+                        NSLocalizedString("启用询问用户选项工具", comment: "Enable ask user input built-in tool"),
+                        isOn: Binding(
+                            get: { appToolManager.isToolEnabled(.askUserInput) },
+                            set: { appToolManager.setToolEnabled(kind: .askUserInput, isEnabled: $0) }
+                        )
+                    )
+                }
             @unknown default:
                 Section(NSLocalizedString("当前状态", comment: "Current status section")) {
                     Text(NSLocalizedString("该工具类型暂未提供可编辑设置。", comment: "Unknown built-in tool settings fallback"))
@@ -996,6 +1021,8 @@ private struct WatchBuiltInToolDetailView: View {
             return NSLocalizedString("记忆系统主动检索", comment: "Memory search tool title")
         case .widgetCard:
             return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
+        case .askUserInput:
+            return NSLocalizedString("询问用户选项", comment: "Built-in ask user input tool title")
         @unknown default:
             return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
         }
@@ -1009,6 +1036,8 @@ private struct WatchBuiltInToolDetailView: View {
             return NSLocalizedString("允许模型调用 search_memory，在回答前主动检索记忆。", comment: "Memory search tool subtitle")
         case .widgetCard:
             return NSLocalizedString("允许模型调用 show_widget，在对话中渲染 HTML 网页卡片。", comment: "Built-in widget tool subtitle")
+        case .askUserInput:
+            return NSLocalizedString("允许模型调用 ask_user_input，在回答前向用户发起结构化问答。", comment: "Built-in ask user input tool subtitle")
         @unknown default:
             return NSLocalizedString("该内置工具当前可按配置参与聊天。", comment: "Built-in tool fallback subtitle")
         }
@@ -1018,6 +1047,8 @@ private struct WatchBuiltInToolDetailView: View {
         switch kind {
         case .widgetCard:
             return .widgetDisabled
+        case .askUserInput:
+            return .askUserInputDisabled
         case .memoryWrite, .memorySearch:
             return .memoryDisabled
         @unknown default:
@@ -1037,7 +1068,7 @@ private struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled:
+            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled, .askUserInputDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
@@ -1057,7 +1088,7 @@ private struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("当前 Top K 为 0，聊天时不会暴露检索工具。", comment: "Memory search top k zero")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .memoryWriteDisabled, .widgetDisabled:
+            case .memoryWriteDisabled, .widgetDisabled, .askUserInputDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
@@ -1068,10 +1099,21 @@ private struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("已启用网页卡片渲染能力。", comment: "Built-in widget enabled status")
             case .widgetDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status")
-            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook:
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .askUserInputDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status fallback")
             @unknown default:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget unknown status fallback")
+            }
+        case .askUserInput:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已启用结构化问答能力。", comment: "Built-in ask user input enabled status")
+            case .askUserInputDisabled:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status")
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status fallback")
+            @unknown default:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input unknown status fallback")
             }
         @unknown default:
             return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")

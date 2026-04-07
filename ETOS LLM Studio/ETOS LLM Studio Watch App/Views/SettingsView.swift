@@ -34,7 +34,6 @@ struct SettingsView: View {
     // MARK: - 视图模型
     
     @ObservedObject var viewModel: ChatViewModel
-    @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     
@@ -97,13 +96,12 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("启动时打开历史会话", isOn: $restoreLastSessionOnLaunch)
-
                     NavigationLink(destination: SessionListView(
                         sessions: $viewModel.chatSessions,
+                        folders: $viewModel.sessionFolders,
                         currentSession: $viewModel.currentSession,
-                        deleteAction: { indexSet in
-                            viewModel.deleteSession(at: indexSet)
+                        deleteSessionAction: { session in
+                            viewModel.deleteSessions([session])
                         },
                         branchAction: { session, copyMessages in
                             let newSession = viewModel.branchSession(from: session, copyMessages: copyMessages)
@@ -121,6 +119,18 @@ struct SettingsView: View {
                         },
                         updateSessionAction: { session in
                             viewModel.updateSession(session)
+                        },
+                        createFolderAction: { name, parentID in
+                            viewModel.createSessionFolder(name: name, parentID: parentID)
+                        },
+                        renameFolderAction: { folder, newName in
+                            viewModel.renameSessionFolder(folder, newName: newName)
+                        },
+                        deleteFolderAction: { folder in
+                            viewModel.deleteSessionFolder(folder)
+                        },
+                        moveSessionToFolderAction: { session, folderID in
+                            viewModel.moveSession(session, toFolderID: folderID)
                         }
                     )) {
                         Label("历史会话管理", systemImage: "list.bullet.rectangle")
@@ -189,7 +199,7 @@ struct SettingsView: View {
                     }
                     
                     NavigationLink(destination: DeviceSyncSettingsView()) {
-                        Label("设备同步", systemImage: "arrow.triangle.2.circlepath")
+                        Label("同步与备份", systemImage: "arrow.triangle.2.circlepath")
                     }
                     
                     NavigationLink(destination: AboutView()) {

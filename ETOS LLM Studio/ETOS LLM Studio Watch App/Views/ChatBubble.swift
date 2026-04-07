@@ -318,15 +318,17 @@ struct ChatBubble: View {
             .frame(height: separatorThickness)
     }
 
-    private var rowHorizontalPadding: CGFloat {
-        16
+    private var noBubbleRowHorizontalPadding: CGFloat {
+        2
     }
 
     private var bubbleMaxWidth: CGFloat {
-        let rowWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
-        let contentWidth = max(rowWidth - rowHorizontalPadding * 2, 1)
-        let widthRatio = usesNoBubbleStyle ? 0.96 : 0.86
-        return contentWidth * widthRatio
+        let screenWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
+        if usesNoBubbleStyle {
+            return max(screenWidth - noBubbleRowHorizontalPadding * 2, 1)
+        }
+        let rowWidth = availableWidth > 0 ? availableWidth : screenWidth
+        return rowWidth * 0.86
     }
 
     private var shouldForceMergedWidth: Bool {
@@ -338,6 +340,13 @@ struct ChatBubble: View {
 
     private var rowVerticalPadding: CGFloat {
         4
+    }
+
+    private var assistantContentInsets: EdgeInsets {
+        if usesNoBubbleStyle {
+            return EdgeInsets(top: 6, leading: 2, bottom: 6, trailing: 2)
+        }
+        return EdgeInsets(top: 10, leading: 8, bottom: 10, trailing: 8)
     }
     
     private var activeToolPermissionRequest: ToolPermissionRequest? {
@@ -366,7 +375,7 @@ struct ChatBubble: View {
                 Spacer()
             }
         }
-        .padding(.horizontal, rowHorizontalPadding)
+        .padding(.horizontal, usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .background(
@@ -375,7 +384,7 @@ struct ChatBubble: View {
             }
         )
         .onPreferenceChange(RowWidthKey.self) { newValue in
-            if availableWidth != newValue {
+            if abs(availableWidth - newValue) > 0.5 {
                 availableWidth = newValue
             }
         }
@@ -519,7 +528,7 @@ struct ChatBubble: View {
                             )
                     }
                 }
-                .padding(10)
+                .padding(assistantContentInsets)
 
                 connectedToolBubbleContainer(
                     isFirst: true,
@@ -558,7 +567,7 @@ struct ChatBubble: View {
                         }
                     }
                 }
-                .padding(10)
+                .padding(assistantContentInsets)
 
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast, isError: false) {
                     content
@@ -602,7 +611,7 @@ struct ChatBubble: View {
                     renderContent(message.content)
                 }
             }
-            .padding(10)
+            .padding(assistantContentInsets)
             
             assistantBubbleContainer(content, isError: false)
             .contentShape(Rectangle())
@@ -651,7 +660,7 @@ struct ChatBubble: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(assistantContentInsets)
 
             assistantBubbleContainer(content, isError: isErrorVersion)
             .contentShape(Rectangle())
@@ -898,6 +907,9 @@ struct ChatBubble: View {
             return label
         }
         if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = AppToolManager.shared.displayLabel(for: toolName) {
             return label
         }
         return toolName
