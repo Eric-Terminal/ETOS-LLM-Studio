@@ -95,7 +95,7 @@ struct DeviceSyncSettingsView: View {
                 Text("导出内容与上方同步勾选项一致。导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。")
             }
 
-            Section("上传备份（POST）") {
+            Section {
                 TextField("https://example.com/backup", text: $backupUploadEndpoint)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -129,6 +129,8 @@ struct DeviceSyncSettingsView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
+            } header: {
+                Text("上传备份（POST）")
             } footer: {
                 Text("会向输入地址发送 POST(JSON) 请求，内容与导出包一致。上传前请确认地址可信。")
             }
