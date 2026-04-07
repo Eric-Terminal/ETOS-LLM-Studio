@@ -422,6 +422,79 @@ struct AppToolManagerTests {
         )
     }
 
+    @Test("结构化问答提交格式：使用 Q/A 文本并去除 JSON 负载")
+    func testAskUserInputSubmissionFormatterUsesQAFormatWithoutJSONPayload() {
+        let request = AppToolAskUserInputRequest(
+            requestID: "req-1",
+            title: "测试标题",
+            description: nil,
+            submitLabel: "提交",
+            questions: [
+                AppToolAskUserInputQuestion(
+                    id: "q1",
+                    question: "你今天主要想用 Claude 做什么？",
+                    type: .multiSelect,
+                    options: [
+                        .init(id: "o1", label: "写作"),
+                        .init(id: "o2", label: "编程"),
+                        .init(id: "o3", label: "分析")
+                    ],
+                    allowOther: true,
+                    required: true
+                )
+            ]
+        )
+        let submission = AppToolAskUserInputSubmission(
+            requestID: "req-1",
+            cancelled: false,
+            submittedAt: "2026-04-07T14:00:00Z",
+            answers: [
+                .init(
+                    questionID: "q1",
+                    question: "你今天主要想用 Claude 做什么？",
+                    type: .multiSelect,
+                    selectedOptionIDs: ["o2", "o3"],
+                    selectedOptionLabels: ["编程", "分析"],
+                    otherText: "顺便聊聊产品设计"
+                )
+            ]
+        )
+
+        let content = AppToolAskUserInputSubmissionFormatter.messageContent(
+            request: request,
+            submission: submission
+        )
+
+        #expect(content.contains("Q: 你今天主要想用 Claude 做什么？"))
+        #expect(content.contains("A: 2,3,顺便聊聊产品设计"))
+        #expect(!content.contains("```json"))
+        #expect(!content.contains("\"requestID\""))
+    }
+
+    @Test("结构化问答提交格式：取消时只返回简短提示")
+    func testAskUserInputSubmissionFormatterCancelledMessage() {
+        let request = AppToolAskUserInputRequest(
+            requestID: "req-cancel",
+            title: nil,
+            description: nil,
+            submitLabel: "提交",
+            questions: []
+        )
+        let submission = AppToolAskUserInputSubmission(
+            requestID: "req-cancel",
+            cancelled: true,
+            submittedAt: "2026-04-07T14:00:00Z",
+            answers: []
+        )
+
+        let content = AppToolAskUserInputSubmissionFormatter.messageContent(
+            request: request,
+            submission: submission
+        )
+
+        #expect(content == "用户取消了本次问答。")
+    }
+
     @MainActor
     @Test("填充输入框工具会广播输入框填充请求")
     func testExecuteFillUserInputToolPostsNotification() async throws {
