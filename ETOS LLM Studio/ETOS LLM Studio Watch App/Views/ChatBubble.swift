@@ -318,14 +318,14 @@ struct ChatBubble: View {
             .frame(height: separatorThickness)
     }
 
-    private var rowHorizontalPadding: CGFloat {
-        usesNoBubbleStyle ? 2 : 16
+    private var noBubbleRowHorizontalPadding: CGFloat {
+        2
     }
 
     private var bubbleMaxWidth: CGFloat {
         let screenWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
         if usesNoBubbleStyle {
-            return max(screenWidth - rowHorizontalPadding * 2, 1)
+            return max(screenWidth - noBubbleRowHorizontalPadding * 2, 1)
         }
         let rowWidth = availableWidth > 0 ? availableWidth : screenWidth
         return rowWidth * 0.86
@@ -375,7 +375,7 @@ struct ChatBubble: View {
                 Spacer()
             }
         }
-        .padding(.horizontal, rowHorizontalPadding)
+        .padding(.horizontal, usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .background(
