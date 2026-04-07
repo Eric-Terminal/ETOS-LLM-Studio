@@ -1003,6 +1003,74 @@ struct OpenAIAdapterTests {
         #expect(!(properties["type"] is String))
     }
 
+    @Test("OpenAI 工具 schema 中属性名 type 不会被误当关键字移除")
+    func testOpenAISchemaPropertyNamedTypeKeepsInPropertiesMap() throws {
+        let tools = [
+            InternalToolDefinition(
+                name: "ask_user_input",
+                description: "测试 ask_user_input",
+                parameters: .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "questions": .dictionary([
+                            "type": .string("array"),
+                            "items": .dictionary([
+                                "type": .string("object"),
+                                "properties": .dictionary([
+                                    "question": .dictionary([
+                                        "type": .string("string")
+                                    ]),
+                                    "type": .dictionary([
+                                        "type": .string("string"),
+                                        "enum": .array([.string("single_select"), .string("multi_select")])
+                                    ]),
+                                    "options": .dictionary([
+                                        "type": .string("array"),
+                                        "items": .dictionary([
+                                            "type": .string("string")
+                                        ])
+                                    ])
+                                ]),
+                                "required": .array([.string("question"), .string("type"), .string("options")])
+                            ])
+                        ])
+                    ]),
+                    "required": .array([.string("questions")])
+                ])
+            )
+        ]
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstTool = toolsPayload.first,
+        let function = firstTool["function"] as? [String: Any],
+        let parameters = function["parameters"] as? [String: Any],
+        let rootProperties = parameters["properties"] as? [String: Any],
+        let questionsSchema = rootProperties["questions"] as? [String: Any],
+        let questionItemsSchema = questionsSchema["items"] as? [String: Any],
+        let questionProperties = questionItemsSchema["properties"] as? [String: Any],
+        let typeSchema = questionProperties["type"] as? [String: Any],
+        let required = questionItemsSchema["required"] as? [String] else {
+            Issue.record("OpenAI 请求体中未找到 ask_user_input 的 type 字段 schema。")
+            return
+        }
+
+        #expect(typeSchema["type"] as? String == "string")
+        #expect((typeSchema["enum"] as? [String]) == ["single_select", "multi_select"])
+        #expect(required.contains("type"))
+    }
+
     @Test("OpenAI 解析保留 provider_specific_fields")
     func testParseResponsePreservesProviderSpecificFields() throws {
         let json = """
