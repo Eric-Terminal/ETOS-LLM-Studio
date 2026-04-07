@@ -43,12 +43,17 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.fontFiles") private var syncFontFiles = true
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
+    @AppStorage("sync.backup.uploadEndpoint") private var backupUploadEndpoint = ""
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
     @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
     @State private var exportSharePayload: DeviceSyncExportSharePayload?
     @State private var exportErrorMessage: String?
     @State private var isExporting: Bool = false
+    @State private var isUploading: Bool = false
+    @State private var uploadErrorMessage: String?
+    @State private var uploadSuccessMessage: String?
+    @State private var uploadResponsePreview: String?
     
     var body: some View {
         List {
@@ -88,6 +93,44 @@ struct DeviceSyncSettingsView: View {
                 Text("导出备份")
             } footer: {
                 Text("导出内容与上方同步勾选项一致。导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。")
+            }
+
+            Section("上传备份（POST）") {
+                TextField("https://example.com/backup", text: $backupUploadEndpoint)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+
+                Button {
+                    uploadDataPackage()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isUploading {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        Label("上传到地址", systemImage: "icloud.and.arrow.up")
+                            .etFont(.headline)
+                        Spacer()
+                    }
+                }
+                .disabled(selectedSyncOptions.isEmpty || isUploading)
+
+                if let uploadSuccessMessage, !uploadSuccessMessage.isEmpty {
+                    Text(uploadSuccessMessage)
+                        .etFont(.footnote)
+                        .foregroundStyle(.green)
+                }
+
+                if let uploadResponsePreview, !uploadResponsePreview.isEmpty {
+                    Text("响应：\(uploadResponsePreview)")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+            } footer: {
+                Text("会向输入地址发送 POST(JSON) 请求，内容与导出包一致。上传前请确认地址可信。")
             }
 
             Section {
@@ -163,6 +206,14 @@ struct DeviceSyncSettingsView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(exportErrorMessage ?? "未知错误")
+        }
+        .alert("上传失败", isPresented: Binding(
+            get: { uploadErrorMessage != nil },
+            set: { if !$0 { uploadErrorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(uploadErrorMessage ?? "未知错误")
         }
     }
     
@@ -350,6 +401,42 @@ struct DeviceSyncSettingsView: View {
                 format: "导出失败：%@",
                 error.localizedDescription
             )
+        }
+    }
+
+    private func uploadDataPackage() {
+        let trimmed = backupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            uploadErrorMessage = "请先输入上传地址。"
+            return
+        }
+        guard let endpoint = URL(string: trimmed),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            uploadErrorMessage = "上传地址格式无效，请输入完整的 http/https URL。"
+            return
+        }
+
+        isUploading = true
+        uploadErrorMessage = nil
+        uploadSuccessMessage = nil
+        uploadResponsePreview = nil
+
+        Task {
+            do {
+                let package = SyncEngine.buildPackage(options: selectedSyncOptions)
+                let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
+                await MainActor.run {
+                    isUploading = false
+                    uploadSuccessMessage = "上传成功（HTTP \(result.statusCode)）"
+                    uploadResponsePreview = result.responseBodyPreview
+                }
+            } catch {
+                await MainActor.run {
+                    isUploading = false
+                    uploadErrorMessage = error.localizedDescription
+                }
+            }
         }
     }
 
