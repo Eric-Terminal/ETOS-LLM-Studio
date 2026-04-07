@@ -319,14 +319,15 @@ struct ChatBubble: View {
     }
 
     private var rowHorizontalPadding: CGFloat {
-        usesNoBubbleStyle ? 4 : 16
+        usesNoBubbleStyle ? 2 : 16
     }
 
     private var bubbleMaxWidth: CGFloat {
-        let rowWidth = availableWidth > 0 ? availableWidth : WKInterfaceDevice.current().screenBounds.width
+        let screenWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
         if usesNoBubbleStyle {
-            return max(rowWidth - rowHorizontalPadding * 2, 1)
+            return max(screenWidth - rowHorizontalPadding * 2, 1)
         }
+        let rowWidth = availableWidth > 0 ? availableWidth : screenWidth
         return rowWidth * 0.86
     }
 
@@ -383,7 +384,7 @@ struct ChatBubble: View {
             }
         )
         .onPreferenceChange(RowWidthKey.self) { newValue in
-            if availableWidth != newValue {
+            if abs(availableWidth - newValue) > 0.5 {
                 availableWidth = newValue
             }
         }
