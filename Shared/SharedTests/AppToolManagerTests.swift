@@ -466,7 +466,7 @@ struct AppToolManagerTests {
         )
 
         #expect(content.contains("Q: 你今天主要想用 Claude 做什么？"))
-        #expect(content.contains("A: 2,3,顺便聊聊产品设计"))
+        #expect(content.contains("A: 编程,分析,顺便聊聊产品设计"))
         #expect(!content.contains("```json"))
         #expect(!content.contains("\"requestID\""))
     }
