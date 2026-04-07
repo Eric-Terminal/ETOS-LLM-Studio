@@ -2069,10 +2069,6 @@ private struct AskUserInputComposerPanel: View {
         return min(max(measured + 4, 120), questionContentMaxHeight)
     }
 
-    private var panelMaxHeight: CGFloat {
-        min(UIScreen.main.bounds.height * 0.72, 560)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             topBar
@@ -2091,7 +2087,6 @@ private struct AskUserInputComposerPanel: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .frame(maxHeight: panelMaxHeight, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(.ultraThinMaterial)
