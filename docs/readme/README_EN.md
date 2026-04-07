@@ -7,16 +7,20 @@
 
 **A native AI client for iOS and Apple Watch. It supports OpenAI, Anthropic Claude, Google Gemini, MCP tool calling, local RAG memory, Worldbook, Daily Pulse, Siri Shortcuts, and cross-device sync.**
 
-[Simplified Chinese](../../README.md) | [Traditional Chinese](README_ZH_HANT.md) | [Japanese](README_JA.md)
+[Simplified Chinese](../../README.md) | [Traditional Chinese](README_ZH_HANT.md) | [Japanese](README_JA.md) | [Русский](README_RU.md)
 
 ---
 
 ## ✨ Recent Highlights
 
-*   **Daily Pulse**: Generates proactive briefing cards by combining recent chats, long-term memory, request logs, feedback history, next-day curation input, external signals, and follow-up tasks.
-*   **Pulse Tasks and Feedback Loop**: Cards can be liked, downranked, hidden, saved as sessions, continued as chats, or converted into tasks; long-term preferences feed back into later runs.
-*   **Morning Delivery and Background Preparation**: iOS now supports background prewarm, morning reminders, and notification quick actions, while watchOS also has the full entry, review, and continue-chat flow.
-*   **Text-to-Speech (TTS)**: Supports system TTS, cloud TTS, and automatic fallback, with separate TTS model selection and provider parameters.
+*   **Session management overhaul (Mar 27 ~ Apr 6)**: Added full-text session search on iOS/watchOS, message index jump, folder-based session organization, batch move, and per-session cross-device send.
+*   **Import/Export coverage expanded**: Added third-party import (Cherry Studio, RikkaHub, Kelivo, ChatGPT conversations) and conversation export to PDF / Markdown / TXT.
+*   **Sync & Backup 2.0**: Added ETOS package import/export, full import flow on watchOS, and direct POST upload for exported packages via custom endpoint.
+*   **Display system redesign**: Added custom fonts (including WOFF / WOFF2), font slot priority ordering, bubble/text color customization, bubbleless UI, and default-on auto preview for thinking content.
+*   **Markdown and code block upgrades**: Added syntax highlight, copy feedback, collapse toggle, iOS code preview, Mermaid rendering, and blockquote left border style.
+*   **Tool Center expansion**: Added full Agent Skills flow with import, structured `ask_user_input` workflow, widget card rendering, and auto ticket submission tool for feedback assistant.
+*   **Networking and voice upgrades**: Added global/provider-level HTTP(S)/SOCKS proxy with authentication, plus streaming STT voice input on iOS and watchOS.
+*   **Feedback and notifications upgrade**: Feedback Center now supports in-ticket comments, developer badge display, status auto-refresh, and high-priority local notifications with deep links.
 
 ---
 
@@ -32,7 +36,7 @@
 
 School life can be pretty boring, and I always seem to have a lot of things I want to ask AI. At the time, most AI apps on the App Store were either absurdly expensive or too crippled to be useful—especially on Apple Watch—so I ended up building one myself.
 
-What started as a rough little app with only 1,800 lines of code and hardcoded API keys has grown into a project with **186 Swift source files and 88,359 lines of code** (including Shared / iOS / watchOS / tests). “ETOS LLM Studio” may sound a bit over the top, but in reality it is still my playground for exploring the edges of LLM applications.
+What started as a rough little app with only 1,800 lines of code and hardcoded API keys has grown into a project with **223 Swift source files and 119,112 lines of code** (including Shared / iOS / watchOS / tests). “ETOS LLM Studio” may sound a bit over the top, but in reality it is still my playground for exploring the edges of LLM applications.
 
 It is no longer just a Watch app either. I have gradually filled out the iOS side into a more complete experience for managing models, tools, memory, worldbooks, and Daily Pulse, and the two platforms can sync through the built-in sync engine.
 
@@ -46,11 +50,14 @@ Since I mostly use a Mac and an Apple Watch in daily life, the iPhone side still
 *   **Multi-Model Support**: Native adapters for OpenAI, Anthropic (Claude), Google (Gemini), and compatible APIs, with in-app provider and model management.
 *   **Advanced Request Configuration**: Supports custom headers, parameter expressions, and raw JSON request bodies for more experimental or provider-compatible setups.
 *   **Multimodal and Image Generation**: Supports voice input, image input, and AI image generation.
+*   **Speech-to-Text (STT)**: Integrates system `SFSpeechRecognizer` streaming transcription, with real-time transcript preview and one-tap insertion into input.
 *   **Text-to-Speech (TTS)**: Supports system TTS, cloud TTS, and automatic fallback, with separate TTS model selection and playback parameters.
 
 #### Tools and Automation
 
 *   **Tool Center + Extended Tools**: Unified management for MCP, Shortcuts, and local tools, with toggles, approval policies, and session-level enablement.
+*   **Agent Skills**: End-to-end skill integration with unified toggles in Tool Center, plus local file import on iOS and URL-based import on watchOS.
+*   **Structured Q&A Tool (`ask_user_input`)**: Supports step-by-step single-question flow, single/multi choice exclusivity rules, custom input, and previous-question navigation.
 *   **Sandbox File System Tools**: Supports search, chunked reading, diff viewing, partial edits, move / copy / delete, and other file operations.
 *   **MCP Integration**: Supports remote [Model Context Protocol](https://modelcontextprotocol.io) with a full MCP client, streamable HTTP/SSE transport, reconnect handling, timeouts, handshake governance, and capability negotiation.
 *   **Siri Shortcuts**: Integrates with the Shortcuts framework, supports AI invocation through shortcuts, custom tools, and URL Scheme routing.
@@ -74,9 +81,10 @@ Since I mostly use a Mac and an Apple Watch in daily life, the iPhone side still
 #### Sync, Debugging, and Operations
 
 *   **Cross-Device Sync**: Built-in iOS ↔ watchOS sync engine for providers, sessions, worldbooks, tool settings, Daily Pulse data, and more.
+*   **Sync and Backup**: Supports ETOS package export/import, full import on watchOS, and upload of exported packages to custom endpoints.
 *   **In-App Feedback Assistant**: Supports feedback categories, environment collection, PoW submission flow, and dual-platform sync.
-*   **LAN Debugging**: Includes a LAN debugging client that can work with a companion desktop tool to manage in-app files or inspect real-time debug logs from a browser.
-*   **Localization**: Supports English, Simplified Chinese, Traditional Chinese (Hong Kong), Japanese, and Russian.
+*   **LAN Debugging**: Includes a LAN debugging client, a Go-based companion service, and a built-in web console for browser-based file/session management.
+*   **Localization**: Supports 8 languages — English, Simplified Chinese, Traditional Chinese (Hong Kong), Japanese, Russian, French, Spanish, and Arabic.
 
 ---
 
@@ -92,6 +100,7 @@ Later, an investor helped cover that fee, on the condition that I repay it throu
 So the rules are simple:
 1.  **If you want convenience / want to support me**: See you on the App Store, and thank you for the “Coke money.”
 2.  **If you want to tinker / want it for free**: The code is right here under GPLv3. If you have a Mac and Xcode, **you can build and install it yourself with no feature differences at all**.
+3.  **If you want the latest build early**: Join TestFlight 👉 [https://testflight.apple.com/join/d4PgF4CK](https://testflight.apple.com/join/d4PgF4CK)
 
 Technology should be shared. I do not want a small price barrier to block someone who is just as curious about code as I am.
 
@@ -115,7 +124,7 @@ Technology should be shared. I do not want a small price barrier to block someon
 The project uses a two-layer structure: a platform-independent Shared framework plus platform-specific view layers.
 
 ```
-Shared/Shared/                  ← Platform-agnostic business logic (69 Swift source files)
+Shared/Shared/                  ← Platform-agnostic business logic (83 Swift source files)
 ├── ChatService.swift            ← Central singleton for sessions, messages, model selection, and request orchestration
 ├── APIAdapter.swift             ← API adapter layer for OpenAI / Anthropic / Gemini and related formats
 ├── Models.swift                 ← Core data models
@@ -134,9 +143,9 @@ Shared/Shared/                  ← Platform-agnostic business logic (69 Swift s
 ├── StorageBrowserSupport.swift  ← File browsing and management support
 └── LocalDebugServer.swift       ← LAN debugging client
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS view layer (41 Swift source files)
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS view layer (43 Swift source files)
-Shared/SharedTests/                         ← Shared-layer tests (30 Swift source files)
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS view layer (44 Swift source files)
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS view layer (47 Swift source files)
+Shared/SharedTests/                         ← Shared-layer tests (49 Swift source files)
 ```
 
 Data flow: `View → ChatViewModel → ChatService.shared → APIAdapter → LLM API`, with UI updates driven through Combine subjects.
@@ -173,4 +182,4 @@ If you want to build it yourself:
 
 ---
 
-This README was last revised on March 22, 2026, after 3245a90. The project moves quickly, so if the README falls behind the code, the commit history is the best source of truth.
+This README was last revised on April 8, 2026, after 99b6f19. The project moves quickly, so if the README falls behind the code, the commit history is the best source of truth.
