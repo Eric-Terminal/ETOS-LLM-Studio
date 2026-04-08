@@ -20,6 +20,9 @@ import AVFAudio
 #if canImport(CoreImage)
 import CoreImage
 #endif
+#if canImport(Accelerate)
+import Accelerate
+#endif
 #if canImport(UserNotifications)
 import UserNotifications
 #endif
@@ -2315,25 +2318,7 @@ class ChatViewModel: ObservableObject {
         let expectedRadius = radius
         backgroundBlurTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            let blurredCGImage: CGImage?
-            #if canImport(CoreImage)
-            let ciImage = CIImage(cgImage: baseCGImage)
-            if let filter = CIFilter(name: "CIGaussianBlur") {
-                filter.setValue(ciImage, forKey: kCIInputImageKey)
-                filter.setValue(expectedRadius, forKey: kCIInputRadiusKey)
-                if let output = filter.outputImage {
-                    let cropped = output.cropped(to: ciImage.extent)
-                    let context = CIContext()
-                    blurredCGImage = context.createCGImage(cropped, from: ciImage.extent)
-                } else {
-                    blurredCGImage = nil
-                }
-            } else {
-                blurredCGImage = nil
-            }
-            #else
-            blurredCGImage = nil
-            #endif
+            let blurredCGImage = Self.makeBlurredCGImage(from: baseCGImage, radius: expectedRadius)
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard self.enableBackground,
@@ -2349,5 +2334,142 @@ class ChatViewModel: ObservableObject {
             }
         }
     }
+
+    nonisolated private static func makeBlurredCGImage(from baseCGImage: CGImage, radius: Double) -> CGImage? {
+#if canImport(CoreImage)
+        if let cgImage = blurCGImageWithCoreImage(baseCGImage, radius: radius) {
+            return cgImage
+        }
+#endif
+#if canImport(Accelerate)
+        return blurCGImageWithVImage(baseCGImage, radius: radius)
+#else
+        return nil
+#endif
+    }
+
+#if canImport(CoreImage)
+    nonisolated private static func blurCGImageWithCoreImage(_ baseCGImage: CGImage, radius: Double) -> CGImage? {
+        let ciImage = CIImage(cgImage: baseCGImage)
+        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
+        filter.setValue(ciImage, forKey: kCIInputImageKey)
+        filter.setValue(radius, forKey: kCIInputRadiusKey)
+        guard let output = filter.outputImage else { return nil }
+        let cropped = output.cropped(to: ciImage.extent)
+        let context = CIContext()
+        return context.createCGImage(cropped, from: ciImage.extent)
+    }
+#endif
+
+#if canImport(Accelerate)
+    nonisolated private static func blurCGImageWithVImage(_ baseCGImage: CGImage, radius: Double) -> CGImage? {
+        let kernelSize = boxKernelSize(for: radius)
+        guard kernelSize > 1 else { return baseCGImage }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        var format = vImage_CGImageFormat(
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            colorSpace: Unmanaged.passRetained(colorSpace),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue),
+            version: 0,
+            decode: nil,
+            renderingIntent: .defaultIntent
+        )
+        defer { format.colorSpace?.release() }
+
+        var sourceBuffer = vImage_Buffer()
+        var error = vImageBuffer_InitWithCGImage(
+            &sourceBuffer,
+            &format,
+            nil,
+            baseCGImage,
+            vImage_Flags(kvImageNoFlags)
+        )
+        guard error == kvImageNoError else { return nil }
+        defer { free(sourceBuffer.data) }
+
+        var destinationBuffer = vImage_Buffer()
+        error = vImageBuffer_Init(
+            &destinationBuffer,
+            sourceBuffer.height,
+            sourceBuffer.width,
+            format.bitsPerPixel,
+            vImage_Flags(kvImageNoFlags)
+        )
+        guard error == kvImageNoError else { return nil }
+        defer { free(destinationBuffer.data) }
+
+        var temporaryBuffer = vImage_Buffer()
+        error = vImageBuffer_Init(
+            &temporaryBuffer,
+            sourceBuffer.height,
+            sourceBuffer.width,
+            format.bitsPerPixel,
+            vImage_Flags(kvImageNoFlags)
+        )
+        guard error == kvImageNoError else { return nil }
+        defer { free(temporaryBuffer.data) }
+
+        let flags = vImage_Flags(kvImageEdgeExtend)
+        error = vImageBoxConvolve_ARGB8888(
+            &sourceBuffer,
+            &destinationBuffer,
+            nil,
+            0,
+            0,
+            kernelSize,
+            kernelSize,
+            nil,
+            flags
+        )
+        guard error == kvImageNoError else { return nil }
+        error = vImageBoxConvolve_ARGB8888(
+            &destinationBuffer,
+            &temporaryBuffer,
+            nil,
+            0,
+            0,
+            kernelSize,
+            kernelSize,
+            nil,
+            flags
+        )
+        guard error == kvImageNoError else { return nil }
+        error = vImageBoxConvolve_ARGB8888(
+            &temporaryBuffer,
+            &destinationBuffer,
+            nil,
+            0,
+            0,
+            kernelSize,
+            kernelSize,
+            nil,
+            flags
+        )
+        guard error == kvImageNoError else { return nil }
+
+        error = kvImageNoError
+        guard let blurredCGImage = vImageCreateCGImageFromBuffer(
+            &destinationBuffer,
+            &format,
+            nil,
+            nil,
+            vImage_Flags(kvImageNoFlags),
+            &error
+        )?.takeRetainedValue(),
+              error == kvImageNoError else {
+            return nil
+        }
+        return blurredCGImage
+    }
+
+    nonisolated private static func boxKernelSize(for radius: Double) -> UInt32 {
+        let clampedRadius = max(0, radius)
+        let estimated = Int((clampedRadius * 2.4).rounded())
+        let odd = max(1, estimated | 1)
+        return UInt32(min(odd, 151))
+    }
+#endif
 
 }

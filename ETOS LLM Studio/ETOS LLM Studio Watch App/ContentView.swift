@@ -53,7 +53,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             // 背景图
-            if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageUIImage {
+            if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageBlurredUIImage {
                 GeometryReader { proxy in
                     let size = proxy.size
                     ZStack {
@@ -64,8 +64,6 @@ struct ContentView: View {
                         Image(uiImage: bgImage)
                             .resizable()
                             .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
-                            // watchOS 当前不提供 CoreImage，高斯模糊改为在视图层实时应用
-                            .blur(radius: viewModel.backgroundBlur)
                             .frame(width: size.width, height: size.height)
                             .position(x: size.width / 2, y: size.height / 2)
                             .clipped()
