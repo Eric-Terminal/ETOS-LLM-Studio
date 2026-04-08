@@ -2063,20 +2063,31 @@ final class ChatViewModel: ObservableObject {
             currentBackgroundImageBlurredUIImage = cached
             return
         }
+        let diskCacheURL = Self.blurredDiskCacheURL(for: currentBackgroundImage, radius: radius)
+        if let diskCachedImage = Self.loadBlurredImageFromDisk(at: diskCacheURL) {
+            blurredBackgroundImageCache.setObject(diskCachedImage, forKey: cacheKey)
+            currentBackgroundImageBlurredUIImage = diskCachedImage
+            return
+        }
         currentBackgroundImageBlurredUIImage = baseImage
         let expectedName = currentBackgroundImage
         let expectedRadius = radius
         backgroundBlurTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             let blurredCGImage = Self.makeBlurredCGImage(from: baseCGImage, radius: expectedRadius)
+            let blurredUIImage = blurredCGImage.map {
+                UIImage(cgImage: $0, scale: baseScale, orientation: baseOrientation)
+            }
+            guard !Task.isCancelled else { return }
+            if let blurredUIImage {
+                Self.saveBlurredImageToDisk(blurredUIImage, at: diskCacheURL)
+                Self.cleanupBlurredDiskCache(keeping: diskCacheURL)
+            }
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard self.enableBackground,
                       self.currentBackgroundImage == expectedName,
                       self.backgroundBlur == expectedRadius else { return }
-                let blurredUIImage = blurredCGImage.map {
-                    UIImage(cgImage: $0, scale: baseScale, orientation: baseOrientation)
-                }
                 if let blurredUIImage {
                     self.blurredBackgroundImageCache.setObject(blurredUIImage, forKey: cacheKey)
                 }
@@ -2217,5 +2228,48 @@ final class ChatViewModel: ObservableObject {
         return UInt32(min(odd, 151))
     }
 #endif
+
+    nonisolated private static func blurredDiskCacheURL(for name: String, radius: Double) -> URL {
+        blurredDiskCacheDirectory().appendingPathComponent(blurredDiskCacheFilename(for: name, radius: radius))
+    }
+
+    nonisolated private static func blurredDiskCacheDirectory() -> URL {
+        let cachesDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return cachesDirectory.appendingPathComponent("blurred-background-cache", isDirectory: true)
+    }
+
+    nonisolated private static func blurredDiskCacheFilename(for name: String, radius: Double) -> String {
+        let scaled = Int((radius * 10).rounded())
+        let sanitized = name.replacingOccurrences(of: "/", with: "_")
+        return "\(sanitized)__blur_\(scaled).jpg"
+    }
+
+    nonisolated private static func loadBlurredImageFromDisk(at url: URL) -> UIImage? {
+        UIImage(contentsOfFile: url.path)
+    }
+
+    nonisolated private static func saveBlurredImageToDisk(_ image: UIImage, at url: URL) {
+        guard let data = image.jpegData(compressionQuality: 0.92) ?? image.pngData() else { return }
+        let directory = url.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try data.write(to: url, options: [.atomic])
+        } catch {
+            return
+        }
+    }
+
+    nonisolated private static func cleanupBlurredDiskCache(keeping keepURL: URL) {
+        let directory = keepURL.deletingLastPathComponent()
+        guard let fileURLs = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) else { return }
+        let keepPath = keepURL.standardizedFileURL.path
+        for fileURL in fileURLs where fileURL.standardizedFileURL.path != keepPath {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
 
 }
