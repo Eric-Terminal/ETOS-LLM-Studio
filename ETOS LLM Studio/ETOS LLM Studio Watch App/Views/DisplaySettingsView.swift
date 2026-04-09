@@ -520,15 +520,15 @@ private struct WatchFontSettingsView: View {
 
             Section("预览") {
                 Text("风来疏竹，风过而竹不留声。")
-                    .etFont(FontRoutePreview.etFont(for: .body, sample: "风来疏竹，风过而竹不留声。", size: 14))
+                    .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。", size: 14))
                 Text("Emphasis")
-                    .etFont(FontRoutePreview.etFont(for: .emphasis, sample: "Emphasis", size: 14))
+                    .font(FontRoutePreview.font(for: .emphasis, sample: "Emphasis", size: 14))
                     .italic()
                 Text("Strong")
-                    .etFont(FontRoutePreview.etFont(for: .strong, sample: "Strong", size: 14))
+                    .font(FontRoutePreview.font(for: .strong, sample: "Strong", size: 14))
                     .fontWeight(.bold)
                 Text("let value = 42")
-                    .etFont(FontRoutePreview.etFont(for: .code, sample: "let value = 42", size: 13))
+                    .font(FontRoutePreview.font(for: .code, sample: "let value = 42", size: 13))
             }
         }
         .navigationTitle("字体设置")
@@ -739,10 +739,15 @@ private struct WatchFontSettingsView: View {
 }
 
 private enum FontRoutePreview {
-    static func etFont(for role: FontSemanticRole, sample: String, size: CGFloat) -> Font {
+    static func font(for role: FontSemanticRole, sample: String, size: CGFloat) -> Font {
         if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) {
             return .custom(postScriptName, size: size)
         }
-        return .system(size: size)
+        switch role {
+        case .code:
+            return .system(size: size, design: .monospaced)
+        default:
+            return .system(size: size)
+        }
     }
 }

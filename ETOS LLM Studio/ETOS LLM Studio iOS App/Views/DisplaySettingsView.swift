@@ -333,17 +333,17 @@ private struct FontSettingsView: View {
 
             Section("预览") {
                 Text("The quick brown fox jumps over the lazy dog.")
-                    .etFont(FontRoutePreview.etFont(for: .body, sample: "The quick brown fox"))
+                    .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
                 Text("中文：风来疏竹，风过而竹不留声。")
-                    .etFont(FontRoutePreview.etFont(for: .body, sample: "风来疏竹，风过而竹不留声。"))
+                    .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
                 Text("斜体预览 / Emphasis")
-                    .etFont(FontRoutePreview.etFont(for: .emphasis, sample: "斜体预览 Emphasis"))
+                    .font(FontRoutePreview.font(for: .emphasis, sample: "斜体预览 Emphasis"))
                     .italic()
                 Text("粗体预览 / Strong")
-                    .etFont(FontRoutePreview.etFont(for: .strong, sample: "粗体预览 Strong"))
+                    .font(FontRoutePreview.font(for: .strong, sample: "粗体预览 Strong"))
                     .fontWeight(.bold)
                 Text("let message = \"Code Preview\"")
-                    .etFont(FontRoutePreview.etFont(for: .code, sample: "let message = \"Code Preview\""))
+                    .font(FontRoutePreview.font(for: .code, sample: "let message = \"Code Preview\""))
             }
         }
         .navigationTitle("字体设置")
@@ -556,10 +556,15 @@ private struct FontSettingsView: View {
 }
 
 private enum FontRoutePreview {
-    static func etFont(for role: FontSemanticRole, sample: String, size: CGFloat = 17) -> Font {
+    static func font(for role: FontSemanticRole, sample: String, size: CGFloat = 17) -> Font {
         if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) {
             return .custom(postScriptName, size: size)
         }
-        return .system(size: size)
+        switch role {
+        case .code:
+            return .system(size: size, design: .monospaced)
+        default:
+            return .system(size: size)
+        }
     }
 }
