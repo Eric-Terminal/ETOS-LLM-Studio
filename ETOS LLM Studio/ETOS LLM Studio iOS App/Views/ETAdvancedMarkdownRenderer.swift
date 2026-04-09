@@ -1252,7 +1252,7 @@ private extension View {
                 if let codeFontName, !codeFontName.isEmpty {
                     FontFamily(.custom(codeFontName))
                 } else {
-                    FontFamilyVariant(.monospaced)
+                    FontFamily(.system(.monospaced))
                 }
                 ForegroundColor(textColor)
             }
@@ -1300,7 +1300,7 @@ private extension View {
                                 if let codeFontName, !codeFontName.isEmpty {
                                     FontFamily(.custom(codeFontName))
                                 } else {
-                                    FontFamilyVariant(.monospaced)
+                                    FontFamily(.system(.monospaced))
                                 }
                                 FontSize(.em(0.9))
                                 ForegroundColor(textColor)

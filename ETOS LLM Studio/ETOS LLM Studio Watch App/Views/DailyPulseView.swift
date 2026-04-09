@@ -594,7 +594,7 @@ private extension View {
                 if let codeFontName, !codeFontName.isEmpty {
                     FontFamily(.custom(codeFontName))
                 } else {
-                    FontFamilyVariant(.monospaced)
+                    FontFamily(.system(.monospaced))
                 }
             }
     }
