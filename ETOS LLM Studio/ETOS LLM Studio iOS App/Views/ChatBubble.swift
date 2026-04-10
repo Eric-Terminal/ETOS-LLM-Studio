@@ -110,6 +110,7 @@ struct ChatBubble: View {
     @State private var imagePreview: ImagePreviewPayload?
     @State private var availableWidth: CGFloat = 0
     @State private var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
+    @State private var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
@@ -927,6 +928,7 @@ struct ChatBubble: View {
         guard selectedToolCallDetailSheetItem == nil else { return }
         guard let pendingCall = pendingToolCallForAutoPresentation else { return }
         markPendingToolCallAutoOpened(pendingCall.id)
+        showRawToolResultInDetailSheet = false
         selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
             messageID: message.id,
             toolCallID: pendingCall.id,
@@ -988,6 +990,7 @@ struct ChatBubble: View {
         let label = toolDisplayLabel(for: call.toolName)
         let status = toolCallStatus(for: call)
         Button {
+            showRawToolResultInDetailSheet = false
             selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
                 messageID: message.id,
                 toolCallID: call.id,
@@ -1055,7 +1058,20 @@ struct ChatBubble: View {
                                 .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                         } else if enableExperimentalToolResultDisplay {
-                            if let primaryContent = displayModel.primaryContentText, !primaryContent.isEmpty {
+                            let primaryContent = displayModel.primaryContentText?.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let hasPrimaryContent = !(primaryContent ?? "").isEmpty
+                            let canToggleRaw = hasPrimaryContent && displayModel.shouldShowRawSection
+                            let showRaw = canToggleRaw && showRawToolResultInDetailSheet
+
+                            if showRaw || !hasPrimaryContent {
+                                CappedScrollableText(
+                                    text: displayModel.rawDisplayText,
+                                    maxHeight: 240,
+                                    font: .system(.caption, design: .monospaced),
+                                    foreground: .secondary,
+                                    enableSelection: true
+                                )
+                            } else if let primaryContent {
                                 CappedScrollableText(
                                     text: primaryContent,
                                     maxHeight: 240,
@@ -1064,15 +1080,19 @@ struct ChatBubble: View {
                                     enableSelection: true
                                 )
                             }
-                            if displayModel.shouldShowRawSection {
+
+                            if canToggleRaw {
                                 Divider()
-                                CappedScrollableText(
-                                    text: displayModel.rawDisplayText,
-                                    maxHeight: 240,
-                                    font: .system(.caption, design: .monospaced),
-                                    foreground: .secondary,
-                                    enableSelection: true
-                                )
+                                HStack {
+                                    Button(showRawToolResultInDetailSheet ? "显示整理结果" : "显示原文") {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            showRawToolResultInDetailSheet.toggle()
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    Spacer(minLength: 0)
+                                }
                             }
                         } else {
                             CappedScrollableText(

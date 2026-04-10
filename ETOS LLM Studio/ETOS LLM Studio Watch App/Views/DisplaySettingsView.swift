@@ -24,7 +24,6 @@ struct DisplaySettingsView: View {
     @Binding var backgroundContentMode: String // "fill" 或 "fit"
     @Binding var enableLiquidGlass: Bool // 新增绑定
     @Binding var enableAdvancedRenderer: Bool
-    @Binding var enableExperimentalToolResultDisplay: Bool
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
 
@@ -103,14 +102,6 @@ struct DisplaySettingsView: View {
                 Toggle("无气泡UI", isOn: $enableNoBubbleUI)
             } footer: {
                 Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("增强工具结果显示（实验性）", isOn: $enableExperimentalToolResultDisplay)
-            } footer: {
-                Text("启用后会优先提取工具结果正文并折叠原始 JSON；关闭后恢复为原始结果文本展示。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

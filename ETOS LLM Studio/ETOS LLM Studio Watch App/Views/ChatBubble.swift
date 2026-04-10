@@ -97,6 +97,7 @@ struct ChatBubble: View {
     @State private var availableWidth: CGFloat = 0
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @State private var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
+    @State private var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
@@ -766,6 +767,7 @@ struct ChatBubble: View {
         guard selectedToolCallDetailSheetItem == nil else { return }
         guard let pendingCall = pendingToolCallForAutoPresentation else { return }
         markPendingToolCallAutoOpened(pendingCall.id)
+        showRawToolResultInDetailSheet = false
         selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
             messageID: message.id,
             toolCallID: pendingCall.id,
@@ -808,6 +810,7 @@ struct ChatBubble: View {
         let label = toolDisplayLabel(for: call.toolName)
         let status = toolCallStatus(for: call)
         Button {
+            showRawToolResultInDetailSheet = false
             selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
                 messageID: message.id,
                 toolCallID: call.id,
@@ -873,8 +876,20 @@ struct ChatBubble: View {
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         } else if enableExperimentalToolResultDisplay {
+                            let primaryContent = displayModel.primaryContentText?.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let hasPrimaryContent = !(primaryContent ?? "").isEmpty
+                            let canToggleRaw = hasPrimaryContent && displayModel.shouldShowRawSection
+                            let showRaw = canToggleRaw && showRawToolResultInDetailSheet
+
                             VStack(alignment: .leading, spacing: 6) {
-                                if let primaryContent = displayModel.primaryContentText, !primaryContent.isEmpty {
+                                if showRaw || !hasPrimaryContent {
+                                    CappedScrollableText(
+                                        text: displayModel.rawDisplayText,
+                                        maxHeight: 120,
+                                        font: .system(.caption2, design: .monospaced),
+                                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82)
+                                    )
+                                } else if let primaryContent {
                                     CappedScrollableText(
                                         text: primaryContent,
                                         maxHeight: 120,
@@ -882,14 +897,18 @@ struct ChatBubble: View {
                                         foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
                                     )
                                 }
-                                if displayModel.shouldShowRawSection {
+
+                                if canToggleRaw {
                                     Divider()
-                                    CappedScrollableText(
-                                        text: displayModel.rawDisplayText,
-                                        maxHeight: 120,
-                                        font: .system(.caption2, design: .monospaced),
-                                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82)
-                                    )
+                                    HStack {
+                                        Button(showRawToolResultInDetailSheet ? "显示整理结果" : "显示原文") {
+                                            withAnimation(.easeInOut(duration: 0.2)) {
+                                                showRawToolResultInDetailSheet.toggle()
+                                            }
+                                        }
+                                        .buttonStyle(.bordered)
+                                        Spacer(minLength: 0)
+                                    }
                                 }
                             }
                         } else {

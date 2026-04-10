@@ -336,7 +336,7 @@ struct ContentView: View {
             enableLiquidGlass: isLiquidGlassEnabled,
             enableNoBubbleUI: viewModel.enableNoBubbleUI,
             enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
-            enableExperimentalToolResultDisplay: viewModel.enableExperimentalToolResultDisplay,
+            enableExperimentalToolResultDisplay: true,
             enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
             showsStreamingIndicators: showsStreamingIndicators,
             mergeWithPrevious: mergeWithPrevious,

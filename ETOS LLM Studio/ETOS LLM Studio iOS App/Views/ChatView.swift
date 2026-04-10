@@ -201,7 +201,7 @@ struct ChatView: View {
                                     enableLiquidGlass: isLiquidGlassEnabled,
                                     enableNoBubbleUI: viewModel.enableNoBubbleUI,
                                     enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
-                                    enableExperimentalToolResultDisplay: viewModel.enableExperimentalToolResultDisplay,
+                                    enableExperimentalToolResultDisplay: true,
                                     enableMathRendering: viewModel.enableAdvancedRenderer,
                                     showsStreamingIndicators: showsStreamingIndicators,
                                     mergeWithPrevious: mergeWithPrevious,
