@@ -639,6 +639,29 @@ struct DailyPulseTests {
         #expect(components.minute == 0)
     }
 
+    @Test("修改提醒时分时会先归一化并避免发布属性递归崩溃")
+    @MainActor
+    func reminderPropertiesNormalizeWithoutRecursiveSet() {
+        let suiteName = "DailyPulseDeliveryCoordinatorTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(false, forKey: "dailyPulse.delivery.reminderEnabled")
+        defaults.set(8, forKey: "dailyPulse.delivery.reminderHour")
+        defaults.set(30, forKey: "dailyPulse.delivery.reminderMinute")
+
+        let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
+        coordinator.reminderHour = 9
+        coordinator.reminderMinute = 15
+        #expect(coordinator.reminderHour == 9)
+        #expect(coordinator.reminderMinute == 15)
+
+        coordinator.reminderHour = 99
+        coordinator.reminderMinute = -20
+        #expect(coordinator.reminderHour == 23)
+        #expect(coordinator.reminderMinute == 0)
+    }
+
     @Test("文本提醒时间支持常见 24 小时制输入格式")
     func reminderTimeComponentsParseCommonInputs() {
         let colonInput = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "08:30")

@@ -30,7 +30,11 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
     @Published public var reminderHour: Int {
         didSet {
-            reminderHour = Self.normalizedHour(reminderHour)
+            let normalizedHour = Self.normalizedHour(reminderHour)
+            guard normalizedHour == reminderHour else {
+                reminderHour = normalizedHour
+                return
+            }
             defaults.set(reminderHour, forKey: Self.reminderHourDefaultsKey)
             Task {
                 await refreshReminderSchedule()
@@ -39,7 +43,11 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
     @Published public var reminderMinute: Int {
         didSet {
-            reminderMinute = Self.normalizedMinute(reminderMinute)
+            let normalizedMinute = Self.normalizedMinute(reminderMinute)
+            guard normalizedMinute == reminderMinute else {
+                reminderMinute = normalizedMinute
+                return
+            }
             defaults.set(reminderMinute, forKey: Self.reminderMinuteDefaultsKey)
             Task {
                 await refreshReminderSchedule()
