@@ -341,6 +341,12 @@ struct ContentView: View {
             showsStreamingIndicators: showsStreamingIndicators,
             mergeWithPrevious: mergeWithPrevious,
             mergeWithNext: mergeWithNext,
+            hasAutoOpenedPendingToolCall: { toolCallID in
+                viewModel.hasAutoOpenedPendingToolCall(toolCallID)
+            },
+            markPendingToolCallAutoOpened: { toolCallID in
+                viewModel.markPendingToolCallAutoOpened(toolCallID)
+            },
             onCodeBlockHeaderTap: { content in
                 viewModel.appendCodeBlockContentToInput(content)
             }

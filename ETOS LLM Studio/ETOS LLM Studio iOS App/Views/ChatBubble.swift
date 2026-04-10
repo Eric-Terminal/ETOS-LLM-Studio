@@ -101,13 +101,15 @@ struct ChatBubble: View {
     let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
+    let hasAutoOpenedPendingToolCall: (String) -> Bool
+    let markPendingToolCallAutoOpened: (String) -> Void
     let onSwitchToPreviousVersion: () -> Void
     let onSwitchToNextVersion: () -> Void
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
     @State private var availableWidth: CGFloat = 0
-    @State private var toolCallResultExpandedState: [String: Bool] = [:]
+    @State private var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
@@ -133,6 +135,8 @@ struct ChatBubble: View {
         showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
         mergeWithNext: Bool,
+        hasAutoOpenedPendingToolCall: @escaping (String) -> Bool = { _ in false },
+        markPendingToolCallAutoOpened: @escaping (String) -> Void = { _ in },
         onSwitchToPreviousVersion: @escaping () -> Void,
         onSwitchToNextVersion: @escaping () -> Void
     ) {
@@ -149,6 +153,8 @@ struct ChatBubble: View {
         self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
+        self.hasAutoOpenedPendingToolCall = hasAutoOpenedPendingToolCall
+        self.markPendingToolCallAutoOpened = markPendingToolCallAutoOpened
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
         self.onSwitchToNextVersion = onSwitchToNextVersion
     }
@@ -390,6 +396,13 @@ struct ChatBubble: View {
         return toolCalls.compactMap(activeToolPermissionRequest(for:)).first
     }
 
+    private var pendingToolCallForAutoPresentation: InternalToolCall? {
+        guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return nil }
+        return toolCalls.first { call in
+            activeToolPermissionRequest(for: call) != nil && !hasAutoOpenedPendingToolCall(call.id)
+        }
+    }
+
     private var shouldShowTextBubble: Bool {
         if hasOnlyImages {
             return false
@@ -491,6 +504,20 @@ struct ChatBubble: View {
                     .padding(24)
             }
         }
+        .sheet(item: $selectedToolCallDetailSheetItem) { item in
+            toolCallDetailSheet(for: item)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .onAppear {
+            autoPresentPendingToolCallIfNeeded()
+        }
+        .onChange(of: toolPermissionCenter.activeRequest?.id) { _, _ in
+            autoPresentPendingToolCallIfNeeded()
+        }
+        .onChange(of: toolCallAutoPresentationSignature) { _, _ in
+            autoPresentPendingToolCallIfNeeded()
+        }
     }
 
     private struct RowWidthKey: PreferenceKey {
@@ -501,9 +528,60 @@ struct ChatBubble: View {
         }
     }
 
-    private struct WidgetToolCardItem: Identifiable {
-        let id: String
-        let payload: ToolWidgetPayload
+    private struct ToolCallDetailSheetItem: Identifiable, Equatable {
+        let messageID: UUID
+        let toolCallID: String
+        let fallbackToolCall: InternalToolCall
+
+        var id: String {
+            "\(messageID.uuidString)-\(toolCallID)"
+        }
+    }
+
+    private enum ToolCallBubbleStatus: Equatable {
+        case pendingApproval
+        case running
+        case finished
+        case rejected
+
+        var title: String {
+            switch self {
+            case .pendingApproval:
+                return "等待审批"
+            case .running:
+                return "执行中"
+            case .finished:
+                return "已完成"
+            case .rejected:
+                return "已拒绝"
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .pendingApproval:
+                return "hourglass"
+            case .running:
+                return "clock.arrow.trianglehead.counterclockwise.rotate.90"
+            case .finished:
+                return "checkmark.circle.fill"
+            case .rejected:
+                return "xmark.circle.fill"
+            }
+        }
+
+        var accentColor: Color {
+            switch self {
+            case .pendingApproval:
+                return .orange
+            case .running:
+                return .blue
+            case .finished:
+                return .green
+            case .rejected:
+                return .red
+            }
+        }
     }
     
     // MARK: - 紧凑版本指示器 (Telegram 风格)
@@ -737,36 +815,7 @@ struct ChatBubble: View {
                 let isLast = position == (totalBubbleCount - 1)
 
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast) {
-                    if let payload = showWidgetPayload(for: call) {
-                        ToolWidgetRendererCard(payload: payload)
-                    } else {
-                        ToolCallsInlineView(
-                            toolCalls: [call],
-                            isOutgoing: isOutgoing,
-                            customTextColor: customTextColorOverride
-                        )
-
-                        if let permissionRequest = activeToolPermissionRequest(for: call) {
-                            ToolPermissionInlineView(
-                                request: permissionRequest,
-                                onDecision: { decision in
-                                    toolPermissionCenter.resolveActiveRequest(with: decision)
-                                }
-                            )
-                        }
-
-                        if shouldShowToolResult(for: call) {
-                            ToolResultsDisclosureView(
-                                toolCalls: [call],
-                                resultText: message.role == .tool ? message.content : "",
-                                isExpanded: toolResultExpansionBinding(for: call.id),
-                                isOutgoing: isOutgoing,
-                                isPending: isPendingToolResult(for: call),
-                                enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
-                                customTextColor: customTextColorOverride
-                            )
-                        }
-                    }
+                    toolCallSummaryRow(for: call)
                 }
             }
         }
@@ -830,51 +879,12 @@ struct ChatBubble: View {
     private var toolCallsSection: some View {
         if let toolCalls = message.toolCalls,
            !toolCalls.isEmpty {
-            let nonWidgetToolCalls = toolCalls.filter { showWidgetPayload(for: $0) == nil }
-            let widgetCards = toolCalls.compactMap { call -> WidgetToolCardItem? in
-                guard let payload = showWidgetPayload(for: call) else { return nil }
-                return WidgetToolCardItem(id: call.id, payload: payload)
-            }
-
-            if !nonWidgetToolCalls.isEmpty {
-                ToolCallsInlineView(
-                    toolCalls: nonWidgetToolCalls,
-                    isOutgoing: isOutgoing,
-                    customTextColor: customTextColorOverride
-                )
-                if let activeToolPermissionRequest {
-                    ToolPermissionInlineView(
-                        request: activeToolPermissionRequest,
-                        onDecision: { decision in
-                            toolPermissionCenter.resolveActiveRequest(with: decision)
-                        }
-                    )
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(toolCalls, id: \.id) { call in
+                    toolCallSummaryRow(for: call)
                 }
-                let shouldShowResults = nonWidgetToolCalls.contains { shouldShowToolResult(for: $0) }
-                if shouldShowResults {
-                    ToolResultsDisclosureView(
-                        toolCalls: nonWidgetToolCalls,
-                        resultText: message.role == .tool ? message.content : "",
-                        isExpanded: $isToolCallsExpanded,
-                        isOutgoing: isOutgoing,
-                        isPending: hasPendingToolResults,
-                        enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay,
-                        customTextColor: customTextColorOverride
-                    )
-                }
-            }
-
-            ForEach(widgetCards) { item in
-                ToolWidgetRendererCard(payload: item.payload)
             }
         }
-    }
-
-    private func toolResultExpansionBinding(for toolCallID: String) -> Binding<Bool> {
-        Binding(
-            get: { toolCallResultExpandedState[toolCallID, default: isToolCallsExpanded] },
-            set: { toolCallResultExpandedState[toolCallID] = $0 }
-        )
     }
 
     private func resolvedToolResultText(for call: InternalToolCall) -> String {
@@ -905,6 +915,234 @@ struct ChatBubble: View {
         let callArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMatch = call.toolName == request.toolName && callArgs == trimmedArgs
         return isMatch ? request : nil
+    }
+
+    private var toolCallAutoPresentationSignature: String {
+        let callIDs = (message.toolCalls ?? []).map(\.id).joined(separator: "|")
+        let activeRequestID = toolPermissionCenter.activeRequest?.id.uuidString ?? ""
+        return "\(message.id.uuidString)#\(callIDs)#\(activeRequestID)"
+    }
+
+    private func autoPresentPendingToolCallIfNeeded() {
+        guard selectedToolCallDetailSheetItem == nil else { return }
+        guard let pendingCall = pendingToolCallForAutoPresentation else { return }
+        markPendingToolCallAutoOpened(pendingCall.id)
+        selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
+            messageID: message.id,
+            toolCallID: pendingCall.id,
+            fallbackToolCall: pendingCall
+        )
+    }
+
+    private func resolvedToolCall(for item: ToolCallDetailSheetItem) -> InternalToolCall {
+        message.toolCalls?.first(where: { $0.id == item.toolCallID }) ?? item.fallbackToolCall
+    }
+
+    private func toolDisplayLabel(for toolName: String) -> String {
+        if toolName == "save_memory" {
+            return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
+        }
+        if let label = MCPManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = AppToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        return toolName
+    }
+
+    private func toolCallStatus(for call: InternalToolCall) -> ToolCallBubbleStatus {
+        if activeToolPermissionRequest(for: call) != nil {
+            return .pendingApproval
+        }
+        let resolvedResult = resolvedToolResultText(for: call)
+        if resolvedResult.isEmpty {
+            return .running
+        }
+        if isDeniedToolResultText(resolvedResult) {
+            return .rejected
+        }
+        return .finished
+    }
+
+    private func isDeniedToolResultText(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        return normalized.contains("denied")
+            || normalized.contains("拒绝")
+            || normalized.contains("拒絕")
+            || normalized.contains("rejected")
+    }
+
+    private func shouldShowPendingGuidance(for call: InternalToolCall) -> Bool {
+        activeToolPermissionRequest(for: call) != nil
+    }
+
+    @ViewBuilder
+    private func toolCallSummaryRow(for call: InternalToolCall) -> some View {
+        let label = toolDisplayLabel(for: call.toolName)
+        let status = toolCallStatus(for: call)
+        Button {
+            selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
+                messageID: message.id,
+                toolCallID: call.id,
+                fallbackToolCall: call
+            )
+        } label: {
+            ToolCallSummaryBubbleRow(
+                label: label,
+                statusTitle: status.title,
+                statusIconName: status.iconName,
+                statusColor: status.accentColor,
+                showPendingGuidance: shouldShowPendingGuidance(for: call),
+                isOutgoing: isOutgoing,
+                customTextColor: customTextColorOverride
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func toolCallDetailSheet(for item: ToolCallDetailSheetItem) -> some View {
+        let call = resolvedToolCall(for: item)
+        let displayName = toolDisplayLabel(for: call.toolName)
+        let status = toolCallStatus(for: call)
+        let argumentText = prettyPrintedJSONOrRaw(call.arguments)
+        let resultText = resolvedToolResultText(for: call)
+        let displayModel = MCPToolResultFormatter.displayModel(from: resultText)
+        let permissionRequest = activeToolPermissionRequest(for: call)
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                        .foregroundStyle(status.accentColor)
+                        .etFont(.system(size: 15, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(displayName)
+                            .etFont(.headline)
+                        Text(status.title)
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Button("关闭") {
+                        selectedToolCallDetailSheetItem = nil
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                toolDetailSection(title: "工具参数") {
+                    CappedScrollableText(
+                        text: argumentText,
+                        maxHeight: 240,
+                        font: .system(.caption, design: .monospaced),
+                        foreground: .secondary,
+                        enableSelection: true
+                    )
+                }
+
+                toolDetailSection(title: "工具结果") {
+                    if resultText.isEmpty {
+                        Text(status == .pendingApproval ? "等待你的审批后继续执行。" : "暂无返回结果。")
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if enableExperimentalToolResultDisplay {
+                        if let primaryContent = displayModel.primaryContentText, !primaryContent.isEmpty {
+                            CappedScrollableText(
+                                text: primaryContent,
+                                maxHeight: 240,
+                                font: .footnote,
+                                foreground: .secondary,
+                                enableSelection: true
+                            )
+                        }
+                        if displayModel.shouldShowRawSection {
+                            Divider()
+                            CappedScrollableText(
+                                text: displayModel.rawDisplayText,
+                                maxHeight: 240,
+                                font: .system(.caption, design: .monospaced),
+                                foreground: .secondary,
+                                enableSelection: true
+                            )
+                        }
+                    } else {
+                        CappedScrollableText(
+                            text: resultText,
+                            maxHeight: 240,
+                            font: .system(.caption, design: .monospaced),
+                            foreground: .secondary,
+                            enableSelection: true
+                        )
+                    }
+                }
+
+                if let permissionRequest {
+                    toolDetailSection(title: "审批操作") {
+                        ToolPermissionInlineView(
+                            request: permissionRequest,
+                            onDecision: { decision in
+                                toolPermissionCenter.resolveActiveRequest(with: decision)
+                                selectedToolCallDetailSheetItem = nil
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 2)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+        .background(Color.clear)
+    }
+
+    @ViewBuilder
+    private func toolDetailSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            content()
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+        )
+    }
+
+    private func prettyPrintedJSONOrRaw(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "{}" }
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              JSONSerialization.isValidJSONObject(object),
+              let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let prettyText = String(data: prettyData, encoding: .utf8) else {
+            return trimmed
+        }
+        return prettyText
     }
     
     @ViewBuilder
@@ -1408,142 +1646,85 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 }
 
-// MARK: - 工具调用视图（内联展示）
-struct ToolCallsInlineView: View, Equatable {
-    let toolCalls: [InternalToolCall]
+// MARK: - 工具调用摘要行
+private struct ToolCallSummaryBubbleRow: View {
+    let label: String
+    let statusTitle: String
+    let statusIconName: String
+    let statusColor: Color
+    let showPendingGuidance: Bool
     let isOutgoing: Bool
     let customTextColor: Color?
-    
-    static func == (lhs: ToolCallsInlineView, rhs: ToolCallsInlineView) -> Bool {
-        lhs.toolCalls.map(\.id) == rhs.toolCalls.map(\.id)
-            && lhs.isOutgoing == rhs.isOutgoing
-            && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
+
+    private var baseForegroundColor: Color {
+        if let customTextColor {
+            return customTextColor.opacity(0.92)
+        }
+        return isOutgoing ? Color.white.opacity(0.92) : Color.secondary
     }
 
-    private func displayName(for toolName: String) -> String {
-        if toolName == "save_memory" {
-            return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
+    private var secondaryForegroundColor: Color {
+        if let customTextColor {
+            return customTextColor.opacity(0.78)
         }
-        if let label = MCPManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        if let label = SkillManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        if let label = AppToolManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        return toolName
+        return isOutgoing ? Color.white.opacity(0.78) : Color.secondary.opacity(0.9)
     }
 
-    private static func colorSignature(_ color: Color?) -> String? {
-        guard let color else { return nil }
-        return ChatAppearanceColorCodec.hexRGBA(from: color)
-    }
-    
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(toolCalls, id: \.id) { call in
-                let label = displayName(for: call.toolName)
-                ToolCallDisclosureRow(
-                    label: label,
-                    arguments: call.arguments,
-                    isOutgoing: isOutgoing,
-                    customTextColor: customTextColor
-                )
-            }
-        }
-    }
+        HStack(spacing: 8) {
+            Image(systemName: "wrench.and.screwdriver")
+                .etFont(.system(size: 12, weight: .semibold))
+                .foregroundStyle(statusColor)
 
-    private struct ToolCallDisclosureRow: View {
-        let label: String
-        let arguments: String
-        let isOutgoing: Bool
-        let customTextColor: Color?
-        @State private var isExpanded = true
-
-        private var trimmedArguments: String {
-            arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
-                if trimmedArguments.isEmpty {
-                    toolHeader
+            VStack(alignment: .leading, spacing: 2) {
+                if showPendingGuidance {
+                    ToolCallPendingGuidanceLabel(text: label, color: baseForegroundColor)
                 } else {
-                    Button {
-                        isExpanded.toggle()
-                    } label: {
-                        toolHeader
-                    }
-                    .buttonStyle(.plain)
+                    Text(label)
+                        .etFont(.subheadline.weight(.medium))
+                        .foregroundStyle(baseForegroundColor)
+                        .lineLimit(1)
                 }
-
-                if !trimmedArguments.isEmpty, isExpanded {
-                    CappedScrollableText(
-                        text: trimmedArguments,
-                        maxHeight: 200,
-                        font: .caption,
-                        foreground: resolvedSecondaryTextColor(
-                            default: isOutgoing ? Color.white.opacity(0.7) : Color.secondary,
-                            customTextColor: customTextColor,
-                            customOpacity: 0.75
-                        ),
-                        enableSelection: true
-                    )
-                    .padding(6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(
-                                isOutgoing
-                                    ? resolvedSecondaryTextColor(
-                                        default: Color.white,
-                                        customTextColor: customTextColor,
-                                        customOpacity: 0.15
-                                    )
-                                    : resolvedSecondaryTextColor(
-                                        default: Color.secondary,
-                                        customTextColor: customTextColor,
-                                        customOpacity: 0.1
-                                    )
-                            )
-                    )
+                HStack(spacing: 4) {
+                    Image(systemName: statusIconName)
+                        .etFont(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(statusColor)
+                    Text(statusTitle)
+                        .etFont(.caption)
+                        .foregroundStyle(secondaryForegroundColor)
                 }
             }
+
+            Spacer(minLength: 6)
+
+            Image(systemName: "chevron.right")
+                .etFont(.system(size: 11, weight: .semibold))
+                .foregroundStyle(secondaryForegroundColor)
         }
+        .contentShape(Rectangle())
+    }
+}
 
-        private var toolHeader: some View {
-            HStack(spacing: 6) {
-                Image(systemName: "wrench.and.screwdriver")
-                    .etFont(.system(size: 12))
-                Text("调用：\(label)")
-                    .etFont(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                if !trimmedArguments.isEmpty {
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .etFont(.system(size: 12, weight: .semibold))
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-            }
-            .foregroundStyle(
-                resolvedSecondaryTextColor(
-                    default: isOutgoing ? Color.white.opacity(0.9) : Color.secondary,
-                    customTextColor: customTextColor,
-                    customOpacity: 0.9
-                )
-            )
-            .contentShape(Rectangle())
-        }
+private struct ToolCallPendingGuidanceLabel: View {
+    let text: String
+    let color: Color
+    @State private var shouldBounce = false
 
-        private func resolvedSecondaryTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
-            if let customTextColor {
-                return customTextColor.opacity(customOpacity)
-            }
-            return defaultColor
+    var body: some View {
+        ShimmeringText(
+            text: text,
+            font: .subheadline.weight(.medium),
+            baseColor: color.opacity(0.75),
+            highlightColor: color
+        )
+        .lineLimit(1)
+        .offset(y: shouldBounce ? -1.5 : 1.5)
+        .animation(
+            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+            value: shouldBounce
+        )
+        .onAppear {
+            shouldBounce = true
         }
     }
 }

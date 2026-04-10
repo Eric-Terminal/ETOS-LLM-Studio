@@ -59,6 +59,7 @@ final class ChatViewModel: ObservableObject {
     @Published var ttsModels: [RunnableModel] = []
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
+    @Published var autoOpenedPendingToolCallIDs: Set<String> = []
     @Published var isSendingMessage: Bool = false
     @Published var globalSystemPromptEntries: [GlobalSystemPromptEntry] = []
     @Published var selectedGlobalSystemPromptEntryID: UUID?
@@ -1419,6 +1420,7 @@ final class ChatViewModel: ObservableObject {
     private func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
         let previousMessages = allMessagesForSession
         allMessagesForSession = incomingMessages
+        syncAutoOpenedPendingToolCallIDs(with: incomingMessages)
         updateAutoReasoningPreviewState(with: incomingMessages)
 
         if hasMatchingMessageIdentity(previousMessages, incomingMessages) {
@@ -1744,6 +1746,28 @@ final class ChatViewModel: ObservableObject {
                 return trimmedResult.isEmpty ? nil : call.id
             }
         )
+    }
+
+    func hasAutoOpenedPendingToolCall(_ toolCallID: String) -> Bool {
+        autoOpenedPendingToolCallIDs.contains(toolCallID)
+    }
+
+    func markPendingToolCallAutoOpened(_ toolCallID: String) {
+        guard !toolCallID.isEmpty else { return }
+        autoOpenedPendingToolCallIDs.insert(toolCallID)
+    }
+
+    private func syncAutoOpenedPendingToolCallIDs(with messages: [ChatMessage]) {
+        guard !autoOpenedPendingToolCallIDs.isEmpty else { return }
+        let existingToolCallIDs = Set(
+            messages
+                .compactMap(\.toolCalls)
+                .flatMap { $0.map(\.id) }
+        )
+        let filteredIDs = autoOpenedPendingToolCallIDs.intersection(existingToolCallIDs)
+        if filteredIDs != autoOpenedPendingToolCallIDs {
+            autoOpenedPendingToolCallIDs = filteredIDs
+        }
     }
 
     private func updateAutoReasoningPreviewState(with messages: [ChatMessage]) {

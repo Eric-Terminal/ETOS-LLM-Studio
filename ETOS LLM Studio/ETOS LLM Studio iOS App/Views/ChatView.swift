@@ -206,6 +206,12 @@ struct ChatView: View {
                                     showsStreamingIndicators: showsStreamingIndicators,
                                     mergeWithPrevious: mergeWithPrevious,
                                     mergeWithNext: mergeWithNext,
+                                    hasAutoOpenedPendingToolCall: { toolCallID in
+                                        viewModel.hasAutoOpenedPendingToolCall(toolCallID)
+                                    },
+                                    markPendingToolCallAutoOpened: { toolCallID in
+                                        viewModel.markPendingToolCallAutoOpened(toolCallID)
+                                    },
                                     onSwitchToPreviousVersion: {
                                         viewModel.switchToPreviousVersion(of: message)
                                     },
