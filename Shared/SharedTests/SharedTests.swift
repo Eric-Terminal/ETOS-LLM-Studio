@@ -3689,6 +3689,32 @@ fileprivate struct PersistenceTests {
         cleanup(sessions: [session])
     }
 
+    @Test("GRDB 辅助 Blob 可读写并删除")
+    func testGRDBAuxiliaryBlobLifecycle() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            _ = Persistence.removeAuxiliaryBlob(forKey: "test_auxiliary_blob_v1")
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [])
+        }
+
+        cleanup(sessions: [])
+        let payload: [String: Int] = ["a": 1, "b": 2]
+        let key = "test_auxiliary_blob_v1"
+
+        #expect(Persistence.saveAuxiliaryBlob(payload, forKey: key))
+        #expect(Persistence.auxiliaryBlobExists(forKey: key))
+
+        let loaded = Persistence.loadAuxiliaryBlob([String: Int].self, forKey: key)
+        #expect(loaded == payload)
+
+        #expect(Persistence.removeAuxiliaryBlob(forKey: key))
+        #expect(!Persistence.auxiliaryBlobExists(forKey: key))
+    }
+
     @Test("GRDB 启动迁移后自动清理旧 JSON 会话文件")
     func testBootstrapGRDBImportAndCleanupLegacyJSON() throws {
         cleanup(sessions: [])
