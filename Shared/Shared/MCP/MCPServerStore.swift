@@ -1,7 +1,7 @@
 // ============================================================================
 // MCPServerStore.swift
 // ============================================================================
-// 管理 MCP Server 配置文件的增删改查。
+// 管理 MCP Server 配置的增删改查（优先 SQLite，失败时回退 JSON 文件）。
 // ============================================================================
 
 import Foundation
@@ -59,6 +59,8 @@ public struct MCPServerMetadataCache: Codable, Hashable {
 }
 
 public struct MCPServerStore {
+    private static let lock = NSLock()
+    private static let grdbBlobKey = "mcp_servers_records_v1"
     
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -83,81 +85,145 @@ public struct MCPServerStore {
     }
     
     public static func loadServers() -> [MCPServerConfiguration] {
-        setupDirectoryIfNeeded()
-        let fm = FileManager.default
-        var result: [MCPServerConfiguration] = []
-        do {
-            let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
-            for file in files where file.pathExtension == "json" {
-                guard let record = loadRecord(from: file) else { continue }
-                result.append(record.server)
-            }
-        } catch {
-            mcpStoreLogger.error("读取 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
+        lock.withLock {
+            loadAllRecords().map(\.server)
         }
-        return result.sorted { $0.displayName.lowercased() < $1.displayName.lowercased() }
     }
 
     public static func save(_ server: MCPServerConfiguration) {
-        setupDirectoryIfNeeded()
-        let existingRecord = loadRecord(for: server.id)
-        let shouldPreserveMetadata = existingRecord?.server.transport == server.transport
-        let metadata = shouldPreserveMetadata ? existingRecord?.metadata : nil
-        let record = MCPServerStoredRecord(server: server, metadata: metadata)
-        writeRecord(record, fileName: server.id.uuidString)
+        lock.withLock {
+            var records = loadAllRecords()
+            if let index = records.firstIndex(where: { $0.server.id == server.id }) {
+                let existingRecord = records[index]
+                let shouldPreserveMetadata = existingRecord.server.transport == server.transport
+                let metadata = shouldPreserveMetadata ? existingRecord.metadata : nil
+                records[index] = MCPServerStoredRecord(server: server, metadata: metadata)
+            } else {
+                records.append(MCPServerStoredRecord(server: server, metadata: nil))
+            }
+            saveAllRecords(records)
+        }
     }
 
     public static func delete(_ server: MCPServerConfiguration) {
-        let fm = FileManager.default
-        let url = serversDirectory.appendingPathComponent("\(server.id.uuidString).json")
-        do {
-            try fm.removeItem(at: url)
+        lock.withLock {
+            var records = loadAllRecords()
+            records.removeAll { $0.server.id == server.id }
+            saveAllRecords(records)
             mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
-        } catch {
-            mcpStoreLogger.error("删除 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     public static func loadMetadata(for serverID: UUID) -> MCPServerMetadataCache? {
-        setupDirectoryIfNeeded()
-        return loadRecord(for: serverID)?.metadata
+        lock.withLock {
+            loadAllRecords().first(where: { $0.server.id == serverID })?.metadata
+        }
     }
 
     public static func saveMetadata(_ metadata: MCPServerMetadataCache?, for serverID: UUID) {
-        setupDirectoryIfNeeded()
-        guard var record = loadRecord(for: serverID) else { return }
-        record.metadata = metadata
-        record.schemaVersion = 3
-        writeRecord(record, fileName: serverID.uuidString)
+        lock.withLock {
+            var records = loadAllRecords()
+            guard let index = records.firstIndex(where: { $0.server.id == serverID }) else { return }
+            records[index].metadata = metadata
+            records[index].schemaVersion = 3
+            saveAllRecords(records)
+        }
     }
 
     /// 返回用于快速判断配置目录是否发生变化的签名。
     /// 签名包含：文件名 + 修改时间 + 文件大小。
     public static func configurationSnapshotSignature() -> String {
-        setupDirectoryIfNeeded()
-        let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(
-            at: serversDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return "mcp_servers_signature_unavailable"
+        lock.withLock {
+            let signatures: [String] = loadAllRecords()
+                .map { record in
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = [.sortedKeys]
+                    let serverData = (try? encoder.encode(record.server)) ?? Data()
+                    let serverJSON = String(data: serverData, encoding: .utf8) ?? "{}"
+                    return "\(record.server.id.uuidString)|\(serverJSON)"
+                }
+                .sorted()
+            return signatures.joined(separator: ";")
+        }
+    }
+
+    private static func loadAllRecords() -> [MCPServerStoredRecord] {
+        if Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
+            let records = Persistence.loadAuxiliaryBlob([MCPServerStoredRecord].self, forKey: grdbBlobKey) ?? []
+            return records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
         }
 
-        let signatures: [String] = files
-            .filter { $0.pathExtension == "json" }
-            .map { fileURL in
-                guard let record = loadRecord(from: fileURL) else {
-                    return "\(fileURL.lastPathComponent)|decode_error"
-                }
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.sortedKeys]
-                let serverData = (try? encoder.encode(record.server)) ?? Data()
-                let serverJSON = String(data: serverData, encoding: .utf8) ?? "{}"
-                return "\(record.server.id.uuidString)|\(serverJSON)"
+        let fileRecords = loadRecordsFromFiles()
+        guard !fileRecords.isEmpty else { return [] }
+
+        if Persistence.saveAuxiliaryBlob(fileRecords, forKey: grdbBlobKey) {
+            cleanupLegacyFileArtifacts()
+        }
+        return fileRecords.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
+    }
+
+    private static func saveAllRecords(_ records: [MCPServerStoredRecord]) {
+        let sortedRecords = records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
+        if Persistence.saveAuxiliaryBlob(sortedRecords, forKey: grdbBlobKey) {
+            cleanupLegacyFileArtifacts()
+            return
+        }
+        saveRecordsToFiles(sortedRecords)
+    }
+
+    private static func loadRecordsFromFiles() -> [MCPServerStoredRecord] {
+        setupDirectoryIfNeeded()
+        let fm = FileManager.default
+        var records: [MCPServerStoredRecord] = []
+        do {
+            let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
+            for file in files where file.pathExtension == "json" {
+                guard let record = loadRecord(from: file) else { continue }
+                records.append(record)
             }
-            .sorted()
-        return signatures.joined(separator: ";")
+        } catch {
+            mcpStoreLogger.error("读取 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
+        }
+        return records
+    }
+
+    private static func saveRecordsToFiles(_ records: [MCPServerStoredRecord]) {
+        setupDirectoryIfNeeded()
+        let fm = FileManager.default
+
+        for record in records {
+            writeRecord(record, fileName: record.server.id.uuidString)
+        }
+
+        do {
+            let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
+            let desired = Set(records.map { "\($0.server.id.uuidString).json".lowercased() })
+            for file in files where file.pathExtension == "json" {
+                if desired.contains(file.lastPathComponent.lowercased()) {
+                    continue
+                }
+                try? fm.removeItem(at: file)
+            }
+        } catch {
+            mcpStoreLogger.error("清理 MCP Server 旧配置文件失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func cleanupLegacyFileArtifacts() {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: serversDirectory.path) else { return }
+        do {
+            let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
+            for file in files where file.pathExtension == "json" {
+                try? fm.removeItem(at: file)
+            }
+            let remaining = try fm.contentsOfDirectory(atPath: serversDirectory.path)
+            if remaining.isEmpty {
+                try? fm.removeItem(at: serversDirectory)
+            }
+        } catch {
+            mcpStoreLogger.error("清理 MCP Server 遗留 JSON 失败: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private struct MCPServerStoredRecord: Codable {
@@ -226,5 +292,13 @@ public struct MCPServerStore {
         } catch {
             mcpStoreLogger.error("保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
         }
+    }
+}
+
+private extension NSLock {
+    func withLock<T>(_ block: () throws -> T) rethrows -> T {
+        lock()
+        defer { unlock() }
+        return try block()
     }
 }

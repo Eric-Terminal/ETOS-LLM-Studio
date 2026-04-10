@@ -3,7 +3,7 @@
 // ============================================================================
 // 世界书持久化存储
 //
-// 负责目录级世界书文件的读写、旧版聚合文件迁移、去重导入与基础 CRUD。
+// 负责世界书数据读写（优先 SQLite，失败时回退目录级 JSON 文件）、旧版聚合文件迁移、去重导入与基础 CRUD。
 // ============================================================================
 
 import Foundation
@@ -69,6 +69,7 @@ public final class WorldbookStore {
 
     public static let directoryName = "Worldbooks"
     public static let fileName = "worldbooks.json"
+    private static let grdbBlobKey = "worldbooks_v1"
     private static let standaloneFileExtension = "json"
     private static let importedFileExtensions: Set<String> = ["json", "png"]
 
@@ -96,6 +97,10 @@ public final class WorldbookStore {
 
     public var storageFileURL: URL {
         storageDirectory.appendingPathComponent(Self.fileName, isDirectory: false)
+    }
+
+    private var canUseGRDB: Bool {
+        storageDirectoryOverride == nil
     }
 
     @discardableResult
@@ -263,30 +268,24 @@ public final class WorldbookStore {
         if let cachedWorldbooks {
             return cachedWorldbooks
         }
+
+        if canUseGRDB, Persistence.auxiliaryBlobExists(forKey: Self.grdbBlobKey) {
+            let storedWorldbooks = Persistence.loadAuxiliaryBlob([Worldbook].self, forKey: Self.grdbBlobKey) ?? []
+            let sortedStoredWorldbooks = deduplicatedAndSortedWorldbooks(storedWorldbooks)
+            updateCaches(with: sortedStoredWorldbooks)
+            cleanupLegacyFilesAfterGRDBSave(removeLegacyAggregate: true)
+            return sortedStoredWorldbooks
+        }
+
         _ = ensureDirectoryIfNeeded()
         let standaloneResult = loadStandaloneWorldbooksUnlocked()
         let legacyResult = loadLegacyWorldbooksUnlocked()
 
-        var merged: [Worldbook] = []
-        var knownIDs = Set<UUID>()
+        let sorted = deduplicatedAndSortedWorldbooks(standaloneResult.worldbooks + legacyResult.worldbooks)
 
-        for worldbook in standaloneResult.worldbooks {
-            if knownIDs.insert(worldbook.id).inserted {
-                merged.append(worldbook)
-            }
-        }
-
-        for worldbook in legacyResult.worldbooks {
-            if knownIDs.insert(worldbook.id).inserted {
-                merged.append(worldbook)
-            }
-        }
-
-        let sorted = merged.sorted { lhs, rhs in
-            if lhs.updatedAt == rhs.updatedAt {
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            return lhs.updatedAt > rhs.updatedAt
+        if canUseGRDB {
+            saveWorldbooksUnlocked(sorted, removeLegacyAggregate: true)
+            return cachedWorldbooks ?? sorted
         }
 
         if standaloneResult.requiresRewrite || legacyResult.requiresRewrite {
@@ -302,9 +301,17 @@ public final class WorldbookStore {
         _ worldbooks: [Worldbook],
         removeLegacyAggregate: Bool = true
     ) {
+        let sorted = deduplicatedAndSortedWorldbooks(worldbooks)
+
+        if canUseGRDB, Persistence.saveAuxiliaryBlob(sorted, forKey: Self.grdbBlobKey) {
+            cleanupLegacyFilesAfterGRDBSave(removeLegacyAggregate: removeLegacyAggregate)
+            logger.info("已保存世界书到 SQLite: \(sorted.count)")
+            updateCaches(with: sorted)
+            return
+        }
+
         _ = ensureDirectoryIfNeeded()
         do {
-            let sorted = worldbooks.sorted { $0.updatedAt > $1.updatedAt }
             let destinationMap = standaloneFileURLs(for: sorted)
 
             for worldbook in sorted {
@@ -318,7 +325,7 @@ public final class WorldbookStore {
                 removeLegacyAggregate: removeLegacyAggregate
             )
 
-            logger.info("已保存世界书文件: \(worldbooks.count)")
+            logger.info("已保存世界书文件: \(sorted.count)")
             updateCaches(with: sorted)
         } catch {
             logger.error("保存世界书失败: \(error.localizedDescription, privacy: .public)")
@@ -548,6 +555,49 @@ public final class WorldbookStore {
             } catch {
                 logger.error("删除旧版世界书聚合文件失败: \(error.localizedDescription, privacy: .public)")
             }
+        }
+    }
+
+    private func cleanupLegacyFilesAfterGRDBSave(removeLegacyAggregate: Bool) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: storageDirectory.path) else { return }
+
+        do {
+            let files = try fm.contentsOfDirectory(at: storageDirectory, includingPropertiesForKeys: nil)
+            for fileURL in files {
+                let lowercasedName = fileURL.lastPathComponent.lowercased()
+                if removeLegacyAggregate, lowercasedName == Self.fileName.lowercased() {
+                    try? fm.removeItem(at: fileURL)
+                    continue
+                }
+                if Self.importedFileExtensions.contains(fileURL.pathExtension.lowercased()) {
+                    try? fm.removeItem(at: fileURL)
+                }
+            }
+            let remaining = try fm.contentsOfDirectory(atPath: storageDirectory.path)
+            if remaining.isEmpty {
+                try? fm.removeItem(at: storageDirectory)
+            }
+        } catch {
+            logger.error("清理世界书遗留 JSON 失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func deduplicatedAndSortedWorldbooks(_ worldbooks: [Worldbook]) -> [Worldbook] {
+        var merged: [Worldbook] = []
+        var knownIDs = Set<UUID>()
+
+        for worldbook in worldbooks {
+            if knownIDs.insert(worldbook.id).inserted {
+                merged.append(worldbook)
+            }
+        }
+
+        return merged.sorted { lhs, rhs in
+            if lhs.updatedAt == rhs.updatedAt {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.updatedAt > rhs.updatedAt
         }
     }
 
