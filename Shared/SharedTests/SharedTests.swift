@@ -3895,6 +3895,46 @@ fileprivate struct PersistenceTests {
         #expect(FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
     }
 
+    @Test("旧 JSON 快照有消息且数据库已有消息时不会触发覆盖导入")
+    func testBootstrapGRDBSkipsImportWhenDatabaseAlreadyHasMessages() throws {
+        cleanup(sessions: [])
+
+        let sessionID = UUID()
+        let persistedSession = ChatSession(id: sessionID, name: "Persisted Session", isTemporary: false)
+        let persistedMessages = [
+            ChatMessage(role: .user, content: "db-user"),
+            ChatMessage(role: .assistant, content: "db-assistant")
+        ]
+        let legacyMessages = [
+            ChatMessage(role: .user, content: "legacy-user")
+        ]
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [persistedSession])
+        }
+
+        Persistence.saveChatSessions([persistedSession])
+        Persistence.saveMessages(persistedMessages, for: sessionID)
+
+        let legacySessionsData = try JSONEncoder().encode([persistedSession])
+        try legacySessionsData.write(to: legacySessionsIndexURL, options: .atomic)
+        let legacyMessagesData = try JSONEncoder().encode(legacyMessages)
+        try legacyMessagesData.write(to: legacyMessageFileURL(sessionID), options: .atomic)
+
+        Persistence.resetGRDBStoreForTests()
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        let loadedMessages = Persistence.loadMessages(for: sessionID)
+        #expect(loadedMessages.map(\.content) == persistedMessages.map(\.content))
+        #expect(FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
+        #expect(FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
+    }
+
     @Test("GRDB 在缺失会话索引时不会清理孤立消息 JSON 文件")
     func testBootstrapGRDBKeepsOrphanLegacyMessageJSONWithoutIndex() throws {
         struct LegacyRequestLogEnvelope: Encodable {

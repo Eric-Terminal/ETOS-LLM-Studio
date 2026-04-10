@@ -1098,6 +1098,10 @@ final class PersistenceGRDBStore {
             self.logger.error("检测到旧 JSON 快照消息为 0，但数据库已有 \(existingMessageCountBeforeImport) 条消息，已跳过导入与清理。")
             return
         }
+        if existingMessageCountBeforeImport > 0, !metaState.importCompleted {
+            self.logger.error("检测到数据库已有 \(existingMessageCountBeforeImport) 条消息且 JSON 导入状态未完成，已跳过自动导入与清理以避免覆盖现有数据。")
+            return
+        }
 
         let importedBefore = try isLegacySnapshotImported(snapshot)
         if !metaState.importCompleted || !importedBefore {
