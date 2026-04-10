@@ -3536,6 +3536,30 @@ fileprivate struct PersistenceTests {
         chatsDirectory.appendingPathComponent("chat-store.sqlite-shm")
     }
 
+    private var configStoreSQLiteURL: URL {
+        chatsDirectory.appendingPathComponent("config-store.sqlite")
+    }
+
+    private var configStoreSQLiteWALURL: URL {
+        chatsDirectory.appendingPathComponent("config-store.sqlite-wal")
+    }
+
+    private var configStoreSQLiteSHMURL: URL {
+        chatsDirectory.appendingPathComponent("config-store.sqlite-shm")
+    }
+
+    private var memoryStoreSQLiteURL: URL {
+        chatsDirectory.appendingPathComponent("memory-store.sqlite")
+    }
+
+    private var memoryStoreSQLiteWALURL: URL {
+        chatsDirectory.appendingPathComponent("memory-store.sqlite-wal")
+    }
+
+    private var memoryStoreSQLiteSHMURL: URL {
+        chatsDirectory.appendingPathComponent("memory-store.sqlite-shm")
+    }
+
     private var legacySessionsIndexURL: URL {
         chatsDirectory.appendingPathComponent("sessions.json")
     }
@@ -3577,6 +3601,12 @@ fileprivate struct PersistenceTests {
         removeIfExists(chatStoreSQLiteURL)
         removeIfExists(chatStoreSQLiteWALURL)
         removeIfExists(chatStoreSQLiteSHMURL)
+        removeIfExists(configStoreSQLiteURL)
+        removeIfExists(configStoreSQLiteWALURL)
+        removeIfExists(configStoreSQLiteSHMURL)
+        removeIfExists(memoryStoreSQLiteURL)
+        removeIfExists(memoryStoreSQLiteWALURL)
+        removeIfExists(memoryStoreSQLiteSHMURL)
     }
 
     @Test("Save and Load Chat Sessions")
