@@ -866,43 +866,48 @@ struct ChatBubble: View {
                     )
                 }
 
-                toolDetailSection(title: "工具结果") {
-                    if resultText.isEmpty {
-                        Text(status == .pendingApproval ? "等待你的审批后继续执行。" : "暂无返回结果。")
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else if enableExperimentalToolResultDisplay {
-                        VStack(alignment: .leading, spacing: 6) {
-                            if let primaryContent = displayModel.primaryContentText, !primaryContent.isEmpty {
-                                CappedScrollableText(
-                                    text: primaryContent,
-                                    maxHeight: 120,
-                                    font: .caption2,
-                                    foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
-                                )
+                if permissionRequest == nil {
+                    toolDetailSection(title: "工具结果") {
+                        if resultText.isEmpty {
+                            Text(status == .pendingApproval ? "等待你的审批后继续执行。" : "暂无返回结果。")
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        } else if enableExperimentalToolResultDisplay {
+                            VStack(alignment: .leading, spacing: 6) {
+                                if let primaryContent = displayModel.primaryContentText, !primaryContent.isEmpty {
+                                    CappedScrollableText(
+                                        text: primaryContent,
+                                        maxHeight: 120,
+                                        font: .caption2,
+                                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
+                                    )
+                                }
+                                if displayModel.shouldShowRawSection {
+                                    Divider()
+                                    CappedScrollableText(
+                                        text: displayModel.rawDisplayText,
+                                        maxHeight: 120,
+                                        font: .system(.caption2, design: .monospaced),
+                                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82)
+                                    )
+                                }
                             }
-                            if displayModel.shouldShowRawSection {
-                                Divider()
-                                CappedScrollableText(
-                                    text: displayModel.rawDisplayText,
-                                    maxHeight: 120,
-                                    font: .system(.caption2, design: .monospaced),
-                                    foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82)
-                                )
-                            }
+                        } else {
+                            CappedScrollableText(
+                                text: resultText,
+                                maxHeight: 120,
+                                font: .system(.caption2, design: .monospaced),
+                                foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
+                            )
                         }
-                    } else {
-                        CappedScrollableText(
-                            text: resultText,
-                            maxHeight: 120,
-                            font: .system(.caption2, design: .monospaced),
-                            foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
-                        )
                     }
                 }
 
                 if let permissionRequest {
-                    toolDetailSection(title: "审批操作") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("审批操作")
+                            .etFont(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         toolPermissionInlineView(
                             request: permissionRequest,
                             onDecision: { decision in
@@ -911,6 +916,7 @@ struct ChatBubble: View {
                             }
                         )
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(12)

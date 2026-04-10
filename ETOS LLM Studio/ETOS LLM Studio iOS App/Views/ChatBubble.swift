@@ -1048,44 +1048,49 @@ struct ChatBubble: View {
                     )
                 }
 
-                toolDetailSection(title: "工具结果") {
-                    if resultText.isEmpty {
-                        Text(status == .pendingApproval ? "等待你的审批后继续执行。" : "暂无返回结果。")
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else if enableExperimentalToolResultDisplay {
-                        if let primaryContent = displayModel.primaryContentText, !primaryContent.isEmpty {
+                if permissionRequest == nil {
+                    toolDetailSection(title: "工具结果") {
+                        if resultText.isEmpty {
+                            Text(status == .pendingApproval ? "等待你的审批后继续执行。" : "暂无返回结果。")
+                                .etFont(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else if enableExperimentalToolResultDisplay {
+                            if let primaryContent = displayModel.primaryContentText, !primaryContent.isEmpty {
+                                CappedScrollableText(
+                                    text: primaryContent,
+                                    maxHeight: 240,
+                                    font: .footnote,
+                                    foreground: .secondary,
+                                    enableSelection: true
+                                )
+                            }
+                            if displayModel.shouldShowRawSection {
+                                Divider()
+                                CappedScrollableText(
+                                    text: displayModel.rawDisplayText,
+                                    maxHeight: 240,
+                                    font: .system(.caption, design: .monospaced),
+                                    foreground: .secondary,
+                                    enableSelection: true
+                                )
+                            }
+                        } else {
                             CappedScrollableText(
-                                text: primaryContent,
-                                maxHeight: 240,
-                                font: .footnote,
-                                foreground: .secondary,
-                                enableSelection: true
-                            )
-                        }
-                        if displayModel.shouldShowRawSection {
-                            Divider()
-                            CappedScrollableText(
-                                text: displayModel.rawDisplayText,
+                                text: resultText,
                                 maxHeight: 240,
                                 font: .system(.caption, design: .monospaced),
                                 foreground: .secondary,
                                 enableSelection: true
                             )
                         }
-                    } else {
-                        CappedScrollableText(
-                            text: resultText,
-                            maxHeight: 240,
-                            font: .system(.caption, design: .monospaced),
-                            foreground: .secondary,
-                            enableSelection: true
-                        )
                     }
                 }
 
                 if let permissionRequest {
-                    toolDetailSection(title: "审批操作") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("审批操作")
+                            .etFont(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         ToolPermissionInlineView(
                             request: permissionRequest,
                             onDecision: { decision in
@@ -1094,6 +1099,7 @@ struct ChatBubble: View {
                             }
                         )
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(14)
