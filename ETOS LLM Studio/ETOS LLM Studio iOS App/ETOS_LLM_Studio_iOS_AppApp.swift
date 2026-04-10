@@ -27,6 +27,9 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
 
     init() {
         Persistence.bootstrapGRDBStoreOnLaunch()
+        DispatchQueue.global(qos: .utility).async {
+            SQLiteStoreMigrationBootstrap.migrateJSONStoresIfNeeded()
+        }
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.registerAllFontsIfNeeded()
     }

@@ -612,6 +612,51 @@ final class PersistenceGRDBStore {
         loadBlob([DailyPulseTask].self, forKey: BlobKey.dailyPulseTasks) ?? []
     }
 
+    func auxiliaryBlobExists(forKey key: String) -> Bool {
+        do {
+            return try dbPool.read { db in
+                (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                    arguments: [key]
+                ) ?? 0) > 0
+            }
+        } catch {
+            logger.error("检查辅助存储键失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func loadAuxiliaryBlob<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
+        loadBlob(type, forKey: key)
+    }
+
+    @discardableResult
+    func saveAuxiliaryBlob<T: Encodable>(_ value: T, forKey key: String) -> Bool {
+        do {
+            try dbPool.write { db in
+                try writeBlob(db, key: key, value: value)
+            }
+            return true
+        } catch {
+            logger.error("写入辅助存储失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeAuxiliaryBlob(forKey key: String) -> Bool {
+        do {
+            try dbPool.write { db in
+                try db.execute(sql: "DELETE FROM json_blobs WHERE key = ?", arguments: [key])
+            }
+            return true
+        } catch {
+            logger.error("删除辅助存储失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
     func sessionDataExists(sessionID: UUID) -> Bool {
         do {
             return try dbPool.read { db in

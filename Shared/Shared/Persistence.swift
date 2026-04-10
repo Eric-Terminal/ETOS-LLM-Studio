@@ -165,6 +165,28 @@ public enum Persistence {
         grdbStoreLock.unlock()
     }
 
+    public static func auxiliaryBlobExists(forKey key: String) -> Bool {
+        guard let store = activeGRDBStore() else { return false }
+        return store.auxiliaryBlobExists(forKey: key)
+    }
+
+    public static func loadAuxiliaryBlob<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
+        guard let store = activeGRDBStore() else { return nil }
+        return store.loadAuxiliaryBlob(type, forKey: key)
+    }
+
+    @discardableResult
+    public static func saveAuxiliaryBlob<T: Encodable>(_ value: T, forKey key: String) -> Bool {
+        guard let store = activeGRDBStore() else { return false }
+        return store.saveAuxiliaryBlob(value, forKey: key)
+    }
+
+    @discardableResult
+    public static func removeAuxiliaryBlob(forKey key: String) -> Bool {
+        guard let store = activeGRDBStore() else { return false }
+        return store.removeAuxiliaryBlob(forKey: key)
+    }
+
     // MARK: - 目录管理
 
     /// 获取用于存储聊天记录的目录URL
