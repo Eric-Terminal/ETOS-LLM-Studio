@@ -29,7 +29,9 @@ struct MemoryRawStore {
     
     func loadMemories() -> [MemoryItem] {
         if canUseGRDB, Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
-            return Persistence.loadAuxiliaryBlob([MemoryItem].self, forKey: grdbBlobKey) ?? []
+            let memories = Persistence.loadAuxiliaryBlob([MemoryItem].self, forKey: grdbBlobKey) ?? []
+            persistJSONMirror(memories)
+            return memories
         }
 
         let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
@@ -40,8 +42,8 @@ struct MemoryRawStore {
         do {
             let data = try Data(contentsOf: fileURL)
             let memories = try decoder.decode([MemoryItem].self, from: data)
-            if canUseGRDB, Persistence.saveAuxiliaryBlob(memories, forKey: grdbBlobKey) {
-                try? FileManager.default.removeItem(at: fileURL)
+            if canUseGRDB {
+                _ = Persistence.saveAuxiliaryBlob(memories, forKey: grdbBlobKey)
             }
             return memories
         } catch {
@@ -51,21 +53,24 @@ struct MemoryRawStore {
     }
     
     func saveMemories(_ memories: [MemoryItem]) throws {
-        if canUseGRDB, Persistence.saveAuxiliaryBlob(memories, forKey: grdbBlobKey) {
-            let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-            return
+        persistJSONMirror(memories)
+        if canUseGRDB {
+            _ = Persistence.saveAuxiliaryBlob(memories, forKey: grdbBlobKey)
         }
-
-        MemoryStoragePaths.ensureRootDirectory(rootDirectory: rootDirectory)
-        let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
-        let data = try encoder.encode(memories)
-        try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
     }
 
     private var canUseGRDB: Bool {
         rootDirectory == nil
+    }
+
+    private func persistJSONMirror(_ memories: [MemoryItem]) {
+        do {
+            MemoryStoragePaths.ensureRootDirectory(rootDirectory: rootDirectory)
+            let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
+            let data = try encoder.encode(memories)
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        } catch {
+            logger.error("写入 Memory JSON 镜像失败: \(error.localizedDescription)")
+        }
     }
 }
