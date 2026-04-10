@@ -1202,7 +1202,7 @@ final class ChatViewModel: ObservableObject {
         if session.id == currentSession?.id {
             return allMessagesForSession.count
         }
-        return Persistence.loadMessages(for: session.id).count
+        return Persistence.loadMessageCount(for: session.id)
     }
     
     @discardableResult
