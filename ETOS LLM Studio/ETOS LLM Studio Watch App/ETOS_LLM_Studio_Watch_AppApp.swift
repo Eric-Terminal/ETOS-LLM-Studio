@@ -24,6 +24,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
     
     init() {
+        Persistence.bootstrapGRDBStoreOnLaunch()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.registerAllFontsIfNeeded()
         // 在 App 启动时预先触发本地网络权限

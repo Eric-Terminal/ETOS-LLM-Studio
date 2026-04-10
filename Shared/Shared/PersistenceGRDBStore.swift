@@ -6,6 +6,7 @@ import os.log
 final class PersistenceGRDBStore {
     private enum MetaKey {
         static let jsonImportCompleted = "json_import_completed_v1"
+        static let jsonCleanupCompleted = "json_cleanup_completed_v1"
     }
 
     private enum BlobKey {
@@ -85,6 +86,23 @@ final class PersistenceGRDBStore {
         let dailyPulsePendingCuration: DailyPulseCurationNote?
         let dailyPulseExternalSignals: [DailyPulseExternalSignal]
         let dailyPulseTasks: [DailyPulseTask]
+
+        var messageCount: Int {
+            sessions.reduce(into: 0) { partialResult, item in
+                partialResult += item.messages.count
+            }
+        }
+
+        var hasAnyData: Bool {
+            !sessions.isEmpty ||
+            !folders.isEmpty ||
+            !requestLogs.isEmpty ||
+            !dailyPulseRuns.isEmpty ||
+            !dailyPulseFeedbackHistory.isEmpty ||
+            dailyPulsePendingCuration != nil ||
+            !dailyPulseExternalSignals.isEmpty ||
+            !dailyPulseTasks.isEmpty
+        }
     }
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "PersistenceGRDB")
@@ -958,117 +976,59 @@ final class PersistenceGRDBStore {
     }
 
     private func importLegacyJSONIfNeeded() throws {
-        let shouldImport = try dbPool.read { db -> Bool in
-            if let _: String = try String.fetchOne(
-                db,
-                sql: "SELECT value FROM meta WHERE key = ?",
-                arguments: [MetaKey.jsonImportCompleted]
-            ) {
-                return false
-            }
-
-            let sessionCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sessions") ?? 0
-            let messageCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages") ?? 0
-            let requestLogCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM request_logs") ?? 0
-
-            if sessionCount > 0 || messageCount > 0 || requestLogCount > 0 {
-                return false
-            }
-            return true
-        }
-
-        guard shouldImport else {
+        let snapshot = collectLegacySnapshot()
+        guard snapshot.hasAnyData else {
             try dbPool.write { db in
                 try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
+                try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
             }
             return
         }
 
-        let snapshot = collectLegacySnapshot()
-
-        try dbPool.write { db in
-            try db.inTransaction {
-                try db.execute(sql: "DELETE FROM messages")
-                try db.execute(sql: "DELETE FROM sessions")
-                try db.execute(sql: "DELETE FROM session_folders")
-                try db.execute(sql: "DELETE FROM request_logs")
-                try db.execute(sql: "DELETE FROM json_blobs")
-
-                for item in snapshot.sessions {
-                    try upsertSession(
-                        db,
-                        session: item.session,
-                        sortIndex: item.sortIndex,
-                        updatedAt: item.updatedAt,
-                        conversationSummary: item.conversationSummary,
-                        conversationSummaryUpdatedAt: item.conversationSummaryUpdatedAt,
-                        preserveExistingSummary: false
-                    )
-
-                    for (position, message) in item.messages.enumerated() {
-                        try insertMessage(
-                            db,
-                            message: message,
-                            sessionID: item.session.id,
-                            position: position,
-                            fallbackTimestamp: item.updatedAt.addingTimeInterval(Double(position) * 0.000_001)
-                        )
-                    }
-                }
-
-                for folder in snapshot.folders {
-                    try db.execute(
-                        sql: """
-                        INSERT INTO session_folders (id, name, parent_id, updated_at)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        arguments: [
-                            folder.id.uuidString,
-                            folder.name,
-                            folder.parentID?.uuidString,
-                            folder.updatedAt.timeIntervalSince1970
-                        ]
-                    )
-                }
-
-                for entry in snapshot.requestLogs {
-                    try db.execute(
-                        sql: """
-                        INSERT INTO request_logs (
-                            id, request_id, session_id, provider_id, provider_name, model_id,
-                            requested_at, finished_at, is_streaming, status, token_usage_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        arguments: [
-                            entry.id.uuidString,
-                            entry.requestID.uuidString,
-                            entry.sessionID?.uuidString,
-                            entry.providerID?.uuidString,
-                            entry.providerName,
-                            entry.modelID,
-                            entry.requestedAt.timeIntervalSince1970,
-                            entry.finishedAt.timeIntervalSince1970,
-                            entry.isStreaming ? 1 : 0,
-                            entry.status.rawValue,
-                            encodeJSON(entry.tokenUsage)
-                        ]
-                    )
-                }
-
-                try writeBlob(db, key: BlobKey.dailyPulseRuns, value: snapshot.dailyPulseRuns)
-                try writeBlob(db, key: BlobKey.dailyPulseFeedbackHistory, value: snapshot.dailyPulseFeedbackHistory)
-                if let note = snapshot.dailyPulsePendingCuration {
-                    try writeBlob(db, key: BlobKey.dailyPulsePendingCuration, value: note)
-                }
-                try writeBlob(db, key: BlobKey.dailyPulseExternalSignals, value: snapshot.dailyPulseExternalSignals)
-                try writeBlob(db, key: BlobKey.dailyPulseTasks, value: snapshot.dailyPulseTasks)
-
-                try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
-                return .commit
-            }
+        let metaState = try dbPool.read { db -> (importCompleted: Bool, cleanupCompleted: Bool) in
+            let importValue: String? = try String.fetchOne(
+                db,
+                sql: "SELECT value FROM meta WHERE key = ?",
+                arguments: [MetaKey.jsonImportCompleted]
+            )
+            let cleanupValue: String? = try String.fetchOne(
+                db,
+                sql: "SELECT value FROM meta WHERE key = ?",
+                arguments: [MetaKey.jsonCleanupCompleted]
+            )
+            return (importValue == "1", cleanupValue == "1")
         }
 
-        self.logger.info("JSON 数据已导入 GRDB，数据库路径: \(self.databaseURL.path)")
+        let importedBefore = try isLegacySnapshotImported(snapshot)
+        if !metaState.importCompleted || !importedBefore {
+            try mergeLegacySnapshotIntoDatabase(snapshot)
+        }
+
+        let verificationPassed = try isLegacySnapshotImported(snapshot)
+        guard verificationPassed else {
+            logger.error("JSON 数据导入校验失败，已保留旧 JSON 文件。")
+            return
+        }
+
+        try dbPool.write { db in
+            try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
+        }
+
+        let shouldCleanupLegacyJSON = !metaState.cleanupCompleted || hasLegacyJSONArtifacts(sessionIDs: snapshot.sessions.map(\.session.id))
+        if shouldCleanupLegacyJSON {
+            let didCleanupAllLegacyJSON = removeLegacyJSONArtifacts(sessionIDs: snapshot.sessions.map(\.session.id))
+            if didCleanupAllLegacyJSON {
+                try dbPool.write { db in
+                    try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
+                }
+                self.logger.info("JSON 数据已导入并校验，旧 JSON 文件已清理，数据库路径: \(self.databaseURL.path)")
+            } else {
+                self.logger.warning("JSON 数据已导入并校验，但旧 JSON 文件未完全清理。")
+            }
+            return
+        }
+
+        self.logger.info("JSON 数据已导入并校验，数据库路径: \(self.databaseURL.path)")
     }
 
     private func collectLegacySnapshot() -> LegacySnapshot {
@@ -1091,6 +1051,268 @@ final class PersistenceGRDBStore {
             dailyPulseExternalSignals: dailyPulseExternalSignals,
             dailyPulseTasks: dailyPulseTasks
         )
+    }
+
+    private func mergeLegacySnapshotIntoDatabase(_ snapshot: LegacySnapshot) throws {
+        try dbPool.write { db in
+            try db.inTransaction {
+                for item in snapshot.sessions {
+                    try upsertSession(
+                        db,
+                        session: item.session,
+                        sortIndex: item.sortIndex,
+                        updatedAt: item.updatedAt,
+                        conversationSummary: item.conversationSummary,
+                        conversationSummaryUpdatedAt: item.conversationSummaryUpdatedAt,
+                        preserveExistingSummary: false
+                    )
+
+                    try db.execute(
+                        sql: "DELETE FROM messages WHERE session_id = ?",
+                        arguments: [item.session.id.uuidString]
+                    )
+                    for (position, message) in item.messages.enumerated() {
+                        try insertMessage(
+                            db,
+                            message: message,
+                            sessionID: item.session.id,
+                            position: position,
+                            fallbackTimestamp: item.updatedAt.addingTimeInterval(Double(position) * 0.000_001)
+                        )
+                    }
+                }
+
+                for folder in snapshot.folders {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO session_folders (id, name, parent_id, updated_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            name = excluded.name,
+                            parent_id = excluded.parent_id,
+                            updated_at = excluded.updated_at
+                        """,
+                        arguments: [
+                            folder.id.uuidString,
+                            folder.name,
+                            folder.parentID?.uuidString,
+                            folder.updatedAt.timeIntervalSince1970
+                        ]
+                    )
+                }
+
+                for entry in snapshot.requestLogs {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO request_logs (
+                            id, request_id, session_id, provider_id, provider_name, model_id,
+                            requested_at, finished_at, is_streaming, status, token_usage_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            request_id = excluded.request_id,
+                            session_id = excluded.session_id,
+                            provider_id = excluded.provider_id,
+                            provider_name = excluded.provider_name,
+                            model_id = excluded.model_id,
+                            requested_at = excluded.requested_at,
+                            finished_at = excluded.finished_at,
+                            is_streaming = excluded.is_streaming,
+                            status = excluded.status,
+                            token_usage_json = excluded.token_usage_json
+                        """,
+                        arguments: [
+                            entry.id.uuidString,
+                            entry.requestID.uuidString,
+                            entry.sessionID?.uuidString,
+                            entry.providerID?.uuidString,
+                            entry.providerName,
+                            entry.modelID,
+                            entry.requestedAt.timeIntervalSince1970,
+                            entry.finishedAt.timeIntervalSince1970,
+                            entry.isStreaming ? 1 : 0,
+                            entry.status.rawValue,
+                            encodeJSON(entry.tokenUsage)
+                        ]
+                    )
+                }
+
+                if !snapshot.dailyPulseRuns.isEmpty {
+                    try writeBlob(db, key: BlobKey.dailyPulseRuns, value: snapshot.dailyPulseRuns)
+                }
+                if !snapshot.dailyPulseFeedbackHistory.isEmpty {
+                    try writeBlob(db, key: BlobKey.dailyPulseFeedbackHistory, value: snapshot.dailyPulseFeedbackHistory)
+                }
+                if let note = snapshot.dailyPulsePendingCuration {
+                    try writeBlob(db, key: BlobKey.dailyPulsePendingCuration, value: note)
+                }
+                if !snapshot.dailyPulseExternalSignals.isEmpty {
+                    try writeBlob(db, key: BlobKey.dailyPulseExternalSignals, value: snapshot.dailyPulseExternalSignals)
+                }
+                if !snapshot.dailyPulseTasks.isEmpty {
+                    try writeBlob(db, key: BlobKey.dailyPulseTasks, value: snapshot.dailyPulseTasks)
+                }
+
+                return .commit
+            }
+        }
+    }
+
+    private func isLegacySnapshotImported(_ snapshot: LegacySnapshot) throws -> Bool {
+        try dbPool.read { db in
+            for item in snapshot.sessions {
+                let sessionExists = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sessions WHERE id = ?",
+                    arguments: [item.session.id.uuidString]
+                ) ?? 0) > 0
+                guard sessionExists else { return false }
+
+                let messageCount = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                    arguments: [item.session.id.uuidString]
+                ) ?? 0
+                guard messageCount >= item.messages.count else { return false }
+            }
+
+            for folder in snapshot.folders {
+                let folderExists = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM session_folders WHERE id = ?",
+                    arguments: [folder.id.uuidString]
+                ) ?? 0) > 0
+                guard folderExists else { return false }
+            }
+
+            for entry in snapshot.requestLogs {
+                let logExists = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM request_logs WHERE id = ?",
+                    arguments: [entry.id.uuidString]
+                ) ?? 0) > 0
+                guard logExists else { return false }
+            }
+
+            if !snapshot.dailyPulseRuns.isEmpty {
+                let runs: [DailyPulseRun]? = try readBlob(db, type: [DailyPulseRun].self, key: BlobKey.dailyPulseRuns)
+                guard (runs?.count ?? 0) >= snapshot.dailyPulseRuns.count else { return false }
+            }
+            if !snapshot.dailyPulseFeedbackHistory.isEmpty {
+                let history: [DailyPulseFeedbackEvent]? = try readBlob(
+                    db,
+                    type: [DailyPulseFeedbackEvent].self,
+                    key: BlobKey.dailyPulseFeedbackHistory
+                )
+                guard (history?.count ?? 0) >= snapshot.dailyPulseFeedbackHistory.count else { return false }
+            }
+            if snapshot.dailyPulsePendingCuration != nil {
+                let note: DailyPulseCurationNote? = try readBlob(
+                    db,
+                    type: DailyPulseCurationNote.self,
+                    key: BlobKey.dailyPulsePendingCuration
+                )
+                guard note != nil else { return false }
+            }
+            if !snapshot.dailyPulseExternalSignals.isEmpty {
+                let signals: [DailyPulseExternalSignal]? = try readBlob(
+                    db,
+                    type: [DailyPulseExternalSignal].self,
+                    key: BlobKey.dailyPulseExternalSignals
+                )
+                guard (signals?.count ?? 0) >= snapshot.dailyPulseExternalSignals.count else { return false }
+            }
+            if !snapshot.dailyPulseTasks.isEmpty {
+                let tasks: [DailyPulseTask]? = try readBlob(db, type: [DailyPulseTask].self, key: BlobKey.dailyPulseTasks)
+                guard (tasks?.count ?? 0) >= snapshot.dailyPulseTasks.count else { return false }
+            }
+
+            return true
+        }
+    }
+
+    private func readBlob<T: Decodable>(_ db: Database, type: T.Type, key: String) throws -> T? {
+        guard let data = try Data.fetchOne(
+            db,
+            sql: "SELECT json_data FROM json_blobs WHERE key = ?",
+            arguments: [key]
+        ) else {
+            return nil
+        }
+        return try makeISO8601Decoder().decode(T.self, from: data)
+    }
+
+    private func hasLegacyJSONArtifacts(sessionIDs: [UUID]) -> Bool {
+        let fileManager = FileManager.default
+        let candidates = legacyJSONArtifactURLs(sessionIDs: sessionIDs) + legacyRootMessageJSONFiles()
+        return candidates.contains { fileManager.fileExists(atPath: $0.path) }
+    }
+
+    private func removeLegacyJSONArtifacts(sessionIDs: [UUID]) -> Bool {
+        let fileManager = FileManager.default
+        let candidates = legacyJSONArtifactURLs(sessionIDs: sessionIDs) + legacyRootMessageJSONFiles()
+        var failedPaths: [String] = []
+
+        for url in candidates {
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            do {
+                try fileManager.removeItem(at: url)
+            } catch {
+                failedPaths.append(url.path)
+                logger.warning("清理旧 JSON 文件失败: \(url.path) - \(error.localizedDescription)")
+            }
+        }
+
+        removeDirectoryIfEmpty(chatsDirectory.appendingPathComponent("RequestLogs"))
+        removeDirectoryIfEmpty(chatsDirectory.appendingPathComponent("DailyPulse"))
+
+        if !failedPaths.isEmpty {
+            return false
+        }
+        return !hasLegacyJSONArtifacts(sessionIDs: sessionIDs)
+    }
+
+    private func legacyJSONArtifactURLs(sessionIDs: [UUID]) -> [URL] {
+        var urls: [URL] = [
+            chatsDirectory.appendingPathComponent("index.json"),
+            chatsDirectory.appendingPathComponent("sessions"),
+            chatsDirectory.appendingPathComponent("sessions.json"),
+            chatsDirectory.appendingPathComponent("folders.json"),
+            chatsDirectory.appendingPathComponent("RequestLogs").appendingPathComponent("index.json"),
+            chatsDirectory.appendingPathComponent("DailyPulse").appendingPathComponent("runs.json"),
+            chatsDirectory.appendingPathComponent("DailyPulse").appendingPathComponent("feedback-history.json"),
+            chatsDirectory.appendingPathComponent("DailyPulse").appendingPathComponent("pending-curation.json"),
+            chatsDirectory.appendingPathComponent("DailyPulse").appendingPathComponent("external-signals.json"),
+            chatsDirectory.appendingPathComponent("DailyPulse").appendingPathComponent("tasks.json"),
+            chatsDirectory.appendingPathComponent("v3"),
+            chatsDirectory.appendingPathComponent("legacy")
+        ]
+
+        urls.append(contentsOf: sessionIDs.map { chatsDirectory.appendingPathComponent("\($0.uuidString).json") })
+        return urls
+    }
+
+    private func legacyRootMessageJSONFiles() -> [URL] {
+        guard let fileURLs = try? FileManager.default.contentsOfDirectory(
+            at: chatsDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return fileURLs.filter { url in
+            guard url.pathExtension.lowercased() == "json" else { return false }
+            let name = url.deletingPathExtension().lastPathComponent
+            return UUID(uuidString: name) != nil
+        }
+    }
+
+    private func removeDirectoryIfEmpty(_ directoryURL: URL) {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: directoryURL.path) else { return }
+        guard let children = try? fileManager.contentsOfDirectory(atPath: directoryURL.path) else { return }
+        guard children.isEmpty else { return }
+        try? fileManager.removeItem(at: directoryURL)
     }
 
     private func readCurrentLayoutSessions() -> [LegacySessionSnapshot]? {
@@ -1369,6 +1591,24 @@ final class PersistenceGRDBStore {
                 token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
                 full_error_content, response_metrics_json, position, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                session_id = excluded.session_id,
+                role = excluded.role,
+                requested_at = excluded.requested_at,
+                content = excluded.content,
+                content_versions_json = excluded.content_versions_json,
+                current_version_index = excluded.current_version_index,
+                reasoning_content = excluded.reasoning_content,
+                tool_calls_json = excluded.tool_calls_json,
+                tool_calls_placement = excluded.tool_calls_placement,
+                token_usage_json = excluded.token_usage_json,
+                audio_file_name = excluded.audio_file_name,
+                image_file_names_json = excluded.image_file_names_json,
+                file_file_names_json = excluded.file_file_names_json,
+                full_error_content = excluded.full_error_content,
+                response_metrics_json = excluded.response_metrics_json,
+                position = excluded.position,
+                created_at = excluded.created_at
             """,
             arguments: [
                 message.id.uuidString,

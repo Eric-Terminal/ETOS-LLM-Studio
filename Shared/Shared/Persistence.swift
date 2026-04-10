@@ -29,7 +29,8 @@ public enum Persistence {
     private static let requestLogLock = NSLock()
     private static let grdbStoreLock = NSLock()
     private static var cachedGRDBStore: PersistenceGRDBStore?
-    private static var grdbStoreInitializationFailed = false
+    private static var lastGRDBStoreInitializationFailedAt: Date?
+    private static let grdbStoreRetryInterval: TimeInterval = 2
     static var grdbEnabledOverrideForTests: Bool?
     static var requestLogRetentionLimitOverride: Int?
     private static var hasLoggedCompatibilityReminder = false
@@ -133,7 +134,9 @@ public enum Persistence {
         if let store = cachedGRDBStore {
             return store
         }
-        guard !grdbStoreInitializationFailed else {
+
+        if let failedAt = lastGRDBStoreInitializationFailedAt,
+           Date().timeIntervalSince(failedAt) < grdbStoreRetryInterval {
             return nil
         }
 
@@ -141,13 +144,25 @@ public enum Persistence {
         do {
             let store = try PersistenceGRDBStore(chatsDirectory: getChatsDirectory())
             cachedGRDBStore = store
+            lastGRDBStoreInitializationFailedAt = nil
             logger.info("GRDB 持久化已启用。")
             return store
         } catch {
-            grdbStoreInitializationFailed = true
-            logger.error("GRDB 持久化初始化失败，已自动回退到 JSON: \(error.localizedDescription)")
+            lastGRDBStoreInitializationFailedAt = Date()
+            logger.error("GRDB 持久化初始化失败，已自动回退到 JSON: \(String(describing: error))")
             return nil
         }
+    }
+
+    public static func bootstrapGRDBStoreOnLaunch() {
+        _ = activeGRDBStore()
+    }
+
+    static func resetGRDBStoreForTests() {
+        grdbStoreLock.lock()
+        cachedGRDBStore = nil
+        lastGRDBStoreInitializationFailedAt = nil
+        grdbStoreLock.unlock()
     }
 
     // MARK: - 目录管理
