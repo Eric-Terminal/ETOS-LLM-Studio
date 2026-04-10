@@ -658,6 +658,43 @@ final class PersistenceGRDBStore {
         }
     }
 
+    func loadAuxiliaryBlobRawData(forKey key: String) -> Data? {
+        do {
+            return try dbPool.read { db in
+                try Data.fetchOne(
+                    db,
+                    sql: "SELECT json_data FROM json_blobs WHERE key = ?",
+                    arguments: [key]
+                )
+            }
+        } catch {
+            logger.error("读取辅助存储原始数据失败 key=\(key): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    @discardableResult
+    func saveAuxiliaryBlobRawData(_ data: Data, forKey key: String) -> Bool {
+        do {
+            try dbPool.write { db in
+                try db.execute(
+                    sql: """
+                    INSERT INTO json_blobs (key, json_data, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        json_data = excluded.json_data,
+                        updated_at = excluded.updated_at
+                    """,
+                    arguments: [key, data, Date().timeIntervalSince1970]
+                )
+            }
+            return true
+        } catch {
+            logger.error("写入辅助存储原始数据失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
     func sessionDataExists(sessionID: UUID) -> Bool {
         do {
             return try dbPool.read { db in
@@ -1900,5 +1937,149 @@ final class PersistenceGRDBStore {
         totals.cacheWriteTokens += usage.cacheWriteTokens ?? 0
         totals.cacheReadTokens += usage.cacheReadTokens ?? 0
         totals.totalTokens += usage.totalTokens ?? 0
+    }
+}
+
+/// 仅用于辅助 JSON Blob 的轻量分库存储。
+final class PersistenceAuxiliaryGRDBStore {
+    private let logger: Logger
+    private let databaseURL: URL
+    private let dbPool: DatabasePool
+
+    init(databaseURL: URL, loggerCategory: String) throws {
+        self.databaseURL = databaseURL
+        self.logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: loggerCategory)
+
+        var configuration = Configuration()
+        configuration.qos = .userInitiated
+        configuration.foreignKeysEnabled = false
+        configuration.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA journal_mode=WAL")
+            try db.execute(sql: "PRAGMA synchronous=NORMAL")
+            try db.execute(sql: "PRAGMA busy_timeout=5000")
+            try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
+            try db.execute(sql: "PRAGMA temp_store=MEMORY")
+            try db.execute(sql: "PRAGMA mmap_size=67108864")
+        }
+
+        self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
+        try migrateSchemaIfNeeded()
+    }
+
+    func auxiliaryBlobExists(forKey key: String) -> Bool {
+        do {
+            return try dbPool.read { db in
+                (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                    arguments: [key]
+                ) ?? 0) > 0
+            }
+        } catch {
+            logger.error("检查辅助存储键失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func loadAuxiliaryBlob<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
+        guard let data = loadAuxiliaryBlobRawData(forKey: key) else {
+            return nil
+        }
+        do {
+            return try makeISO8601Decoder().decode(T.self, from: data)
+        } catch {
+            logger.error("读取辅助存储失败 key=\(key): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    @discardableResult
+    func saveAuxiliaryBlob<T: Encodable>(_ value: T, forKey key: String) -> Bool {
+        do {
+            let data = try makeISO8601Encoder().encode(value)
+            return saveAuxiliaryBlobRawData(data, forKey: key)
+        } catch {
+            logger.error("写入辅助存储失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeAuxiliaryBlob(forKey key: String) -> Bool {
+        do {
+            try dbPool.write { db in
+                try db.execute(sql: "DELETE FROM json_blobs WHERE key = ?", arguments: [key])
+            }
+            return true
+        } catch {
+            logger.error("删除辅助存储失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func loadAuxiliaryBlobRawData(forKey key: String) -> Data? {
+        do {
+            return try dbPool.read { db in
+                try Data.fetchOne(
+                    db,
+                    sql: "SELECT json_data FROM json_blobs WHERE key = ?",
+                    arguments: [key]
+                )
+            }
+        } catch {
+            logger.error("读取辅助存储原始数据失败 key=\(key): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    @discardableResult
+    func saveAuxiliaryBlobRawData(_ data: Data, forKey key: String) -> Bool {
+        do {
+            try dbPool.write { db in
+                try db.execute(
+                    sql: """
+                    INSERT INTO json_blobs (key, json_data, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        json_data = excluded.json_data,
+                        updated_at = excluded.updated_at
+                    """,
+                    arguments: [key, data, Date().timeIntervalSince1970]
+                )
+            }
+            return true
+        } catch {
+            logger.error("写入辅助存储原始数据失败 key=\(key): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func migrateSchemaIfNeeded() throws {
+        var migrator = DatabaseMigrator()
+        migrator.registerMigration("v1_create_json_blobs") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS json_blobs (
+                    key TEXT PRIMARY KEY NOT NULL,
+                    json_data BLOB NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_json_blobs_updated_at ON json_blobs(updated_at DESC)")
+        }
+        try migrator.migrate(dbPool)
+        logger.info("辅助存储已启用，数据库路径: \(databaseURL.path)")
+    }
+
+    private func makeISO8601Encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private func makeISO8601Decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }

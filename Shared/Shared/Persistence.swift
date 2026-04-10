@@ -31,9 +31,38 @@ public enum Persistence {
     private static var cachedGRDBStore: PersistenceGRDBStore?
     private static var lastGRDBStoreInitializationFailedAt: Date?
     private static let grdbStoreRetryInterval: TimeInterval = 2
+    private static let auxiliaryStoreLock = NSLock()
+    private static var cachedAuxiliaryStores: [AuxiliaryStoreKind: PersistenceAuxiliaryGRDBStore] = [:]
+    private static var lastAuxiliaryStoreInitializationFailedAt: [AuxiliaryStoreKind: Date] = [:]
+    private static let auxiliaryStoreRetryInterval: TimeInterval = 2
+    private static let auxiliaryConfigBlobKeys: Set<String> = [
+        "providers_v1",
+        "worldbooks_v1",
+        "shortcut_tools_v1",
+        "feedback_tickets_v1",
+        "mcp_servers_records_v1"
+    ]
+    private static let auxiliaryMemoryBlobKeys: Set<String> = [
+        "memory_raw_memories_v1",
+        "conversation_user_profile_v1"
+    ]
     static var grdbEnabledOverrideForTests: Bool?
     static var requestLogRetentionLimitOverride: Int?
     private static var hasLoggedCompatibilityReminder = false
+
+    private enum AuxiliaryStoreKind: String {
+        case config = "config-store.sqlite"
+        case memory = "memory-store.sqlite"
+
+        var loggerCategory: String {
+            switch self {
+            case .config:
+                return "PersistenceAuxConfig"
+            case .memory:
+                return "PersistenceAuxMemory"
+            }
+        }
+    }
 
     private static let sessionIndexFileName = "index.json"
     private static let sessionFoldersFileName = "folders.json"
@@ -154,8 +183,77 @@ public enum Persistence {
         }
     }
 
+    private static func auxiliaryStoreKind(forKey key: String) -> AuxiliaryStoreKind {
+        if auxiliaryMemoryBlobKeys.contains(key) {
+            return .memory
+        }
+        if auxiliaryConfigBlobKeys.contains(key) {
+            return .config
+        }
+        return .config
+    }
+
+    private static func activeAuxiliaryStore(forKey key: String) -> PersistenceAuxiliaryGRDBStore? {
+        activeAuxiliaryStore(kind: auxiliaryStoreKind(forKey: key))
+    }
+
+    private static func activeAuxiliaryStore(kind: AuxiliaryStoreKind) -> PersistenceAuxiliaryGRDBStore? {
+        guard shouldUseGRDBStore() else { return nil }
+        if let store = cachedAuxiliaryStores[kind] {
+            return store
+        }
+
+        auxiliaryStoreLock.lock()
+        defer { auxiliaryStoreLock.unlock() }
+
+        if let store = cachedAuxiliaryStores[kind] {
+            return store
+        }
+
+        if let failedAt = lastAuxiliaryStoreInitializationFailedAt[kind],
+           Date().timeIntervalSince(failedAt) < auxiliaryStoreRetryInterval {
+            return nil
+        }
+
+        do {
+            let databaseURL = getChatsDirectory().appendingPathComponent(kind.rawValue)
+            let store = try PersistenceAuxiliaryGRDBStore(
+                databaseURL: databaseURL,
+                loggerCategory: kind.loggerCategory
+            )
+            cachedAuxiliaryStores[kind] = store
+            lastAuxiliaryStoreInitializationFailedAt[kind] = nil
+            return store
+        } catch {
+            lastAuxiliaryStoreInitializationFailedAt[kind] = Date()
+            logger.error("辅助存储初始化失败(\(kind.rawValue)): \(String(describing: error))")
+            return nil
+        }
+    }
+
+    @discardableResult
+    private static func migrateLegacyAuxiliaryBlobIfNeeded(
+        forKey key: String,
+        targetStore: PersistenceAuxiliaryGRDBStore?
+    ) -> Bool {
+        guard let targetStore else { return false }
+        guard !targetStore.auxiliaryBlobExists(forKey: key) else { return true }
+        guard let legacyStore = activeGRDBStore(),
+              let legacyData = legacyStore.loadAuxiliaryBlobRawData(forKey: key) else {
+            return false
+        }
+        guard targetStore.saveAuxiliaryBlobRawData(legacyData, forKey: key) else {
+            return false
+        }
+        _ = legacyStore.removeAuxiliaryBlob(forKey: key)
+        logger.info("辅助存储键已迁移到分库: \(key)")
+        return true
+    }
+
     public static func bootstrapGRDBStoreOnLaunch() {
         _ = activeGRDBStore()
+        _ = activeAuxiliaryStore(kind: .config)
+        _ = activeAuxiliaryStore(kind: .memory)
     }
 
     static func resetGRDBStoreForTests() {
@@ -163,28 +261,71 @@ public enum Persistence {
         cachedGRDBStore = nil
         lastGRDBStoreInitializationFailedAt = nil
         grdbStoreLock.unlock()
+
+        auxiliaryStoreLock.lock()
+        cachedAuxiliaryStores.removeAll()
+        lastAuxiliaryStoreInitializationFailedAt.removeAll()
+        auxiliaryStoreLock.unlock()
     }
 
     public static func auxiliaryBlobExists(forKey key: String) -> Bool {
-        guard let store = activeGRDBStore() else { return false }
-        return store.auxiliaryBlobExists(forKey: key)
+        let targetStore = activeAuxiliaryStore(forKey: key)
+        if targetStore?.auxiliaryBlobExists(forKey: key) == true {
+            return true
+        }
+
+        if migrateLegacyAuxiliaryBlobIfNeeded(forKey: key, targetStore: targetStore) {
+            return targetStore?.auxiliaryBlobExists(forKey: key) == true
+        }
+
+        guard let legacyStore = activeGRDBStore() else { return false }
+        return legacyStore.auxiliaryBlobExists(forKey: key)
     }
 
     public static func loadAuxiliaryBlob<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
-        guard let store = activeGRDBStore() else { return nil }
-        return store.loadAuxiliaryBlob(type, forKey: key)
+        let targetStore = activeAuxiliaryStore(forKey: key)
+        if let value = targetStore?.loadAuxiliaryBlob(type, forKey: key) {
+            return value
+        }
+
+        _ = migrateLegacyAuxiliaryBlobIfNeeded(forKey: key, targetStore: targetStore)
+        if let value = targetStore?.loadAuxiliaryBlob(type, forKey: key) {
+            return value
+        }
+
+        guard let legacyStore = activeGRDBStore() else { return nil }
+        return legacyStore.loadAuxiliaryBlob(type, forKey: key)
     }
 
     @discardableResult
     public static func saveAuxiliaryBlob<T: Encodable>(_ value: T, forKey key: String) -> Bool {
-        guard let store = activeGRDBStore() else { return false }
-        return store.saveAuxiliaryBlob(value, forKey: key)
+        if let targetStore = activeAuxiliaryStore(forKey: key),
+           targetStore.saveAuxiliaryBlob(value, forKey: key) {
+            if let legacyStore = activeGRDBStore() {
+                _ = legacyStore.removeAuxiliaryBlob(forKey: key)
+            }
+            return true
+        }
+
+        guard let legacyStore = activeGRDBStore() else { return false }
+        return legacyStore.saveAuxiliaryBlob(value, forKey: key)
     }
 
     @discardableResult
     public static func removeAuxiliaryBlob(forKey key: String) -> Bool {
-        guard let store = activeGRDBStore() else { return false }
-        return store.removeAuxiliaryBlob(forKey: key)
+        var didHandle = false
+        var didSucceed = true
+
+        if let targetStore = activeAuxiliaryStore(forKey: key) {
+            didHandle = true
+            didSucceed = targetStore.removeAuxiliaryBlob(forKey: key) && didSucceed
+        }
+        if let legacyStore = activeGRDBStore() {
+            didHandle = true
+            didSucceed = legacyStore.removeAuxiliaryBlob(forKey: key) && didSucceed
+        }
+
+        return didHandle ? didSucceed : false
     }
 
     // MARK: - 目录管理
