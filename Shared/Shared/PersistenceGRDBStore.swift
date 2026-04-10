@@ -106,6 +106,9 @@ final class PersistenceGRDBStore {
     }
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "PersistenceGRDB")
+    private static let incrementalVacuumTriggerPages = 8_192
+    private static let incrementalVacuumTriggerRatio = 0.2
+    private static let incrementalVacuumBatchPages = 4_096
     private let chatsDirectory: URL
     private let databaseURL: URL
     private let dbPool: DatabasePool
@@ -124,12 +127,14 @@ final class PersistenceGRDBStore {
             try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
             try db.execute(sql: "PRAGMA temp_store=MEMORY")
             try db.execute(sql: "PRAGMA mmap_size=134217728")
+            try db.execute(sql: "PRAGMA auto_vacuum=INCREMENTAL")
         }
 
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
 
         try migrateSchemaIfNeeded()
         try importLegacyJSONIfNeeded()
+        scheduleDatabaseMaintenanceIfNeeded()
     }
 
     func saveChatSessions(_ sessions: [ChatSession]) {
@@ -1067,6 +1072,45 @@ final class PersistenceGRDBStore {
         }
 
         try migrator.migrate(dbPool)
+    }
+
+    private func scheduleDatabaseMaintenanceIfNeeded() {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            self.runDatabaseMaintenanceIfNeeded()
+        }
+    }
+
+    private func runDatabaseMaintenanceIfNeeded() {
+        do {
+            try self.dbPool.barrierWriteWithoutTransaction { db in
+                let autoVacuumMode = try Int.fetchOne(db, sql: "PRAGMA auto_vacuum") ?? 0
+                if autoVacuumMode != 2 {
+                    try db.execute(sql: "PRAGMA auto_vacuum=INCREMENTAL")
+                    try db.execute(sql: "VACUUM")
+                    self.logger.info("主数据库已升级为 auto_vacuum=INCREMENTAL，并完成一次 VACUUM。")
+                }
+
+                let pageCount = try Int.fetchOne(db, sql: "PRAGMA page_count") ?? 0
+                let freelistCount = try Int.fetchOne(db, sql: "PRAGMA freelist_count") ?? 0
+                guard pageCount > 0 else { return }
+
+                let freeRatio = Double(freelistCount) / Double(pageCount)
+                let shouldVacuum = freelistCount >= Self.incrementalVacuumTriggerPages
+                    || freeRatio >= Self.incrementalVacuumTriggerRatio
+                guard shouldVacuum, freelistCount > 0 else { return }
+
+                let vacuumPages = min(freelistCount, Self.incrementalVacuumBatchPages)
+                _ = try? db.checkpoint(.passive)
+                try db.execute(sql: "PRAGMA incremental_vacuum(\(vacuumPages))")
+
+                let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 4096
+                let reclaimedMB = Double(vacuumPages * pageSize) / (1024 * 1024)
+                self.logger.info("主数据库已执行增量回收，回收页数=\(vacuumPages)，预计回收=\(String(format: \"%.2f\", reclaimedMB))MB。")
+            }
+        } catch {
+            self.logger.warning("主数据库维护任务执行失败: \(error.localizedDescription)")
+        }
     }
 
     private func importLegacyJSONIfNeeded() throws {
@@ -2026,6 +2070,9 @@ final class PersistenceGRDBStore {
 /// 仅用于辅助 JSON Blob 的轻量分库存储。
 final class PersistenceAuxiliaryGRDBStore {
     private let logger: Logger
+    private static let incrementalVacuumTriggerPages = 1_024
+    private static let incrementalVacuumTriggerRatio = 0.25
+    private static let incrementalVacuumBatchPages = 512
     private let databaseURL: URL
     private let dbPool: DatabasePool
 
@@ -2043,10 +2090,12 @@ final class PersistenceAuxiliaryGRDBStore {
             try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
             try db.execute(sql: "PRAGMA temp_store=MEMORY")
             try db.execute(sql: "PRAGMA mmap_size=67108864")
+            try db.execute(sql: "PRAGMA auto_vacuum=INCREMENTAL")
         }
 
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
         try migrateSchemaIfNeeded()
+        scheduleDatabaseMaintenanceIfNeeded()
     }
 
     func auxiliaryBlobExists(forKey key: String) -> Bool {
@@ -2151,6 +2200,45 @@ final class PersistenceAuxiliaryGRDBStore {
         }
         try migrator.migrate(self.dbPool)
         self.logger.info("辅助存储已启用，数据库路径: \(self.databaseURL.path)")
+    }
+
+    private func scheduleDatabaseMaintenanceIfNeeded() {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            self.runDatabaseMaintenanceIfNeeded()
+        }
+    }
+
+    private func runDatabaseMaintenanceIfNeeded() {
+        do {
+            try self.dbPool.barrierWriteWithoutTransaction { db in
+                let autoVacuumMode = try Int.fetchOne(db, sql: "PRAGMA auto_vacuum") ?? 0
+                if autoVacuumMode != 2 {
+                    try db.execute(sql: "PRAGMA auto_vacuum=INCREMENTAL")
+                    try db.execute(sql: "VACUUM")
+                    self.logger.info("辅助数据库已升级为 auto_vacuum=INCREMENTAL，并完成一次 VACUUM。")
+                }
+
+                let pageCount = try Int.fetchOne(db, sql: "PRAGMA page_count") ?? 0
+                let freelistCount = try Int.fetchOne(db, sql: "PRAGMA freelist_count") ?? 0
+                guard pageCount > 0 else { return }
+
+                let freeRatio = Double(freelistCount) / Double(pageCount)
+                let shouldVacuum = freelistCount >= Self.incrementalVacuumTriggerPages
+                    || freeRatio >= Self.incrementalVacuumTriggerRatio
+                guard shouldVacuum, freelistCount > 0 else { return }
+
+                let vacuumPages = min(freelistCount, Self.incrementalVacuumBatchPages)
+                _ = try? db.checkpoint(.passive)
+                try db.execute(sql: "PRAGMA incremental_vacuum(\(vacuumPages))")
+
+                let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 4096
+                let reclaimedMB = Double(vacuumPages * pageSize) / (1024 * 1024)
+                self.logger.info("辅助数据库已执行增量回收，回收页数=\(vacuumPages)，预计回收=\(String(format: \"%.2f\", reclaimedMB))MB。")
+            }
+        } catch {
+            self.logger.warning("辅助数据库维护任务执行失败: \(error.localizedDescription)")
+        }
     }
 
     private func makeISO8601Encoder() -> JSONEncoder {
