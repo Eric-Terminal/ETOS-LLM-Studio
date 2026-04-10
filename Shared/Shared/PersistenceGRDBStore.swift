@@ -1082,9 +1082,22 @@ final class PersistenceGRDBStore {
             return (importValue == "1", cleanupValue == "1")
         }
 
+        let existingMessageCountBeforeImport = try totalMessageCount()
+        if snapshot.messageCount == 0, existingMessageCountBeforeImport > 0 {
+            self.logger.error("检测到旧 JSON 快照消息为 0，但数据库已有 \(existingMessageCountBeforeImport) 条消息，已跳过导入与清理。")
+            return
+        }
+
         let importedBefore = try isLegacySnapshotImported(snapshot)
         if !metaState.importCompleted || !importedBefore {
             try mergeLegacySnapshotIntoDatabase(snapshot)
+        }
+
+        let existingMessageCountAfterImport = try totalMessageCount()
+        if existingMessageCountBeforeImport > 0,
+           existingMessageCountAfterImport < existingMessageCountBeforeImport {
+            self.logger.error("检测到导入后消息总数下降（\(existingMessageCountBeforeImport) -> \(existingMessageCountAfterImport)），已中止清理旧 JSON 文件。")
+            return
         }
 
         let verificationPassed = try isLegacySnapshotImported(snapshot)
@@ -1095,6 +1108,11 @@ final class PersistenceGRDBStore {
 
         try dbPool.write { db in
             try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
+        }
+
+        if !snapshot.sessions.isEmpty, snapshot.messageCount == 0 {
+            self.logger.warning("旧 JSON 快照包含会话但消息总数为 0，已禁用自动清理旧 JSON，等待人工确认。")
+            return
         }
 
         let shouldCleanupLegacyJSON = !metaState.cleanupCompleted || hasLegacyJSONArtifacts(sessionIDs: snapshot.sessions.map(\.session.id))
@@ -1112,6 +1130,12 @@ final class PersistenceGRDBStore {
         }
 
         self.logger.info("JSON 数据已导入并校验，数据库路径: \(self.databaseURL.path)")
+    }
+
+    private func totalMessageCount() throws -> Int {
+        try dbPool.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages") ?? 0
+        }
     }
 
     private func collectLegacySnapshot() -> LegacySnapshot {
