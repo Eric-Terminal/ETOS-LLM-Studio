@@ -1106,7 +1106,8 @@ final class PersistenceGRDBStore {
 
                 let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 4096
                 let reclaimedMB = Double(vacuumPages * pageSize) / (1024 * 1024)
-                self.logger.info("主数据库已执行增量回收，回收页数=\(vacuumPages)，预计回收=\(String(format: \"%.2f\", reclaimedMB))MB。")
+                let reclaimedText = String(format: "%.2f", reclaimedMB)
+                self.logger.info("主数据库已执行增量回收，回收页数=\(vacuumPages)，预计回收=\(reclaimedText)MB。")
             }
         } catch {
             self.logger.warning("主数据库维护任务执行失败: \(error.localizedDescription)")
@@ -2234,7 +2235,8 @@ final class PersistenceAuxiliaryGRDBStore {
 
                 let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 4096
                 let reclaimedMB = Double(vacuumPages * pageSize) / (1024 * 1024)
-                self.logger.info("辅助数据库已执行增量回收，回收页数=\(vacuumPages)，预计回收=\(String(format: \"%.2f\", reclaimedMB))MB。")
+                let reclaimedText = String(format: "%.2f", reclaimedMB)
+                self.logger.info("辅助数据库已执行增量回收，回收页数=\(vacuumPages)，预计回收=\(reclaimedText)MB。")
             }
         } catch {
             self.logger.warning("辅助数据库维护任务执行失败: \(error.localizedDescription)")
