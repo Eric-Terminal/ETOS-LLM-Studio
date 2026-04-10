@@ -3826,6 +3826,66 @@ fileprivate struct PersistenceTests {
         #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
     }
 
+    @Test("GRDB 在缺失会话索引时不会清理孤立消息 JSON 文件")
+    func testBootstrapGRDBKeepsOrphanLegacyMessageJSONWithoutIndex() throws {
+        struct LegacyRequestLogEnvelope: Encodable {
+            let schemaVersion: Int
+            let updatedAt: String
+            let logs: [RequestLogEntry]
+        }
+
+        cleanup(sessions: [])
+
+        let orphanSessionID = UUID()
+        let orphanMessages = [
+            ChatMessage(role: .user, content: "orphan-user"),
+            ChatMessage(role: .assistant, content: "orphan-assistant")
+        ]
+        let orphanData = try JSONEncoder().encode(orphanMessages)
+        try orphanData.write(to: legacyMessageFileURL(orphanSessionID), options: .atomic)
+
+        try FileManager.default.createDirectory(
+            at: requestLogsDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        let requestLog = RequestLogEntry(
+            requestID: UUID(),
+            sessionID: nil,
+            providerID: nil,
+            providerName: "migration-guard",
+            modelID: "guard-model",
+            requestedAt: Date(timeIntervalSince1970: 1_700_300_000),
+            finishedAt: Date(timeIntervalSince1970: 1_700_300_001),
+            isStreaming: false,
+            status: .success,
+            tokenUsage: nil
+        )
+        let legacyRequestLogData = try JSONEncoder().encode(
+            LegacyRequestLogEnvelope(
+                schemaVersion: 1,
+                updatedAt: ISO8601DateFormatter().string(from: Date()),
+                logs: [requestLog]
+            )
+        )
+        try legacyRequestLogData.write(to: requestLogsDirectory.appendingPathComponent("index.json"), options: .atomic)
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            removeIfExists(legacyMessageFileURL(orphanSessionID))
+            cleanup(sessions: [])
+        }
+
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        #expect(FileManager.default.fileExists(atPath: chatStoreSQLiteURL.path))
+        #expect(FileManager.default.fileExists(atPath: legacyMessageFileURL(orphanSessionID).path))
+    }
+
     @Test("Migrate Legacy Session Store To Current Layout And Cleanup Legacy Files")
     func testMigrateLegacySessionStoreToCurrentLayoutAndCleanupLegacyFiles() throws {
         let sessionId = UUID()

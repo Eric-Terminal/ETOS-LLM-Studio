@@ -1115,6 +1115,11 @@ final class PersistenceGRDBStore {
             return
         }
 
+        if snapshot.sessions.isEmpty, hasUnindexedLegacySessionArtifacts() {
+            self.logger.warning("检测到未建索引的旧会话 JSON 文件，已跳过自动清理，避免误删潜在对话数据。")
+            return
+        }
+
         let shouldCleanupLegacyJSON = !metaState.cleanupCompleted || hasLegacyJSONArtifacts(sessionIDs: snapshot.sessions.map(\.session.id))
         if shouldCleanupLegacyJSON {
             let didCleanupAllLegacyJSON = removeLegacyJSONArtifacts(sessionIDs: snapshot.sessions.map(\.session.id))
@@ -1418,6 +1423,35 @@ final class PersistenceGRDBStore {
             let name = url.deletingPathExtension().lastPathComponent
             return UUID(uuidString: name) != nil
         }
+    }
+
+    private func hasUnindexedLegacySessionArtifacts() -> Bool {
+        if !legacyRootMessageJSONFiles().isEmpty {
+            return true
+        }
+
+        let fileManager = FileManager.default
+        let candidateDirectories = [
+            chatsDirectory.appendingPathComponent("sessions", isDirectory: true),
+            chatsDirectory.appendingPathComponent("v3", isDirectory: true).appendingPathComponent("sessions", isDirectory: true)
+        ]
+
+        for directoryURL in candidateDirectories {
+            guard fileManager.fileExists(atPath: directoryURL.path),
+                  let fileURLs = try? fileManager.contentsOfDirectory(
+                    at: directoryURL,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                  ) else {
+                continue
+            }
+
+            if fileURLs.contains(where: { $0.pathExtension.lowercased() == "json" }) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func removeDirectoryIfEmpty(_ directoryURL: URL) {
