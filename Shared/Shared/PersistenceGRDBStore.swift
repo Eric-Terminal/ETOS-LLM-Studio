@@ -115,6 +115,7 @@ final class PersistenceGRDBStore {
         self.databaseURL = chatsDirectory.appendingPathComponent("chat-store.sqlite")
 
         var configuration = Configuration()
+        configuration.qos = .userInitiated
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA journal_mode=WAL")
