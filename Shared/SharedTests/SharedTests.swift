@@ -3524,6 +3524,18 @@ fileprivate struct PersistenceTests {
         chatsDirectory.appendingPathComponent("RequestLogs")
     }
 
+    private var chatStoreSQLiteURL: URL {
+        chatsDirectory.appendingPathComponent("chat-store.sqlite")
+    }
+
+    private var chatStoreSQLiteWALURL: URL {
+        chatsDirectory.appendingPathComponent("chat-store.sqlite-wal")
+    }
+
+    private var chatStoreSQLiteSHMURL: URL {
+        chatsDirectory.appendingPathComponent("chat-store.sqlite-shm")
+    }
+
     private var legacySessionsIndexURL: URL {
         chatsDirectory.appendingPathComponent("sessions.json")
     }
@@ -3562,6 +3574,9 @@ fileprivate struct PersistenceTests {
         removeIfExists(legacyV3Directory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyRootDirectory)
+        removeIfExists(chatStoreSQLiteURL)
+        removeIfExists(chatStoreSQLiteWALURL)
+        removeIfExists(chatStoreSQLiteSHMURL)
     }
 
     @Test("Save and Load Chat Sessions")
@@ -3646,6 +3661,30 @@ fileprivate struct PersistenceTests {
 
         // Teardown
         cleanup(sessions: [ChatSession(id: sessionId, name: "cleanup", isTemporary: false)])
+    }
+
+    @Test("GRDB backend can count messages without loading full array")
+    func testGRDBMessageCount() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+        }
+
+        let session = ChatSession(id: UUID(), name: "GRDB Count Session", isTemporary: false)
+        let messages: [ChatMessage] = [
+            ChatMessage(role: .user, content: "A"),
+            ChatMessage(role: .assistant, content: "B"),
+            ChatMessage(role: .assistant, content: "C")
+        ]
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+
+        let messageCount = Persistence.loadMessageCount(for: session.id)
+        #expect(messageCount == 3)
+
+        cleanup(sessions: [session])
     }
 
     @Test("Migrate Legacy Session Store To Current Layout And Cleanup Legacy Files")
