@@ -3,8 +3,8 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 负责读写长期记忆的原始文本列表（未分块）到 Memory/memories.json。
-// UI 层展示的数据直接来源于此 JSON，而不依赖向量索引。
+// 负责读写长期记忆的原始文本列表（未分块）到 SQLite（失败时回退 Memory/memories.json）。
+// UI 层展示的数据直接来源于原始存储，而不依赖向量索引。
 // ============================================================================
 
 import Foundation
@@ -15,6 +15,7 @@ struct MemoryRawStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let rootDirectory: URL?
+    private let grdbBlobKey = "memory_raw_memories_v1"
     
     init(rootDirectory: URL? = nil) {
         self.rootDirectory = rootDirectory
@@ -27,6 +28,10 @@ struct MemoryRawStore {
     }
     
     func loadMemories() -> [MemoryItem] {
+        if canUseGRDB, Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
+            return Persistence.loadAuxiliaryBlob([MemoryItem].self, forKey: grdbBlobKey) ?? []
+        }
+
         let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return []
@@ -35,6 +40,9 @@ struct MemoryRawStore {
         do {
             let data = try Data(contentsOf: fileURL)
             let memories = try decoder.decode([MemoryItem].self, from: data)
+            if canUseGRDB, Persistence.saveAuxiliaryBlob(memories, forKey: grdbBlobKey) {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
             return memories
         } catch {
             logger.error("读取 Memory JSON 失败: \(error.localizedDescription)")
@@ -43,9 +51,21 @@ struct MemoryRawStore {
     }
     
     func saveMemories(_ memories: [MemoryItem]) throws {
+        if canUseGRDB, Persistence.saveAuxiliaryBlob(memories, forKey: grdbBlobKey) {
+            let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            return
+        }
+
         MemoryStoragePaths.ensureRootDirectory(rootDirectory: rootDirectory)
         let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
         let data = try encoder.encode(memories)
         try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+    }
+
+    private var canUseGRDB: Bool {
+        rootDirectory == nil
     }
 }

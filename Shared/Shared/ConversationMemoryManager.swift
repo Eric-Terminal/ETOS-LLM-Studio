@@ -4,8 +4,8 @@
 // ETOS LLM Studio
 //
 // 负责管理“跨对话记忆”：
-// - 会话级摘要（存放在会话 JSON 记录中）
-// - 用户画像（存放在 Memory/user_profile.json）
+// - 会话级摘要（存放在会话持久化存储中）
+// - 用户画像（优先存放在 SQLite，失败时回退 Memory/user_profile.json）
 // ============================================================================
 
 import Foundation
@@ -119,6 +119,7 @@ private struct ConversationUserProfileStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let rootDirectory: URL?
+    private let grdbBlobKey = "conversation_user_profile_v1"
 
     init(rootDirectory: URL? = nil) {
         self.rootDirectory = rootDirectory
@@ -131,6 +132,10 @@ private struct ConversationUserProfileStore {
     }
 
     func loadProfile() -> ConversationUserProfile? {
+        if canUseGRDB, Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
+            return Persistence.loadAuxiliaryBlob(ConversationUserProfile.self, forKey: grdbBlobKey)
+        }
+
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return nil
@@ -138,7 +143,11 @@ private struct ConversationUserProfileStore {
 
         do {
             let data = try Data(contentsOf: fileURL)
-            return try decoder.decode(ConversationUserProfile.self, from: data)
+            let profile = try decoder.decode(ConversationUserProfile.self, from: data)
+            if canUseGRDB, Persistence.saveAuxiliaryBlob(profile, forKey: grdbBlobKey) {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            return profile
         } catch {
             logger.error("读取用户画像失败: \(error.localizedDescription)")
             return nil
@@ -146,6 +155,14 @@ private struct ConversationUserProfileStore {
     }
 
     func saveProfile(_ profile: ConversationUserProfile) throws {
+        if canUseGRDB, Persistence.saveAuxiliaryBlob(profile, forKey: grdbBlobKey) {
+            let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            return
+        }
+
         MemoryStoragePaths.ensureRootDirectory(rootDirectory: rootDirectory)
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
         let data = try encoder.encode(profile)
@@ -153,8 +170,15 @@ private struct ConversationUserProfileStore {
     }
 
     func clearProfile() throws {
+        if canUseGRDB {
+            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+        }
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         try FileManager.default.removeItem(at: fileURL)
+    }
+
+    private var canUseGRDB: Bool {
+        rootDirectory == nil
     }
 }

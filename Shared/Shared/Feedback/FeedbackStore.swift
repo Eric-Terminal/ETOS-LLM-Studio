@@ -20,6 +20,7 @@ public extension Notification.Name {
 public enum FeedbackStore {
     private static let lock = NSLock()
     private static let fileName = "tickets.json"
+    private static let grdbBlobKey = "feedback_tickets_v1"
 
     private static var directoryURL: URL {
         StorageUtility.documentsDirectory.appendingPathComponent("FeedbackTickets")
@@ -31,20 +32,7 @@ public enum FeedbackStore {
 
     public static func loadTickets() -> [FeedbackTicket] {
         lock.withLock {
-            do {
-                try ensureDirectoryExists()
-                guard FileManager.default.fileExists(atPath: fileURL.path) else {
-                    return []
-                }
-
-                let data = try Data(contentsOf: fileURL)
-                let decoder = FeedbackDateCodec.makeJSONDecoder()
-                let tickets = try decoder.decode([FeedbackTicket].self, from: data)
-                return sortTickets(tickets)
-            } catch {
-                feedbackStoreLogger.error("读取反馈工单失败: \(error.localizedDescription)")
-                return []
-            }
+            loadTicketsWithoutLock()
         }
     }
 
@@ -118,6 +106,11 @@ public enum FeedbackStore {
     // MARK: - 私有实现
 
     private static func loadTicketsWithoutLock() -> [FeedbackTicket] {
+        if Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
+            let tickets = Persistence.loadAuxiliaryBlob([FeedbackTicket].self, forKey: grdbBlobKey) ?? []
+            return sortTickets(tickets)
+        }
+
         do {
             try ensureDirectoryExists()
             guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -126,6 +119,9 @@ public enum FeedbackStore {
             let data = try Data(contentsOf: fileURL)
             let decoder = FeedbackDateCodec.makeJSONDecoder()
             let tickets = try decoder.decode([FeedbackTicket].self, from: data)
+            if Persistence.saveAuxiliaryBlob(tickets, forKey: grdbBlobKey) {
+                cleanupLegacyFileArtifactsWithoutLock()
+            }
             return sortTickets(tickets)
         } catch {
             feedbackStoreLogger.error("读取反馈工单失败: \(error.localizedDescription)")
@@ -134,6 +130,11 @@ public enum FeedbackStore {
     }
 
     private static func writeTicketsWithoutLock(_ tickets: [FeedbackTicket]) {
+        if Persistence.saveAuxiliaryBlob(tickets, forKey: grdbBlobKey) {
+            cleanupLegacyFileArtifactsWithoutLock()
+            return
+        }
+
         do {
             try ensureDirectoryExists()
             let encoder = FeedbackDateCodec.makeJSONEncoder()
@@ -147,6 +148,18 @@ public enum FeedbackStore {
     private static func ensureDirectoryExists() throws {
         if !FileManager.default.fileExists(atPath: directoryURL.path) {
             try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
+    }
+
+    private static func cleanupLegacyFileArtifactsWithoutLock() {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: fileURL.path) {
+            try? fm.removeItem(at: fileURL)
+        }
+        if fm.fileExists(atPath: directoryURL.path),
+           let items = try? fm.contentsOfDirectory(atPath: directoryURL.path),
+           items.isEmpty {
+            try? fm.removeItem(at: directoryURL)
         }
     }
 

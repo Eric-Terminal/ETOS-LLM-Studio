@@ -17,6 +17,7 @@ public struct ShortcutToolStore {
     }
 
     public static let currentSchemaVersion = 1
+    private static let grdbBlobKey = "shortcut_tools_v1"
 
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -45,14 +46,28 @@ public struct ShortcutToolStore {
     }
 
     public static func loadTools() -> [ShortcutToolDefinition] {
+        if Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
+            if let envelope = Persistence.loadAuxiliaryBlob(StoredEnvelope.self, forKey: grdbBlobKey) {
+                return envelope.tools
+            }
+            return Persistence.loadAuxiliaryBlob([ShortcutToolDefinition].self, forKey: grdbBlobKey) ?? []
+        }
+
         setupDirectoryIfNeeded()
         do {
             let data = try Data(contentsOf: toolsFileURL)
             let decoder = JSONDecoder()
+            let loadedTools: [ShortcutToolDefinition]
             if let envelope = try? decoder.decode(StoredEnvelope.self, from: data) {
-                return envelope.tools
+                loadedTools = envelope.tools
+            } else {
+                loadedTools = try decoder.decode([ShortcutToolDefinition].self, from: data)
             }
-            return try decoder.decode([ShortcutToolDefinition].self, from: data)
+            let migratedEnvelope = StoredEnvelope(schemaVersion: currentSchemaVersion, tools: loadedTools)
+            if Persistence.saveAuxiliaryBlob(migratedEnvelope, forKey: grdbBlobKey) {
+                cleanupLegacyFileArtifacts()
+            }
+            return loadedTools
         } catch {
             shortcutStoreLogger.info("加载快捷指令工具失败或为空，返回空数组: \(error.localizedDescription, privacy: .public)")
             return []
@@ -60,8 +75,14 @@ public struct ShortcutToolStore {
     }
 
     public static func saveTools(_ tools: [ShortcutToolDefinition]) {
-        setupDirectoryIfNeeded()
         let envelope = StoredEnvelope(schemaVersion: currentSchemaVersion, tools: tools)
+        if Persistence.saveAuxiliaryBlob(envelope, forKey: grdbBlobKey) {
+            cleanupLegacyFileArtifacts()
+            shortcutStoreLogger.info("已保存快捷指令工具到 SQLite: \(tools.count)")
+            return
+        }
+
+        setupDirectoryIfNeeded()
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -70,6 +91,18 @@ public struct ShortcutToolStore {
             shortcutStoreLogger.info("已保存快捷指令工具: \(tools.count)")
         } catch {
             shortcutStoreLogger.error("保存快捷指令工具失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func cleanupLegacyFileArtifacts() {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: toolsFileURL.path) {
+            try? fm.removeItem(at: toolsFileURL)
+        }
+        if fm.fileExists(atPath: storageDirectory.path),
+           let entries = try? fm.contentsOfDirectory(atPath: storageDirectory.path),
+           entries.isEmpty {
+            try? fm.removeItem(at: storageDirectory)
         }
     }
 }
