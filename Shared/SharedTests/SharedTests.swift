@@ -18,6 +18,7 @@ import Foundation
 @testable import Shared
 import Combine
 import SwiftUI
+import SQLite3
 
 // MARK: - Network Mocking Infrastructure
 
@@ -3584,6 +3585,30 @@ fileprivate struct PersistenceTests {
         memoryDirectory.appendingPathComponent("memory-store.sqlite-shm")
     }
 
+    private var chatStoreBackupDirectory: URL {
+        chatsDirectory.appendingPathComponent("StartupBackups")
+    }
+
+    private var chatStoreBackupSQLiteURL: URL {
+        chatStoreBackupDirectory.appendingPathComponent("chat-store.sqlite")
+    }
+
+    private var configStoreBackupDirectory: URL {
+        configDirectory.appendingPathComponent("StartupBackups")
+    }
+
+    private var configStoreBackupSQLiteURL: URL {
+        configStoreBackupDirectory.appendingPathComponent("config-store.sqlite")
+    }
+
+    private var memoryStoreBackupDirectory: URL {
+        memoryDirectory.appendingPathComponent("StartupBackups")
+    }
+
+    private var memoryStoreBackupSQLiteURL: URL {
+        memoryStoreBackupDirectory.appendingPathComponent("memory-store.sqlite")
+    }
+
     private var legacyMemoryStoreSQLiteURL: URL {
         chatsDirectory.appendingPathComponent("memory-store.sqlite")
     }
@@ -3619,6 +3644,48 @@ fileprivate struct PersistenceTests {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         try? FileManager.default.removeItem(at: url)
     }
+
+    private func sqliteExists(_ url: URL, sql: String) -> Bool {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
+              let database else {
+            return false
+        }
+        defer { sqlite3_close(database) }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            return false
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return false
+        }
+        return sqlite3_column_int(statement, 0) > 0
+    }
+
+    private func sqliteCount(_ url: URL, sql: String) -> Int {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
+              let database else {
+            return 0
+        }
+        defer { sqlite3_close(database) }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            return 0
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return 0
+        }
+        return Int(sqlite3_column_int(statement, 0))
+    }
     
     // Clean up files created during tests
     private func cleanup(sessions: [ChatSession]) {
@@ -3646,6 +3713,18 @@ fileprivate struct PersistenceTests {
         removeIfExists(memoryStoreSQLiteURL)
         removeIfExists(memoryStoreSQLiteWALURL)
         removeIfExists(memoryStoreSQLiteSHMURL)
+        removeIfExists(chatStoreBackupSQLiteURL)
+        removeIfExists(URL(fileURLWithPath: chatStoreBackupSQLiteURL.path + "-wal"))
+        removeIfExists(URL(fileURLWithPath: chatStoreBackupSQLiteURL.path + "-shm"))
+        removeIfExists(configStoreBackupSQLiteURL)
+        removeIfExists(URL(fileURLWithPath: configStoreBackupSQLiteURL.path + "-wal"))
+        removeIfExists(URL(fileURLWithPath: configStoreBackupSQLiteURL.path + "-shm"))
+        removeIfExists(memoryStoreBackupSQLiteURL)
+        removeIfExists(URL(fileURLWithPath: memoryStoreBackupSQLiteURL.path + "-wal"))
+        removeIfExists(URL(fileURLWithPath: memoryStoreBackupSQLiteURL.path + "-shm"))
+        removeIfExists(chatStoreBackupDirectory)
+        removeIfExists(configStoreBackupDirectory)
+        removeIfExists(memoryStoreBackupDirectory)
         removeIfExists(legacyMemoryStoreSQLiteURL)
         removeIfExists(legacyMemoryStoreSQLiteWALURL)
         removeIfExists(legacyMemoryStoreSQLiteSHMURL)
@@ -3856,6 +3935,91 @@ fileprivate struct PersistenceTests {
         #expect(FileManager.default.fileExists(atPath: chatStoreSQLiteURL.path))
         #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
         #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
+    }
+
+    @Test("启动备份会裁剪 chat-store 的 FTS 结构")
+    func testLaunchBackupCreatesSlimChatStoreBackup() {
+        cleanup(sessions: [])
+
+        let defaults = UserDefaults.standard
+        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let session = ChatSession(id: UUID(), name: "Launch Backup Session", isTemporary: false)
+        let messages = [
+            ChatMessage(role: .user, content: "launch-backup-user"),
+            ChatMessage(role: .assistant, content: "launch-backup-assistant")
+        ]
+
+        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            if let previousBackupEnabled = previousBackupEnabled as? Bool {
+                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
+            } else {
+                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
+            }
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+        }
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        #expect(FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
+        #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"))
+        #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ai'"))
+        #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ad'"))
+        #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"))
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages") == messages.count)
+    }
+
+    @Test("启动检测到 chat-store 损坏时会按备份重建并重建 FTS")
+    func testLaunchBackupRestoresCorruptedChatStoreAndRebuildsFTS() throws {
+        cleanup(sessions: [])
+
+        let defaults = UserDefaults.standard
+        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let session = ChatSession(id: UUID(), name: "Corrupted Launch Session", isTemporary: false)
+        let messages = [
+            ChatMessage(role: .user, content: "recover-user"),
+            ChatMessage(role: .assistant, content: "recover-assistant")
+        ]
+
+        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            if let previousBackupEnabled = previousBackupEnabled as? Bool {
+                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
+            } else {
+                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
+            }
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+        }
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+        Persistence.bootstrapGRDBStoreOnLaunch()
+        #expect(FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
+
+        removeIfExists(chatStoreSQLiteWALURL)
+        removeIfExists(chatStoreSQLiteSHMURL)
+        try Data([0x00, 0x01, 0x02, 0x03, 0x04]).write(to: chatStoreSQLiteURL, options: .atomic)
+
+        Persistence.resetGRDBStoreForTests()
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        let restoredMessages = Persistence.loadMessages(for: session.id)
+        #expect(restoredMessages.map(\.content) == messages.map(\.content))
+        let recoveryNotice = Persistence.consumeLaunchRecoveryNotice()
+        #expect(recoveryNotice?.contains("聊天数据库") == true)
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM messages_fts") == messages.count)
     }
 
     @Test("旧 JSON 快照消息为零且数据库已有消息时不会覆盖与清理")
