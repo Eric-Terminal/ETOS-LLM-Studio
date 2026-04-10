@@ -28,6 +28,14 @@
 	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>语音输入需要访问语音识别</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.ericterminal.els.dailyPulse.refresh</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
