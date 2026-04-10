@@ -1055,104 +1055,100 @@ final class PersistenceGRDBStore {
 
     private func mergeLegacySnapshotIntoDatabase(_ snapshot: LegacySnapshot) throws {
         try dbPool.write { db in
-            try db.inTransaction {
-                for item in snapshot.sessions {
-                    try upsertSession(
+            for item in snapshot.sessions {
+                try upsertSession(
+                    db,
+                    session: item.session,
+                    sortIndex: item.sortIndex,
+                    updatedAt: item.updatedAt,
+                    conversationSummary: item.conversationSummary,
+                    conversationSummaryUpdatedAt: item.conversationSummaryUpdatedAt,
+                    preserveExistingSummary: false
+                )
+
+                try db.execute(
+                    sql: "DELETE FROM messages WHERE session_id = ?",
+                    arguments: [item.session.id.uuidString]
+                )
+                for (position, message) in item.messages.enumerated() {
+                    try insertMessage(
                         db,
-                        session: item.session,
-                        sortIndex: item.sortIndex,
-                        updatedAt: item.updatedAt,
-                        conversationSummary: item.conversationSummary,
-                        conversationSummaryUpdatedAt: item.conversationSummaryUpdatedAt,
-                        preserveExistingSummary: false
-                    )
-
-                    try db.execute(
-                        sql: "DELETE FROM messages WHERE session_id = ?",
-                        arguments: [item.session.id.uuidString]
-                    )
-                    for (position, message) in item.messages.enumerated() {
-                        try insertMessage(
-                            db,
-                            message: message,
-                            sessionID: item.session.id,
-                            position: position,
-                            fallbackTimestamp: item.updatedAt.addingTimeInterval(Double(position) * 0.000_001)
-                        )
-                    }
-                }
-
-                for folder in snapshot.folders {
-                    try db.execute(
-                        sql: """
-                        INSERT INTO session_folders (id, name, parent_id, updated_at)
-                        VALUES (?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET
-                            name = excluded.name,
-                            parent_id = excluded.parent_id,
-                            updated_at = excluded.updated_at
-                        """,
-                        arguments: [
-                            folder.id.uuidString,
-                            folder.name,
-                            folder.parentID?.uuidString,
-                            folder.updatedAt.timeIntervalSince1970
-                        ]
+                        message: message,
+                        sessionID: item.session.id,
+                        position: position,
+                        fallbackTimestamp: item.updatedAt.addingTimeInterval(Double(position) * 0.000_001)
                     )
                 }
+            }
 
-                for entry in snapshot.requestLogs {
-                    try db.execute(
-                        sql: """
-                        INSERT INTO request_logs (
-                            id, request_id, session_id, provider_id, provider_name, model_id,
-                            requested_at, finished_at, is_streaming, status, token_usage_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET
-                            request_id = excluded.request_id,
-                            session_id = excluded.session_id,
-                            provider_id = excluded.provider_id,
-                            provider_name = excluded.provider_name,
-                            model_id = excluded.model_id,
-                            requested_at = excluded.requested_at,
-                            finished_at = excluded.finished_at,
-                            is_streaming = excluded.is_streaming,
-                            status = excluded.status,
-                            token_usage_json = excluded.token_usage_json
-                        """,
-                        arguments: [
-                            entry.id.uuidString,
-                            entry.requestID.uuidString,
-                            entry.sessionID?.uuidString,
-                            entry.providerID?.uuidString,
-                            entry.providerName,
-                            entry.modelID,
-                            entry.requestedAt.timeIntervalSince1970,
-                            entry.finishedAt.timeIntervalSince1970,
-                            entry.isStreaming ? 1 : 0,
-                            entry.status.rawValue,
-                            encodeJSON(entry.tokenUsage)
-                        ]
-                    )
-                }
+            for folder in snapshot.folders {
+                try db.execute(
+                    sql: """
+                    INSERT INTO session_folders (id, name, parent_id, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        parent_id = excluded.parent_id,
+                        updated_at = excluded.updated_at
+                    """,
+                    arguments: [
+                        folder.id.uuidString,
+                        folder.name,
+                        folder.parentID?.uuidString,
+                        folder.updatedAt.timeIntervalSince1970
+                    ]
+                )
+            }
 
-                if !snapshot.dailyPulseRuns.isEmpty {
-                    try writeBlob(db, key: BlobKey.dailyPulseRuns, value: snapshot.dailyPulseRuns)
-                }
-                if !snapshot.dailyPulseFeedbackHistory.isEmpty {
-                    try writeBlob(db, key: BlobKey.dailyPulseFeedbackHistory, value: snapshot.dailyPulseFeedbackHistory)
-                }
-                if let note = snapshot.dailyPulsePendingCuration {
-                    try writeBlob(db, key: BlobKey.dailyPulsePendingCuration, value: note)
-                }
-                if !snapshot.dailyPulseExternalSignals.isEmpty {
-                    try writeBlob(db, key: BlobKey.dailyPulseExternalSignals, value: snapshot.dailyPulseExternalSignals)
-                }
-                if !snapshot.dailyPulseTasks.isEmpty {
-                    try writeBlob(db, key: BlobKey.dailyPulseTasks, value: snapshot.dailyPulseTasks)
-                }
+            for entry in snapshot.requestLogs {
+                try db.execute(
+                    sql: """
+                    INSERT INTO request_logs (
+                        id, request_id, session_id, provider_id, provider_name, model_id,
+                        requested_at, finished_at, is_streaming, status, token_usage_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        request_id = excluded.request_id,
+                        session_id = excluded.session_id,
+                        provider_id = excluded.provider_id,
+                        provider_name = excluded.provider_name,
+                        model_id = excluded.model_id,
+                        requested_at = excluded.requested_at,
+                        finished_at = excluded.finished_at,
+                        is_streaming = excluded.is_streaming,
+                        status = excluded.status,
+                        token_usage_json = excluded.token_usage_json
+                    """,
+                    arguments: [
+                        entry.id.uuidString,
+                        entry.requestID.uuidString,
+                        entry.sessionID?.uuidString,
+                        entry.providerID?.uuidString,
+                        entry.providerName,
+                        entry.modelID,
+                        entry.requestedAt.timeIntervalSince1970,
+                        entry.finishedAt.timeIntervalSince1970,
+                        entry.isStreaming ? 1 : 0,
+                        entry.status.rawValue,
+                        encodeJSON(entry.tokenUsage)
+                    ]
+                )
+            }
 
-                return .commit
+            if !snapshot.dailyPulseRuns.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseRuns, value: snapshot.dailyPulseRuns)
+            }
+            if !snapshot.dailyPulseFeedbackHistory.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseFeedbackHistory, value: snapshot.dailyPulseFeedbackHistory)
+            }
+            if let note = snapshot.dailyPulsePendingCuration {
+                try writeBlob(db, key: BlobKey.dailyPulsePendingCuration, value: note)
+            }
+            if !snapshot.dailyPulseExternalSignals.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseExternalSignals, value: snapshot.dailyPulseExternalSignals)
+            }
+            if !snapshot.dailyPulseTasks.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseTasks, value: snapshot.dailyPulseTasks)
             }
         }
     }
