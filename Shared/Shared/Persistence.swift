@@ -27,6 +27,10 @@ public enum Persistence {
     private static let compatibilityReminderPrefix = "[(迁移)][兼容提醒]"
     private static let compatibilityReminderLock = NSLock()
     private static let requestLogLock = NSLock()
+    private static let grdbStoreLock = NSLock()
+    private static var cachedGRDBStore: PersistenceGRDBStore?
+    private static var grdbStoreInitializationFailed = false
+    static var grdbEnabledOverrideForTests: Bool?
     static var requestLogRetentionLimitOverride: Int?
     private static var hasLoggedCompatibilityReminder = false
 
@@ -107,6 +111,45 @@ public enum Persistence {
         let didMigratePlacement: Bool
     }
 
+    private static func shouldUseGRDBStore() -> Bool {
+        if let override = grdbEnabledOverrideForTests {
+            return override
+        }
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return false
+        }
+        return true
+    }
+
+    private static func activeGRDBStore() -> PersistenceGRDBStore? {
+        guard shouldUseGRDBStore() else { return nil }
+        if let store = cachedGRDBStore {
+            return store
+        }
+
+        grdbStoreLock.lock()
+        defer { grdbStoreLock.unlock() }
+
+        if let store = cachedGRDBStore {
+            return store
+        }
+        guard !grdbStoreInitializationFailed else {
+            return nil
+        }
+
+        migrateLegacyV3StoreToCurrentLayoutIfNeeded()
+        do {
+            let store = try PersistenceGRDBStore(chatsDirectory: getChatsDirectory())
+            cachedGRDBStore = store
+            logger.info("GRDB 持久化已启用。")
+            return store
+        } catch {
+            grdbStoreInitializationFailed = true
+            logger.error("GRDB 持久化初始化失败，已自动回退到 JSON: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     // MARK: - 目录管理
 
     /// 获取用于存储聊天记录的目录URL
@@ -125,6 +168,11 @@ public enum Persistence {
 
     /// 保存所有聊天会话的列表
     public static func saveChatSessions(_ sessions: [ChatSession]) {
+        if let store = activeGRDBStore() {
+            store.saveChatSessions(sessions)
+            return
+        }
+
         migrateLegacyV3StoreToCurrentLayoutIfNeeded()
 
         let sessionsToSave = sessions.filter { !$0.isTemporary }
@@ -156,6 +204,10 @@ public enum Persistence {
 
     /// 加载所有聊天会话的列表
     public static func loadChatSessions() -> [ChatSession] {
+        if let store = activeGRDBStore() {
+            return store.loadChatSessions()
+        }
+
         migrateLegacyV3StoreToCurrentLayoutIfNeeded()
         logCompatibilityReminderIfNeeded(trigger: "loadChatSessions")
 
@@ -191,6 +243,11 @@ public enum Persistence {
 
     /// 保存会话文件夹列表。
     public static func saveSessionFolders(_ folders: [SessionFolder]) {
+        if let store = activeGRDBStore() {
+            store.saveSessionFolders(folders)
+            return
+        }
+
         migrateLegacyV3StoreToCurrentLayoutIfNeeded()
 
         let normalizedFolders = normalizeSessionFoldersForPersistence(folders)
@@ -213,6 +270,10 @@ public enum Persistence {
 
     /// 加载会话文件夹列表。
     public static func loadSessionFolders() -> [SessionFolder] {
+        if let store = activeGRDBStore() {
+            return store.loadSessionFolders()
+        }
+
         migrateLegacyV3StoreToCurrentLayoutIfNeeded()
 
         let fileURL = sessionFoldersFileURL()
@@ -240,6 +301,11 @@ public enum Persistence {
 
     /// 保存指定会话的聊天消息
     public static func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
+        if let store = activeGRDBStore() {
+            store.saveMessages(messages, for: sessionID)
+            return
+        }
+
         migrateLegacyV3StoreToCurrentLayoutIfNeeded()
 
         do {
@@ -255,6 +321,10 @@ public enum Persistence {
 
     /// 加载指定会话的聊天消息
     public static func loadMessages(for sessionID: UUID) -> [ChatMessage] {
+        if let store = activeGRDBStore() {
+            return store.loadMessages(for: sessionID)
+        }
+
         migrateLegacyV3StoreToCurrentLayoutIfNeeded()
         logCompatibilityReminderIfNeeded(trigger: "loadMessages")
 
@@ -286,10 +356,23 @@ public enum Persistence {
         }
     }
 
+    /// 统计指定会话的消息数量。
+    public static func loadMessageCount(for sessionID: UUID) -> Int {
+        if let store = activeGRDBStore() {
+            return store.loadMessageCount(for: sessionID)
+        }
+        return loadMessages(for: sessionID).count
+    }
+
     // MARK: - 请求日志持久化
 
     /// 追加一条请求日志，内部会执行滚动裁剪。
     public static func appendRequestLog(_ entry: RequestLogEntry) {
+        if let store = activeGRDBStore() {
+            store.appendRequestLog(entry, retentionLimit: effectiveRequestLogRetentionLimit())
+            return
+        }
+
         requestLogLock.lock()
         defer { requestLogLock.unlock() }
 
@@ -314,6 +397,11 @@ public enum Persistence {
 
     /// 清空请求日志文件。
     public static func clearRequestLogs() {
+        if let store = activeGRDBStore() {
+            store.clearRequestLogs()
+            return
+        }
+
         requestLogLock.lock()
         defer { requestLogLock.unlock() }
 
@@ -327,6 +415,10 @@ public enum Persistence {
 
     /// 按条件读取请求日志（默认按请求开始时间倒序）。
     public static func loadRequestLogs(query: RequestLogQuery = .init()) -> [RequestLogEntry] {
+        if let store = activeGRDBStore() {
+            return store.loadRequestLogs(query: query)
+        }
+
         requestLogLock.lock()
         defer { requestLogLock.unlock() }
 
@@ -365,6 +457,10 @@ public enum Persistence {
 
     /// 汇总请求日志，用于后续统计展示与导出。
     public static func summarizeRequestLogs(query: RequestLogQuery = .init()) -> RequestLogSummary {
+        if let store = activeGRDBStore() {
+            return store.summarizeRequestLogs(query: query)
+        }
+
         let logs = loadRequestLogs(query: query)
         var summary = RequestLogSummary()
 
@@ -427,6 +523,11 @@ public enum Persistence {
 
     /// 保存每日脉冲运行记录。
     public static func saveDailyPulseRuns(_ runs: [DailyPulseRun]) {
+        if let store = activeGRDBStore() {
+            store.saveDailyPulseRuns(runs)
+            return
+        }
+
         let fileURL = dailyPulseRunsFileURL()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -442,6 +543,10 @@ public enum Persistence {
 
     /// 读取每日脉冲运行记录。
     public static func loadDailyPulseRuns() -> [DailyPulseRun] {
+        if let store = activeGRDBStore() {
+            return store.loadDailyPulseRuns()
+        }
+
         let fileURL = dailyPulseRunsFileURL()
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
 
@@ -459,6 +564,11 @@ public enum Persistence {
 
     /// 保存每日脉冲反馈历史。
     public static func saveDailyPulseFeedbackHistory(_ history: [DailyPulseFeedbackEvent]) {
+        if let store = activeGRDBStore() {
+            store.saveDailyPulseFeedbackHistory(history)
+            return
+        }
+
         let fileURL = dailyPulseFeedbackHistoryFileURL()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -474,6 +584,10 @@ public enum Persistence {
 
     /// 读取每日脉冲反馈历史。
     public static func loadDailyPulseFeedbackHistory() -> [DailyPulseFeedbackEvent] {
+        if let store = activeGRDBStore() {
+            return store.loadDailyPulseFeedbackHistory()
+        }
+
         let fileURL = dailyPulseFeedbackHistoryFileURL()
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
 
@@ -491,6 +605,11 @@ public enum Persistence {
 
     /// 保存待消费的每日脉冲策展输入。
     public static func saveDailyPulsePendingCuration(_ note: DailyPulseCurationNote?) {
+        if let store = activeGRDBStore() {
+            store.saveDailyPulsePendingCuration(note)
+            return
+        }
+
         let fileURL = dailyPulsePendingCurationFileURL()
 
         guard let note else {
@@ -512,6 +631,10 @@ public enum Persistence {
 
     /// 读取待消费的每日脉冲策展输入。
     public static func loadDailyPulsePendingCuration() -> DailyPulseCurationNote? {
+        if let store = activeGRDBStore() {
+            return store.loadDailyPulsePendingCuration()
+        }
+
         let fileURL = dailyPulsePendingCurationFileURL()
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
 
@@ -529,6 +652,11 @@ public enum Persistence {
 
     /// 保存每日脉冲外部信号历史。
     public static func saveDailyPulseExternalSignals(_ signals: [DailyPulseExternalSignal]) {
+        if let store = activeGRDBStore() {
+            store.saveDailyPulseExternalSignals(signals)
+            return
+        }
+
         let fileURL = dailyPulseExternalSignalsFileURL()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -544,6 +672,10 @@ public enum Persistence {
 
     /// 读取每日脉冲外部信号历史。
     public static func loadDailyPulseExternalSignals() -> [DailyPulseExternalSignal] {
+        if let store = activeGRDBStore() {
+            return store.loadDailyPulseExternalSignals()
+        }
+
         let fileURL = dailyPulseExternalSignalsFileURL()
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
 
@@ -561,6 +693,11 @@ public enum Persistence {
 
     /// 保存每日脉冲任务。
     public static func saveDailyPulseTasks(_ tasks: [DailyPulseTask]) {
+        if let store = activeGRDBStore() {
+            store.saveDailyPulseTasks(tasks)
+            return
+        }
+
         let fileURL = dailyPulseTasksFileURL()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -576,6 +713,10 @@ public enum Persistence {
 
     /// 读取每日脉冲任务。
     public static func loadDailyPulseTasks() -> [DailyPulseTask] {
+        if let store = activeGRDBStore() {
+            return store.loadDailyPulseTasks()
+        }
+
         let fileURL = dailyPulseTasksFileURL()
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
 
@@ -593,6 +734,10 @@ public enum Persistence {
 
     /// 判断会话是否存在可读取的数据文件（V3 或 legacy）。
     public static func sessionDataExists(sessionID: UUID) -> Bool {
+        if let store = activeGRDBStore() {
+            return store.sessionDataExists(sessionID: sessionID)
+        }
+
         let v3FileExists = FileManager.default.fileExists(atPath: sessionRecordFileURL(for: sessionID).path)
         let legacyV3FileExists = FileManager.default.fileExists(atPath: legacyV3SessionRecordFileURL(for: sessionID).path)
         let legacyFileExists = FileManager.default.fileExists(atPath: legacyMessagesFileURL(for: sessionID).path)
@@ -601,6 +746,11 @@ public enum Persistence {
 
     /// 删除会话相关的消息持久化文件（V3 + legacy）。
     public static func deleteSessionArtifacts(sessionID: UUID) {
+        if let store = activeGRDBStore() {
+            store.deleteSessionArtifacts(sessionID: sessionID)
+            return
+        }
+
         let targets = [
             sessionRecordFileURL(for: sessionID),
             legacyV3SessionRecordFileURL(for: sessionID),
@@ -620,6 +770,11 @@ public enum Persistence {
 
     /// 写入（或覆盖）某个会话的跨对话摘要。
     public static func upsertConversationSessionSummary(_ summary: String, for sessionID: UUID, updatedAt: Date = Date()) {
+        if let store = activeGRDBStore() {
+            store.upsertConversationSessionSummary(summary, for: sessionID, updatedAt: updatedAt)
+            return
+        }
+
         let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             clearConversationSessionSummary(for: sessionID)
@@ -634,12 +789,21 @@ public enum Persistence {
 
     /// 清空某个会话的跨对话摘要字段。
     public static func clearConversationSessionSummary(for sessionID: UUID) {
+        if let store = activeGRDBStore() {
+            store.clearConversationSessionSummary(for: sessionID)
+            return
+        }
+
         updateConversationSummaryFields(for: sessionID, summary: nil, updatedAt: nil)
     }
 
     /// 清空所有会话的跨对话摘要，返回实际清理条数。
     @discardableResult
     public static func clearAllConversationSessionSummaries() -> Int {
+        if let store = activeGRDBStore() {
+            return store.clearAllConversationSessionSummaries()
+        }
+
         let summaries = loadConversationSessionSummaries(limit: nil, excludingSessionID: nil)
         guard !summaries.isEmpty else { return 0 }
         summaries.forEach { summary in
@@ -650,6 +814,10 @@ public enum Persistence {
 
     /// 读取某个会话的跨对话摘要。
     public static func loadConversationSessionSummary(for sessionID: UUID) -> ConversationSessionSummary? {
+        if let store = activeGRDBStore() {
+            return store.loadConversationSessionSummary(for: sessionID)
+        }
+
         guard let summary = try? loadSessionSummaryV3(for: sessionID),
               let text = summary.session.conversationSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else {
@@ -668,6 +836,10 @@ public enum Persistence {
 
     /// 读取会话摘要列表，可选限制返回数量并排除指定会话。
     public static func loadConversationSessionSummaries(limit: Int?, excludingSessionID: UUID?) -> [ConversationSessionSummary] {
+        if let store = activeGRDBStore() {
+            return store.loadConversationSessionSummaries(limit: limit, excludingSessionID: excludingSessionID)
+        }
+
         guard let index = loadSessionIndexV3() else { return [] }
 
         var summaries: [ConversationSessionSummary] = []
