@@ -3761,6 +3761,38 @@ fileprivate struct PersistenceTests {
         cleanup(sessions: [session])
     }
 
+    @Test("GRDB 在仅收到临时会话快照时不会误删已有会话")
+    func testGRDBSaveChatSessionsTemporarySnapshotFuse() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        let existingSession = ChatSession(id: UUID(), name: "Existing Session", isTemporary: false)
+        let existingMessages: [ChatMessage] = [
+            ChatMessage(role: .user, content: "历史消息1"),
+            ChatMessage(role: .assistant, content: "历史消息2")
+        ]
+        let temporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+
+        Persistence.saveChatSessions([existingSession])
+        Persistence.saveMessages(existingMessages, for: existingSession.id)
+
+        Persistence.saveChatSessions([temporarySession])
+
+        let sessionsAfter = Persistence.loadChatSessions()
+        #expect(sessionsAfter.contains(where: { $0.id == existingSession.id }))
+        #expect(!sessionsAfter.contains(where: { $0.id == temporarySession.id }))
+
+        let messagesAfter = Persistence.loadMessages(for: existingSession.id)
+        #expect(messagesAfter.map(\.content) == existingMessages.map(\.content))
+
+        cleanup(sessions: [existingSession])
+    }
+
     @Test("GRDB 辅助 Blob 可读写并删除")
     func testGRDBAuxiliaryBlobLifecycle() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests
@@ -3824,6 +3856,43 @@ fileprivate struct PersistenceTests {
         #expect(FileManager.default.fileExists(atPath: chatStoreSQLiteURL.path))
         #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
         #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
+    }
+
+    @Test("旧 JSON 快照消息为零且数据库已有消息时不会覆盖与清理")
+    func testBootstrapGRDBSkipsZeroMessageSnapshotWhenDatabaseHasMessages() throws {
+        cleanup(sessions: [])
+
+        let sessionID = UUID()
+        let persistedSession = ChatSession(id: sessionID, name: "Persisted Session", isTemporary: false)
+        let persistedMessages = [
+            ChatMessage(role: .user, content: "db-user"),
+            ChatMessage(role: .assistant, content: "db-assistant")
+        ]
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [persistedSession])
+        }
+
+        Persistence.saveChatSessions([persistedSession])
+        Persistence.saveMessages(persistedMessages, for: sessionID)
+
+        let legacySessionsData = try JSONEncoder().encode([persistedSession])
+        try legacySessionsData.write(to: legacySessionsIndexURL, options: .atomic)
+        let emptyLegacyMessagesData = try JSONEncoder().encode([ChatMessage]())
+        try emptyLegacyMessagesData.write(to: legacyMessageFileURL(sessionID), options: .atomic)
+
+        Persistence.resetGRDBStoreForTests()
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        let loadedMessages = Persistence.loadMessages(for: sessionID)
+        #expect(loadedMessages.map(\.content) == persistedMessages.map(\.content))
+        #expect(FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
+        #expect(FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
     }
 
     @Test("GRDB 在缺失会话索引时不会清理孤立消息 JSON 文件")

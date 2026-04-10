@@ -136,6 +136,17 @@ final class PersistenceGRDBStore {
         let persistedSessions = sessions.filter { !$0.isTemporary }
         do {
             try dbPool.write { db in
+                let existingNonTemporaryCount = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sessions WHERE is_temporary = 0"
+                ) ?? 0
+                if persistedSessions.isEmpty,
+                   sessions.contains(where: \.isTemporary),
+                   existingNonTemporaryCount > 0 {
+                    self.logger.error("检测到仅临时会话快照，已跳过会话覆盖写入以避免误删现有会话。")
+                    return
+                }
+
                 let existingNonTemporaryIDs = try String.fetchAll(db, sql: "SELECT id FROM sessions WHERE is_temporary = 0")
                 let targetIDs = Set(persistedSessions.map { $0.id.uuidString })
                 for id in existingNonTemporaryIDs where !targetIDs.contains(id) {
