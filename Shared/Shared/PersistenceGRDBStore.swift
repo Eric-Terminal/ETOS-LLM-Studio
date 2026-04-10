@@ -1149,6 +1149,16 @@ final class PersistenceGRDBStore {
                     preserveExistingSummary: false
                 )
 
+                let existingMessageCount = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                    arguments: [item.session.id.uuidString]
+                ) ?? 0
+                if item.messages.isEmpty, existingMessageCount > 0 {
+                    self.logger.warning("检测到旧 JSON 快照消息为空，已跳过覆盖会话消息: \(item.session.id.uuidString)")
+                    continue
+                }
+
                 try db.execute(
                     sql: "DELETE FROM messages WHERE session_id = ?",
                     arguments: [item.session.id.uuidString]
