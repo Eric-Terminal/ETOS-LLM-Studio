@@ -4,9 +4,9 @@
 // ETOS LLM Studio - Provider 配置加载与管理
 //
 // 功能特性:
-// - 管理用户专属的 `Providers` 目录。
+// - 提供商配置优先存储在 SQLite，失败时回退 `Providers` 目录 JSON。
 // - App首次启动时，自动从 Bundle 的 `Providers_template` 目录中拷贝模板配置。
-// - 提供加载、保存、删除单个提供商配置文件的静态方法。
+// - 提供加载、保存、删除提供商配置的静态方法。
 // ============================================================================
 
 import Foundation
@@ -42,12 +42,18 @@ public struct ConfigLoader {
     private static let downloadOnceTimeout: TimeInterval = 8
     private static let downloadOnceCompletedFlagKey = "com.ETOS.LLM.Studio.download_once.completed"
     private static let toolCapabilityMigrationFlagKey = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated.v1"
+    private static let providersBlobKey = "providers_v1"
     private static let downloadOnceStateQueue = DispatchQueue(label: "com.ETOS.LLM.Studio.downloadOnce")
     private static var downloadOnceInProgress = false
 
     private struct CredentialHydrationResult {
         let apiKeys: [String]
         let shouldRewriteProviderFile: Bool
+    }
+
+    private struct LegacyProviderLoadResult {
+        let providers: [Provider]
+        let didScanProviderDirectory: Bool
     }
 
     /// 获取用户专属的根目录 URL
@@ -111,12 +117,58 @@ public struct ConfigLoader {
     /// 从 `Providers` 目录加载所有提供商的配置。
     /// - Returns: 一个包含所有已加载 `Provider` 对象的数组。
     public static func loadProviders() -> [Provider] {
+        let shouldMigrateToolCapability = !UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
+        if var providers = loadProvidersFromSQLite() {
+            if providers.isEmpty {
+                let legacyResult = loadProvidersFromLegacyFiles(shouldMigrateToolCapability: shouldMigrateToolCapability)
+                if !legacyResult.providers.isEmpty {
+                    if saveProvidersToSQLite(legacyResult.providers) {
+                        cleanupLegacyProviderFiles()
+                    }
+                    logger.info("从旧版 JSON 导入 \(legacyResult.providers.count) 个提供商到 SQLite。")
+                    return legacyResult.providers
+                }
+            }
+
+            var didRepair = false
+            if shouldMigrateToolCapability {
+                for index in providers.indices {
+                    if migrateToolCallingCapabilityIfNeeded(for: &providers[index]) {
+                        didRepair = true
+                    }
+                }
+                UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+            }
+
+            if didRepair {
+                _ = saveProvidersToSQLite(providers)
+            }
+
+            logger.info("正在从 SQLite 加载所有提供商，共 \(providers.count) 个。")
+            return providers
+        }
+
         logger.info("正在从 \(providersDirectory.path) 加载所有提供商...")
+        let legacyResult = loadProvidersFromLegacyFiles(shouldMigrateToolCapability: shouldMigrateToolCapability)
+        if shouldMigrateToolCapability, legacyResult.didScanProviderDirectory {
+            UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+        }
+
+        if !legacyResult.providers.isEmpty, saveProvidersToSQLite(legacyResult.providers) {
+            cleanupLegacyProviderFiles()
+            logger.info("提供商配置已迁移到 SQLite。")
+        }
+
+        logger.info("总共加载了 \(legacyResult.providers.count) 个提供商。")
+        return legacyResult.providers
+    }
+
+    private static func loadProvidersFromLegacyFiles(shouldMigrateToolCapability: Bool) -> LegacyProviderLoadResult {
+        setupInitialProviderConfigs()
         let fileManager = FileManager.default
         var providers: [Provider] = []
         var seenProviderIndexByID: [UUID: Int] = [:]
         var seenProviderSourceByID: [UUID: URL] = [:]
-        let shouldMigrateToolCapability = !UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
         var didScanProviderDirectory = false
 
         do {
@@ -135,7 +187,6 @@ public struct ConfigLoader {
                         logger.info("  - 已为旧模型补齐“工具”能力默认值: \(url.lastPathComponent)")
                     }
 
-                    // 修复同一个 Provider 内部重复的模型 ID，避免 SwiftUI 列表 diff 异常。
                     if deduplicateModelIDs(for: &provider) {
                         didRepair = true
                         logger.warning("  - 检测到重复模型 ID，已自动修复: \(url.lastPathComponent)")
@@ -148,7 +199,6 @@ public struct ConfigLoader {
                         let currentIsCanonical = isSameFileURL(url, canonicalURL)
                         let existingIsCanonical = existingSource.map { isSameFileURL($0, canonicalURL) } ?? false
 
-                        // 完全重复配置：保留规范文件，清理非规范重复文件。
                         if providersShareSamePersistentConfiguration(existingProvider, provider) {
                             let mergedAPIKeys = mergeAPIKeysPreservingOrder(
                                 existingProvider.apiKeys,
@@ -171,13 +221,12 @@ public struct ConfigLoader {
                             if didMergeAPIKeys {
                                 var normalizedProvider = providers[existingIndex]
                                 normalizedProvider.apiKeys = mergedAPIKeys
-                                saveProvider(normalizedProvider)
+                                persistNormalizedProvider(normalizedProvider, sourceURL: canonicalURL)
                                 seenProviderSourceByID[provider.id] = canonicalURL
                             }
                             continue
                         }
 
-                        // ID 冲突但内容不同：重新分配新 ID，避免列表出现重复标识导致崩溃。
                         let oldID = provider.id
                         provider.id = UUID()
                         didRepair = true
@@ -206,20 +255,33 @@ public struct ConfigLoader {
             logger.error("无法读取 Providers 目录: \(error.localizedDescription)")
         }
 
-        if shouldMigrateToolCapability, didScanProviderDirectory {
-            UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
-        }
-        
-        logger.info("总共加载了 \(providers.count) 个提供商。")
-        return providers
+        return LegacyProviderLoadResult(providers: providers, didScanProviderDirectory: didScanProviderDirectory)
     }
 
     // 将提供商配置统一保存到 <provider.id>.json，并在必要时清理旧文件。
     private static func persistNormalizedProvider(_ provider: Provider, sourceURL: URL) {
-        saveProvider(provider)
+        persistProviderToFileOnly(provider)
         let canonicalURL = canonicalProviderFileURL(for: provider.id)
         if !isSameFileURL(sourceURL, canonicalURL) {
             removeFileIfExists(at: sourceURL)
+        }
+    }
+
+    private static func persistProviderToFileOnly(_ provider: Provider) {
+        setupInitialProviderConfigs()
+        let fileURL = canonicalProviderFileURL(for: provider.id)
+        do {
+            let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+            var persistedProvider = provider
+            persistedProvider.apiKeys = normalizedAPIKeys
+
+            try? FileManager.default.removeItem(at: fileURL)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(persistedProvider)
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        } catch {
+            logger.error("写入旧版 Provider 文件失败: \(error.localizedDescription)")
         }
     }
 
@@ -234,6 +296,36 @@ public struct ConfigLoader {
     private static func removeFileIfExists(at url: URL) {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         try? FileManager.default.removeItem(at: url)
+    }
+
+    private static func loadProvidersFromSQLite() -> [Provider]? {
+        guard Persistence.auxiliaryBlobExists(forKey: providersBlobKey) else {
+            return nil
+        }
+        return Persistence.loadAuxiliaryBlob([Provider].self, forKey: providersBlobKey) ?? []
+    }
+
+    @discardableResult
+    private static func saveProvidersToSQLite(_ providers: [Provider]) -> Bool {
+        Persistence.saveAuxiliaryBlob(providers, forKey: providersBlobKey)
+    }
+
+    private static func cleanupLegacyProviderFiles() {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: providersDirectory.path) else { return }
+
+        do {
+            let files = try fileManager.contentsOfDirectory(at: providersDirectory, includingPropertiesForKeys: nil)
+            for fileURL in files where fileURL.pathExtension.lowercased() == "json" {
+                try? fileManager.removeItem(at: fileURL)
+            }
+            let remaining = try fileManager.contentsOfDirectory(atPath: providersDirectory.path)
+            if remaining.isEmpty {
+                try? fileManager.removeItem(at: providersDirectory)
+            }
+        } catch {
+            logger.error("清理旧版 Provider JSON 文件失败: \(error.localizedDescription)")
+        }
     }
 
     /// 返回是否发生了修复。
@@ -268,76 +360,72 @@ public struct ConfigLoader {
     /// 将单个提供商的配置保存（或更新）到其对应的 JSON 文件。
     /// - Parameter provider: 需要保存的 `Provider` 对象。
     public static func saveProvider(_ provider: Provider) {
-        setupInitialProviderConfigs()
+        let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+        var persistedProvider = provider
+        persistedProvider.apiKeys = normalizedAPIKeys
 
-        // 使用 provider 的 ID 作为文件名以确保唯一性
-        let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
-        let previousProvider = loadPersistedProvider(at: fileURL)
-        logger.info("正在保存提供商 \(provider.name) 到 \(fileURL.path)")
-        
-        do {
-            let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
-
-            // 使用“先删再写”模式，确保能覆盖文件
-            try? FileManager.default.removeItem(at: fileURL)
-            
-            var persistedProvider = provider
-            persistedProvider.apiKeys = normalizedAPIKeys
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(persistedProvider)
-            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
-            logger.info("  - 保存成功。")
-
-            let changedFields = changedFieldsForProviderUpdate(old: previousProvider, new: persistedProvider)
-            let action = previousProvider == nil ? "新增提供商配置" : "更新提供商配置"
-            var payload: [String: String] = [
-                "providerID": persistedProvider.id.uuidString,
-                "providerName": persistedProvider.name,
-                "apiFormat": persistedProvider.apiFormat,
-                "baseURL": persistedProvider.baseURL,
-                "modelCount": "\(persistedProvider.models.count)",
-                "headerCount": "\(persistedProvider.headerOverrides.count)",
-                "apiKeyCount": "\(normalizedAPIKeys.count)",
-                "changedFields": changedFields.joined(separator: "、")
-            ]
-            if !persistedProvider.headerOverrides.isEmpty {
-                let sortedHeaderKeys = persistedProvider.headerOverrides.keys.sorted().joined(separator: ", ")
-                payload["headerKeys"] = sortedHeaderKeys
-            }
-
-            AppLog.userOperation(
-                category: "配置",
-                action: action,
-                payload: payload
-            )
-            AppLog.developer(
-                category: "config",
-                action: action,
-                message: "提供商配置已保存：\(persistedProvider.name)",
-                payload: payload
-            )
-        } catch {
-            logger.error("  - 保存失败: \(error.localizedDescription)")
-            AppLog.developer(
-                level: .error,
-                category: "config",
-                action: "保存提供商配置失败",
-                message: "保存提供商 \(provider.name) 失败：\(error.localizedDescription)",
-                payload: [
-                    "providerID": provider.id.uuidString,
-                    "providerName": provider.name
-                ]
-            )
+        var providers = loadProviders()
+        let previousProvider = providers.first(where: { $0.id == persistedProvider.id })
+        if let index = providers.firstIndex(where: { $0.id == persistedProvider.id }) {
+            providers[index] = persistedProvider
+        } else {
+            providers.append(persistedProvider)
         }
+
+        if saveProvidersToSQLite(providers) {
+            cleanupLegacyProviderFiles()
+            logger.info("已保存提供商 \(persistedProvider.name) 到 SQLite。")
+        } else {
+            let fileURL = providersDirectory.appendingPathComponent("\(persistedProvider.id.uuidString).json")
+            logger.info("正在回退保存提供商 \(persistedProvider.name) 到 \(fileURL.path)")
+            persistProviderToFileOnly(persistedProvider)
+            logger.info("  - 回退保存成功。")
+        }
+
+        let changedFields = changedFieldsForProviderUpdate(old: previousProvider, new: persistedProvider)
+        let action = previousProvider == nil ? "新增提供商配置" : "更新提供商配置"
+        var payload: [String: String] = [
+            "providerID": persistedProvider.id.uuidString,
+            "providerName": persistedProvider.name,
+            "apiFormat": persistedProvider.apiFormat,
+            "baseURL": persistedProvider.baseURL,
+            "modelCount": "\(persistedProvider.models.count)",
+            "headerCount": "\(persistedProvider.headerOverrides.count)",
+            "apiKeyCount": "\(normalizedAPIKeys.count)",
+            "changedFields": changedFields.joined(separator: "、")
+        ]
+        if !persistedProvider.headerOverrides.isEmpty {
+            let sortedHeaderKeys = persistedProvider.headerOverrides.keys.sorted().joined(separator: ", ")
+            payload["headerKeys"] = sortedHeaderKeys
+        }
+
+        AppLog.userOperation(
+            category: "配置",
+            action: action,
+            payload: payload
+        )
+        AppLog.developer(
+            category: "config",
+            action: action,
+            message: "提供商配置已保存：\(persistedProvider.name)",
+            payload: payload
+        )
     }
     
     /// 删除指定提供商的配置文件。
     /// - Parameter provider: 需要删除的 `Provider` 对象。
     public static func deleteProvider(_ provider: Provider) {
-        let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
-        logger.info("正在删除提供商 \(provider.name) 的配置文件: \(fileURL.path)")
-        removeFileIfExists(at: fileURL)
+        var providers = loadProviders()
+        providers.removeAll { $0.id == provider.id }
+
+        if saveProvidersToSQLite(providers) {
+            cleanupLegacyProviderFiles()
+            logger.info("已从 SQLite 删除提供商 \(provider.name)。")
+        } else {
+            let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
+            logger.info("正在删除提供商 \(provider.name) 的配置文件: \(fileURL.path)")
+            removeFileIfExists(at: fileURL)
+        }
         _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
         logger.info("  - 删除成功。")
         let payload: [String: String] = [
@@ -358,14 +446,6 @@ public struct ConfigLoader {
             message: "提供商配置已删除：\(provider.name)",
             payload: payload
         )
-    }
-
-    private static func loadPersistedProvider(at fileURL: URL) -> Provider? {
-        guard FileManager.default.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL) else {
-            return nil
-        }
-        return try? JSONDecoder().decode(Provider.self, from: data)
     }
 
     private static func changedFieldsForProviderUpdate(old: Provider?, new: Provider) -> [String] {
@@ -425,7 +505,7 @@ public struct ConfigLoader {
         let didMigrateFromCredentialStore = !migratedAPIKeys.isEmpty
 
         if didMigrateFromCredentialStore {
-            logger.info("  - 已将提供商 \(provider.name) 的 API Key 从旧凭据存储迁移到 JSON。")
+            logger.info("  - 已将提供商 \(provider.name) 的 API Key 从旧凭据存储迁移到主存储。")
         }
         if !storedAPIKeys.isEmpty {
             _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)

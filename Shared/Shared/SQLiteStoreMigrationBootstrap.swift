@@ -16,6 +16,7 @@ public enum SQLiteStoreMigrationBootstrap {
         _ = WorldbookStore.shared.loadWorldbooks()
         _ = ShortcutToolStore.loadTools()
         _ = FeedbackStore.loadTickets()
+        _ = ConfigLoader.loadProviders()
         _ = MCPServerStore.loadServers()
         _ = MemoryRawStore().loadMemories()
         _ = ConversationMemoryManager.loadUserProfile()

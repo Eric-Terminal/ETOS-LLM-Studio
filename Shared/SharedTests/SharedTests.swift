@@ -4155,7 +4155,7 @@ fileprivate struct ConfigLoaderTests {
         try data.write(to: fileURL, options: .atomic)
     }
 
-    @Test("保存并加载提供商时将 API Key 写入 Provider JSON")
+    @Test("保存并加载提供商时将 API Key 写入 SQLite 主存储")
     func testSaveAndLoadProvider() throws {
         let provider = Provider(
             id: UUID(),
@@ -4176,10 +4176,7 @@ fileprivate struct ConfigLoaderTests {
         #expect(foundProvider?.name == "Test Provider")
         #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
-
-        let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
-        #expect(fileContents.contains("\"apiKeys\""))
-        #expect(fileContents.contains("key1"))
+        #expect(Persistence.auxiliaryBlobExists(forKey: "providers_v1"))
     }
 
     @Test("同步包编码会包含 Provider JSON 中的 API Key")
@@ -4203,8 +4200,8 @@ fileprivate struct ConfigLoaderTests {
         #expect(payload.contains("sync-key"))
     }
 
-    @Test("加载旧版无 apiKeys 字段的 Provider 文件时会从旧凭据存储迁移到 JSON")
-    func testLoadProvidersMigratesLegacyCredentialStoreToJSON() throws {
+    @Test("加载旧版无 apiKeys 字段的 Provider 文件时会迁移到 SQLite")
+    func testLoadProvidersMigratesLegacyCredentialStoreToSQLite() throws {
         let provider = Provider(
             id: UUID(),
             name: "legacy-\(UUID().uuidString)",
@@ -4224,10 +4221,7 @@ fileprivate struct ConfigLoaderTests {
 
         let firstLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
         #expect(firstLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
-
-        let fileContents = try String(contentsOf: providerFileURL(for: provider.id), encoding: .utf8)
-        #expect(fileContents.contains("\"apiKeys\""))
-        #expect(fileContents.contains("legacy-key-1"))
+        #expect(Persistence.auxiliaryBlobExists(forKey: "providers_v1"))
         #expect(ProviderCredentialStore.shared.loadAPIKeys(for: provider.id).isEmpty)
 
         let secondLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
