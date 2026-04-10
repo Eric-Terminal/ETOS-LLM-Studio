@@ -59,15 +59,10 @@ struct ToolPermissionBubble: View {
     let enableLiquidGlass: Bool
     let onDecision: (ToolPermissionDecision) -> Void
 
-    @State private var isPresentingDetails = false
     @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
 
     private var toolName: String {
         request.displayName ?? request.toolName
-    }
-
-    private var displayArguments: String {
-        WatchToolArgumentFormatter.normalized(request.arguments)
     }
 
     private var argumentPreview: String? {
@@ -83,6 +78,12 @@ struct ToolPermissionBubble: View {
             return nil
         }
         return "将在 \(remaining)s 后自动允许"
+    }
+
+    private var autoApproveToggleLabel: String {
+        permissionCenter.isAutoApproveDisabled(for: request.toolName)
+            ? "恢复该工具自动批准"
+            : "关闭该工具自动批准"
     }
 
     var body: some View {
@@ -110,15 +111,41 @@ struct ToolPermissionBubble: View {
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
 
-                Button {
-                    isPresentingDetails = true
-                } label: {
-                    Label(argumentPreview == nil ? "更多权限" : "查看详情与更多", systemImage: "ellipsis.circle")
-                        .etFont(.caption2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Button("拒绝", role: .destructive) {
+                    onDecision(.deny)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+
+                Button("补充提示") {
+                    onDecision(.supplement)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+
+                Button("保持允许") {
+                    onDecision(.allowForTool)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+
+                Button("完全权限") {
+                    onDecision(.allowAll)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+
+                Button(autoApproveToggleLabel) {
+                    let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
+                    permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
@@ -128,16 +155,6 @@ struct ToolPermissionBubble: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
-        .sheet(isPresented: $isPresentingDetails) {
-            ToolPermissionDetailSheet(
-                request: request,
-                displayArguments: displayArguments,
-                onDecision: { decision in
-                    isPresentingDetails = false
-                    onDecision(decision)
-                }
-            )
-        }
     }
 
     private var header: some View {

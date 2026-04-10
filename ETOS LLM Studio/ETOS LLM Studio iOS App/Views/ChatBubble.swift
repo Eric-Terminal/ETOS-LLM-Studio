@@ -1760,26 +1760,33 @@ private struct ToolPermissionInlineView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                Menu {
-                    Button("拒绝", role: .destructive) {
-                        onDecision(.deny)
-                    }
-                    Button("补充提示") {
-                        onDecision(.supplement)
-                    }
-                    Button("保持允许") {
-                        onDecision(.allowForTool)
-                    }
-                    Button("完全权限") {
-                        onDecision(.allowAll)
-                    }
-                    Divider()
-                    Button(autoApproveToggleLabel) {
-                        let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
-                        permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
-                    }
-                } label: {
-                    Label("更多", systemImage: "ellipsis")
+                Button("拒绝", role: .destructive) {
+                    onDecision(.deny)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            HStack(spacing: 8) {
+                Button("补充提示") {
+                    onDecision(.supplement)
+                }
+                .buttonStyle(.bordered)
+
+                Button("保持允许") {
+                    onDecision(.allowForTool)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            HStack(spacing: 8) {
+                Button("完全权限") {
+                    onDecision(.allowAll)
+                }
+                .buttonStyle(.bordered)
+
+                Button(autoApproveToggleLabel) {
+                    let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
+                    permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
                 }
                 .buttonStyle(.bordered)
             }
