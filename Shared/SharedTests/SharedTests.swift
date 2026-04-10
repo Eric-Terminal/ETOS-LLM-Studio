@@ -3536,27 +3536,63 @@ fileprivate struct PersistenceTests {
         chatsDirectory.appendingPathComponent("chat-store.sqlite-shm")
     }
 
+    private var documentsDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    private var configDirectory: URL {
+        documentsDirectory.appendingPathComponent("Config")
+    }
+
+    private var memoryDirectory: URL {
+        documentsDirectory.appendingPathComponent("Memory")
+    }
+
     private var configStoreSQLiteURL: URL {
-        chatsDirectory.appendingPathComponent("config-store.sqlite")
+        configDirectory.appendingPathComponent("config-store.sqlite")
     }
 
     private var configStoreSQLiteWALURL: URL {
-        chatsDirectory.appendingPathComponent("config-store.sqlite-wal")
+        configDirectory.appendingPathComponent("config-store.sqlite-wal")
     }
 
     private var configStoreSQLiteSHMURL: URL {
+        configDirectory.appendingPathComponent("config-store.sqlite-shm")
+    }
+
+    private var legacyConfigStoreSQLiteURL: URL {
+        chatsDirectory.appendingPathComponent("config-store.sqlite")
+    }
+
+    private var legacyConfigStoreSQLiteWALURL: URL {
+        chatsDirectory.appendingPathComponent("config-store.sqlite-wal")
+    }
+
+    private var legacyConfigStoreSQLiteSHMURL: URL {
         chatsDirectory.appendingPathComponent("config-store.sqlite-shm")
     }
 
     private var memoryStoreSQLiteURL: URL {
-        chatsDirectory.appendingPathComponent("memory-store.sqlite")
+        memoryDirectory.appendingPathComponent("memory-store.sqlite")
     }
 
     private var memoryStoreSQLiteWALURL: URL {
-        chatsDirectory.appendingPathComponent("memory-store.sqlite-wal")
+        memoryDirectory.appendingPathComponent("memory-store.sqlite-wal")
     }
 
     private var memoryStoreSQLiteSHMURL: URL {
+        memoryDirectory.appendingPathComponent("memory-store.sqlite-shm")
+    }
+
+    private var legacyMemoryStoreSQLiteURL: URL {
+        chatsDirectory.appendingPathComponent("memory-store.sqlite")
+    }
+
+    private var legacyMemoryStoreSQLiteWALURL: URL {
+        chatsDirectory.appendingPathComponent("memory-store.sqlite-wal")
+    }
+
+    private var legacyMemoryStoreSQLiteSHMURL: URL {
         chatsDirectory.appendingPathComponent("memory-store.sqlite-shm")
     }
 
@@ -3604,9 +3640,15 @@ fileprivate struct PersistenceTests {
         removeIfExists(configStoreSQLiteURL)
         removeIfExists(configStoreSQLiteWALURL)
         removeIfExists(configStoreSQLiteSHMURL)
+        removeIfExists(legacyConfigStoreSQLiteURL)
+        removeIfExists(legacyConfigStoreSQLiteWALURL)
+        removeIfExists(legacyConfigStoreSQLiteSHMURL)
         removeIfExists(memoryStoreSQLiteURL)
         removeIfExists(memoryStoreSQLiteWALURL)
         removeIfExists(memoryStoreSQLiteSHMURL)
+        removeIfExists(legacyMemoryStoreSQLiteURL)
+        removeIfExists(legacyMemoryStoreSQLiteWALURL)
+        removeIfExists(legacyMemoryStoreSQLiteSHMURL)
     }
 
     @Test("Save and Load Chat Sessions")

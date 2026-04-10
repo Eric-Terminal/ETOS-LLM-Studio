@@ -64,6 +64,10 @@ public enum Persistence {
         }
     }
 
+    private static var documentsDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
     private static let sessionIndexFileName = "index.json"
     private static let sessionFoldersFileName = "folders.json"
     private static let sessionRecordsDirectoryName = "sessions"
@@ -216,7 +220,8 @@ public enum Persistence {
         }
 
         do {
-            let databaseURL = getChatsDirectory().appendingPathComponent(kind.rawValue)
+            let databaseURL = auxiliaryStoreDatabaseURL(for: kind)
+            migrateLegacyAuxiliaryStoreFileIfNeeded(kind: kind, targetURL: databaseURL)
             let store = try PersistenceAuxiliaryGRDBStore(
                 databaseURL: databaseURL,
                 loggerCategory: kind.loggerCategory
@@ -229,6 +234,61 @@ public enum Persistence {
             logger.error("辅助存储初始化失败(\(kind.rawValue)): \(String(describing: error))")
             return nil
         }
+    }
+
+    private static func auxiliaryStoreDatabaseURL(for kind: AuxiliaryStoreKind) -> URL {
+        switch kind {
+        case .config:
+            let configDirectory = documentsDirectory.appendingPathComponent("Config", isDirectory: true)
+            if !FileManager.default.fileExists(atPath: configDirectory.path) {
+                try? FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
+            }
+            return configDirectory.appendingPathComponent(kind.rawValue, isDirectory: false)
+        case .memory:
+            let memoryDirectory = MemoryStoragePaths.rootDirectory()
+            return memoryDirectory.appendingPathComponent(kind.rawValue, isDirectory: false)
+        }
+    }
+
+    private static func legacyAuxiliaryStoreDatabaseURL(for kind: AuxiliaryStoreKind) -> URL {
+        getChatsDirectory().appendingPathComponent(kind.rawValue, isDirectory: false)
+    }
+
+    private static func migrateLegacyAuxiliaryStoreFileIfNeeded(kind: AuxiliaryStoreKind, targetURL: URL) {
+        let legacyURL = legacyAuxiliaryStoreDatabaseURL(for: kind)
+        guard legacyURL.standardizedFileURL.path != targetURL.standardizedFileURL.path else { return }
+
+        let fileManager = FileManager.default
+        let legacyPaths = [legacyURL.path, legacyURL.path + "-wal", legacyURL.path + "-shm"]
+        let hasLegacyFiles = legacyPaths.contains { fileManager.fileExists(atPath: $0) }
+        guard hasLegacyFiles else { return }
+
+        do {
+            try ensureDirectoryExists(targetURL.deletingLastPathComponent())
+        } catch {
+            logger.error("准备辅助存储目录失败(\(kind.rawValue)): \(error.localizedDescription)")
+            return
+        }
+
+        let targetPaths = [targetURL.path, targetURL.path + "-wal", targetURL.path + "-shm"]
+        let targetAlreadyExists = targetPaths.contains { fileManager.fileExists(atPath: $0) }
+        if targetAlreadyExists {
+            logger.warning("辅助存储目标路径已存在，跳过旧路径迁移: \(targetURL.path)")
+            return
+        }
+
+        for suffix in ["", "-wal", "-shm"] {
+            let sourcePath = legacyURL.path + suffix
+            guard fileManager.fileExists(atPath: sourcePath) else { continue }
+            let destinationPath = targetURL.path + suffix
+            do {
+                try fileManager.moveItem(atPath: sourcePath, toPath: destinationPath)
+            } catch {
+                logger.error("迁移辅助存储文件失败(\(kind.rawValue)) \(sourcePath) -> \(destinationPath): \(error.localizedDescription)")
+            }
+        }
+
+        logger.info("辅助存储文件路径已迁移(\(kind.rawValue)): \(legacyURL.path) -> \(targetURL.path)")
     }
 
     @discardableResult
