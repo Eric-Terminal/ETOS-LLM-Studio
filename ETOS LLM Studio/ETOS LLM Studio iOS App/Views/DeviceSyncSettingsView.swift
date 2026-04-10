@@ -44,6 +44,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
     @AppStorage("sync.backup.uploadEndpoint") private var backupUploadEndpoint = ""
+    @AppStorage(Persistence.launchBackupEnabledKey) private var launchBackupEnabled = false
     @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
     @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
     @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
@@ -194,6 +195,14 @@ struct DeviceSyncSettingsView: View {
 
             Section("iCloud 状态") {
                 cloudSyncStatusView
+            }
+
+            Section {
+                Toggle("启动时创建数据库备份点", isOn: $launchBackupEnabled)
+            } header: {
+                Text("启动保护备份")
+            } footer: {
+                Text("用于防止 SQLite 数据库损坏。开启后每次启动会额外 dump 一份可恢复备份并落盘，可能占用更多空间；若检测到数据库损坏，会按这份备份自动重建并恢复检索索引。")
             }
         }
         .navigationTitle("同步与备份")

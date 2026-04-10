@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var selection: Tab = .chat
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
+    @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     
@@ -87,6 +88,14 @@ struct ContentView: View {
         } message: {
             Text(viewModel.dimensionMismatchMessage)
         }
+        .alert("数据库已自动恢复", isPresented: Binding(
+            get: { launchRecoveryNoticeMessage != nil },
+            set: { if !$0 { launchRecoveryNoticeMessage = nil } }
+        )) {
+            Button("好的", role: .cancel) {}
+        } message: {
+            Text(launchRecoveryNoticeMessage ?? "")
+        }
         // MARK: - 公告弹窗
         .sheet(isPresented: $announcementManager.shouldShowAlert) {
             if let announcement = announcementManager.currentAnnouncement {
@@ -100,6 +109,7 @@ struct ContentView: View {
         }
         // 启动时检查公告
         .task {
+            launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
             await announcementManager.checkAnnouncement()
             scheduleDailyPulsePreparation(after: 1_500_000_000)
             if openDailyPulseContinuationIfNeeded() {

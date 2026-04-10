@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var shouldForceScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     @State private var pendingJumpRequest: MessageJumpRequest?
+    @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     private let inputControlHeight: CGFloat = 38
@@ -715,6 +716,14 @@ struct ContentView: View {
             } message: {
                 Text(viewModel.dimensionMismatchMessage)
             }
+            .alert("数据库已自动恢复", isPresented: Binding(
+                get: { launchRecoveryNoticeMessage != nil },
+                set: { if !$0 { launchRecoveryNoticeMessage = nil } }
+            )) {
+                Button("好的", role: .cancel) { }
+            } message: {
+                Text(launchRecoveryNoticeMessage ?? "")
+            }
             .alert(
                 Text(NSLocalizedString("记忆嵌入失败", comment: "Memory embedding failure alert title")),
                 isPresented: $viewModel.showMemoryEmbeddingErrorAlert
@@ -738,6 +747,7 @@ struct ContentView: View {
             }
             // 启动时检查公告
             .task {
+                launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
                 await announcementManager.checkAnnouncement()
                 scheduleDailyPulsePreparation(after: 1_500_000_000)
                 if applyDailyPulseContinuationIfNeeded() {
