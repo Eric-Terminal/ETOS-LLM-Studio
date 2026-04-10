@@ -127,7 +127,6 @@ final class PersistenceGRDBStore {
             try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
             try db.execute(sql: "PRAGMA temp_store=MEMORY")
             try db.execute(sql: "PRAGMA mmap_size=134217728")
-            try db.execute(sql: "PRAGMA auto_vacuum=INCREMENTAL")
         }
 
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
@@ -2091,7 +2090,6 @@ final class PersistenceAuxiliaryGRDBStore {
             try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
             try db.execute(sql: "PRAGMA temp_store=MEMORY")
             try db.execute(sql: "PRAGMA mmap_size=67108864")
-            try db.execute(sql: "PRAGMA auto_vacuum=INCREMENTAL")
         }
 
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
