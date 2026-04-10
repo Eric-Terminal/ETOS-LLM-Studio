@@ -1087,13 +1087,18 @@ struct ChatBubble: View {
                 }
 
                 if let permissionRequest {
-                    ToolPermissionInlineView(
-                        request: permissionRequest,
-                        onDecision: { decision in
-                            toolPermissionCenter.resolveActiveRequest(with: decision)
-                            selectedToolCallDetailSheetItem = nil
-                        }
-                    )
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("审批操作")
+                            .etFont(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ToolPermissionInlineView(
+                            request: permissionRequest,
+                            onDecision: { decision in
+                                toolPermissionCenter.resolveActiveRequest(with: decision)
+                                selectedToolCallDetailSheetItem = nil
+                            }
+                        )
+                    }
                 }
             }
             .padding(14)
