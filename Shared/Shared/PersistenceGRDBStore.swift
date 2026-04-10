@@ -1068,7 +1068,7 @@ final class PersistenceGRDBStore {
             }
         }
 
-        logger.info("JSON 数据已导入 GRDB，数据库路径: \(databaseURL.path)")
+        self.logger.info("JSON 数据已导入 GRDB，数据库路径: \(self.databaseURL.path)")
     }
 
     private func collectLegacySnapshot() -> LegacySnapshot {
