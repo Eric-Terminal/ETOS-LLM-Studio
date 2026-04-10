@@ -28,7 +28,6 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     init() {
         Persistence.bootstrapGRDBStoreOnLaunch()
         DailyPulseDeliveryCoordinator.shared.activate()
-        DailyPulseBackgroundDeliveryScheduler.shared.activate()
         FontLibrary.registerAllFontsIfNeeded()
     }
 
