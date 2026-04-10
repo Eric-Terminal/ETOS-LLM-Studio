@@ -664,9 +664,17 @@ public class ChatService {
         guard let adapter = adapters[provider.apiFormat] else {
             throw NetworkError.adapterNotFound(format: provider.apiFormat)
         }
+
+        if let configurationError = providerConfigurationValidationErrorMessage(
+            for: provider,
+            action: NSLocalizedString("在线获取模型列表", comment: "Fetch model list action")
+        ) {
+            logger.warning("  - 提供商 '\(provider.name)' 配置异常: \(configurationError)")
+            throw NetworkError.invalidProviderConfiguration(message: configurationError)
+        }
         
         guard let request = adapter.buildModelListRequest(for: provider) else {
-            logger.warning("  - 提供商 '\(provider.name)' (\(provider.apiFormat)) 不支持在线获取模型列表。")
+            logger.warning("  - 提供商 '\(provider.name)' (\(provider.apiFormat)) 当前适配器未实现在线模型列表。")
             throw NetworkError.modelListUnavailable(provider: provider.name, apiFormat: provider.apiFormat)
         }
         
@@ -2767,6 +2775,32 @@ public class ChatService {
             return
         }
 
+        let requestStartedAt = Date()
+        let requestLogContext = RequestLogContext(
+            requestID: UUID(),
+            sessionID: currentSessionID,
+            providerID: runnableModel.provider.id,
+            providerName: runnableModel.provider.name,
+            modelID: runnableModel.model.modelName,
+            isStreaming: enableStreaming,
+            requestedAt: requestStartedAt
+        )
+
+        if let configurationError = providerConfigurationValidationErrorMessage(
+            for: runnableModel.provider,
+            action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
+        ) {
+            addErrorMessage(configurationError)
+            requestStatusSubject.send(.error)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
+            return
+        }
+
         let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.lorebookIDs ?? [])
         let worldbookResult = worldbookEngine.evaluate(
             .init(
@@ -2886,19 +2920,13 @@ public class ChatService {
         if tools != nil, effectiveTools == nil {
             logger.info("当前模型未启用工具能力，本次请求不会附带工具定义。")
         }
-        let requestStartedAt = Date()
-        let requestLogContext = RequestLogContext(
-            requestID: UUID(),
-            sessionID: currentSessionID,
-            providerID: runnableModel.provider.id,
-            providerName: runnableModel.provider.name,
-            modelID: runnableModel.model.modelName,
-            isStreaming: enableStreaming,
-            requestedAt: requestStartedAt
-        )
         
         guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: effectiveTools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
-            addErrorMessage(NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error"))
+            let reason = providerConfigurationValidationErrorMessage(
+                for: runnableModel.provider,
+                action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
+            ) ?? NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error")
+            addErrorMessage(reason)
             requestStatusSubject.send(.error)
             persistRequestLog(
                 context: requestLogContext,
@@ -3375,6 +3403,24 @@ public class ChatService {
         logger.info(
             "构建生图请求: session=\(currentSessionID.uuidString), model=\(runnableModel.model.modelName), referenceCount=\(referenceImages.count)"
         )
+        if let configurationError = providerConfigurationValidationErrorMessage(
+            for: runnableModel.provider,
+            action: NSLocalizedString("发送生图请求", comment: "Send image generation request action")
+        ) {
+            addErrorMessage(configurationError)
+            requestStatusSubject.send(.error)
+            imageGenerationStatusSubject.send(
+                .failed(
+                    sessionID: currentSessionID,
+                    loadingMessageID: loadingMessageID,
+                    prompt: prompt,
+                    reason: configurationError,
+                    finishedAt: Date()
+                )
+            )
+            return
+        }
+
         guard let request = adapter.buildImageGenerationRequest(
             for: runnableModel,
             prompt: prompt,
@@ -3597,6 +3643,42 @@ public class ChatService {
         }
         return NSLocalizedString("响应体为空。", comment: "Empty response body")
     }
+
+    private func providerConfigurationValidationErrorMessage(for provider: Provider, action: String) -> String? {
+        let providerName = provider.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? NSLocalizedString("未命名提供商", comment: "Unnamed provider fallback name")
+            : provider.name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let trimmedBaseURL = provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedBaseURL.isEmpty {
+            return String(
+                format: NSLocalizedString("错误: 提供商“%@”未配置 API 地址，无法%@。请在提供商设置中补全后重试。", comment: "Provider missing base URL"),
+                providerName,
+                action
+            )
+        }
+
+        if URL(string: trimmedBaseURL) == nil {
+            return String(
+                format: NSLocalizedString("错误: 提供商“%@”的 API 地址格式无效，无法%@。请检查地址是否包含多余空格或换行。", comment: "Provider base URL invalid"),
+                providerName,
+                action
+            )
+        }
+
+        let hasValidAPIKey = provider.apiKeys.contains {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if !hasValidAPIKey {
+            return String(
+                format: NSLocalizedString("错误: 提供商“%@”未配置 API Key，无法%@。请重新填写 API Key 后重试（如从旧版本同步迁移过，建议保存一次提供商配置）。", comment: "Provider missing API key"),
+                providerName,
+                action
+            )
+        }
+
+        return nil
+    }
     
     // MARK: - 私有网络层与响应处理 (已重构)
 
@@ -3605,6 +3687,7 @@ public class ChatService {
         case adapterNotFound(format: String)
         case requestBuildFailed(provider: String)
         case featureUnavailable(provider: String)
+        case invalidProviderConfiguration(message: String)
         case modelListUnavailable(provider: String, apiFormat: String)
 
         var errorDescription: String? {
@@ -3629,7 +3712,8 @@ public class ChatService {
             case .adapterNotFound(let format): return "找不到适用于 '\(format)' 格式的 API 适配器。"
             case .requestBuildFailed(let provider): return "无法为 '\(provider)' 构建请求。"
             case .featureUnavailable(let provider): return "当前提供商 \(provider) 暂未实现语音转文字能力。"
-            case .modelListUnavailable(let provider, let apiFormat): return "\(provider) (\(apiFormat)) 不支持在线获取模型列表，请手动配置模型。"
+            case .invalidProviderConfiguration(let message): return message
+            case .modelListUnavailable(let provider, let apiFormat): return "\(provider) (\(apiFormat)) 当前适配器未实现在线获取模型列表，请手动配置模型。"
             }
         }
     }
