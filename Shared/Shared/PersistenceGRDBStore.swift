@@ -942,6 +942,30 @@ final class PersistenceGRDBStore {
         }
     }
 
+    func rebuildMessagesFTSIndex() {
+        do {
+            try dbPool.write { db in
+                try db.execute(sql: """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
+                    USING fts5(
+                        message_id UNINDEXED,
+                        session_id UNINDEXED,
+                        content,
+                        tokenize = 'unicode61'
+                    )
+                """)
+                try db.execute(sql: "DELETE FROM messages_fts")
+                try db.execute(sql: """
+                    INSERT INTO messages_fts(message_id, session_id, content)
+                    SELECT id, session_id, content FROM messages
+                """)
+            }
+            logger.info("聊天消息 FTS 索引已重建。")
+        } catch {
+            logger.error("重建聊天消息 FTS 索引失败: \(error.localizedDescription)")
+        }
+    }
+
     private func migrateSchemaIfNeeded() throws {
         var migrator = DatabaseMigrator()
 
