@@ -2066,8 +2066,8 @@ final class PersistenceAuxiliaryGRDBStore {
             """)
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_json_blobs_updated_at ON json_blobs(updated_at DESC)")
         }
-        try migrator.migrate(dbPool)
-        logger.info("辅助存储已启用，数据库路径: \(databaseURL.path)")
+        try migrator.migrate(self.dbPool)
+        self.logger.info("辅助存储已启用，数据库路径: \(self.databaseURL.path)")
     }
 
     private func makeISO8601Encoder() -> JSONEncoder {
