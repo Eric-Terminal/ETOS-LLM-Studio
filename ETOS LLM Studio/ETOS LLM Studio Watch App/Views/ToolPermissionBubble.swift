@@ -139,13 +139,15 @@ struct ToolPermissionBubble: View {
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
 
-                Button(autoApproveToggleLabel) {
-                    let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
-                    permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
+                if permissionCenter.autoApproveEnabled {
+                    Button(autoApproveToggleLabel) {
+                        let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
+                        permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)

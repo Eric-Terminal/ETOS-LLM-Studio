@@ -1784,11 +1784,13 @@ private struct ToolPermissionInlineView: View {
                 }
                 .buttonStyle(.bordered)
 
-                Button(autoApproveToggleLabel) {
-                    let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
-                    permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
+                if permissionCenter.autoApproveEnabled {
+                    Button(autoApproveToggleLabel) {
+                        let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
+                        permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
             if let countdownText {
