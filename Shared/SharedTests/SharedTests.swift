@@ -3667,8 +3667,10 @@ fileprivate struct PersistenceTests {
     func testGRDBMessageCount() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
         defer {
             Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
         }
 
         let session = ChatSession(id: UUID(), name: "GRDB Count Session", isTemporary: false)
@@ -3685,6 +3687,45 @@ fileprivate struct PersistenceTests {
         #expect(messageCount == 3)
 
         cleanup(sessions: [session])
+    }
+
+    @Test("GRDB 启动迁移后自动清理旧 JSON 会话文件")
+    func testBootstrapGRDBImportAndCleanupLegacyJSON() throws {
+        cleanup(sessions: [])
+
+        let sessionID = UUID()
+        let legacySession = ChatSession(id: sessionID, name: "Legacy JSON Session", isTemporary: false)
+        let legacyMessages = [
+            ChatMessage(role: .user, content: "legacy-user"),
+            ChatMessage(role: .assistant, content: "legacy-assistant")
+        ]
+
+        let legacySessionsData = try JSONEncoder().encode([legacySession])
+        try legacySessionsData.write(to: legacySessionsIndexURL, options: .atomic)
+
+        let legacyMessagesData = try JSONEncoder().encode(legacyMessages)
+        try legacyMessagesData.write(to: legacyMessageFileURL(sessionID), options: .atomic)
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [legacySession])
+        }
+
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        let loadedSessions = Persistence.loadChatSessions()
+        #expect(loadedSessions.contains(where: { $0.id == sessionID }))
+
+        let loadedMessages = Persistence.loadMessages(for: sessionID)
+        #expect(loadedMessages.map(\.content) == ["legacy-user", "legacy-assistant"])
+
+        #expect(FileManager.default.fileExists(atPath: chatStoreSQLiteURL.path))
+        #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
+        #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
     }
 
     @Test("Migrate Legacy Session Store To Current Layout And Cleanup Legacy Files")
