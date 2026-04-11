@@ -81,7 +81,7 @@ enum RelationalJSONValueCodec {
 
 enum RelationalFloatArrayCodec {
     static func encode(_ values: [Float]) -> Data {
-        var copiedValues = values
+        let copiedValues = values
         return copiedValues.withUnsafeBytes { Data($0) }
     }
 
@@ -561,11 +561,11 @@ public enum Persistence {
         }
     }
 
-    static func observeConfigDatabase<T: Sendable>(
-        _ observation: ValueObservation<T>,
+    static func observeConfigDatabase<Reducer: ValueReducer>(
+        _ observation: ValueObservation<Reducer>,
         onError: @escaping @Sendable (Error) -> Void,
-        onChange: @escaping @Sendable (T) -> Void
-    ) -> AnyDatabaseCancellable? {
+        onChange: @escaping @Sendable (Reducer.Value) -> Void
+    ) -> AnyDatabaseCancellable? where Reducer.Value: Sendable {
         guard let store = activeAuxiliaryStore(kind: .config) else { return nil }
         return store.startObservation(observation, onError: onError, onChange: onChange)
     }

@@ -170,7 +170,7 @@ public enum FeedbackStore {
                 return FeedbackTicket(
                     issueNumber: row["issue_number"],
                     ticketToken: row["ticket_token"],
-                    category: FeedbackCategory(rawValue: categoryRaw) ?? .other,
+                    category: FeedbackCategory(rawValue: categoryRaw) ?? .bug,
                     title: row["title"],
                     createdAt: Date(timeIntervalSince1970: row["created_at"]),
                     lastKnownStatus: FeedbackTicketStatus(rawValue: statusRaw) ?? .inProgress,

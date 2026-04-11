@@ -188,7 +188,7 @@ private struct ConversationUserProfileStore {
     }
 
     private func loadProfileFromSQLite() -> (didRead: Bool, profile: ConversationUserProfile?) {
-        guard let profile = Persistence.withMemoryDatabaseRead({ db in
+        guard let profile = Persistence.withMemoryDatabaseRead({ db -> ConversationUserProfile? in
             guard let row = try Row.fetchOne(
                 db,
                 sql: """

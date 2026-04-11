@@ -390,7 +390,12 @@ public struct MCPServerStore {
         let serverID = server.id.uuidString
         let didSave = Persistence.withConfigDatabaseWrite { db in
             let existing = try MCPServerRecord.fetchOne(db, key: serverID)
-            var record = existing ?? try MCPServerRecord(server: server, status: .idle, updatedAt: Date().timeIntervalSince1970)
+            var record: MCPServerRecord
+            if let existing {
+                record = existing
+            } else {
+                record = try MCPServerRecord(server: server, status: .idle, updatedAt: Date().timeIntervalSince1970)
+            }
 
             let shouldPreserveMetadata: Bool
             if let existing,

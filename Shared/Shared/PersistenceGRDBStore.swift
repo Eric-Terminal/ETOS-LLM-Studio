@@ -2174,11 +2174,11 @@ final class PersistenceAuxiliaryGRDBStore {
         try dbPool.write(block)
     }
 
-    func startObservation<T: Sendable>(
-        _ observation: ValueObservation<T>,
+    func startObservation<Reducer: ValueReducer>(
+        _ observation: ValueObservation<Reducer>,
         onError: @escaping @Sendable (Error) -> Void,
-        onChange: @escaping @Sendable (T) -> Void
-    ) -> AnyDatabaseCancellable {
+        onChange: @escaping @Sendable (Reducer.Value) -> Void
+    ) -> AnyDatabaseCancellable where Reducer.Value: Sendable {
         observation.start(
             in: dbPool,
             scheduling: .async(onQueue: .main),
