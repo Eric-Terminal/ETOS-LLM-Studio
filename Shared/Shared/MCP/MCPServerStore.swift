@@ -62,6 +62,8 @@ public struct MCPServerMetadataCache: Codable, Hashable {
 public struct MCPServerStore {
     private static let lock = NSLock()
     private static let legacyBlobKey = "mcp_servers_records_v1"
+    private static let relationalServerTable = "mcp_servers_v2"
+    private static let relationalToolTable = "mcp_tools_v2"
     private static var didBootstrapRelationalStore = false
 
     private static var documentsDirectory: URL {
@@ -325,7 +327,7 @@ public struct MCPServerStore {
 
     private static func migrateLegacyRecordsToRelationalStoreIfNeeded() {
         guard let existingServerCount = Persistence.withConfigDatabaseRead({ db in
-            let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers")
+            let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(relationalServerTable)")
             return count ?? 0
         }) else {
             return
@@ -337,42 +339,33 @@ public struct MCPServerStore {
         guard !legacyRecords.isEmpty else { return }
 
         let migrateSucceeded = Persistence.withConfigDatabaseWrite { db in
-            let now = Date().timeIntervalSince1970
             for legacyRecord in legacyRecords {
-                var serverRecord = try MCPServerRecord(
+                let status: MCPServerHeaderRecord.Status = legacyRecord.metadata == nil ? .idle : .ready
+                try upsertServerRow(
+                    db,
                     server: legacyRecord.server,
-                    status: .idle,
-                    updatedAt: now
+                    status: status,
+                    metadata: legacyRecord.metadata,
+                    updatedAt: Date().timeIntervalSince1970
                 )
 
                 if let metadata = legacyRecord.metadata {
-                    try serverRecord.applyMetadata(metadata)
-                }
-
-                try serverRecord.save(db)
-
-                try MCPToolRecord
-                    .filter(MCPToolRecord.Columns.serverID == legacyRecord.server.id.uuidString)
-                    .deleteAll(db)
-
-                if let metadata = legacyRecord.metadata {
                     let toolsTimestamp = metadata.cachedAt.timeIntervalSince1970
-                    for (index, tool) in metadata.tools.enumerated() {
-                        var toolRecord = try MCPToolRecord(
-                            serverID: legacyRecord.server.id.uuidString,
-                            tool: tool,
-                            sortIndex: index,
-                            updatedAt: toolsTimestamp
-                        )
-                        try toolRecord.save(db)
-                    }
+                    try replaceTools(
+                        db,
+                        serverID: legacyRecord.server.id.uuidString,
+                        tools: metadata.tools,
+                        updatedAt: toolsTimestamp
+                    )
+                } else {
+                    try deleteTools(db, serverID: legacyRecord.server.id.uuidString)
                 }
             }
             return true
         } ?? false
 
         guard migrateSucceeded else {
-            mcpStoreLogger.error("MCP 关系化迁移失败：未能写入 mcp_servers/mcp_tools。")
+            mcpStoreLogger.error("MCP 关系化迁移失败：未能写入 mcp_servers_v2/mcp_tools_v2。")
             return
         }
 
@@ -383,10 +376,23 @@ public struct MCPServerStore {
 
     private static func loadServersFromRelationalStore() -> [MCPServerConfiguration]? {
         Persistence.withConfigDatabaseRead { db in
-            let records = try MCPServerRecord.fetchAll(db)
-            let servers = records.compactMap { record -> MCPServerConfiguration? in
-                guard let server = record.decodeConfiguration() else {
-                    mcpStoreLogger.error("读取 MCP 服务器失败：配置数据损坏 id=\(record.id, privacy: .public)")
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    id, display_name, notes, is_selected_for_chat,
+                    transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
+                    api_key, additional_headers_json, oauth_payload_json,
+                    disabled_tool_ids_json, tool_approval_policies_json, stream_resumption_token
+                FROM \(relationalServerTable)
+                ORDER BY LOWER(display_name) ASC, id ASC
+                """
+            )
+
+            let servers = rows.compactMap { row -> MCPServerConfiguration? in
+                guard let server = decodeServerConfiguration(from: row) else {
+                    let id: String = row["id"]
+                    mcpStoreLogger.error("读取 MCP 服务器失败：配置数据损坏 id=\(id, privacy: .public)")
                     return nil
                 }
                 return server
@@ -406,31 +412,50 @@ public struct MCPServerStore {
     private static func saveServerToRelationalStore(_ server: MCPServerConfiguration) -> Bool {
         let serverID = server.id.uuidString
         let didSave = Persistence.withConfigDatabaseWrite { db in
-            let existing = try MCPServerRecord.fetchOne(db, key: serverID)
-            var record: MCPServerRecord
-            if let existing {
-                record = existing
-            } else {
-                record = try MCPServerRecord(server: server, status: .idle, updatedAt: Date().timeIntervalSince1970)
-            }
+            let existingServerRow = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT
+                    id, display_name, notes, is_selected_for_chat,
+                    transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
+                    api_key, additional_headers_json, oauth_payload_json,
+                    disabled_tool_ids_json, tool_approval_policies_json, stream_resumption_token,
+                    status, metadata_cached_at,
+                    info_json, resources_json, resource_templates_json, prompts_json, roots_json,
+                    updated_at
+                FROM \(relationalServerTable)
+                WHERE id = ?
+                """,
+                arguments: [serverID]
+            )
 
             let shouldPreserveMetadata: Bool
-            if let existing,
-               let previousServer = existing.decodeConfiguration() {
+            if let existingServerRow,
+               let previousServer = decodeServerConfiguration(from: existingServerRow) {
                 shouldPreserveMetadata = previousServer.transport == server.transport
             } else {
                 shouldPreserveMetadata = false
             }
 
-            try record.applyConfiguration(server)
-            if !shouldPreserveMetadata {
-                record.clearMetadata(status: .idle)
-                try MCPToolRecord
-                    .filter(MCPToolRecord.Columns.serverID == serverID)
-                    .deleteAll(db)
+            let status: MCPServerHeaderRecord.Status
+            let metadata: MCPServerMetadataCache?
+            if shouldPreserveMetadata,
+               let existingServerRow {
+                status = MCPServerHeaderRecord.Status(rawValue: (existingServerRow["status"] as String?) ?? MCPServerHeaderRecord.Status.idle.rawValue) ?? .idle
+                metadata = decodeMetadataPayload(from: existingServerRow, includeTools: true, tools: try fetchTools(db, serverID: serverID))
+            } else {
+                status = .idle
+                metadata = nil
+                try deleteTools(db, serverID: serverID)
             }
 
-            try record.save(db)
+            try upsertServerRow(
+                db,
+                server: server,
+                status: status,
+                metadata: metadata,
+                updatedAt: Date().timeIntervalSince1970
+            )
             return true
         } ?? false
 
@@ -439,113 +464,119 @@ public struct MCPServerStore {
 
     private static func deleteServerFromRelationalStore(serverID: UUID) -> Bool {
         Persistence.withConfigDatabaseWrite { db in
-            _ = try MCPServerRecord.deleteOne(db, key: serverID.uuidString)
+            try db.execute(
+                sql: "DELETE FROM \(relationalServerTable) WHERE id = ?",
+                arguments: [serverID.uuidString]
+            )
             return true
         } ?? false
     }
 
     private static func loadMetadataFromRelationalStore(serverID: UUID, includeTools: Bool) -> MCPServerMetadataCache? {
         Persistence.withConfigDatabaseRead { db in
-            guard let serverRecord = try MCPServerRecord.fetchOne(db, key: serverID.uuidString) else {
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT
+                    id, metadata_cached_at, updated_at,
+                    info_json, resources_json, resource_templates_json, prompts_json, roots_json
+                FROM \(relationalServerTable)
+                WHERE id = ?
+                """,
+                arguments: [serverID.uuidString]
+            ) else {
                 return nil
             }
 
-            let toolRecords: [MCPToolRecord]
+            let tools: [MCPToolDescription]
             if includeTools {
-                toolRecords = try MCPToolRecord
-                    .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
-                    .order(MCPToolRecord.Columns.sortIndex.asc)
-                    .fetchAll(db)
+                tools = try fetchTools(db, serverID: serverID.uuidString)
             } else {
-                toolRecords = []
+                tools = []
             }
 
-            return serverRecord.makeMetadata(toolRecords: toolRecords)
+            return decodeMetadataPayload(from: row, includeTools: includeTools, tools: tools)
         } ?? nil
     }
 
     private static func loadToolsFromRelationalStore(serverID: UUID) -> [MCPToolDescription]? {
         Persistence.withConfigDatabaseRead { db in
-            try MCPToolRecord
-                .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
-                .order(MCPToolRecord.Columns.sortIndex.asc)
-                .fetchAll(db)
-                .compactMap { $0.toToolDescription() }
+            try fetchTools(db, serverID: serverID.uuidString)
         }
     }
 
     private static func loadServerInfoFromRelationalStore(serverID: UUID) -> MCPServerInfo? {
         Persistence.withConfigDatabaseRead { db in
-            let infoData = try Data.fetchOne(
+            let infoText = try String.fetchOne(
                 db,
                 sql: """
-                SELECT info_data
-                FROM mcp_servers
+                SELECT info_json
+                FROM \(relationalServerTable)
                 WHERE id = ?
                 """,
                 arguments: [serverID.uuidString]
             )
-            return MCPServerStoreCodec.decodeIfPresent(MCPServerInfo.self, from: infoData)
+            return MCPServerStoreCodec.decodeJSONTextIfPresent(MCPServerInfo.self, from: infoText)
         } ?? nil
     }
 
     private static func loadResourcesFromRelationalStore(serverID: UUID) -> [MCPResourceDescription]? {
         Persistence.withConfigDatabaseRead { db in
-            let resourcesData = try Data.fetchOne(
+            let resourcesText = try String.fetchOne(
                 db,
                 sql: """
-                SELECT resources_data
-                FROM mcp_servers
+                SELECT resources_json
+                FROM \(relationalServerTable)
                 WHERE id = ?
                 """,
                 arguments: [serverID.uuidString]
             )
-            return MCPServerStoreCodec.decodeIfPresent([MCPResourceDescription].self, from: resourcesData) ?? []
+            return MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceDescription].self, from: resourcesText) ?? []
         }
     }
 
     private static func loadResourceTemplatesFromRelationalStore(serverID: UUID) -> [MCPResourceTemplate]? {
         Persistence.withConfigDatabaseRead { db in
-            let resourceTemplatesData = try Data.fetchOne(
+            let resourceTemplatesText = try String.fetchOne(
                 db,
                 sql: """
-                SELECT resource_templates_data
-                FROM mcp_servers
+                SELECT resource_templates_json
+                FROM \(relationalServerTable)
                 WHERE id = ?
                 """,
                 arguments: [serverID.uuidString]
             )
-            return MCPServerStoreCodec.decodeIfPresent([MCPResourceTemplate].self, from: resourceTemplatesData) ?? []
+            return MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceTemplate].self, from: resourceTemplatesText) ?? []
         }
     }
 
     private static func loadPromptsFromRelationalStore(serverID: UUID) -> [MCPPromptDescription]? {
         Persistence.withConfigDatabaseRead { db in
-            let promptsData = try Data.fetchOne(
+            let promptsText = try String.fetchOne(
                 db,
                 sql: """
-                SELECT prompts_data
-                FROM mcp_servers
+                SELECT prompts_json
+                FROM \(relationalServerTable)
                 WHERE id = ?
                 """,
                 arguments: [serverID.uuidString]
             )
-            return MCPServerStoreCodec.decodeIfPresent([MCPPromptDescription].self, from: promptsData) ?? []
+            return MCPServerStoreCodec.decodeJSONTextIfPresent([MCPPromptDescription].self, from: promptsText) ?? []
         }
     }
 
     private static func loadRootsFromRelationalStore(serverID: UUID) -> [MCPRoot]? {
         Persistence.withConfigDatabaseRead { db in
-            let rootsData = try Data.fetchOne(
+            let rootsText = try String.fetchOne(
                 db,
                 sql: """
-                SELECT roots_data
-                FROM mcp_servers
+                SELECT roots_json
+                FROM \(relationalServerTable)
                 WHERE id = ?
                 """,
                 arguments: [serverID.uuidString]
             )
-            return MCPServerStoreCodec.decodeIfPresent([MCPRoot].self, from: rootsData) ?? []
+            return MCPServerStoreCodec.decodeJSONTextIfPresent([MCPRoot].self, from: rootsText) ?? []
         }
     }
 
@@ -557,13 +588,13 @@ public struct MCPServerStore {
                 SELECT
                     metadata_cached_at,
                     updated_at,
-                    info_data,
-                    resources_data,
-                    resource_templates_data,
-                    prompts_data,
-                    roots_data,
-                    (SELECT COUNT(*) FROM mcp_tools t WHERE t.server_id = mcp_servers.id) AS tools_count
-                FROM mcp_servers
+                    info_json,
+                    resources_json,
+                    resource_templates_json,
+                    prompts_json,
+                    roots_json,
+                    (SELECT COUNT(*) FROM \(relationalToolTable) t WHERE t.server_id = \(relationalServerTable).id) AS tools_count
+                FROM \(relationalServerTable)
                 WHERE id = ?
                 """,
                 arguments: [serverID.uuidString]
@@ -575,11 +606,11 @@ public struct MCPServerStore {
                 return Date(timeIntervalSince1970: cachedAt)
             }
 
-            let hasInfoData: Data? = row["info_data"]
-            let hasResourcesData: Data? = row["resources_data"]
-            let hasResourceTemplatesData: Data? = row["resource_templates_data"]
-            let hasPromptsData: Data? = row["prompts_data"]
-            let hasRootsData: Data? = row["roots_data"]
+            let hasInfoData: String? = row["info_json"]
+            let hasResourcesData: String? = row["resources_json"]
+            let hasResourceTemplatesData: String? = row["resource_templates_json"]
+            let hasPromptsData: String? = row["prompts_json"]
+            let hasRootsData: String? = row["roots_json"]
             let toolCount: Int = row["tools_count"]
             let hasMetadata = toolCount > 0 ||
                 hasInfoData != nil ||
@@ -596,32 +627,68 @@ public struct MCPServerStore {
 
     private static func saveMetadataToRelationalStore(_ metadata: MCPServerMetadataCache?, for serverID: UUID) -> Bool {
         Persistence.withConfigDatabaseWrite { db in
-            guard var serverRecord = try MCPServerRecord.fetchOne(db, key: serverID.uuidString) else {
+            let exists = (try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM \(relationalServerTable) WHERE id = ?",
+                arguments: [serverID.uuidString]
+            ) ?? 0) > 0
+            guard exists else {
                 return true
             }
 
-            try MCPToolRecord
-                .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
-                .deleteAll(db)
+            try deleteTools(db, serverID: serverID.uuidString)
 
             if let metadata {
-                try serverRecord.applyMetadata(metadata)
-
                 let updatedAt = metadata.cachedAt.timeIntervalSince1970
-                for (index, tool) in metadata.tools.enumerated() {
-                    var toolRecord = try MCPToolRecord(
-                        serverID: serverID.uuidString,
-                        tool: tool,
-                        sortIndex: index,
-                        updatedAt: updatedAt
-                    )
-                    try toolRecord.save(db)
-                }
+                try replaceTools(db, serverID: serverID.uuidString, tools: metadata.tools, updatedAt: updatedAt)
+                try db.execute(
+                    sql: """
+                    UPDATE \(relationalServerTable)
+                    SET
+                        status = ?,
+                        metadata_cached_at = ?,
+                        info_json = ?,
+                        resources_json = ?,
+                        resource_templates_json = ?,
+                        prompts_json = ?,
+                        roots_json = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    arguments: [
+                        MCPServerHeaderRecord.Status.ready.rawValue,
+                        metadata.cachedAt.timeIntervalSince1970,
+                        MCPServerStoreCodec.encodeJSONTextIfPresent(metadata.info),
+                        metadata.resources.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(metadata.resources),
+                        metadata.resourceTemplates.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(metadata.resourceTemplates),
+                        metadata.prompts.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(metadata.prompts),
+                        metadata.roots.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(metadata.roots),
+                        Date().timeIntervalSince1970,
+                        serverID.uuidString
+                    ]
+                )
             } else {
-                serverRecord.clearMetadata(status: .idle)
+                try db.execute(
+                    sql: """
+                    UPDATE \(relationalServerTable)
+                    SET
+                        status = ?,
+                        metadata_cached_at = NULL,
+                        info_json = NULL,
+                        resources_json = NULL,
+                        resource_templates_json = NULL,
+                        prompts_json = NULL,
+                        roots_json = NULL,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    arguments: [
+                        MCPServerHeaderRecord.Status.idle.rawValue,
+                        Date().timeIntervalSince1970,
+                        serverID.uuidString
+                    ]
+                )
             }
-
-            try serverRecord.save(db)
             return true
         } ?? false
     }
@@ -638,14 +705,14 @@ public struct MCPServerStore {
             sql: """
             SELECT
                 s.id AS id,
-                s.name AS name,
+                s.display_name AS name,
                 s.status AS status,
                 s.updated_at AS updated_at,
                 COALESCE(MAX(t.updated_at), 0) AS tools_updated_at,
-                COUNT(t.id) AS tools_count
-            FROM mcp_servers s
-            LEFT JOIN mcp_tools t ON t.server_id = s.id
-            GROUP BY s.id, s.name, s.status, s.updated_at
+                COUNT(t.tool_name) AS tools_count
+            FROM \(relationalServerTable) s
+            LEFT JOIN \(relationalToolTable) t ON t.server_id = s.id
+            GROUP BY s.id, s.display_name, s.status, s.updated_at
             ORDER BY s.id ASC
             """
         )
@@ -660,6 +727,306 @@ public struct MCPServerStore {
             return "\(id)|\(name)|\(status)|\(updatedAt)|\(toolsUpdatedAt)|\(toolsCount)"
         }
         return signatures.joined(separator: ";")
+    }
+
+    private static func decodeServerConfiguration(from row: Row) -> MCPServerConfiguration? {
+        let idRaw: String = row["id"]
+        let displayName: String = row["display_name"]
+        let notes: String? = row["notes"]
+        let selectedRaw: Int = row["is_selected_for_chat"]
+        let kindRaw: String = row["transport_kind"]
+        let endpointURLRaw: String? = row["endpoint_url"]
+        let messageEndpointURLRaw: String? = row["message_endpoint_url"]
+        let sseEndpointURLRaw: String? = row["sse_endpoint_url"]
+        let apiKey: String? = row["api_key"]
+        let additionalHeadersJSON: String? = row["additional_headers_json"]
+        let oauthPayloadJSON: String? = row["oauth_payload_json"]
+        let disabledToolIDsJSON: String? = row["disabled_tool_ids_json"]
+        let toolPoliciesJSON: String? = row["tool_approval_policies_json"]
+        let streamToken: String? = row["stream_resumption_token"]
+
+        guard let id = UUID(uuidString: idRaw) else { return nil }
+        let additionalHeaders = MCPServerStoreCodec.decodeJSONTextIfPresent([String: String].self, from: additionalHeadersJSON) ?? [:]
+        let disabledToolIDs = MCPServerStoreCodec.decodeJSONTextIfPresent([String].self, from: disabledToolIDsJSON) ?? []
+        let toolPolicies = MCPServerStoreCodec.decodeJSONTextIfPresent([String: MCPToolApprovalPolicy].self, from: toolPoliciesJSON) ?? [:]
+        let transport: MCPServerConfiguration.Transport
+
+        switch kindRaw {
+        case "http":
+            guard let endpointURLRaw,
+                  let endpoint = URL(string: endpointURLRaw) else { return nil }
+            transport = .http(endpoint: endpoint, apiKey: apiKey, additionalHeaders: additionalHeaders)
+        case "sse":
+            guard let messageEndpointURLRaw,
+                  let messageEndpoint = URL(string: messageEndpointURLRaw),
+                  let sseEndpointURLRaw,
+                  let sseEndpoint = URL(string: sseEndpointURLRaw) else { return nil }
+            transport = .httpSSE(
+                messageEndpoint: messageEndpoint,
+                sseEndpoint: sseEndpoint,
+                apiKey: apiKey,
+                additionalHeaders: additionalHeaders
+            )
+        case "oauth":
+            guard let endpointURLRaw,
+                  let endpoint = URL(string: endpointURLRaw),
+                  let payload = MCPServerStoreCodec.decodeJSONTextIfPresent(MCPOAuthPayload.self, from: oauthPayloadJSON),
+                  let tokenEndpoint = URL(string: payload.tokenEndpoint) else {
+                return nil
+            }
+            transport = .oauth(
+                endpoint: endpoint,
+                tokenEndpoint: tokenEndpoint,
+                clientID: payload.clientID,
+                clientSecret: payload.clientSecret,
+                scope: payload.scope,
+                grantType: payload.grantType,
+                authorizationCode: payload.authorizationCode,
+                redirectURI: payload.redirectURI,
+                codeVerifier: payload.codeVerifier
+            )
+        default:
+            return nil
+        }
+
+        return MCPServerConfiguration(
+            id: id,
+            displayName: displayName,
+            notes: notes,
+            transport: transport,
+            isSelectedForChat: selectedRaw != 0,
+            disabledToolIds: disabledToolIDs,
+            toolApprovalPolicies: toolPolicies,
+            streamResumptionToken: streamToken
+        )
+    }
+
+    private static func decodeMetadataPayload(
+        from row: Row,
+        includeTools: Bool,
+        tools: [MCPToolDescription]
+    ) -> MCPServerMetadataCache? {
+        let infoText: String? = row["info_json"]
+        let resourcesText: String? = row["resources_json"]
+        let resourceTemplatesText: String? = row["resource_templates_json"]
+        let promptsText: String? = row["prompts_json"]
+        let rootsText: String? = row["roots_json"]
+        let metadataCachedAt: Double? = row["metadata_cached_at"]
+        let updatedAt: Double = row["updated_at"]
+
+        let info = MCPServerStoreCodec.decodeJSONTextIfPresent(MCPServerInfo.self, from: infoText)
+        let resources = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceDescription].self, from: resourcesText) ?? []
+        let resourceTemplates = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceTemplate].self, from: resourceTemplatesText) ?? []
+        let prompts = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPPromptDescription].self, from: promptsText) ?? []
+        let roots = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPRoot].self, from: rootsText) ?? []
+        let payloadTools = includeTools ? tools : []
+
+        if info == nil,
+           payloadTools.isEmpty,
+           resources.isEmpty,
+           resourceTemplates.isEmpty,
+           prompts.isEmpty,
+           roots.isEmpty {
+            return nil
+        }
+
+        return MCPServerMetadataCache(
+            cachedAt: Date(timeIntervalSince1970: metadataCachedAt ?? updatedAt),
+            info: info,
+            tools: payloadTools,
+            resources: resources,
+            resourceTemplates: resourceTemplates,
+            prompts: prompts,
+            roots: roots
+        )
+    }
+
+    private static func fetchTools(_ db: Database, serverID: String) throws -> [MCPToolDescription] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT server_id, tool_name, description, sort_index, updated_at, input_schema_json, examples_json
+            FROM \(relationalToolTable)
+            WHERE server_id = ?
+            ORDER BY sort_index ASC, tool_name ASC
+            """,
+            arguments: [serverID]
+        )
+        return rows.map { row in
+            let toolName: String = row["tool_name"]
+            let description: String? = row["description"]
+            let inputSchemaJSON: String? = row["input_schema_json"]
+            let examplesJSON: String? = row["examples_json"]
+            let payload = MCPToolPayloadRecord(
+                serverID: serverID,
+                toolName: toolName,
+                inputSchemaJSON: inputSchemaJSON,
+                examplesJSON: examplesJSON
+            )
+            return payload.toToolDescription(toolName: toolName, description: description)
+        }
+    }
+
+    private static func deleteTools(_ db: Database, serverID: String) throws {
+        try db.execute(
+            sql: "DELETE FROM \(relationalToolTable) WHERE server_id = ?",
+            arguments: [serverID]
+        )
+    }
+
+    private static func replaceTools(_ db: Database, serverID: String, tools: [MCPToolDescription], updatedAt: Double) throws {
+        try deleteTools(db, serverID: serverID)
+        for (index, tool) in tools.enumerated() {
+            var payload = MCPToolPayloadRecord(serverID: serverID, toolName: tool.toolId)
+            payload.apply(tool: tool)
+            try db.execute(
+                sql: """
+                INSERT INTO \(relationalToolTable) (
+                    server_id, tool_name, description, sort_index, updated_at, input_schema_json, examples_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(server_id, tool_name) DO UPDATE SET
+                    description = excluded.description,
+                    sort_index = excluded.sort_index,
+                    updated_at = excluded.updated_at,
+                    input_schema_json = excluded.input_schema_json,
+                    examples_json = excluded.examples_json
+                """,
+                arguments: [
+                    serverID,
+                    tool.toolId,
+                    tool.description,
+                    index,
+                    updatedAt,
+                    payload.inputSchemaJSON,
+                    payload.examplesJSON
+                ]
+            )
+        }
+    }
+
+    private static func upsertServerRow(
+        _ db: Database,
+        server: MCPServerConfiguration,
+        status: MCPServerHeaderRecord.Status,
+        metadata: MCPServerMetadataCache?,
+        updatedAt: Double
+    ) throws {
+        let header = MCPServerHeaderRecord(
+            id: server.id.uuidString,
+            displayName: server.displayName,
+            notes: server.notes,
+            isSelectedForChat: server.isSelectedForChat ? 1 : 0,
+            status: status.rawValue,
+            transportKind: transportKind(of: server.transport),
+            endpointURL: transportEndpoint(of: server.transport),
+            messageEndpointURL: transportMessageEndpoint(of: server.transport),
+            sseEndpointURL: transportSSEEndpoint(of: server.transport),
+            metadataCachedAt: metadata?.cachedAt.timeIntervalSince1970,
+            updatedAt: updatedAt
+        )
+        let payload = MCPServerPayloadRecord(server: server, metadata: metadata)
+
+        try db.execute(
+            sql: """
+            INSERT INTO \(relationalServerTable) (
+                id, display_name, notes, is_selected_for_chat, status, transport_kind,
+                endpoint_url, message_endpoint_url, sse_endpoint_url, metadata_cached_at, updated_at,
+                api_key, additional_headers_json, disabled_tool_ids_json, tool_approval_policies_json,
+                oauth_payload_json, stream_resumption_token,
+                info_json, resources_json, resource_templates_json, prompts_json, roots_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                display_name = excluded.display_name,
+                notes = excluded.notes,
+                is_selected_for_chat = excluded.is_selected_for_chat,
+                status = excluded.status,
+                transport_kind = excluded.transport_kind,
+                endpoint_url = excluded.endpoint_url,
+                message_endpoint_url = excluded.message_endpoint_url,
+                sse_endpoint_url = excluded.sse_endpoint_url,
+                metadata_cached_at = excluded.metadata_cached_at,
+                updated_at = excluded.updated_at,
+                api_key = excluded.api_key,
+                additional_headers_json = excluded.additional_headers_json,
+                disabled_tool_ids_json = excluded.disabled_tool_ids_json,
+                tool_approval_policies_json = excluded.tool_approval_policies_json,
+                oauth_payload_json = excluded.oauth_payload_json,
+                stream_resumption_token = excluded.stream_resumption_token,
+                info_json = excluded.info_json,
+                resources_json = excluded.resources_json,
+                resource_templates_json = excluded.resource_templates_json,
+                prompts_json = excluded.prompts_json,
+                roots_json = excluded.roots_json
+            """,
+            arguments: [
+                header.id,
+                header.displayName,
+                header.notes,
+                header.isSelectedForChat,
+                header.status,
+                header.transportKind,
+                header.endpointURL,
+                header.messageEndpointURL,
+                header.sseEndpointURL,
+                header.metadataCachedAt,
+                header.updatedAt,
+                payload.apiKey,
+                payload.additionalHeadersJSON,
+                payload.disabledToolIDsJSON,
+                payload.toolApprovalPoliciesJSON,
+                payload.oauthPayloadJSON,
+                payload.streamResumptionToken,
+                payload.infoJSON,
+                payload.resourcesJSON,
+                payload.resourceTemplatesJSON,
+                payload.promptsJSON,
+                payload.rootsJSON
+            ]
+        )
+    }
+
+    private static func transportKind(of transport: MCPServerConfiguration.Transport) -> String {
+        switch transport {
+        case .http:
+            return "http"
+        case .httpSSE:
+            return "sse"
+        case .oauth:
+            return "oauth"
+        }
+    }
+
+    private static func transportEndpoint(of transport: MCPServerConfiguration.Transport) -> String? {
+        switch transport {
+        case .http(let endpoint, _, _):
+            return endpoint.absoluteString
+        case .httpSSE:
+            return nil
+        case .oauth(let endpoint, _, _, _, _, _, _, _, _):
+            return endpoint.absoluteString
+        }
+    }
+
+    private static func transportMessageEndpoint(of transport: MCPServerConfiguration.Transport) -> String? {
+        switch transport {
+        case .http:
+            return nil
+        case .httpSSE(let messageEndpoint, _, _, _):
+            return messageEndpoint.absoluteString
+        case .oauth:
+            return nil
+        }
+    }
+
+    private static func transportSSEEndpoint(of transport: MCPServerConfiguration.Transport) -> String? {
+        switch transport {
+        case .http:
+            return nil
+        case .httpSSE(_, let sseEndpoint, _, _):
+            return sseEndpoint.absoluteString
+        case .oauth:
+            return nil
+        }
     }
 
     private static func cleanupLegacyArtifactsAfterRelationalSave() {
@@ -828,8 +1195,8 @@ public struct MCPServerStore {
 
 // MARK: - GRDB Records
 
-private struct MCPServerRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
-    static let databaseTableName = "mcp_servers"
+private struct MCPServerHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+    static let databaseTableName = "mcp_servers_v2"
 
     enum Status: String {
         case idle
@@ -838,195 +1205,208 @@ private struct MCPServerRecord: Codable, FetchableRecord, MutablePersistableReco
 
     enum CodingKeys: String, CodingKey {
         case id
-        case name
+        case displayName = "display_name"
+        case notes
+        case isSelectedForChat = "is_selected_for_chat"
         case status
-        case configurationData = "configuration_data"
+        case transportKind = "transport_kind"
+        case endpointURL = "endpoint_url"
+        case messageEndpointURL = "message_endpoint_url"
+        case sseEndpointURL = "sse_endpoint_url"
         case metadataCachedAt = "metadata_cached_at"
-        case infoData = "info_data"
-        case resourcesData = "resources_data"
-        case resourceTemplatesData = "resource_templates_data"
-        case promptsData = "prompts_data"
-        case rootsData = "roots_data"
         case updatedAt = "updated_at"
     }
 
     enum Columns {
         static let id = Column(CodingKeys.id.rawValue)
-        static let name = Column(CodingKeys.name.rawValue)
+        static let displayName = Column(CodingKeys.displayName.rawValue)
         static let status = Column(CodingKeys.status.rawValue)
         static let updatedAt = Column(CodingKeys.updatedAt.rawValue)
     }
 
-    static let tools = hasMany(MCPToolRecord.self, using: ForeignKey(["server_id"]))
-
     var id: String
-    var name: String
+    var displayName: String
+    var notes: String?
+    var isSelectedForChat: Int
     var status: String
-    var configurationData: Data
+    var transportKind: String
+    var endpointURL: String?
+    var messageEndpointURL: String?
+    var sseEndpointURL: String?
     var metadataCachedAt: Double?
-    var infoData: Data?
-    var resourcesData: Data?
-    var resourceTemplatesData: Data?
-    var promptsData: Data?
-    var rootsData: Data?
     var updatedAt: Double
-
-    init(server: MCPServerConfiguration, status: Status, updatedAt: Double) throws {
-        self.id = server.id.uuidString
-        self.name = server.displayName
-        self.status = status.rawValue
-        self.configurationData = try MCPServerStoreCodec.encode(server)
-        self.metadataCachedAt = nil
-        self.infoData = nil
-        self.resourcesData = nil
-        self.resourceTemplatesData = nil
-        self.promptsData = nil
-        self.rootsData = nil
-        self.updatedAt = updatedAt
-    }
-
-    mutating func applyConfiguration(_ server: MCPServerConfiguration) throws {
-        id = server.id.uuidString
-        name = server.displayName
-        configurationData = try MCPServerStoreCodec.encode(server)
-        updatedAt = Date().timeIntervalSince1970
-    }
-
-    mutating func applyMetadata(_ metadata: MCPServerMetadataCache) throws {
-        status = Status.ready.rawValue
-        metadataCachedAt = metadata.cachedAt.timeIntervalSince1970
-        infoData = try MCPServerStoreCodec.encodeIfPresent(metadata.info)
-        resourcesData = try metadata.resources.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.resources)
-        resourceTemplatesData = try metadata.resourceTemplates.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.resourceTemplates)
-        promptsData = try metadata.prompts.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.prompts)
-        rootsData = try metadata.roots.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.roots)
-    }
-
-    mutating func clearMetadata(status: Status = .idle) {
-        self.status = status.rawValue
-        metadataCachedAt = nil
-        infoData = nil
-        resourcesData = nil
-        resourceTemplatesData = nil
-        promptsData = nil
-        rootsData = nil
-    }
-
-    func decodeConfiguration() -> MCPServerConfiguration? {
-        try? MCPServerStoreCodec.decode(MCPServerConfiguration.self, from: configurationData)
-    }
-
-    func makeMetadata(toolRecords: [MCPToolRecord]) -> MCPServerMetadataCache? {
-        let tools = toolRecords.compactMap { $0.toToolDescription() }
-        let info = MCPServerStoreCodec.decodeIfPresent(MCPServerInfo.self, from: infoData)
-        let resources = MCPServerStoreCodec.decodeIfPresent([MCPResourceDescription].self, from: resourcesData) ?? []
-        let resourceTemplates = MCPServerStoreCodec.decodeIfPresent([MCPResourceTemplate].self, from: resourceTemplatesData) ?? []
-        let prompts = MCPServerStoreCodec.decodeIfPresent([MCPPromptDescription].self, from: promptsData) ?? []
-        let roots = MCPServerStoreCodec.decodeIfPresent([MCPRoot].self, from: rootsData) ?? []
-
-        if info == nil,
-           tools.isEmpty,
-           resources.isEmpty,
-           resourceTemplates.isEmpty,
-           prompts.isEmpty,
-           roots.isEmpty {
-            return nil
-        }
-
-        let cachedAtTimestamp = metadataCachedAt ?? updatedAt
-        let cachedAt = Date(timeIntervalSince1970: cachedAtTimestamp)
-
-        return MCPServerMetadataCache(
-            cachedAt: cachedAt,
-            info: info,
-            tools: tools,
-            resources: resources,
-            resourceTemplates: resourceTemplates,
-            prompts: prompts,
-            roots: roots
-        )
-    }
 }
 
-private struct MCPToolRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
-    static let databaseTableName = "mcp_tools"
+private struct MCPOAuthPayload: Codable, Hashable {
+    var tokenEndpoint: String
+    var clientID: String
+    var clientSecret: String?
+    var scope: String?
+    var grantType: MCPOAuthGrantType
+    var authorizationCode: String?
+    var redirectURI: String?
+    var codeVerifier: String?
+}
+
+private struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+    static let databaseTableName = "mcp_servers_v2"
 
     enum CodingKeys: String, CodingKey {
         case id
+        case apiKey = "api_key"
+        case additionalHeadersJSON = "additional_headers_json"
+        case disabledToolIDsJSON = "disabled_tool_ids_json"
+        case toolApprovalPoliciesJSON = "tool_approval_policies_json"
+        case oauthPayloadJSON = "oauth_payload_json"
+        case streamResumptionToken = "stream_resumption_token"
+        case infoJSON = "info_json"
+        case resourcesJSON = "resources_json"
+        case resourceTemplatesJSON = "resource_templates_json"
+        case promptsJSON = "prompts_json"
+        case rootsJSON = "roots_json"
+    }
+
+    var id: String
+    var apiKey: String?
+    var additionalHeadersJSON: String?
+    var disabledToolIDsJSON: String?
+    var toolApprovalPoliciesJSON: String?
+    var oauthPayloadJSON: String?
+    var streamResumptionToken: String?
+    var infoJSON: String?
+    var resourcesJSON: String?
+    var resourceTemplatesJSON: String?
+    var promptsJSON: String?
+    var rootsJSON: String?
+
+    init(server: MCPServerConfiguration, metadata: MCPServerMetadataCache?) {
+        id = server.id.uuidString
+        streamResumptionToken = server.streamResumptionToken
+        disabledToolIDsJSON = server.disabledToolIds.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(server.disabledToolIds)
+        toolApprovalPoliciesJSON = server.toolApprovalPolicies.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(server.toolApprovalPolicies)
+        infoJSON = MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.info)
+        resourcesJSON = metadata?.resources.isEmpty == false ? MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.resources) : nil
+        resourceTemplatesJSON = metadata?.resourceTemplates.isEmpty == false ? MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.resourceTemplates) : nil
+        promptsJSON = metadata?.prompts.isEmpty == false ? MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.prompts) : nil
+        rootsJSON = metadata?.roots.isEmpty == false ? MCPServerStoreCodec.encodeJSONTextIfPresent(metadata?.roots) : nil
+
+        switch server.transport {
+        case .http(_, let apiKey, let headers):
+            self.apiKey = apiKey
+            additionalHeadersJSON = headers.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(headers)
+            oauthPayloadJSON = nil
+        case .httpSSE(_, _, let apiKey, let headers):
+            self.apiKey = apiKey
+            additionalHeadersJSON = headers.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(headers)
+            oauthPayloadJSON = nil
+        case .oauth(_, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
+            self.apiKey = nil
+            additionalHeadersJSON = nil
+            oauthPayloadJSON = MCPServerStoreCodec.encodeJSONTextIfPresent(
+                MCPOAuthPayload(
+                    tokenEndpoint: tokenEndpoint.absoluteString,
+                    clientID: clientID,
+                    clientSecret: clientSecret,
+                    scope: scope,
+                    grantType: grantType,
+                    authorizationCode: authorizationCode,
+                    redirectURI: redirectURI,
+                    codeVerifier: codeVerifier
+                )
+            )
+        }
+    }
+}
+
+private struct MCPToolHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+    static let databaseTableName = "mcp_tools_v2"
+
+    enum CodingKeys: String, CodingKey {
         case serverID = "server_id"
-        case name
+        case toolName = "tool_name"
         case description
-        case inputSchemaData = "input_schema_data"
-        case examplesData = "examples_data"
         case sortIndex = "sort_index"
         case updatedAt = "updated_at"
     }
 
     enum Columns {
-        static let id = Column(CodingKeys.id.rawValue)
         static let serverID = Column(CodingKeys.serverID.rawValue)
-        static let name = Column(CodingKeys.name.rawValue)
+        static let toolName = Column(CodingKeys.toolName.rawValue)
         static let sortIndex = Column(CodingKeys.sortIndex.rawValue)
     }
 
-    static let server = belongsTo(MCPServerRecord.self, using: ForeignKey([CodingKeys.serverID.rawValue]))
-
-    var id: String
     var serverID: String
-    var name: String
+    var toolName: String
     var description: String?
-    var inputSchemaData: Data?
-    var examplesData: Data?
     var sortIndex: Int
     var updatedAt: Double
+}
 
-    init(serverID: String, tool: MCPToolDescription, sortIndex: Int, updatedAt: Double) throws {
-        self.id = Self.makePrimaryID(serverID: serverID, toolName: tool.toolId)
+private struct MCPToolPayloadRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+    static let databaseTableName = "mcp_tools_v2"
+
+    enum CodingKeys: String, CodingKey {
+        case serverID = "server_id"
+        case toolName = "tool_name"
+        case inputSchemaJSON = "input_schema_json"
+        case examplesJSON = "examples_json"
+    }
+
+    var serverID: String
+    var toolName: String
+    var inputSchemaJSON: String?
+    var examplesJSON: String?
+
+    init(
+        serverID: String,
+        toolName: String,
+        inputSchemaJSON: String? = nil,
+        examplesJSON: String? = nil
+    ) {
         self.serverID = serverID
-        self.name = tool.toolId
-        self.description = tool.description
-        self.inputSchemaData = try MCPServerStoreCodec.encodeIfPresent(tool.inputSchema)
-        if let examples = tool.examples, !examples.isEmpty {
-            self.examplesData = try MCPServerStoreCodec.encode(examples)
-        } else {
-            self.examplesData = nil
-        }
-        self.sortIndex = sortIndex
-        self.updatedAt = updatedAt
+        self.toolName = toolName
+        self.inputSchemaJSON = inputSchemaJSON
+        self.examplesJSON = examplesJSON
     }
 
-    func toToolDescription() -> MCPToolDescription? {
-        let inputSchema = MCPServerStoreCodec.decodeIfPresent(JSONValue.self, from: inputSchemaData)
-        let examples = MCPServerStoreCodec.decodeIfPresent([JSONValue].self, from: examplesData)
-        return MCPToolDescription(
-            toolId: name,
+    mutating func apply(tool: MCPToolDescription) {
+        inputSchemaJSON = MCPServerStoreCodec.encodeJSONTextIfPresent(tool.inputSchema)
+        examplesJSON = MCPServerStoreCodec.encodeJSONTextIfPresent(tool.examples)
+    }
+
+    func decodeInputSchema() -> JSONValue? {
+        MCPServerStoreCodec.decodeJSONTextIfPresent(JSONValue.self, from: inputSchemaJSON)
+    }
+
+    func decodeExamples() -> [JSONValue]? {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([JSONValue].self, from: examplesJSON)
+    }
+
+    func toToolDescription(toolName: String, description: String?) -> MCPToolDescription {
+        MCPToolDescription(
+            toolId: toolName,
             description: description,
-            inputSchema: inputSchema,
-            examples: examples
+            inputSchema: decodeInputSchema(),
+            examples: decodeExamples()
         )
-    }
-
-    private static func makePrimaryID(serverID: String, toolName: String) -> String {
-        "\(serverID)::\(toolName)"
     }
 }
 
 private enum MCPServerStoreCodec {
-    static func encode<T: Encodable>(_ value: T) throws -> Data {
-        try makeEncoder().encode(value)
-    }
-
-    static func encodeIfPresent<T: Encodable>(_ value: T?) throws -> Data? {
+    static func encodeJSONTextIfPresent<T: Encodable>(_ value: T?) -> String? {
         guard let value else { return nil }
-        return try makeEncoder().encode(value)
+        guard let data = try? makeEncoder().encode(value),
+              let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return text
     }
 
-    static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        try makeDecoder().decode(type, from: data)
-    }
-
-    static func decodeIfPresent<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
-        guard let data else { return nil }
+    static func decodeJSONTextIfPresent<T: Decodable>(_ type: T.Type, from text: String?) -> T? {
+        guard let text,
+              let data = text.data(using: .utf8) else {
+            return nil
+        }
         return try? makeDecoder().decode(type, from: data)
     }
 
