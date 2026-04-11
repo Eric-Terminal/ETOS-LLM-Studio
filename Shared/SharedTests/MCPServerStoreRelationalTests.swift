@@ -190,4 +190,76 @@ struct MCPServerStoreRelationalTests {
         let signatureAfter = MCPServerStore.configurationSnapshotSignature()
         #expect(signatureAfter == signatureBefore)
     }
+
+    @MainActor
+    @Test("服务器列表 Header 查询不触碰 Payload JSON 解码")
+    func testLoadServerHeadersDoesNotDependOnPayloadJSON() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+
+        let originalServers = MCPServerStore.loadServers()
+        let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
+            (server.id, MCPServerStore.loadMetadata(for: server.id))
+        })
+
+        defer {
+            for server in MCPServerStore.loadServers() {
+                MCPServerStore.delete(server)
+            }
+
+            for server in originalServers {
+                MCPServerStore.save(server)
+                if let metadata = originalMetadata[server.id] {
+                    MCPServerStore.saveMetadata(metadata, for: server.id)
+                }
+            }
+
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        for server in MCPServerStore.loadServers() {
+            MCPServerStore.delete(server)
+        }
+
+        let server = MCPServerConfiguration(
+            displayName: "Header 轻查询测试服务器",
+            transport: .oauth(
+                endpoint: URL(string: "https://example.com/oauth/mcp")!,
+                tokenEndpoint: URL(string: "https://example.com/oauth/token")!,
+                clientID: "client-id",
+                clientSecret: "secret",
+                scope: "read",
+                grantType: .clientCredentials
+            ),
+            isSelectedForChat: true
+        )
+        MCPServerStore.save(server)
+
+        let didInjectBrokenPayload = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(
+                sql: """
+                UPDATE mcp_servers_v2
+                SET oauth_payload_json = ?, additional_headers_json = ?, disabled_tool_ids_json = ?, tool_approval_policies_json = ?
+                WHERE id = ?
+                """,
+                arguments: [
+                    "{broken-json",
+                    "{broken-json",
+                    "{broken-json",
+                    "{broken-json",
+                    server.id.uuidString
+                ]
+            )
+            return true
+        } ?? false
+        #expect(didInjectBrokenPayload)
+
+        let headers = MCPServerStore.loadServerHeaders()
+        let matched = headers.first(where: { $0.id == server.id })
+        #expect(matched != nil)
+        #expect(matched?.displayName == "Header 轻查询测试服务器")
+        #expect(matched?.transportKind == "oauth")
+    }
 }

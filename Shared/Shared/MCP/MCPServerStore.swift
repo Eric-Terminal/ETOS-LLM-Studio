@@ -59,6 +59,43 @@ public struct MCPServerMetadataCache: Codable, Hashable {
     }
 }
 
+public struct MCPServerListHeader: Codable, Hashable, Identifiable {
+    public var id: UUID
+    public var displayName: String
+    public var notes: String?
+    public var isSelectedForChat: Bool
+    public var status: String
+    public var transportKind: String
+    public var endpointURL: String?
+    public var messageEndpointURL: String?
+    public var sseEndpointURL: String?
+    public var updatedAt: Date
+
+    public init(
+        id: UUID,
+        displayName: String,
+        notes: String?,
+        isSelectedForChat: Bool,
+        status: String,
+        transportKind: String,
+        endpointURL: String?,
+        messageEndpointURL: String?,
+        sseEndpointURL: String?,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.notes = notes
+        self.isSelectedForChat = isSelectedForChat
+        self.status = status
+        self.transportKind = transportKind
+        self.endpointURL = endpointURL
+        self.messageEndpointURL = messageEndpointURL
+        self.sseEndpointURL = sseEndpointURL
+        self.updatedAt = updatedAt
+    }
+}
+
 public struct MCPServerStore {
     private static let lock = NSLock()
     private static let legacyBlobKey = "mcp_servers_records_v1"
@@ -95,6 +132,38 @@ public struct MCPServerStore {
                 return servers
             }
             return loadLegacyRecords(usingBlobCache: true).map(\.server)
+        }
+    }
+
+    public static func loadServerHeaders() -> [MCPServerListHeader] {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let headers = loadServerHeadersFromRelationalStore() {
+                return headers
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .map { record in
+                    MCPServerListHeader(
+                        id: record.server.id,
+                        displayName: record.server.displayName,
+                        notes: record.server.notes,
+                        isSelectedForChat: record.server.isSelectedForChat,
+                        status: record.metadata == nil ? MCPServerHeaderRecord.Status.idle.rawValue : MCPServerHeaderRecord.Status.ready.rawValue,
+                        transportKind: transportKind(of: record.server.transport),
+                        endpointURL: transportEndpoint(of: record.server.transport),
+                        messageEndpointURL: transportMessageEndpoint(of: record.server.transport),
+                        sseEndpointURL: transportSSEEndpoint(of: record.server.transport),
+                        updatedAt: Date()
+                    )
+                }
+                .sorted {
+                    let lhsName = $0.displayName.lowercased()
+                    let rhsName = $1.displayName.lowercased()
+                    if lhsName == rhsName {
+                        return $0.id.uuidString < $1.id.uuidString
+                    }
+                    return lhsName < rhsName
+                }
         }
     }
 
@@ -376,35 +445,68 @@ public struct MCPServerStore {
 
     private static func loadServersFromRelationalStore() -> [MCPServerConfiguration]? {
         Persistence.withConfigDatabaseRead { db in
-            let rows = try Row.fetchAll(
+            let headers = try MCPServerHeaderRecord.fetchAll(
                 db,
                 sql: """
                 SELECT
                     id, display_name, notes, is_selected_for_chat,
-                    transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
-                    api_key, additional_headers_json, oauth_payload_json,
-                    disabled_tool_ids_json, tool_approval_policies_json, stream_resumption_token
+                    status, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
+                    metadata_cached_at, updated_at
                 FROM \(relationalServerTable)
                 ORDER BY LOWER(display_name) ASC, id ASC
                 """
             )
+            let payloadRows = try MCPServerPayloadRecord.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    id, api_key, additional_headers_json, disabled_tool_ids_json,
+                    tool_approval_policies_json, oauth_payload_json, stream_resumption_token,
+                    info_json, resources_json, resource_templates_json, prompts_json, roots_json
+                FROM \(relationalServerTable)
+                """
+            )
+            let payloadByID = Dictionary(uniqueKeysWithValues: payloadRows.map { ($0.id, $0) })
 
-            let servers = rows.compactMap { row -> MCPServerConfiguration? in
-                guard let server = decodeServerConfiguration(from: row) else {
-                    let id: String = row["id"]
+            return headers.compactMap { header -> MCPServerConfiguration? in
+                guard let server = decodeServerConfiguration(from: header, payload: payloadByID[header.id]) else {
+                    let id = header.id
                     mcpStoreLogger.error("读取 MCP 服务器失败：配置数据损坏 id=\(id, privacy: .public)")
                     return nil
                 }
                 return server
             }
+        }
+    }
 
-            return servers.sorted {
-                let lhsName = $0.displayName.lowercased()
-                let rhsName = $1.displayName.lowercased()
-                if lhsName == rhsName {
-                    return $0.id.uuidString < $1.id.uuidString
-                }
-                return lhsName < rhsName
+    private static func loadServerHeadersFromRelationalStore() -> [MCPServerListHeader]? {
+        Persistence.withConfigDatabaseRead { db in
+            let headers = try MCPServerHeaderRecord.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    id, display_name, notes, is_selected_for_chat,
+                    status, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
+                    metadata_cached_at, updated_at
+                FROM \(relationalServerTable)
+                ORDER BY LOWER(display_name) ASC, id ASC
+                """
+            )
+
+            return headers.compactMap { header in
+                guard let id = UUID(uuidString: header.id) else { return nil }
+                return MCPServerListHeader(
+                    id: id,
+                    displayName: header.displayName,
+                    notes: header.notes,
+                    isSelectedForChat: header.isSelectedForChat != 0,
+                    status: header.status,
+                    transportKind: header.transportKind,
+                    endpointURL: header.endpointURL,
+                    messageEndpointURL: header.messageEndpointURL,
+                    sseEndpointURL: header.sseEndpointURL,
+                    updatedAt: Date(timeIntervalSince1970: header.updatedAt)
+                )
             }
         }
     }
@@ -745,7 +847,19 @@ public struct MCPServerStore {
         let toolPoliciesJSON: String? = row["tool_approval_policies_json"]
         let streamToken: String? = row["stream_resumption_token"]
 
-        guard let id = UUID(uuidString: idRaw) else { return nil }
+        let header = MCPServerHeaderRecord(
+            id: idRaw,
+            displayName: displayName,
+            notes: notes,
+            isSelectedForChat: selectedRaw,
+            status: MCPServerHeaderRecord.Status.idle.rawValue,
+            transportKind: kindRaw,
+            endpointURL: endpointURLRaw,
+            messageEndpointURL: messageEndpointURLRaw,
+            sseEndpointURL: sseEndpointURLRaw,
+            metadataCachedAt: nil,
+            updatedAt: 0
+        )
         let payload = MCPServerPayloadRecord(
             id: idRaw,
             apiKey: apiKey,
@@ -760,31 +874,40 @@ public struct MCPServerStore {
             promptsJSON: nil,
             rootsJSON: nil
         )
-        let additionalHeaders = payload.decodeAdditionalHeaders()
-        let disabledToolIDs = payload.decodeDisabledToolIDs()
-        let toolPolicies = payload.decodeToolApprovalPolicies()
+        return decodeServerConfiguration(from: header, payload: payload)
+    }
+
+    private static func decodeServerConfiguration(
+        from header: MCPServerHeaderRecord,
+        payload: MCPServerPayloadRecord?
+    ) -> MCPServerConfiguration? {
+        guard let id = UUID(uuidString: header.id) else { return nil }
+        let additionalHeaders = payload?.decodeAdditionalHeaders() ?? [:]
+        let disabledToolIDs = payload?.decodeDisabledToolIDs() ?? []
+        let toolPolicies = payload?.decodeToolApprovalPolicies() ?? [:]
+        let streamToken = payload?.streamResumptionToken
         let transport: MCPServerConfiguration.Transport
 
-        switch kindRaw {
+        switch header.transportKind {
         case "http":
-            guard let endpointURLRaw,
+            guard let endpointURLRaw = header.endpointURL,
                   let endpoint = URL(string: endpointURLRaw) else { return nil }
-            transport = .http(endpoint: endpoint, apiKey: apiKey, additionalHeaders: additionalHeaders)
+            transport = .http(endpoint: endpoint, apiKey: payload?.apiKey, additionalHeaders: additionalHeaders)
         case "sse":
-            guard let messageEndpointURLRaw,
+            guard let messageEndpointURLRaw = header.messageEndpointURL,
                   let messageEndpoint = URL(string: messageEndpointURLRaw),
-                  let sseEndpointURLRaw,
+                  let sseEndpointURLRaw = header.sseEndpointURL,
                   let sseEndpoint = URL(string: sseEndpointURLRaw) else { return nil }
             transport = .httpSSE(
                 messageEndpoint: messageEndpoint,
                 sseEndpoint: sseEndpoint,
-                apiKey: apiKey,
+                apiKey: payload?.apiKey,
                 additionalHeaders: additionalHeaders
             )
         case "oauth":
-            guard let endpointURLRaw,
+            guard let endpointURLRaw = header.endpointURL,
                   let endpoint = URL(string: endpointURLRaw),
-                  let oauthPayload = payload.decodeOAuthPayload(),
+                  let oauthPayload = payload?.decodeOAuthPayload(),
                   let tokenEndpoint = URL(string: oauthPayload.tokenEndpoint) else {
                 return nil
             }
@@ -802,13 +925,12 @@ public struct MCPServerStore {
         default:
             return nil
         }
-
         return MCPServerConfiguration(
             id: id,
-            displayName: displayName,
-            notes: notes,
+            displayName: header.displayName,
+            notes: header.notes,
             transport: transport,
-            isSelectedForChat: selectedRaw != 0,
+            isSelectedForChat: header.isSelectedForChat != 0,
             disabledToolIds: disabledToolIDs,
             toolApprovalPolicies: toolPolicies,
             streamResumptionToken: streamToken
