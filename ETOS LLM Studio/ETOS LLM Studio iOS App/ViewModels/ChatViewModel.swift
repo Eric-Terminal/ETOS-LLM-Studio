@@ -2432,7 +2432,7 @@ private actor ETMarkdownPrecomputeWorker {
     private var keyOrder: [String] = []
     private let cacheLimit = 240
 
-    func prepare(source: String) -> ETPreparedMarkdownRenderPayload {
+    func prepare(source: String) async -> ETPreparedMarkdownRenderPayload {
         if let cached = cache[source] {
             return cached
         }
