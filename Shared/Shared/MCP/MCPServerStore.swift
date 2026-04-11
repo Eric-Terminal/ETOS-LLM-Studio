@@ -746,9 +746,23 @@ public struct MCPServerStore {
         let streamToken: String? = row["stream_resumption_token"]
 
         guard let id = UUID(uuidString: idRaw) else { return nil }
-        let additionalHeaders = MCPServerStoreCodec.decodeJSONTextIfPresent([String: String].self, from: additionalHeadersJSON) ?? [:]
-        let disabledToolIDs = MCPServerStoreCodec.decodeJSONTextIfPresent([String].self, from: disabledToolIDsJSON) ?? []
-        let toolPolicies = MCPServerStoreCodec.decodeJSONTextIfPresent([String: MCPToolApprovalPolicy].self, from: toolPoliciesJSON) ?? [:]
+        let payload = MCPServerPayloadRecord(
+            id: idRaw,
+            apiKey: apiKey,
+            additionalHeadersJSON: additionalHeadersJSON,
+            disabledToolIDsJSON: disabledToolIDsJSON,
+            toolApprovalPoliciesJSON: toolPoliciesJSON,
+            oauthPayloadJSON: oauthPayloadJSON,
+            streamResumptionToken: streamToken,
+            infoJSON: nil,
+            resourcesJSON: nil,
+            resourceTemplatesJSON: nil,
+            promptsJSON: nil,
+            rootsJSON: nil
+        )
+        let additionalHeaders = payload.decodeAdditionalHeaders()
+        let disabledToolIDs = payload.decodeDisabledToolIDs()
+        let toolPolicies = payload.decodeToolApprovalPolicies()
         let transport: MCPServerConfiguration.Transport
 
         switch kindRaw {
@@ -770,20 +784,20 @@ public struct MCPServerStore {
         case "oauth":
             guard let endpointURLRaw,
                   let endpoint = URL(string: endpointURLRaw),
-                  let payload = MCPServerStoreCodec.decodeJSONTextIfPresent(MCPOAuthPayload.self, from: oauthPayloadJSON),
-                  let tokenEndpoint = URL(string: payload.tokenEndpoint) else {
+                  let oauthPayload = payload.decodeOAuthPayload(),
+                  let tokenEndpoint = URL(string: oauthPayload.tokenEndpoint) else {
                 return nil
             }
             transport = .oauth(
                 endpoint: endpoint,
                 tokenEndpoint: tokenEndpoint,
-                clientID: payload.clientID,
-                clientSecret: payload.clientSecret,
-                scope: payload.scope,
-                grantType: payload.grantType,
-                authorizationCode: payload.authorizationCode,
-                redirectURI: payload.redirectURI,
-                codeVerifier: payload.codeVerifier
+                clientID: oauthPayload.clientID,
+                clientSecret: oauthPayload.clientSecret,
+                scope: oauthPayload.scope,
+                grantType: oauthPayload.grantType,
+                authorizationCode: oauthPayload.authorizationCode,
+                redirectURI: oauthPayload.redirectURI,
+                codeVerifier: oauthPayload.codeVerifier
             )
         default:
             return nil
@@ -806,6 +820,7 @@ public struct MCPServerStore {
         includeTools: Bool,
         tools: [MCPToolDescription]
     ) -> MCPServerMetadataCache? {
+        let id: String = row["id"]
         let infoText: String? = row["info_json"]
         let resourcesText: String? = row["resources_json"]
         let resourceTemplatesText: String? = row["resource_templates_json"]
@@ -814,11 +829,26 @@ public struct MCPServerStore {
         let metadataCachedAt: Double? = row["metadata_cached_at"]
         let updatedAt: Double = row["updated_at"]
 
-        let info = MCPServerStoreCodec.decodeJSONTextIfPresent(MCPServerInfo.self, from: infoText)
-        let resources = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceDescription].self, from: resourcesText) ?? []
-        let resourceTemplates = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceTemplate].self, from: resourceTemplatesText) ?? []
-        let prompts = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPPromptDescription].self, from: promptsText) ?? []
-        let roots = MCPServerStoreCodec.decodeJSONTextIfPresent([MCPRoot].self, from: rootsText) ?? []
+        let payload = MCPServerPayloadRecord(
+            id: id,
+            apiKey: nil,
+            additionalHeadersJSON: nil,
+            disabledToolIDsJSON: nil,
+            toolApprovalPoliciesJSON: nil,
+            oauthPayloadJSON: nil,
+            streamResumptionToken: nil,
+            infoJSON: infoText,
+            resourcesJSON: resourcesText,
+            resourceTemplatesJSON: resourceTemplatesText,
+            promptsJSON: promptsText,
+            rootsJSON: rootsText
+        )
+
+        let info = payload.decodeInfo()
+        let resources = payload.decodeResources()
+        let resourceTemplates = payload.decodeResourceTemplates()
+        let prompts = payload.decodePrompts()
+        let roots = payload.decodeRoots()
         let payloadTools = includeTools ? tools : []
 
         if info == nil,
@@ -1315,6 +1345,42 @@ private struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersista
                 )
             )
         }
+    }
+
+    func decodeAdditionalHeaders() -> [String: String] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([String: String].self, from: additionalHeadersJSON) ?? [:]
+    }
+
+    func decodeDisabledToolIDs() -> [String] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([String].self, from: disabledToolIDsJSON) ?? []
+    }
+
+    func decodeToolApprovalPolicies() -> [String: MCPToolApprovalPolicy] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([String: MCPToolApprovalPolicy].self, from: toolApprovalPoliciesJSON) ?? [:]
+    }
+
+    func decodeOAuthPayload() -> MCPOAuthPayload? {
+        MCPServerStoreCodec.decodeJSONTextIfPresent(MCPOAuthPayload.self, from: oauthPayloadJSON)
+    }
+
+    func decodeInfo() -> MCPServerInfo? {
+        MCPServerStoreCodec.decodeJSONTextIfPresent(MCPServerInfo.self, from: infoJSON)
+    }
+
+    func decodeResources() -> [MCPResourceDescription] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceDescription].self, from: resourcesJSON) ?? []
+    }
+
+    func decodeResourceTemplates() -> [MCPResourceTemplate] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([MCPResourceTemplate].self, from: resourceTemplatesJSON) ?? []
+    }
+
+    func decodePrompts() -> [MCPPromptDescription] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([MCPPromptDescription].self, from: promptsJSON) ?? []
+    }
+
+    func decodeRoots() -> [MCPRoot] {
+        MCPServerStoreCodec.decodeJSONTextIfPresent([MCPRoot].self, from: rootsJSON) ?? []
     }
 }
 
