@@ -12,6 +12,7 @@
 import Foundation
 import os.log
 import SQLite3
+import GRDB
 #if canImport(CoreText)
 import CoreText
 #endif
@@ -460,6 +461,26 @@ public enum Persistence {
         }
 
         return didHandle ? didSucceed : false
+    }
+
+    static func withConfigDatabaseRead<T>(_ block: (Database) throws -> T) -> T? {
+        guard let store = activeAuxiliaryStore(kind: .config) else { return nil }
+        do {
+            return try store.read(block)
+        } catch {
+            logger.error("读取配置数据库失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    static func withConfigDatabaseWrite<T>(_ block: (Database) throws -> T) -> T? {
+        guard let store = activeAuxiliaryStore(kind: .config) else { return nil }
+        do {
+            return try store.write(block)
+        } catch {
+            logger.error("写入配置数据库失败: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private static func prepareDatabasesForLaunchIfNeeded() -> LaunchPreparationResult {

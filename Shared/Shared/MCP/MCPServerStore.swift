@@ -1,10 +1,11 @@
 // ============================================================================
 // MCPServerStore.swift
 // ============================================================================
-// 管理 MCP Server 配置的增删改查（优先 SQLite，失败时回退 JSON 文件）。
+// 管理 MCP Server 配置的增删改查（优先关系化 SQLite，失败时回退 JSON 文件）。
 // ============================================================================
 
 import Foundation
+import GRDB
 import os.log
 
 private let mcpStoreLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MCPServerStore")
@@ -60,16 +61,17 @@ public struct MCPServerMetadataCache: Codable, Hashable {
 
 public struct MCPServerStore {
     private static let lock = NSLock()
-    private static let grdbBlobKey = "mcp_servers_records_v1"
-    
+    private static let legacyBlobKey = "mcp_servers_records_v1"
+    private static var didBootstrapRelationalStore = false
+
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
-    
+
     private static var serversDirectory: URL {
         documentsDirectory.appendingPathComponent("MCPServers")
     }
-    
+
     @discardableResult
     public static func setupDirectoryIfNeeded() -> URL {
         let fm = FileManager.default
@@ -83,16 +85,26 @@ public struct MCPServerStore {
         }
         return serversDirectory
     }
-    
+
     public static func loadServers() -> [MCPServerConfiguration] {
         lock.withLock {
-            loadAllRecords().map(\.server)
+            bootstrapRelationalStoreIfNeeded()
+            if let servers = loadServersFromRelationalStore() {
+                return servers
+            }
+            return loadLegacyRecords(usingBlobCache: true).map(\.server)
         }
     }
 
     public static func save(_ server: MCPServerConfiguration) {
         lock.withLock {
-            var records = loadAllRecords()
+            bootstrapRelationalStoreIfNeeded()
+            if saveServerToRelationalStore(server) {
+                cleanupLegacyArtifactsAfterRelationalSave()
+                return
+            }
+
+            var records = loadLegacyRecords(usingBlobCache: true)
             if let index = records.firstIndex(where: { $0.server.id == server.id }) {
                 let existingRecord = records[index]
                 let shouldPreserveMetadata = existingRecord.server.transport == server.transport
@@ -101,74 +113,304 @@ public struct MCPServerStore {
             } else {
                 records.append(MCPServerStoredRecord(server: server, metadata: nil))
             }
-            saveAllRecords(records)
+            saveLegacyRecords(records)
         }
     }
 
     public static func delete(_ server: MCPServerConfiguration) {
         lock.withLock {
-            var records = loadAllRecords()
+            bootstrapRelationalStoreIfNeeded()
+            if deleteServerFromRelationalStore(serverID: server.id) {
+                mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
+                cleanupLegacyArtifactsAfterRelationalSave()
+                return
+            }
+
+            var records = loadLegacyRecords(usingBlobCache: true)
             records.removeAll { $0.server.id == server.id }
-            saveAllRecords(records)
+            saveLegacyRecords(records)
             mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
         }
     }
 
     public static func loadMetadata(for serverID: UUID) -> MCPServerMetadataCache? {
         lock.withLock {
-            loadAllRecords().first(where: { $0.server.id == serverID })?.metadata
+            bootstrapRelationalStoreIfNeeded()
+            if let metadata = loadMetadataFromRelationalStore(serverID: serverID) {
+                return metadata
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata
         }
     }
 
     public static func saveMetadata(_ metadata: MCPServerMetadataCache?, for serverID: UUID) {
         lock.withLock {
-            var records = loadAllRecords()
+            bootstrapRelationalStoreIfNeeded()
+            if saveMetadataToRelationalStore(metadata, for: serverID) {
+                cleanupLegacyArtifactsAfterRelationalSave()
+                return
+            }
+
+            var records = loadLegacyRecords(usingBlobCache: true)
             guard let index = records.firstIndex(where: { $0.server.id == serverID }) else { return }
             records[index].metadata = metadata
             records[index].schemaVersion = 3
-            saveAllRecords(records)
+            saveLegacyRecords(records)
         }
     }
 
-    /// 返回用于快速判断配置目录是否发生变化的签名。
-    /// 签名包含：文件名 + 修改时间 + 文件大小。
+    /// 返回用于快速判断配置是否变化的签名。
+    /// 仅抓取 mcp_servers 轻量列，避免深层 JSON 反序列化带来的 CPU 抖动。
     public static func configurationSnapshotSignature() -> String {
         lock.withLock {
-            let signatures: [String] = loadAllRecords()
-                .map { record in
-                    let encoder = JSONEncoder()
-                    encoder.outputFormatting = [.sortedKeys]
-                    let serverData = (try? encoder.encode(record.server)) ?? Data()
-                    let serverJSON = String(data: serverData, encoding: .utf8) ?? "{}"
-                    return "\(record.server.id.uuidString)|\(serverJSON)"
+            bootstrapRelationalStoreIfNeeded()
+            if let relationalSignature = configurationSignatureFromRelationalStore() {
+                return relationalSignature
+            }
+            return configurationSignatureFromLegacyRecords()
+        }
+    }
+
+    // MARK: - 关系化存储
+
+    private static func bootstrapRelationalStoreIfNeeded() {
+        guard !didBootstrapRelationalStore else { return }
+        guard Persistence.withConfigDatabaseRead({ _ in true }) == true else { return }
+
+        migrateLegacyRecordsToRelationalStoreIfNeeded()
+        didBootstrapRelationalStore = true
+    }
+
+    private static func migrateLegacyRecordsToRelationalStoreIfNeeded() {
+        guard let existingServerCount = Persistence.withConfigDatabaseRead({ db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
+        }) else {
+            return
+        }
+
+        guard existingServerCount == 0 else { return }
+
+        let legacyRecords = loadLegacyRecords(usingBlobCache: false)
+        guard !legacyRecords.isEmpty else { return }
+
+        let migrateSucceeded = Persistence.withConfigDatabaseWrite { db in
+            let now = Date().timeIntervalSince1970
+            for legacyRecord in legacyRecords {
+                var serverRecord = try MCPServerRecord(
+                    server: legacyRecord.server,
+                    status: .idle,
+                    updatedAt: now
+                )
+
+                if let metadata = legacyRecord.metadata {
+                    try serverRecord.applyMetadata(metadata)
                 }
-                .sorted()
+
+                try serverRecord.save(db)
+
+                try MCPToolRecord
+                    .filter(MCPToolRecord.Columns.serverID == legacyRecord.server.id.uuidString)
+                    .deleteAll(db)
+
+                if let metadata = legacyRecord.metadata {
+                    let toolsTimestamp = metadata.cachedAt.timeIntervalSince1970
+                    for (index, tool) in metadata.tools.enumerated() {
+                        var toolRecord = try MCPToolRecord(
+                            serverID: legacyRecord.server.id.uuidString,
+                            tool: tool,
+                            sortIndex: index,
+                            updatedAt: toolsTimestamp
+                        )
+                        try toolRecord.save(db)
+                    }
+                }
+            }
+            return true
+        } ?? false
+
+        guard migrateSucceeded else {
+            mcpStoreLogger.error("MCP 关系化迁移失败：未能写入 mcp_servers/mcp_tools。")
+            return
+        }
+
+        _ = Persistence.removeAuxiliaryBlob(forKey: legacyBlobKey)
+        cleanupLegacyFileArtifacts()
+        mcpStoreLogger.info("MCP 配置已自动迁移到关系化表：servers=\(legacyRecords.count)")
+    }
+
+    private static func loadServersFromRelationalStore() -> [MCPServerConfiguration]? {
+        Persistence.withConfigDatabaseRead { db in
+            let records = try MCPServerRecord.fetchAll(db)
+            let servers = records.compactMap { record -> MCPServerConfiguration? in
+                guard let server = record.decodeConfiguration() else {
+                    mcpStoreLogger.error("读取 MCP 服务器失败：配置数据损坏 id=\(record.id, privacy: .public)")
+                    return nil
+                }
+                return server
+            }
+
+            return servers.sorted {
+                let lhsName = $0.displayName.lowercased()
+                let rhsName = $1.displayName.lowercased()
+                if lhsName == rhsName {
+                    return $0.id.uuidString < $1.id.uuidString
+                }
+                return lhsName < rhsName
+            }
+        }
+    }
+
+    private static func saveServerToRelationalStore(_ server: MCPServerConfiguration) -> Bool {
+        let serverID = server.id.uuidString
+        let didSave = Persistence.withConfigDatabaseWrite { db in
+            let existing = try MCPServerRecord.fetchOne(db, key: serverID)
+            var record = existing ?? try MCPServerRecord(server: server, status: .idle, updatedAt: Date().timeIntervalSince1970)
+
+            let shouldPreserveMetadata: Bool
+            if let existing,
+               let previousServer = existing.decodeConfiguration() {
+                shouldPreserveMetadata = previousServer.transport == server.transport
+            } else {
+                shouldPreserveMetadata = false
+            }
+
+            try record.applyConfiguration(server)
+            if !shouldPreserveMetadata {
+                record.clearMetadata(status: .idle)
+                try MCPToolRecord
+                    .filter(MCPToolRecord.Columns.serverID == serverID)
+                    .deleteAll(db)
+            }
+
+            try record.save(db)
+            return true
+        } ?? false
+
+        return didSave
+    }
+
+    private static func deleteServerFromRelationalStore(serverID: UUID) -> Bool {
+        Persistence.withConfigDatabaseWrite { db in
+            _ = try MCPServerRecord.deleteOne(db, key: serverID.uuidString)
+            return true
+        } ?? false
+    }
+
+    private static func loadMetadataFromRelationalStore(serverID: UUID) -> MCPServerMetadataCache? {
+        Persistence.withConfigDatabaseRead { db in
+            guard let serverRecord = try MCPServerRecord.fetchOne(db, key: serverID.uuidString) else {
+                return nil
+            }
+
+            let toolRecords = try MCPToolRecord
+                .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
+                .order(MCPToolRecord.Columns.sortIndex.asc)
+                .fetchAll(db)
+
+            return serverRecord.makeMetadata(toolRecords: toolRecords)
+        } ?? nil
+    }
+
+    private static func saveMetadataToRelationalStore(_ metadata: MCPServerMetadataCache?, for serverID: UUID) -> Bool {
+        Persistence.withConfigDatabaseWrite { db in
+            guard var serverRecord = try MCPServerRecord.fetchOne(db, key: serverID.uuidString) else {
+                return true
+            }
+
+            try MCPToolRecord
+                .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
+                .deleteAll(db)
+
+            if let metadata {
+                try serverRecord.applyMetadata(metadata)
+
+                let updatedAt = metadata.cachedAt.timeIntervalSince1970
+                for (index, tool) in metadata.tools.enumerated() {
+                    var toolRecord = try MCPToolRecord(
+                        serverID: serverID.uuidString,
+                        tool: tool,
+                        sortIndex: index,
+                        updatedAt: updatedAt
+                    )
+                    try toolRecord.save(db)
+                }
+            } else {
+                serverRecord.clearMetadata(status: .idle)
+            }
+
+            try serverRecord.save(db)
+            return true
+        } ?? false
+    }
+
+    private static func configurationSignatureFromRelationalStore() -> String? {
+        Persistence.withConfigDatabaseRead { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT id, name, status, updated_at
+                FROM mcp_servers
+                ORDER BY id ASC
+                """
+            )
+
+            let signatures = rows.map { row -> String in
+                let id: String = row["id"]
+                let name: String = row["name"]
+                let status: String = row["status"]
+                let updatedAt: Double = row["updated_at"]
+                return "\(id)|\(name)|\(status)|\(updatedAt)"
+            }
             return signatures.joined(separator: ";")
         }
     }
 
-    private static func loadAllRecords() -> [MCPServerStoredRecord] {
-        if Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
-            let records = Persistence.loadAuxiliaryBlob([MCPServerStoredRecord].self, forKey: grdbBlobKey) ?? []
+    private static func cleanupLegacyArtifactsAfterRelationalSave() {
+        _ = Persistence.removeAuxiliaryBlob(forKey: legacyBlobKey)
+        cleanupLegacyFileArtifacts()
+    }
+
+    // MARK: - 旧版数据（JSON Blob / 文件）
+
+    private static func loadLegacyRecords(usingBlobCache: Bool) -> [MCPServerStoredRecord] {
+        if Persistence.auxiliaryBlobExists(forKey: legacyBlobKey) {
+            let records = Persistence.loadAuxiliaryBlob([MCPServerStoredRecord].self, forKey: legacyBlobKey) ?? []
             return records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
         }
 
         let fileRecords = loadRecordsFromFiles()
         guard !fileRecords.isEmpty else { return [] }
 
-        if Persistence.saveAuxiliaryBlob(fileRecords, forKey: grdbBlobKey) {
+        if usingBlobCache,
+           Persistence.saveAuxiliaryBlob(fileRecords, forKey: legacyBlobKey) {
             cleanupLegacyFileArtifacts()
         }
+
         return fileRecords.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
     }
 
-    private static func saveAllRecords(_ records: [MCPServerStoredRecord]) {
+    private static func saveLegacyRecords(_ records: [MCPServerStoredRecord]) {
         let sortedRecords = records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
-        if Persistence.saveAuxiliaryBlob(sortedRecords, forKey: grdbBlobKey) {
+        if Persistence.saveAuxiliaryBlob(sortedRecords, forKey: legacyBlobKey) {
             cleanupLegacyFileArtifacts()
             return
         }
         saveRecordsToFiles(sortedRecords)
+    }
+
+    private static func configurationSignatureFromLegacyRecords() -> String {
+        let signatures: [String] = loadLegacyRecords(usingBlobCache: true)
+            .map { record in
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                let serverData = (try? encoder.encode(record.server)) ?? Data()
+                let serverJSON = String(data: serverData, encoding: .utf8) ?? "{}"
+                return "\(record.server.id.uuidString)|\(serverJSON)"
+            }
+            .sorted()
+        return signatures.joined(separator: ";")
     }
 
     private static func loadRecordsFromFiles() -> [MCPServerStoredRecord] {
@@ -226,6 +468,30 @@ public struct MCPServerStore {
         }
     }
 
+    private static func loadRecord(from url: URL) -> MCPServerStoredRecord? {
+        do {
+            let data = try Data(contentsOf: url)
+            let record = try JSONDecoder().decode(MCPServerStoredRecord.self, from: data)
+            return record
+        } catch {
+            mcpStoreLogger.error("解析 MCP Server 文件失败 \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    private static func writeRecord(_ record: MCPServerStoredRecord, fileName: String) {
+        let url = serversDirectory.appendingPathComponent("\(fileName).json")
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(record)
+            try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
+            mcpStoreLogger.info("已保存 MCP Server: \(record.server.displayName, privacy: .public)")
+        } catch {
+            mcpStoreLogger.error("保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private struct MCPServerStoredRecord: Codable {
         var schemaVersion: Int
         var server: MCPServerConfiguration
@@ -263,35 +529,223 @@ public struct MCPServerStore {
             try container.encodeIfPresent(metadata, forKey: .metadata)
         }
     }
+}
 
-    private static func loadRecord(for serverID: UUID) -> MCPServerStoredRecord? {
-        let url = serversDirectory.appendingPathComponent("\(serverID.uuidString).json")
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return loadRecord(from: url)
+// MARK: - GRDB Records
+
+private struct MCPServerRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+    static let databaseTableName = "mcp_servers"
+
+    enum Status: String {
+        case idle
+        case ready
     }
 
-    private static func loadRecord(from url: URL) -> MCPServerStoredRecord? {
-        do {
-            let data = try Data(contentsOf: url)
-            let record = try JSONDecoder().decode(MCPServerStoredRecord.self, from: data)
-            return record
-        } catch {
-            mcpStoreLogger.error("解析 MCP Server 文件失败 \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case status
+        case configurationData = "configuration_data"
+        case metadataCachedAt = "metadata_cached_at"
+        case infoData = "info_data"
+        case resourcesData = "resources_data"
+        case resourceTemplatesData = "resource_templates_data"
+        case promptsData = "prompts_data"
+        case rootsData = "roots_data"
+        case updatedAt = "updated_at"
+    }
+
+    enum Columns {
+        static let id = Column(CodingKeys.id.rawValue)
+        static let name = Column(CodingKeys.name.rawValue)
+        static let status = Column(CodingKeys.status.rawValue)
+        static let updatedAt = Column(CodingKeys.updatedAt.rawValue)
+    }
+
+    static let tools = hasMany(MCPToolRecord.self, using: ForeignKey(["server_id"]))
+
+    var id: String
+    var name: String
+    var status: String
+    var configurationData: Data
+    var metadataCachedAt: Double?
+    var infoData: Data?
+    var resourcesData: Data?
+    var resourceTemplatesData: Data?
+    var promptsData: Data?
+    var rootsData: Data?
+    var updatedAt: Double
+
+    init(server: MCPServerConfiguration, status: Status, updatedAt: Double) throws {
+        self.id = server.id.uuidString
+        self.name = server.displayName
+        self.status = status.rawValue
+        self.configurationData = try MCPServerStoreCodec.encode(server)
+        self.metadataCachedAt = nil
+        self.infoData = nil
+        self.resourcesData = nil
+        self.resourceTemplatesData = nil
+        self.promptsData = nil
+        self.rootsData = nil
+        self.updatedAt = updatedAt
+    }
+
+    mutating func applyConfiguration(_ server: MCPServerConfiguration) throws {
+        id = server.id.uuidString
+        name = server.displayName
+        configurationData = try MCPServerStoreCodec.encode(server)
+        updatedAt = Date().timeIntervalSince1970
+    }
+
+    mutating func applyMetadata(_ metadata: MCPServerMetadataCache) throws {
+        status = Status.ready.rawValue
+        metadataCachedAt = metadata.cachedAt.timeIntervalSince1970
+        infoData = try MCPServerStoreCodec.encodeIfPresent(metadata.info)
+        resourcesData = try metadata.resources.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.resources)
+        resourceTemplatesData = try metadata.resourceTemplates.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.resourceTemplates)
+        promptsData = try metadata.prompts.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.prompts)
+        rootsData = try metadata.roots.isEmpty ? nil : MCPServerStoreCodec.encode(metadata.roots)
+    }
+
+    mutating func clearMetadata(status: Status = .idle) {
+        self.status = status.rawValue
+        metadataCachedAt = nil
+        infoData = nil
+        resourcesData = nil
+        resourceTemplatesData = nil
+        promptsData = nil
+        rootsData = nil
+    }
+
+    func decodeConfiguration() -> MCPServerConfiguration? {
+        try? MCPServerStoreCodec.decode(MCPServerConfiguration.self, from: configurationData)
+    }
+
+    func makeMetadata(toolRecords: [MCPToolRecord]) -> MCPServerMetadataCache? {
+        let tools = toolRecords.compactMap { $0.toToolDescription() }
+        let info = MCPServerStoreCodec.decodeIfPresent(MCPServerInfo.self, from: infoData)
+        let resources = MCPServerStoreCodec.decodeIfPresent([MCPResourceDescription].self, from: resourcesData) ?? []
+        let resourceTemplates = MCPServerStoreCodec.decodeIfPresent([MCPResourceTemplate].self, from: resourceTemplatesData) ?? []
+        let prompts = MCPServerStoreCodec.decodeIfPresent([MCPPromptDescription].self, from: promptsData) ?? []
+        let roots = MCPServerStoreCodec.decodeIfPresent([MCPRoot].self, from: rootsData) ?? []
+
+        if info == nil,
+           tools.isEmpty,
+           resources.isEmpty,
+           resourceTemplates.isEmpty,
+           prompts.isEmpty,
+           roots.isEmpty {
             return nil
         }
+
+        let cachedAtTimestamp = metadataCachedAt ?? updatedAt
+        let cachedAt = Date(timeIntervalSince1970: cachedAtTimestamp)
+
+        return MCPServerMetadataCache(
+            cachedAt: cachedAt,
+            info: info,
+            tools: tools,
+            resources: resources,
+            resourceTemplates: resourceTemplates,
+            prompts: prompts,
+            roots: roots
+        )
+    }
+}
+
+private struct MCPToolRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+    static let databaseTableName = "mcp_tools"
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case serverID = "server_id"
+        case name
+        case description
+        case inputSchemaData = "input_schema_data"
+        case examplesData = "examples_data"
+        case sortIndex = "sort_index"
+        case updatedAt = "updated_at"
     }
 
-    private static func writeRecord(_ record: MCPServerStoredRecord, fileName: String) {
-        let url = serversDirectory.appendingPathComponent("\(fileName).json")
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(record)
-            try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
-            mcpStoreLogger.info("已保存 MCP Server: \(record.server.displayName, privacy: .public)")
-        } catch {
-            mcpStoreLogger.error("保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
+    enum Columns {
+        static let id = Column(CodingKeys.id.rawValue)
+        static let serverID = Column(CodingKeys.serverID.rawValue)
+        static let name = Column(CodingKeys.name.rawValue)
+        static let sortIndex = Column(CodingKeys.sortIndex.rawValue)
+    }
+
+    static let server = belongsTo(MCPServerRecord.self, using: ForeignKey([CodingKeys.serverID.rawValue]))
+
+    var id: String
+    var serverID: String
+    var name: String
+    var description: String?
+    var inputSchemaData: Data?
+    var examplesData: Data?
+    var sortIndex: Int
+    var updatedAt: Double
+
+    init(serverID: String, tool: MCPToolDescription, sortIndex: Int, updatedAt: Double) throws {
+        self.id = Self.makePrimaryID(serverID: serverID, toolName: tool.toolId)
+        self.serverID = serverID
+        self.name = tool.toolId
+        self.description = tool.description
+        self.inputSchemaData = try MCPServerStoreCodec.encodeIfPresent(tool.inputSchema)
+        if let examples = tool.examples, !examples.isEmpty {
+            self.examplesData = try MCPServerStoreCodec.encode(examples)
+        } else {
+            self.examplesData = nil
         }
+        self.sortIndex = sortIndex
+        self.updatedAt = updatedAt
+    }
+
+    func toToolDescription() -> MCPToolDescription? {
+        let inputSchema = MCPServerStoreCodec.decodeIfPresent(JSONValue.self, from: inputSchemaData)
+        let examples = MCPServerStoreCodec.decodeIfPresent([JSONValue].self, from: examplesData)
+        return MCPToolDescription(
+            toolId: name,
+            description: description,
+            inputSchema: inputSchema,
+            examples: examples
+        )
+    }
+
+    private static func makePrimaryID(serverID: String, toolName: String) -> String {
+        "\(serverID)::\(toolName)"
+    }
+}
+
+private enum MCPServerStoreCodec {
+    static func encode<T: Encodable>(_ value: T) throws -> Data {
+        try makeEncoder().encode(value)
+    }
+
+    static func encodeIfPresent<T: Encodable>(_ value: T?) throws -> Data? {
+        guard let value else { return nil }
+        return try makeEncoder().encode(value)
+    }
+
+    static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        try makeDecoder().decode(type, from: data)
+    }
+
+    static func decodeIfPresent<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
+        guard let data else { return nil }
+        return try? makeDecoder().decode(type, from: data)
+    }
+
+    private static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }
 

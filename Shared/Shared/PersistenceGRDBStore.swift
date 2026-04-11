@@ -2115,22 +2115,24 @@ final class PersistenceGRDBStore {
     }
 }
 
-/// 仅用于辅助 JSON Blob 的轻量分库存储。
+/// 辅助分库存储（JSON Blob + 关系化扩展表）。
 final class PersistenceAuxiliaryGRDBStore {
     private let logger: Logger
     private static let incrementalVacuumTriggerPages = 1_024
     private static let incrementalVacuumTriggerRatio = 0.25
     private static let incrementalVacuumBatchPages = 512
     private let databaseURL: URL
+    private let supportsMCPRelationalSchema: Bool
     private let dbPool: DatabasePool
 
     init(databaseURL: URL, loggerCategory: String) throws {
         self.databaseURL = databaseURL
         self.logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: loggerCategory)
+        self.supportsMCPRelationalSchema = databaseURL.lastPathComponent == "config-store.sqlite"
 
         var configuration = Configuration()
         configuration.qos = .userInitiated
-        configuration.foreignKeysEnabled = false
+        configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA journal_mode=WAL")
             try db.execute(sql: "PRAGMA synchronous=NORMAL")
@@ -2158,6 +2160,14 @@ final class PersistenceAuxiliaryGRDBStore {
             logger.error("检查辅助存储键失败 key=\(key): \(error.localizedDescription)")
             return false
         }
+    }
+
+    func read<T>(_ block: (Database) throws -> T) throws -> T {
+        try dbPool.read(block)
+    }
+
+    func write<T>(_ block: (Database) throws -> T) throws -> T {
+        try dbPool.write(block)
     }
 
     func loadAuxiliaryBlob<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
@@ -2244,6 +2254,43 @@ final class PersistenceAuxiliaryGRDBStore {
                 )
             """)
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_json_blobs_updated_at ON json_blobs(updated_at DESC)")
+        }
+
+        if supportsMCPRelationalSchema {
+            migrator.registerMigration("v2_create_mcp_relational_tables") { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS mcp_servers (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'idle',
+                        configuration_data BLOB NOT NULL,
+                        metadata_cached_at REAL,
+                        info_data BLOB,
+                        resources_data BLOB,
+                        resource_templates_data BLOB,
+                        prompts_data BLOB,
+                        roots_data BLOB,
+                        updated_at REAL NOT NULL
+                    )
+                """)
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS mcp_tools (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        input_schema_data BLOB,
+                        examples_data BLOB,
+                        sort_index INTEGER NOT NULL DEFAULT 0,
+                        updated_at REAL NOT NULL
+                    )
+                """)
+
+                try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_tools_server_name ON mcp_tools(server_id, name)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_updated_at ON mcp_servers(updated_at DESC)")
+            }
         }
         try migrator.migrate(self.dbPool)
         self.logger.info("辅助存储已启用，数据库路径: \(self.databaseURL.path)")
