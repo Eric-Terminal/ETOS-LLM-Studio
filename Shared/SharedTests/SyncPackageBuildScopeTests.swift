@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import Combine
 @testable import Shared
 
 @Suite("同步打包范围测试")
@@ -96,4 +97,3 @@ struct SyncPackageBuildScopeTests {
         }
     }
 }
-
