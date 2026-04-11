@@ -1450,6 +1450,34 @@ private struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersista
     var promptsJSON: String?
     var rootsJSON: String?
 
+    init(
+        id: String,
+        apiKey: String?,
+        additionalHeadersJSON: String?,
+        disabledToolIDsJSON: String?,
+        toolApprovalPoliciesJSON: String?,
+        oauthPayloadJSON: String?,
+        streamResumptionToken: String?,
+        infoJSON: String?,
+        resourcesJSON: String?,
+        resourceTemplatesJSON: String?,
+        promptsJSON: String?,
+        rootsJSON: String?
+    ) {
+        self.id = id
+        self.apiKey = apiKey
+        self.additionalHeadersJSON = additionalHeadersJSON
+        self.disabledToolIDsJSON = disabledToolIDsJSON
+        self.toolApprovalPoliciesJSON = toolApprovalPoliciesJSON
+        self.oauthPayloadJSON = oauthPayloadJSON
+        self.streamResumptionToken = streamResumptionToken
+        self.infoJSON = infoJSON
+        self.resourcesJSON = resourcesJSON
+        self.resourceTemplatesJSON = resourceTemplatesJSON
+        self.promptsJSON = promptsJSON
+        self.rootsJSON = rootsJSON
+    }
+
     init(server: MCPServerConfiguration, metadata: MCPServerMetadataCache?) {
         id = server.id.uuidString
         streamResumptionToken = server.streamResumptionToken
