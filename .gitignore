@@ -93,3 +93,7 @@ DEVELOPMENT*.md\n# MCP Config templates\nassets/mcp_configs/
 AGENTS.md
 GEMINI.md
 CLAUDE.md
+
+# 临时任务清单（仅本地使用，不纳入版本库）
+TODO.md
+TODO-*.md
