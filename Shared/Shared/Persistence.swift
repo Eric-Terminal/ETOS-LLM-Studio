@@ -483,6 +483,15 @@ public enum Persistence {
         }
     }
 
+    static func observeConfigDatabase<T: Sendable>(
+        _ observation: ValueObservation<T>,
+        onError: @escaping @Sendable (Error) -> Void,
+        onChange: @escaping @Sendable (T) -> Void
+    ) -> AnyDatabaseCancellable? {
+        guard let store = activeAuxiliaryStore(kind: .config) else { return nil }
+        return store.startObservation(observation, onError: onError, onChange: onChange)
+    }
+
     private static func prepareDatabasesForLaunchIfNeeded() -> LaunchPreparationResult {
         launchBackupAndRecoveryLock.lock()
         if hasPreparedLaunchDatabases {

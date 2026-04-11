@@ -133,15 +133,19 @@ public struct MCPServerStore {
         }
     }
 
-    public static func loadMetadata(for serverID: UUID) -> MCPServerMetadataCache? {
+    public static func loadMetadata(for serverID: UUID, includeTools: Bool = true) -> MCPServerMetadataCache? {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let metadata = loadMetadataFromRelationalStore(serverID: serverID) {
+            if let metadata = loadMetadataFromRelationalStore(serverID: serverID, includeTools: includeTools) {
                 return metadata
             }
-            return loadLegacyRecords(usingBlobCache: true)
+            var metadata = loadLegacyRecords(usingBlobCache: true)
                 .first(where: { $0.server.id == serverID })?
                 .metadata
+            if includeTools == false {
+                metadata?.tools = []
+            }
+            return metadata
         }
     }
 
@@ -161,6 +165,20 @@ public struct MCPServerStore {
         }
     }
 
+    /// 仅按需加载某个服务的工具列表，避免解码整份 Server 元数据。
+    public static func loadTools(for serverID: UUID) -> [MCPToolDescription] {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let tools = loadToolsFromRelationalStore(serverID: serverID) {
+                return tools
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata?
+                .tools ?? []
+        }
+    }
+
     /// 返回用于快速判断配置是否变化的签名。
     /// 仅抓取 mcp_servers 轻量列，避免深层 JSON 反序列化带来的 CPU 抖动。
     public static func configurationSnapshotSignature() -> String {
@@ -171,6 +189,28 @@ public struct MCPServerStore {
             }
             return configurationSignatureFromLegacyRecords()
         }
+    }
+
+    /// 基于 GRDB ValueObservation 监听配置变化（仅在真实写入时触发）。
+    public static func observeConfigurationSignature(
+        onError: @escaping @Sendable (Error) -> Void,
+        onChange: @escaping @Sendable (String) -> Void
+    ) -> AnyDatabaseCancellable? {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+        }
+
+        let observation = ValueObservation
+            .tracking { db in
+                try configurationSignatureFromRelationalDatabase(db)
+            }
+            .removeDuplicates()
+
+        return Persistence.observeConfigDatabase(
+            observation,
+            onError: onError,
+            onChange: onChange
+        )
     }
 
     // MARK: - 关系化存储
@@ -298,19 +338,34 @@ public struct MCPServerStore {
         } ?? false
     }
 
-    private static func loadMetadataFromRelationalStore(serverID: UUID) -> MCPServerMetadataCache? {
+    private static func loadMetadataFromRelationalStore(serverID: UUID, includeTools: Bool) -> MCPServerMetadataCache? {
         Persistence.withConfigDatabaseRead { db in
             guard let serverRecord = try MCPServerRecord.fetchOne(db, key: serverID.uuidString) else {
                 return nil
             }
 
-            let toolRecords = try MCPToolRecord
-                .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
-                .order(MCPToolRecord.Columns.sortIndex.asc)
-                .fetchAll(db)
+            let toolRecords: [MCPToolRecord]
+            if includeTools {
+                toolRecords = try MCPToolRecord
+                    .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
+                    .order(MCPToolRecord.Columns.sortIndex.asc)
+                    .fetchAll(db)
+            } else {
+                toolRecords = []
+            }
 
             return serverRecord.makeMetadata(toolRecords: toolRecords)
         } ?? nil
+    }
+
+    private static func loadToolsFromRelationalStore(serverID: UUID) -> [MCPToolDescription]? {
+        Persistence.withConfigDatabaseRead { db in
+            try MCPToolRecord
+                .filter(MCPToolRecord.Columns.serverID == serverID.uuidString)
+                .order(MCPToolRecord.Columns.sortIndex.asc)
+                .fetchAll(db)
+                .compactMap { $0.toToolDescription() }
+        }
     }
 
     private static func saveMetadataToRelationalStore(_ metadata: MCPServerMetadataCache?, for serverID: UUID) -> Bool {
@@ -347,24 +402,38 @@ public struct MCPServerStore {
 
     private static func configurationSignatureFromRelationalStore() -> String? {
         Persistence.withConfigDatabaseRead { db in
-            let rows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT id, name, status, updated_at
-                FROM mcp_servers
-                ORDER BY id ASC
-                """
-            )
-
-            let signatures = rows.map { row -> String in
-                let id: String = row["id"]
-                let name: String = row["name"]
-                let status: String = row["status"]
-                let updatedAt: Double = row["updated_at"]
-                return "\(id)|\(name)|\(status)|\(updatedAt)"
-            }
-            return signatures.joined(separator: ";")
+            try configurationSignatureFromRelationalDatabase(db)
         }
+    }
+
+    private static func configurationSignatureFromRelationalDatabase(_ db: Database) throws -> String {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT
+                s.id AS id,
+                s.name AS name,
+                s.status AS status,
+                s.updated_at AS updated_at,
+                COALESCE(MAX(t.updated_at), 0) AS tools_updated_at,
+                COUNT(t.id) AS tools_count
+            FROM mcp_servers s
+            LEFT JOIN mcp_tools t ON t.server_id = s.id
+            GROUP BY s.id, s.name, s.status, s.updated_at
+            ORDER BY s.id ASC
+            """
+        )
+
+        let signatures = rows.map { row -> String in
+            let id: String = row["id"]
+            let name: String = row["name"]
+            let status: String = row["status"]
+            let updatedAt: Double = row["updated_at"]
+            let toolsUpdatedAt: Double = row["tools_updated_at"]
+            let toolsCount: Int = row["tools_count"]
+            return "\(id)|\(name)|\(status)|\(updatedAt)|\(toolsUpdatedAt)|\(toolsCount)"
+        }
+        return signatures.joined(separator: ";")
     }
 
     private static func cleanupLegacyArtifactsAfterRelationalSave() {

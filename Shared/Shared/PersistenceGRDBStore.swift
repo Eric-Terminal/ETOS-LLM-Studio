@@ -2170,6 +2170,19 @@ final class PersistenceAuxiliaryGRDBStore {
         try dbPool.write(block)
     }
 
+    func startObservation<T: Sendable>(
+        _ observation: ValueObservation<T>,
+        onError: @escaping @Sendable (Error) -> Void,
+        onChange: @escaping @Sendable (T) -> Void
+    ) -> AnyDatabaseCancellable {
+        observation.start(
+            in: dbPool,
+            scheduling: .async(onQueue: .main),
+            onError: onError,
+            onChange: onChange
+        )
+    }
+
     func loadAuxiliaryBlob<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
         guard let data = loadAuxiliaryBlobRawData(forKey: key) else {
             return nil

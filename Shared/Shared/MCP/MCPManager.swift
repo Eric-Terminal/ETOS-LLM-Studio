@@ -6,6 +6,7 @@
 
 import Foundation
 import Combine
+import GRDB
 import os.log
 #if canImport(UserNotifications)
 import UserNotifications
@@ -323,7 +324,7 @@ public final class MCPManager: ObservableObject {
     private var trackedToolCallObservers: [UUID: @Sendable (MCPProgressParams) -> Void] = [:]
     private var trackedToolCallTokenKeys: [UUID: String] = [:]
     private var progressTimestampsByToken: [String: Date] = [:]
-    private var configWatcherTask: Task<Void, Never>?
+    private var configObservationCancellable: AnyDatabaseCancellable?
     private var configSnapshotSignature: String = MCPServerStore.configurationSnapshotSignature()
     private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     private var autoConnectRetryAttempts: [UUID: Int] = [:]
@@ -334,7 +335,6 @@ public final class MCPManager: ObservableObject {
     private let autoConnectMaxDelay: TimeInterval = 30.0
     private let autoConnectHandshakeTimeout: TimeInterval = 120.0
     private let autoConnectFailureNotificationCooldown: TimeInterval = 120.0
-    private let configWatcherInterval: TimeInterval = 2.0
     private let defaultToolCallTimeout: TimeInterval = 60
     private let defaultChatToolCallTimeout: TimeInterval = 120
     private let toolCallWatchdogInterval: TimeInterval = 0.25
@@ -344,12 +344,12 @@ public final class MCPManager: ObservableObject {
     private init() {
         chatToolsEnabled = UserDefaults.standard.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
         reloadServers()
-        startConfigWatcherIfNeeded()
+        startConfigObservationIfNeeded()
         connectSelectedServersIfNeeded()
     }
 
     deinit {
-        configWatcherTask?.cancel()
+        configObservationCancellable?.cancel()
         for task in autoConnectRetryTasks.values {
             task.cancel()
         }
@@ -388,22 +388,29 @@ public final class MCPManager: ObservableObject {
             let existingStatus = newStatuses[server.id]
             var status = existingStatus ?? MCPServerStatus()
             status.isSelectedForChat = server.isSelectedForChat
-            if case .idle = status.connectionState, let cache = MCPServerStore.loadMetadata(for: server.id) {
-                if status.info == nil {
-                    status.info = cache.info
+            if case .idle = status.connectionState {
+                if status.tools.isEmpty {
+                    status.tools = MCPServerStore.loadTools(for: server.id)
                 }
-                if status.tools.isEmpty && status.resources.isEmpty && status.resourceTemplates.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
-                    status.tools = cache.tools
-                    status.resources = cache.resources
-                    status.resourceTemplates = cache.resourceTemplates
-                    status.prompts = cache.prompts
-                    status.roots = cache.roots
-                }
-                status.metadataCachedAt = cache.cachedAt
-                // 首次加载时，若服务器已加入聊天路由且有可用缓存，先乐观恢复为 ready。
-                // 后台会继续发起 initialize 握手校验，失败后再回落到 failed。
-                if existingStatus == nil, server.isSelectedForChat {
-                    status.connectionState = .ready
+
+                if let cache = MCPServerStore.loadMetadata(for: server.id, includeTools: false) {
+                    if status.info == nil {
+                        status.info = cache.info
+                    }
+                    if status.resources.isEmpty && status.resourceTemplates.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
+                        status.resources = cache.resources
+                        status.resourceTemplates = cache.resourceTemplates
+                        status.prompts = cache.prompts
+                        status.roots = cache.roots
+                    }
+                    if status.metadataCachedAt == nil || !status.tools.isEmpty || !status.resources.isEmpty || !status.resourceTemplates.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty {
+                        status.metadataCachedAt = cache.cachedAt
+                    }
+                    // 首次加载时，若服务器已加入聊天路由且有可用缓存，先乐观恢复为 ready。
+                    // 后台会继续发起 initialize 握手校验，失败后再回落到 failed。
+                    if existingStatus == nil, server.isSelectedForChat {
+                        status.connectionState = .ready
+                    }
                 }
             }
             newStatuses[server.id] = status
@@ -1290,30 +1297,40 @@ public final class MCPManager: ObservableObject {
 
     // MARK: - Private helpers
 
-    private func startConfigWatcherIfNeeded() {
-        guard configWatcherTask == nil else { return }
-        let watcherInterval = configWatcherInterval
-        configWatcherTask = Task { [weak self, watcherInterval] in
-            while !Task.isCancelled {
-                let nanos = UInt64(watcherInterval * 1_000_000_000)
-                do {
-                    try await Task.sleep(nanoseconds: nanos)
-                } catch {
-                    return
+    private func startConfigObservationIfNeeded() {
+        guard configObservationCancellable == nil else { return }
+        configObservationCancellable = MCPServerStore.observeConfigurationSignature(
+            onError: { [weak self] error in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.appendGovernanceLog(
+                        level: .warning,
+                        category: .lifecycle,
+                        message: "MCP 配置监听失败，将保留当前状态：\(error.localizedDescription)"
+                    )
                 }
-                guard let self else { return }
-                self.processConfigWatcherTick()
+            },
+            onChange: { [weak self] latestSignature in
+                Task { @MainActor [weak self] in
+                    self?.handleConfigObservationSignature(latestSignature)
+                }
             }
+        )
+        if configObservationCancellable == nil {
+            appendGovernanceLog(
+                level: .warning,
+                category: .lifecycle,
+                message: "MCP 配置监听未启用：将仅在应用内触发保存时刷新。"
+            )
         }
     }
 
-    private func processConfigWatcherTick() {
-        let latestSignature = MCPServerStore.configurationSnapshotSignature()
+    private func handleConfigObservationSignature(_ latestSignature: String) {
         guard latestSignature != configSnapshotSignature else { return }
         appendGovernanceLog(
             level: .info,
             category: .lifecycle,
-            message: "检测到 MCP 配置文件变化，自动刷新。"
+            message: "检测到 MCP 配置数据库变化，自动刷新。"
         )
         reloadServers()
     }

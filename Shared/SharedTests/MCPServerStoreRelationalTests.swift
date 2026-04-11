@@ -93,7 +93,32 @@ struct MCPServerStoreRelationalTests {
         #expect(metadata?.tools.map(\.toolId) == ["tool.alpha", "tool.beta"])
         #expect(metadata?.tools.first?.description == "示例工具 A")
 
-        let signature = MCPServerStore.configurationSnapshotSignature()
-        #expect(signature.contains(server.id.uuidString))
+        let toolsOnly = MCPServerStore.loadTools(for: server.id)
+        #expect(toolsOnly.map(\.toolId) == ["tool.alpha", "tool.beta"])
+
+        let signatureBefore = MCPServerStore.configurationSnapshotSignature()
+        #expect(signatureBefore.contains(server.id.uuidString))
+
+        MCPServerStore.saveMetadata(
+            MCPServerMetadataCache(
+                info: nil,
+                tools: [
+                    MCPToolDescription(
+                        toolId: "tool.gamma",
+                        description: "变更后的工具",
+                        inputSchema: .dictionary(["type": .string("object")]),
+                        examples: nil
+                    )
+                ],
+                resources: [],
+                resourceTemplates: [],
+                prompts: [],
+                roots: []
+            ),
+            for: server.id
+        )
+
+        let signatureAfter = MCPServerStore.configurationSnapshotSignature()
+        #expect(signatureAfter != signatureBefore)
     }
 }
