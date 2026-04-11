@@ -4020,6 +4020,9 @@ fileprivate struct PersistenceTests {
         let recoveryNotice = Persistence.consumeLaunchRecoveryNotice()
         #expect(recoveryNotice?.contains("聊天数据库") == true)
         #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM messages_fts") == messages.count)
+        #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ai'"))
+        #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ad'"))
+        #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"))
     }
 
     @Test("旧 JSON 快照消息为零且数据库已有消息时不会覆盖与清理")

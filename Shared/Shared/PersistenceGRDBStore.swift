@@ -954,6 +954,30 @@ final class PersistenceGRDBStore {
                         tokenize = 'unicode61'
                     )
                 """)
+                try db.execute(sql: "DROP TRIGGER IF EXISTS messages_ai")
+                try db.execute(sql: "DROP TRIGGER IF EXISTS messages_ad")
+                try db.execute(sql: "DROP TRIGGER IF EXISTS messages_au")
+                try db.execute(sql: """
+                    CREATE TRIGGER messages_ai AFTER INSERT ON messages
+                    BEGIN
+                        INSERT INTO messages_fts(message_id, session_id, content)
+                        VALUES (new.id, new.session_id, new.content);
+                    END
+                """)
+                try db.execute(sql: """
+                    CREATE TRIGGER messages_ad AFTER DELETE ON messages
+                    BEGIN
+                        DELETE FROM messages_fts WHERE message_id = old.id;
+                    END
+                """)
+                try db.execute(sql: """
+                    CREATE TRIGGER messages_au AFTER UPDATE ON messages
+                    BEGIN
+                        DELETE FROM messages_fts WHERE message_id = old.id;
+                        INSERT INTO messages_fts(message_id, session_id, content)
+                        VALUES (new.id, new.session_id, new.content);
+                    END
+                """)
                 try db.execute(sql: "DELETE FROM messages_fts")
                 try db.execute(sql: """
                     INSERT INTO messages_fts(message_id, session_id, content)
