@@ -355,6 +355,7 @@ private struct WatchColorEditorView: View {
 
 private struct WatchFontSettingsView: View {
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
+    @AppStorage(FontLibrary.fallbackScopeStorageKey) private var fallbackScopeRawValue: String = FontFallbackScope.segment.rawValue
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -391,6 +392,17 @@ private struct WatchFontSettingsView: View {
                 Toggle("启用自定义字体", isOn: $isCustomFontEnabled)
             } footer: {
                 Text("关闭后会全局回退系统字体；已导入字体与优先级配置会保留。")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("回退范围") {
+                Picker("字体回退范围", selection: fallbackScopeBinding) {
+                    ForEach(FontFallbackScope.allCases) { scope in
+                        Text(scope.title).tag(scope)
+                    }
+                }
+                Text(fallbackScope.summary)
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -536,6 +548,9 @@ private struct WatchFontSettingsView: View {
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
+        .onChange(of: fallbackScopeRawValue) { _, _ in
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
         .confirmationDialog(
             "添加字体到当前槽位",
             isPresented: $showAddAssetDialog,
@@ -608,6 +623,17 @@ private struct WatchFontSettingsView: View {
             assets = loadedAssets
         }
         routes = FontLibrary.loadRouteConfiguration()
+    }
+
+    private var fallbackScope: FontFallbackScope {
+        FontFallbackScope(rawValue: fallbackScopeRawValue) ?? .segment
+    }
+
+    private var fallbackScopeBinding: Binding<FontFallbackScope> {
+        Binding(
+            get: { fallbackScope },
+            set: { fallbackScopeRawValue = $0.rawValue }
+        )
     }
 
     private func moveAsset(at index: Int, offset: Int) {

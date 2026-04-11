@@ -202,6 +202,7 @@ struct DisplaySettingsView: View {
 private struct FontSettingsView: View {
     @Environment(\.editMode) private var editMode
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
+    @AppStorage(FontLibrary.fallbackScopeStorageKey) private var fallbackScopeRawValue: String = FontFallbackScope.segment.rawValue
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -237,6 +238,19 @@ private struct FontSettingsView: View {
                 Toggle("启用自定义字体", isOn: $isCustomFontEnabled)
             } footer: {
                 Text("关闭后全局回退为系统字体；已导入字体与优先级配置会保留。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("回退范围") {
+                Picker("字体回退范围", selection: fallbackScopeBinding) {
+                    ForEach(FontFallbackScope.allCases) { scope in
+                        Text(scope.title).tag(scope)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(fallbackScope.summary)
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -354,6 +368,9 @@ private struct FontSettingsView: View {
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
+        .onChange(of: fallbackScopeRawValue) { _, _ in
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
         .fileImporter(
             isPresented: $showImporter,
             allowedContentTypes: supportedFontTypes,
@@ -430,6 +447,17 @@ private struct FontSettingsView: View {
 
     private var isEditing: Bool {
         editMode?.wrappedValue.isEditing == true
+    }
+
+    private var fallbackScope: FontFallbackScope {
+        FontFallbackScope(rawValue: fallbackScopeRawValue) ?? .segment
+    }
+
+    private var fallbackScopeBinding: Binding<FontFallbackScope> {
+        Binding(
+            get: { fallbackScope },
+            set: { fallbackScopeRawValue = $0.rawValue }
+        )
     }
 
     private var supportedFontTypes: [UTType] {

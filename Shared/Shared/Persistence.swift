@@ -2608,6 +2608,33 @@ public enum FontSemanticRole: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+public enum FontFallbackScope: String, Codable, CaseIterable, Identifiable {
+    /// 当前逻辑：以整段样本检测覆盖率，必须整段都可渲染才命中该字体。
+    case segment
+    /// 新逻辑：按单字回退，只要候选字体能覆盖样本中的任意字符即可命中。
+    case character
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .segment:
+            return "整段"
+        case .character:
+            return "单字"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .segment:
+            return "当前行为：一条文本里只要有字形缺失，就整段降级到下一优先级字体。"
+        case .character:
+            return "按单字回退：优先保留高优先级字体，缺失字形再由系统进行逐字回退。"
+        }
+    }
+}
+
 public struct FontAssetRecord: Codable, Identifiable, Equatable {
     public var id: UUID
     public var fileName: String
@@ -2729,6 +2756,7 @@ public enum FontLibrary {
     private static let routeConfigFileName = "font-routes-v1.json"
     private static let supportedFontFileExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
     public static let customFontEnabledStorageKey = "font.useCustomFonts"
+    public static let fallbackScopeStorageKey = "font.fallbackScope"
 
     private static var manifestURL: URL {
         Persistence.getFontDirectory().appendingPathComponent(manifestFileName)
@@ -2741,6 +2769,15 @@ public enum FontLibrary {
     /// 全局开关：是否启用自定义字体（默认启用）。
     public static var isCustomFontEnabled: Bool {
         (UserDefaults.standard.object(forKey: customFontEnabledStorageKey) as? Bool) ?? true
+    }
+
+    /// 字体回退范围设置（默认整段）。
+    public static var fallbackScope: FontFallbackScope {
+        guard let rawValue = UserDefaults.standard.string(forKey: fallbackScopeStorageKey),
+              let scope = FontFallbackScope(rawValue: rawValue) else {
+            return .segment
+        }
+        return scope
     }
 
     public static func loadAssets() -> [FontAssetRecord] {
@@ -2932,12 +2969,18 @@ public enum FontLibrary {
         guard !candidates.isEmpty else { return nil }
 
         let normalizedSample = normalizeSampleText(sampleText)
-        for postScriptName in candidates {
-            if fontCanRenderSample(postScriptName: postScriptName, sample: normalizedSample) {
-                return postScriptName
-            }
+        switch fallbackScope {
+        case .segment:
+            return resolveFontForSegmentFallback(
+                candidates: candidates,
+                normalizedSample: normalizedSample
+            )
+        case .character:
+            return resolveFontForCharacterFallback(
+                candidates: candidates,
+                normalizedSample: normalizedSample
+            )
         }
-        return nil
     }
 
     private static func sanitizeBaseName(_ value: String) -> String {
@@ -2967,6 +3010,30 @@ public enum FontLibrary {
             .filter { !$0.properties.isWhitespace && $0.properties.generalCategory != .control }
         let prefix = String(String.UnicodeScalarView(scalars.prefix(96)))
         return prefix.isEmpty ? "Aa测试あア한ع" : prefix
+    }
+
+    private static func resolveFontForSegmentFallback(
+        candidates: [String],
+        normalizedSample: String
+    ) -> String? {
+        for postScriptName in candidates {
+            if fontCanRenderSample(postScriptName: postScriptName, sample: normalizedSample) {
+                return postScriptName
+            }
+        }
+        return nil
+    }
+
+    private static func resolveFontForCharacterFallback(
+        candidates: [String],
+        normalizedSample: String
+    ) -> String? {
+        for postScriptName in candidates {
+            if fontCanRenderAnyCharacter(postScriptName: postScriptName, sample: normalizedSample) {
+                return postScriptName
+            }
+        }
+        return nil
     }
 
     private static func registerFontFileIfNeeded(fileName: String) {
@@ -3005,16 +3072,8 @@ public enum FontLibrary {
     private static func fontCanRenderSample(postScriptName: String, sample: String) -> Bool {
 #if canImport(CoreText)
         guard !sample.isEmpty else { return true }
-        let font = CTFontCreateWithName(postScriptName as CFString, 16, nil)
-        let filteredScalars = sample.unicodeScalars.filter { scalar in
-            !scalar.properties.isWhitespace && scalar.properties.generalCategory != .control
-        }
-        let characters = filteredScalars.prefix(96).map { scalar -> UniChar in
-            if scalar.value <= 0xFFFF {
-                return UniChar(scalar.value)
-            }
-            return UniChar(0xFFFD)
-        }
+        guard let font = createFontIfExists(postScriptName: postScriptName) else { return false }
+        let characters = sampleCharacters(sample)
         guard !characters.isEmpty else { return true }
 
         var mutableCharacters = characters
@@ -3025,6 +3084,50 @@ public enum FontLibrary {
         _ = postScriptName
         _ = sample
         return true
+#endif
+    }
+
+    private static func fontCanRenderAnyCharacter(postScriptName: String, sample: String) -> Bool {
+#if canImport(CoreText)
+        guard !sample.isEmpty else { return true }
+        guard let font = createFontIfExists(postScriptName: postScriptName) else { return false }
+        let characters = sampleCharacters(sample)
+        guard !characters.isEmpty else { return true }
+
+        var mutableCharacters = characters
+        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
+        _ = CTFontGetGlyphsForCharacters(font, &mutableCharacters, &glyphs, mutableCharacters.count)
+        return glyphs.contains { $0 != 0 }
+#else
+        _ = postScriptName
+        _ = sample
+        return true
+#endif
+    }
+
+    private static func sampleCharacters(_ sample: String) -> [UniChar] {
+        let filteredScalars = sample.unicodeScalars.filter { scalar in
+            !scalar.properties.isWhitespace && scalar.properties.generalCategory != .control
+        }
+        return filteredScalars.prefix(96).map { scalar -> UniChar in
+            if scalar.value <= 0xFFFF {
+                return UniChar(scalar.value)
+            }
+            return UniChar(0xFFFD)
+        }
+    }
+
+    private static func createFontIfExists(postScriptName: String) -> CTFont? {
+#if canImport(CoreText)
+        let font = CTFontCreateWithName(postScriptName as CFString, 16, nil)
+        let resolvedPostScriptName = CTFontCopyPostScriptName(font) as String
+        guard resolvedPostScriptName.caseInsensitiveCompare(postScriptName) == .orderedSame else {
+            return nil
+        }
+        return font
+#else
+        _ = postScriptName
+        return nil
 #endif
     }
 }

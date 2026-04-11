@@ -290,6 +290,39 @@ struct FontRouteSyncTests {
         }
     }
 
+    @Test("单字回退模式会优先保留首个可渲染字符的高优先级字体")
+    func testCharacterFallbackScopeKeepsHigherPriorityFontForMixedSample() async throws {
+        let defaults = UserDefaults.standard
+        let key = FontLibrary.fallbackScopeStorageKey
+        let previousValue = defaults.object(forKey: key)
+        defer {
+            if let previousValue {
+                defaults.set(previousValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        try await withIsolatedFontStore {
+            let fixture = try loadSystemFontFixture()
+            let imported = try FontLibrary.importFont(
+                data: fixture.data,
+                fileName: "scope-\(fixture.fileName)"
+            )
+            FontLibrary.updateChain([imported.id], for: .body)
+
+            let mixedSample = "A\u{0378}"
+
+            defaults.set(FontFallbackScope.segment.rawValue, forKey: key)
+            #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == nil)
+
+            defaults.set(FontFallbackScope.character.rawValue, forKey: key)
+            #expect(
+                FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == imported.postScriptName
+            )
+        }
+    }
+
     @Test("旧版本同步包缺少 isEnabled 字段时默认按启用处理")
     func testDecodeLegacySyncedFontFileDefaultsIsEnabled() throws {
         let assetID = UUID(uuidString: "40000000-0000-0000-0000-000000000001")!
