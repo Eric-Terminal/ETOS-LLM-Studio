@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import Combine
 @testable import Shared
 
 @Suite("聊天服务生图路由测试")

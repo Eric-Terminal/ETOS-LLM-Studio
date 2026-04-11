@@ -2,6 +2,7 @@ import Testing
 @testable import Shared
 
 @Suite("公告语言匹配测试")
+@MainActor
 struct AnnouncementLanguageMatchingTests {
 
     @Test("简体环境只命中 zh-Hans，不命中 zh-Hant")

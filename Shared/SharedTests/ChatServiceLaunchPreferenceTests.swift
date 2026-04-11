@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Combine
 @testable import Shared
 
 @Suite("聊天服务启动会话偏好测试")
