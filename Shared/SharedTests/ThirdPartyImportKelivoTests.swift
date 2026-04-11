@@ -2,7 +2,7 @@
 // ThirdPartyImportKelivoTests.swift
 // ============================================================================
 // ThirdPartyImportService Kelivo 导入测试
-// - 覆盖 settings.json provider_configs_v1 解析
+// - 覆盖 settings.json provider_configs 解析
 // - 覆盖 chats.json conversations/messages 解析
 // ============================================================================
 
@@ -19,7 +19,7 @@ struct ThirdPartyImportKelivoTests {
         defer { try? FileManager.default.removeItem(at: sandbox) }
 
         let settings: [String: Any] = [
-            "provider_configs_v1": [
+            "provider_configs": [
                 "kelivo-provider-1": [
                     "name": "Kelivo Gemini",
                     "providerType": "gemini",

@@ -98,9 +98,11 @@ public struct MCPServerListHeader: Codable, Hashable, Identifiable {
 
 public struct MCPServerStore {
     private static let lock = NSLock()
-    private static let legacyBlobKey = "mcp_servers_records_v1"
-    private static let relationalServerTable = "mcp_servers_v2"
-    private static let relationalToolTable = "mcp_tools_v2"
+    private static let recordBlobKey = "mcp_servers_records"
+    private static let legacyRecordBlobKey = "mcp_servers_records_v1"
+    private static let allRecordBlobKeys = [recordBlobKey, legacyRecordBlobKey]
+    fileprivate static let relationalServerTable = "mcp_servers"
+    fileprivate static let relationalToolTable = "mcp_tools"
     private static var didBootstrapRelationalStore = false
 
     private static var documentsDirectory: URL {
@@ -434,11 +436,11 @@ public struct MCPServerStore {
         } ?? false
 
         guard migrateSucceeded else {
-            mcpStoreLogger.error("MCP 关系化迁移失败：未能写入 mcp_servers_v2/mcp_tools_v2。")
+            mcpStoreLogger.error("MCP 关系化迁移失败：未能写入 mcp_servers/mcp_tools。")
             return
         }
 
-        _ = Persistence.removeAuxiliaryBlob(forKey: legacyBlobKey)
+        removeLegacyRecordBlobs()
         cleanupLegacyFileArtifacts()
         mcpStoreLogger.info("MCP 配置已自动迁移到关系化表：servers=\(legacyRecords.count)")
     }
@@ -1182,15 +1184,14 @@ public struct MCPServerStore {
     }
 
     private static func cleanupLegacyArtifactsAfterRelationalSave() {
-        _ = Persistence.removeAuxiliaryBlob(forKey: legacyBlobKey)
+        removeLegacyRecordBlobs()
         cleanupLegacyFileArtifacts()
     }
 
     // MARK: - 旧版数据（JSON Blob / 文件）
 
     private static func loadLegacyRecords(usingBlobCache: Bool) -> [MCPServerStoredRecord] {
-        if Persistence.auxiliaryBlobExists(forKey: legacyBlobKey) {
-            let records = Persistence.loadAuxiliaryBlob([MCPServerStoredRecord].self, forKey: legacyBlobKey) ?? []
+        if let records = loadLegacyRecordsFromBlob() {
             return records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
         }
 
@@ -1198,7 +1199,8 @@ public struct MCPServerStore {
         guard !fileRecords.isEmpty else { return [] }
 
         if usingBlobCache,
-           Persistence.saveAuxiliaryBlob(fileRecords, forKey: legacyBlobKey) {
+           Persistence.saveAuxiliaryBlob(fileRecords, forKey: recordBlobKey) {
+            removeLegacyRecordBlobs(excluding: recordBlobKey)
             cleanupLegacyFileArtifacts()
         }
 
@@ -1207,11 +1209,28 @@ public struct MCPServerStore {
 
     private static func saveLegacyRecords(_ records: [MCPServerStoredRecord]) {
         let sortedRecords = records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
-        if Persistence.saveAuxiliaryBlob(sortedRecords, forKey: legacyBlobKey) {
+        if Persistence.saveAuxiliaryBlob(sortedRecords, forKey: recordBlobKey) {
+            removeLegacyRecordBlobs(excluding: recordBlobKey)
             cleanupLegacyFileArtifacts()
             return
         }
         saveRecordsToFiles(sortedRecords)
+    }
+
+    private static func loadLegacyRecordsFromBlob() -> [MCPServerStoredRecord]? {
+        for key in allRecordBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else {
+                continue
+            }
+            return Persistence.loadAuxiliaryBlob([MCPServerStoredRecord].self, forKey: key) ?? []
+        }
+        return nil
+    }
+
+    private static func removeLegacyRecordBlobs(excluding keepKey: String? = nil) {
+        for key in allRecordBlobKeys where key != keepKey {
+            _ = Persistence.removeAuxiliaryBlob(forKey: key)
+        }
     }
 
     private static func configurationSignatureFromLegacyRecords() -> String {
@@ -1348,7 +1367,7 @@ public struct MCPServerStore {
 // MARK: - GRDB Records
 
 private struct MCPServerHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
-    static let databaseTableName = "mcp_servers_v2"
+    static let databaseTableName = MCPServerStore.relationalServerTable
 
     enum Status: String {
         case idle
@@ -1401,7 +1420,7 @@ private struct MCPOAuthPayload: Codable, Hashable {
 }
 
 private struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
-    static let databaseTableName = "mcp_servers_v2"
+    static let databaseTableName = MCPServerStore.relationalServerTable
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1507,7 +1526,7 @@ private struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersista
 }
 
 private struct MCPToolHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
-    static let databaseTableName = "mcp_tools_v2"
+    static let databaseTableName = MCPServerStore.relationalToolTable
 
     enum CodingKeys: String, CodingKey {
         case serverID = "server_id"
@@ -1531,7 +1550,7 @@ private struct MCPToolHeaderRecord: Codable, FetchableRecord, MutablePersistable
 }
 
 private struct MCPToolPayloadRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
-    static let databaseTableName = "mcp_tools_v2"
+    static let databaseTableName = MCPServerStore.relationalToolTable
 
     enum CodingKeys: String, CodingKey {
         case serverID = "server_id"

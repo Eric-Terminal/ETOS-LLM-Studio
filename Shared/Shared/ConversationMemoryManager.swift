@@ -120,7 +120,8 @@ private struct ConversationUserProfileStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let rootDirectory: URL?
-    private let grdbBlobKey = "conversation_user_profile_v1"
+    private let grdbBlobKey = "conversation_user_profile"
+    private var legacyBlobKeys: [String] { [grdbBlobKey, "conversation_user_profile_v1"] }
 
     init(rootDirectory: URL? = nil) {
         self.rootDirectory = rootDirectory
@@ -176,7 +177,7 @@ private struct ConversationUserProfileStore {
     func clearProfile() throws {
         if canUseGRDB {
             _ = clearProfileFromSQLite()
-            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            removeLegacyProfileBlobs()
         }
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
@@ -211,10 +212,9 @@ private struct ConversationUserProfileStore {
         }
 
         if profile == nil,
-           Persistence.auxiliaryBlobExists(forKey: grdbBlobKey),
-           let legacy = Persistence.loadAuxiliaryBlob(ConversationUserProfile.self, forKey: grdbBlobKey) {
+           let legacy = loadLegacyProfileFromBlob() {
             if saveProfileToSQLite(legacy) {
-                _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+                removeLegacyProfileBlobs()
             }
             return (true, legacy)
         }
@@ -244,7 +244,7 @@ private struct ConversationUserProfileStore {
         } ?? false
 
         if didSave {
-            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            removeLegacyProfileBlobs()
         }
         return didSave
     }
@@ -255,5 +255,21 @@ private struct ConversationUserProfileStore {
             try db.execute(sql: "DELETE FROM conversation_user_profile WHERE singleton_key = 1")
             return true
         } ?? false
+    }
+
+    private func loadLegacyProfileFromBlob() -> ConversationUserProfile? {
+        for key in legacyBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else {
+                continue
+            }
+            return Persistence.loadAuxiliaryBlob(ConversationUserProfile.self, forKey: key)
+        }
+        return nil
+    }
+
+    private func removeLegacyProfileBlobs() {
+        for key in legacyBlobKeys {
+            _ = Persistence.removeAuxiliaryBlob(forKey: key)
+        }
     }
 }

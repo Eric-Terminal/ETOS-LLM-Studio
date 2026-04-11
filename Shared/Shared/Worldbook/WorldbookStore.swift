@@ -70,7 +70,9 @@ public final class WorldbookStore {
 
     public static let directoryName = "Worldbooks"
     public static let fileName = "worldbooks.json"
-    private static let grdbBlobKey = "worldbooks_v1"
+    private static let grdbBlobKey = "worldbooks"
+    private static let legacyGrdbBlobKey = "worldbooks_v1"
+    private static let legacyBlobKeys = [grdbBlobKey, legacyGrdbBlobKey]
     private static let standaloneFileExtension = "json"
     private static let importedFileExtensions: Set<String> = ["json", "png"]
 
@@ -345,7 +347,7 @@ public final class WorldbookStore {
            let legacyWorldbooks = loadLegacyWorldbooksFromBlob(),
            !legacyWorldbooks.isEmpty {
             if saveWorldbooksToSQLite(legacyWorldbooks) {
-                _ = Persistence.removeAuxiliaryBlob(forKey: Self.grdbBlobKey)
+                removeLegacyWorldbookBlobs()
             }
             return legacyWorldbooks
         }
@@ -354,10 +356,13 @@ public final class WorldbookStore {
     }
 
     private func loadLegacyWorldbooksFromBlob() -> [Worldbook]? {
-        guard Persistence.auxiliaryBlobExists(forKey: Self.grdbBlobKey) else {
-            return nil
+        for key in Self.legacyBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else {
+                continue
+            }
+            return Persistence.loadAuxiliaryBlob([Worldbook].self, forKey: key) ?? []
         }
-        return Persistence.loadAuxiliaryBlob([Worldbook].self, forKey: Self.grdbBlobKey) ?? []
+        return nil
     }
 
     @discardableResult
@@ -502,9 +507,15 @@ public final class WorldbookStore {
         } ?? false
 
         if didSave {
-            _ = Persistence.removeAuxiliaryBlob(forKey: Self.grdbBlobKey)
+            removeLegacyWorldbookBlobs()
         }
         return didSave
+    }
+
+    private func removeLegacyWorldbookBlobs() {
+        for key in Self.legacyBlobKeys {
+            _ = Persistence.removeAuxiliaryBlob(forKey: key)
+        }
     }
 
     private func loadWorldbooksFromRelationalStore(_ db: Database) throws -> [Worldbook] {

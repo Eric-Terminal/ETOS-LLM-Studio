@@ -16,7 +16,8 @@ struct MemoryRawStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let rootDirectory: URL?
-    private let grdbBlobKey = "memory_raw_memories_v1"
+    private let grdbBlobKey = "memory_raw_memories"
+    private var legacyBlobKeys: [String] { [grdbBlobKey, "memory_raw_memories_v1"] }
     
     init(rootDirectory: URL? = nil) {
         self.rootDirectory = rootDirectory
@@ -91,11 +92,10 @@ struct MemoryRawStore {
         }
 
         if memories.isEmpty,
-           Persistence.auxiliaryBlobExists(forKey: grdbBlobKey),
-           let legacy = Persistence.loadAuxiliaryBlob([MemoryItem].self, forKey: grdbBlobKey),
+           let legacy = loadLegacyMemoriesFromBlob(),
            !legacy.isEmpty {
             if saveMemoriesToSQLite(legacy) {
-                _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+                removeLegacyMemoryBlobs()
             }
             return legacy
         }
@@ -127,9 +127,25 @@ struct MemoryRawStore {
         } ?? false
 
         if didSave {
-            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            removeLegacyMemoryBlobs()
         }
         return didSave
+    }
+
+    private func loadLegacyMemoriesFromBlob() -> [MemoryItem]? {
+        for key in legacyBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else {
+                continue
+            }
+            return Persistence.loadAuxiliaryBlob([MemoryItem].self, forKey: key) ?? []
+        }
+        return nil
+    }
+
+    private func removeLegacyMemoryBlobs() {
+        for key in legacyBlobKeys {
+            _ = Persistence.removeAuxiliaryBlob(forKey: key)
+        }
     }
 
     private func persistJSONMirror(_ memories: [MemoryItem]) {

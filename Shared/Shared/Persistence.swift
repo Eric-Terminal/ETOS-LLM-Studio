@@ -116,14 +116,21 @@ public enum Persistence {
     private static var lastAuxiliaryStoreInitializationFailedAt: [AuxiliaryStoreKind: Date] = [:]
     private static let auxiliaryStoreRetryInterval: TimeInterval = 2
     private static let auxiliaryConfigBlobKeys: Set<String> = [
+        "providers",
         "providers_v1",
+        "worldbooks",
         "worldbooks_v1",
+        "shortcut_tools",
         "shortcut_tools_v1",
+        "feedback_tickets",
         "feedback_tickets_v1",
+        "mcp_servers_records",
         "mcp_servers_records_v1"
     ]
     private static let auxiliaryMemoryBlobKeys: Set<String> = [
+        "memory_raw_memories",
         "memory_raw_memories_v1",
+        "conversation_user_profile",
         "conversation_user_profile_v1"
     ]
     static var grdbEnabledOverrideForTests: Bool?

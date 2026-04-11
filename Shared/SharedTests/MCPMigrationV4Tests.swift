@@ -1,7 +1,7 @@
 // ============================================================================
 // MCPMigrationV4Tests.swift
 // ============================================================================
-// 验证 MCP v4 迁移：旧关系表/json_blobs -> v2 混合表。
+// 验证 MCP v4 迁移：旧关系表/json_blobs -> 混合表。
 // ============================================================================
 
 import Foundation
@@ -11,7 +11,7 @@ import Testing
 
 @Suite("MCP v4 迁移测试")
 struct MCPMigrationV4Tests {
-    @Test("旧 mcp_servers/mcp_tools 可迁移到 v2 混合表")
+    @Test("旧 mcp_servers/mcp_tools 可迁移到混合表")
     func testMigrateFromLegacyRelationalTables() throws {
         let databaseURL = try makeTemporaryConfigDatabaseURL()
         defer { cleanupTemporaryDatabase(at: databaseURL) }
@@ -87,32 +87,42 @@ struct MCPMigrationV4Tests {
         let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
 
         let verification = try store.read { db -> (Int, Int, String?, String?, Bool, Bool, Int) in
-            let serverCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers_v2") ?? 0
-            let toolCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_tools_v2") ?? 0
+            let serverCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
+            let toolCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_tools") ?? 0
             let migratedName = try String.fetchOne(
                 db,
-                sql: "SELECT display_name FROM mcp_servers_v2 WHERE id = ?",
+                sql: "SELECT display_name FROM mcp_servers WHERE id = ?",
                 arguments: [serverID.uuidString]
             )
             let migratedToolDescription = try String.fetchOne(
                 db,
-                sql: "SELECT description FROM mcp_tools_v2 WHERE server_id = ? AND tool_name = ?",
+                sql: "SELECT description FROM mcp_tools WHERE server_id = ? AND tool_name = ?",
                 arguments: [serverID.uuidString, "tool.alpha"]
             )
-            let legacyServerTableDropped = (try Int.fetchOne(
+            let serverHasDisplayName = (try Int.fetchOne(
                 db,
-                sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'mcp_servers'"
-            ) ?? 0) == 0
-            let legacyToolTableDropped = (try Int.fetchOne(
+                sql: "SELECT COUNT(*) FROM pragma_table_info('mcp_servers') WHERE name = 'display_name'"
+            ) ?? 0) > 0
+            let serverHasLegacyConfigurationData = (try Int.fetchOne(
                 db,
-                sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'mcp_tools'"
-            ) ?? 0) == 0
+                sql: "SELECT COUNT(*) FROM pragma_table_info('mcp_servers') WHERE name = 'configuration_data'"
+            ) ?? 0) > 0
+            let toolHasToolName = (try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pragma_table_info('mcp_tools') WHERE name = 'tool_name'"
+            ) ?? 0) > 0
+            let toolHasLegacyName = (try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pragma_table_info('mcp_tools') WHERE name = 'name'"
+            ) ?? 0) > 0
             let verifyPassed = try Int.fetchOne(
                 db,
                 sql: "SELECT passed FROM migration_checks WHERE check_key = ?",
-                arguments: ["mcp_v2_migration_verified"]
+                arguments: ["mcp_migration_verified"]
             ) ?? 0
-            return (serverCount, toolCount, migratedName, migratedToolDescription, legacyServerTableDropped, legacyToolTableDropped, verifyPassed)
+            let serverSchemaMigrated = serverHasDisplayName && !serverHasLegacyConfigurationData
+            let toolSchemaMigrated = toolHasToolName && !toolHasLegacyName
+            return (serverCount, toolCount, migratedName, migratedToolDescription, serverSchemaMigrated, toolSchemaMigrated, verifyPassed)
         }
 
         #expect(verification.0 == 1)
@@ -124,7 +134,7 @@ struct MCPMigrationV4Tests {
         #expect(verification.6 == 1)
     }
 
-    @Test("仅有 json_blobs 时也可迁移到 v2 混合表")
+    @Test("仅有 json_blobs 时也可迁移到混合表")
     func testMigrateFromLegacyJSONBlobOnly() throws {
         let databaseURL = try makeTemporaryConfigDatabaseURL()
         defer { cleanupTemporaryDatabase(at: databaseURL) }
@@ -154,7 +164,7 @@ struct MCPMigrationV4Tests {
             try db.execute(
                 sql: "INSERT INTO json_blobs (key, json_data, updated_at) VALUES (?, ?, ?)",
                 arguments: [
-                    "mcp_servers_records_v1",
+                    "mcp_servers_records",
                     try encodeJSONData(records),
                     Date().timeIntervalSince1970
                 ]
@@ -164,17 +174,17 @@ struct MCPMigrationV4Tests {
         let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
 
         let verification = try store.read { db -> (Int, Int, String?, Int) in
-            let serverCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers_v2") ?? 0
-            let toolCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_tools_v2 WHERE server_id = ?", arguments: [server.id.uuidString]) ?? 0
+            let serverCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
+            let toolCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_tools WHERE server_id = ?", arguments: [server.id.uuidString]) ?? 0
             let status = try String.fetchOne(
                 db,
-                sql: "SELECT status FROM mcp_servers_v2 WHERE id = ?",
+                sql: "SELECT status FROM mcp_servers WHERE id = ?",
                 arguments: [server.id.uuidString]
             )
             let blobKeyCount = try Int.fetchOne(
                 db,
                 sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
-                arguments: ["mcp_servers_records_v1"]
+                arguments: ["mcp_servers_records"]
             ) ?? 0
             return (serverCount, toolCount, status, blobKeyCount)
         }
@@ -232,7 +242,7 @@ struct MCPMigrationV4Tests {
             try db.execute(
                 sql: "INSERT INTO json_blobs (key, json_data, updated_at) VALUES (?, ?, ?)",
                 arguments: [
-                    "mcp_servers_records_v1",
+                    "mcp_servers_records",
                     Data("not-json".utf8),
                     Date().timeIntervalSince1970
                 ]
@@ -242,7 +252,7 @@ struct MCPMigrationV4Tests {
         let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
 
         let migratedCount = try store.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers_v2") ?? 0
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
         }
 
         #expect(migratedCount == 1)
@@ -308,7 +318,7 @@ struct MCPMigrationV4Tests {
             try db.execute(
                 sql: "INSERT INTO json_blobs (key, json_data, updated_at) VALUES (?, ?, ?)",
                 arguments: [
-                    "mcp_servers_records_v1",
+                    "mcp_servers_records",
                     try encodeJSONData(blobRecords),
                     Date().timeIntervalSince1970
                 ]
@@ -320,12 +330,12 @@ struct MCPMigrationV4Tests {
         let verification = try store.read { db -> (Int, String?) in
             let toolCount = try Int.fetchOne(
                 db,
-                sql: "SELECT COUNT(*) FROM mcp_tools_v2 WHERE server_id = ? AND tool_name = ?",
+                sql: "SELECT COUNT(*) FROM mcp_tools WHERE server_id = ? AND tool_name = ?",
                 arguments: [serverID.uuidString, "tool.alpha"]
             ) ?? 0
             let description = try String.fetchOne(
                 db,
-                sql: "SELECT description FROM mcp_tools_v2 WHERE server_id = ? AND tool_name = ?",
+                sql: "SELECT description FROM mcp_tools WHERE server_id = ? AND tool_name = ?",
                 arguments: [serverID.uuidString, "tool.alpha"]
             )
             return (toolCount, description)
@@ -381,7 +391,7 @@ struct MCPMigrationV4Tests {
             try db.execute(
                 sql: "INSERT INTO json_blobs (key, json_data, updated_at) VALUES (?, ?, ?)",
                 arguments: [
-                    "mcp_servers_records_v1",
+                    "mcp_servers_records",
                     try encodeJSONData(records),
                     Date().timeIntervalSince1970
                 ]
@@ -393,12 +403,12 @@ struct MCPMigrationV4Tests {
         let verification = try store.read { db -> (String?, String?) in
             let displayName = try String.fetchOne(
                 db,
-                sql: "SELECT display_name FROM mcp_servers_v2 WHERE id = ?",
+                sql: "SELECT display_name FROM mcp_servers WHERE id = ?",
                 arguments: [serverID.uuidString]
             )
             let toolDescription = try String.fetchOne(
                 db,
-                sql: "SELECT description FROM mcp_tools_v2 WHERE server_id = ? AND tool_name = ?",
+                sql: "SELECT description FROM mcp_tools WHERE server_id = ? AND tool_name = ?",
                 arguments: [serverID.uuidString, "tool.alpha"]
             )
             return (displayName, toolDescription)

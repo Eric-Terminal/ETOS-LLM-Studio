@@ -21,7 +21,9 @@ public extension Notification.Name {
 public enum FeedbackStore {
     private static let lock = NSLock()
     private static let fileName = "tickets.json"
-    private static let grdbBlobKey = "feedback_tickets_v1"
+    private static let grdbBlobKey = "feedback_tickets"
+    private static let legacyGrdbBlobKey = "feedback_tickets_v1"
+    private static let legacyBlobKeys = [grdbBlobKey, legacyGrdbBlobKey]
 
     private static var directoryURL: URL {
         StorageUtility.documentsDirectory.appendingPathComponent("FeedbackTickets")
@@ -196,11 +198,10 @@ public enum FeedbackStore {
         }
 
         if tickets.isEmpty,
-           Persistence.auxiliaryBlobExists(forKey: grdbBlobKey),
-           let legacy = Persistence.loadAuxiliaryBlob([FeedbackTicket].self, forKey: grdbBlobKey),
+           let legacy = loadLegacyTicketsFromBlob(),
            !legacy.isEmpty {
             if saveTicketsToSQLite(legacy) {
-                _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+                removeLegacyTicketBlobs()
             }
             return legacy
         }
@@ -252,9 +253,25 @@ public enum FeedbackStore {
         } ?? false
 
         if didSave {
-            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            removeLegacyTicketBlobs()
         }
         return didSave
+    }
+
+    private static func loadLegacyTicketsFromBlob() -> [FeedbackTicket]? {
+        for key in legacyBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else {
+                continue
+            }
+            return Persistence.loadAuxiliaryBlob([FeedbackTicket].self, forKey: key) ?? []
+        }
+        return nil
+    }
+
+    private static func removeLegacyTicketBlobs() {
+        for key in legacyBlobKeys {
+            _ = Persistence.removeAuxiliaryBlob(forKey: key)
+        }
     }
 
     private static func ensureDirectoryExists() throws {

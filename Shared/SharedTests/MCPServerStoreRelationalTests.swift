@@ -170,7 +170,7 @@ struct MCPServerStoreRelationalTests {
         let didInjectPayload = Persistence.withConfigDatabaseWrite { db in
             try db.execute(
                 sql: """
-                UPDATE mcp_servers_v2
+                UPDATE mcp_servers
                 SET info_json = ?, resources_json = ?, resource_templates_json = ?, prompts_json = ?, roots_json = ?
                 WHERE id = ?
                 """,
@@ -240,7 +240,7 @@ struct MCPServerStoreRelationalTests {
         let didInjectBrokenPayload = Persistence.withConfigDatabaseWrite { db in
             try db.execute(
                 sql: """
-                UPDATE mcp_servers_v2
+                UPDATE mcp_servers
                 SET oauth_payload_json = ?, additional_headers_json = ?, disabled_tool_ids_json = ?, tool_approval_policies_json = ?
                 WHERE id = ?
                 """,

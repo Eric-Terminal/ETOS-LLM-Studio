@@ -5,8 +5,13 @@ import os.log
 /// GRDB 持久化存储实现（会话、消息、请求日志、Daily Pulse 等）。
 final class PersistenceGRDBStore {
     private enum MetaKey {
-        static let jsonImportCompleted = "json_import_completed_v1"
-        static let jsonCleanupCompleted = "json_cleanup_completed_v1"
+        static let jsonImportCompleted = "json_import_completed"
+        static let jsonCleanupCompleted = "json_cleanup_completed"
+        static let legacyJSONImportCompleted = "json_import_completed_v1"
+        static let legacyJSONCleanupCompleted = "json_cleanup_completed_v1"
+
+        static let jsonImportCompletedCandidates = [jsonImportCompleted, legacyJSONImportCompleted]
+        static let jsonCleanupCompletedCandidates = [jsonCleanupCompleted, legacyJSONCleanupCompleted]
     }
 
     private enum BlobKey {
@@ -1168,21 +1173,14 @@ final class PersistenceGRDBStore {
             try dbPool.write { db in
                 try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
                 try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
+                try removeMetaEntries(db, keys: [MetaKey.legacyJSONImportCompleted, MetaKey.legacyJSONCleanupCompleted])
             }
             return
         }
 
         let metaState = try dbPool.read { db -> (importCompleted: Bool, cleanupCompleted: Bool) in
-            let importValue: String? = try String.fetchOne(
-                db,
-                sql: "SELECT value FROM meta WHERE key = ?",
-                arguments: [MetaKey.jsonImportCompleted]
-            )
-            let cleanupValue: String? = try String.fetchOne(
-                db,
-                sql: "SELECT value FROM meta WHERE key = ?",
-                arguments: [MetaKey.jsonCleanupCompleted]
-            )
+            let importValue = try readMetaValue(db, candidateKeys: MetaKey.jsonImportCompletedCandidates)
+            let cleanupValue = try readMetaValue(db, candidateKeys: MetaKey.jsonCleanupCompletedCandidates)
             return (importValue == "1", cleanupValue == "1")
         }
 
@@ -1216,6 +1214,7 @@ final class PersistenceGRDBStore {
 
         try dbPool.write { db in
             try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
+            try removeMetaEntries(db, keys: [MetaKey.legacyJSONImportCompleted])
         }
 
         if !snapshot.sessions.isEmpty, snapshot.messageCount == 0 {
@@ -1234,6 +1233,7 @@ final class PersistenceGRDBStore {
             if didCleanupAllLegacyJSON {
                 try dbPool.write { db in
                     try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
+                    try removeMetaEntries(db, keys: [MetaKey.legacyJSONCleanupCompleted])
                 }
                 self.logger.info("JSON 数据已导入并校验，旧 JSON 文件已清理，数据库路径: \(self.databaseURL.path)")
             } else {
@@ -1902,6 +1902,25 @@ final class PersistenceGRDBStore {
             """,
             arguments: [key, value, Date().timeIntervalSince1970]
         )
+    }
+
+    private func readMetaValue(_ db: Database, candidateKeys: [String]) throws -> String? {
+        for key in candidateKeys {
+            if let value: String = try String.fetchOne(
+                db,
+                sql: "SELECT value FROM meta WHERE key = ?",
+                arguments: [key]
+            ) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func removeMetaEntries(_ db: Database, keys: [String]) throws {
+        for key in keys {
+            try db.execute(sql: "DELETE FROM meta WHERE key = ?", arguments: [key])
+        }
     }
 
     private func saveBlob<T: Encodable>(_ value: T, forKey key: String) {
@@ -2968,8 +2987,23 @@ final class PersistenceAuxiliaryGRDBStore {
                 if try tableExists("json_blobs"),
                    let blobData = try Data.fetchOne(
                         db,
-                        sql: "SELECT json_data FROM json_blobs WHERE key = ?",
-                        arguments: ["mcp_servers_records_v1"]
+                        sql: """
+                        SELECT json_data
+                        FROM json_blobs
+                        WHERE key IN (?, ?)
+                        ORDER BY CASE key
+                            WHEN ? THEN 0
+                            WHEN ? THEN 1
+                            ELSE 2
+                        END
+                        LIMIT 1
+                        """,
+                        arguments: [
+                            "mcp_servers_records",
+                            "mcp_servers_records_v1",
+                            "mcp_servers_records",
+                            "mcp_servers_records_v1"
+                        ]
                    ) {
                     let records = (try? decoder.decode([LegacyBlobRecord].self, from: blobData)) ?? []
                     for record in records {
@@ -3121,21 +3155,21 @@ final class PersistenceAuxiliaryGRDBStore {
                             passed = excluded.passed,
                             checked_at = excluded.checked_at
                         """,
-                        arguments: ["mcp_v2_migration_verified", passed ? 1 : 0, checkedAt]
+                        arguments: ["mcp_migration_verified", passed ? 1 : 0, checkedAt]
                     )
                 }
 
-                let hasV2Servers = try tableExists("mcp_servers_v2")
-                let hasV2Tools = try tableExists("mcp_tools_v2")
-                guard hasV2Servers, hasV2Tools else { return }
+                let hasHybridServersTable = try tableExists("mcp_servers_v2")
+                let hasHybridToolsTable = try tableExists("mcp_tools_v2")
+                guard hasHybridServersTable, hasHybridToolsTable else { return }
 
                 let legacyServerRows = (try tableExists("mcp_servers")) ? (try rowCount(of: "mcp_servers")) : 0
                 let legacyToolRows = (try tableExists("mcp_tools")) ? (try rowCount(of: "mcp_tools")) : 0
                 let legacyBlobRows = (try tableExists("json_blobs")) ? (
                     try Int.fetchOne(
                         db,
-                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
-                        arguments: ["mcp_servers_records_v1"]
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key IN (?, ?)",
+                        arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
                     ) ?? 0
                 ) : 0
                 let requiresMigratedData = legacyServerRows > 0 || legacyToolRows > 0 || legacyBlobRows > 0
@@ -3207,8 +3241,8 @@ final class PersistenceAuxiliaryGRDBStore {
                 let legacyBlobKeyCount = hasJSONBlobs ? (
                     try Int.fetchOne(
                         db,
-                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
-                        arguments: ["mcp_servers_records_v1"]
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key IN (?, ?)",
+                        arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
                     ) ?? 0
                 ) : 0
                 let hasLegacyArtifacts = hasLegacyServers || hasLegacyTools || legacyBlobKeyCount > 0
@@ -3218,8 +3252,23 @@ final class PersistenceAuxiliaryGRDBStore {
                 if try tableExists("migration_checks") {
                     verificationPassed = (try Int.fetchOne(
                         db,
-                        sql: "SELECT passed FROM migration_checks WHERE check_key = ?",
-                        arguments: ["mcp_v2_migration_verified"]
+                        sql: """
+                        SELECT passed
+                        FROM migration_checks
+                        WHERE check_key IN (?, ?)
+                        ORDER BY CASE check_key
+                            WHEN ? THEN 0
+                            WHEN ? THEN 1
+                            ELSE 2
+                        END
+                        LIMIT 1
+                        """,
+                        arguments: [
+                            "mcp_migration_verified",
+                            "mcp_v2_migration_verified",
+                            "mcp_migration_verified",
+                            "mcp_v2_migration_verified"
+                        ]
                     ) ?? 0) != 0
                 } else {
                     verificationPassed = false
@@ -3235,9 +3284,141 @@ final class PersistenceAuxiliaryGRDBStore {
                 }
                 if hasJSONBlobs {
                     try db.execute(
-                        sql: "DELETE FROM json_blobs WHERE key = ?",
-                        arguments: ["mcp_servers_records_v1"]
+                        sql: "DELETE FROM json_blobs WHERE key IN (?, ?)",
+                        arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
                     )
+                }
+            }
+
+            migrator.registerMigration("v8_finalize_mcp_table_names") { db in
+                func tableExists(_ name: String) throws -> Bool {
+                    (try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        arguments: [name]
+                    ) ?? 0) > 0
+                }
+
+                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
+                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+                    for column in columns {
+                        let name: String = column["name"]
+                        if name == columnName {
+                            return true
+                        }
+                    }
+                    return false
+                }
+
+                func nextBackupTableName(baseName: String) throws -> String {
+                    var candidate = baseName
+                    var suffix = 1
+                    while try tableExists(candidate) {
+                        candidate = "\(baseName)_\(suffix)"
+                        suffix += 1
+                    }
+                    return candidate
+                }
+
+                let hasCurrentServers = try tableExists("mcp_servers")
+                let hasCurrentTools = try tableExists("mcp_tools")
+                let hasHybridServers = try tableExists("mcp_servers_v2")
+                let hasHybridTools = try tableExists("mcp_tools_v2")
+
+                if hasCurrentServers {
+                    let isCurrentSchema = try tableHasColumn("mcp_servers", columnName: "display_name")
+                    if !isCurrentSchema {
+                        let backupName = try nextBackupTableName(baseName: "mcp_servers_legacy_backup")
+                        try db.execute(sql: "ALTER TABLE mcp_servers RENAME TO \(backupName)")
+                    }
+                }
+
+                if hasCurrentTools {
+                    let isCurrentSchema = try tableHasColumn("mcp_tools", columnName: "tool_name")
+                    if !isCurrentSchema {
+                        let backupName = try nextBackupTableName(baseName: "mcp_tools_legacy_backup")
+                        try db.execute(sql: "ALTER TABLE mcp_tools RENAME TO \(backupName)")
+                    }
+                }
+
+                if hasHybridServers, !(try tableExists("mcp_servers")) {
+                    try db.execute(sql: "ALTER TABLE mcp_servers_v2 RENAME TO mcp_servers")
+                }
+                if hasHybridTools, !(try tableExists("mcp_tools")) {
+                    try db.execute(sql: "ALTER TABLE mcp_tools_v2 RENAME TO mcp_tools")
+                }
+
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_updated_at")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_selected")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_status")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_display_name")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_v2_server_sort")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_v2_updated_at")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_updated_at")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_selected")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_status")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_display_name")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_server_sort")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_updated_at")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_server_name")
+
+                if try tableExists("mcp_servers"), try tableHasColumn("mcp_servers", columnName: "display_name") {
+                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_updated_at ON mcp_servers(updated_at DESC)")
+                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_selected ON mcp_servers(is_selected_for_chat, updated_at DESC)")
+                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_status ON mcp_servers(status, updated_at DESC)")
+                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_display_name ON mcp_servers(display_name COLLATE NOCASE)")
+                }
+                if try tableExists("mcp_tools"), try tableHasColumn("mcp_tools", columnName: "tool_name") {
+                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
+                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_updated_at ON mcp_tools(updated_at DESC)")
+                }
+
+                if try tableExists("json_blobs") {
+                    let newKeyCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                        arguments: ["mcp_servers_records"]
+                    ) ?? 0
+                    let oldKeyCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                        arguments: ["mcp_servers_records_v1"]
+                    ) ?? 0
+                    if oldKeyCount > 0, newKeyCount == 0 {
+                        try db.execute(
+                            sql: "UPDATE json_blobs SET key = ? WHERE key = ?",
+                            arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
+                        )
+                    } else if oldKeyCount > 0 {
+                        try db.execute(
+                            sql: "DELETE FROM json_blobs WHERE key = ?",
+                            arguments: ["mcp_servers_records_v1"]
+                        )
+                    }
+                }
+
+                if try tableExists("migration_checks") {
+                    let newKeyCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM migration_checks WHERE check_key = ?",
+                        arguments: ["mcp_migration_verified"]
+                    ) ?? 0
+                    let oldKeyCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM migration_checks WHERE check_key = ?",
+                        arguments: ["mcp_v2_migration_verified"]
+                    ) ?? 0
+                    if oldKeyCount > 0, newKeyCount == 0 {
+                        try db.execute(
+                            sql: "UPDATE migration_checks SET check_key = ? WHERE check_key = ?",
+                            arguments: ["mcp_migration_verified", "mcp_v2_migration_verified"]
+                        )
+                    } else if oldKeyCount > 0 {
+                        try db.execute(
+                            sql: "DELETE FROM migration_checks WHERE check_key = ?",
+                            arguments: ["mcp_v2_migration_verified"]
+                        )
+                    }
                 }
             }
         }

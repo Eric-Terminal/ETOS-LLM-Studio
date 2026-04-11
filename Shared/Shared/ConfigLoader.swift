@@ -42,8 +42,10 @@ public struct ConfigLoader {
     private static let downloadOnceURLString = "https://notify.els.ericterminal.com/download_once.json"
     private static let downloadOnceTimeout: TimeInterval = 8
     private static let downloadOnceCompletedFlagKey = "com.ETOS.LLM.Studio.download_once.completed"
-    private static let toolCapabilityMigrationFlagKey = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated.v1"
-    private static let providersBlobKey = "providers_v1"
+    private static let toolCapabilityMigrationFlagKey = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated"
+    private static let legacyToolCapabilityMigrationFlagKey = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated.v1"
+    private static let providersBlobKey = "providers"
+    private static let legacyProvidersBlobKeys = [providersBlobKey, "providers_v1"]
     private static let downloadOnceStateQueue = DispatchQueue(label: "com.ETOS.LLM.Studio.downloadOnce")
     private static var downloadOnceInProgress = false
 
@@ -118,7 +120,7 @@ public struct ConfigLoader {
     /// 从 `Providers` 目录加载所有提供商的配置。
     /// - Returns: 一个包含所有已加载 `Provider` 对象的数组。
     public static func loadProviders() -> [Provider] {
-        let shouldMigrateToolCapability = !UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
+        let shouldMigrateToolCapability = !hasMigratedToolCapability()
         if var providers = loadProvidersFromSQLite() {
             if providers.isEmpty {
                 let legacyResult = loadProvidersFromLegacyFiles(shouldMigrateToolCapability: shouldMigrateToolCapability)
@@ -138,7 +140,7 @@ public struct ConfigLoader {
                         didRepair = true
                     }
                 }
-                UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+                markToolCapabilityMigrated()
             }
 
             if didRepair {
@@ -152,7 +154,7 @@ public struct ConfigLoader {
         logger.info("正在从 \(providersDirectory.path) 加载所有提供商...")
         let legacyResult = loadProvidersFromLegacyFiles(shouldMigrateToolCapability: shouldMigrateToolCapability)
         if shouldMigrateToolCapability, legacyResult.didScanProviderDirectory {
-            UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+            markToolCapabilityMigrated()
         }
 
         if !legacyResult.providers.isEmpty, saveProvidersToSQLite(legacyResult.providers) {
@@ -307,11 +309,10 @@ public struct ConfigLoader {
         }
 
         if providers.isEmpty,
-           Persistence.auxiliaryBlobExists(forKey: providersBlobKey),
-           let legacyProviders = Persistence.loadAuxiliaryBlob([Provider].self, forKey: providersBlobKey),
+           let legacyProviders = loadLegacyProvidersFromBlob(),
            !legacyProviders.isEmpty {
             if saveProvidersToSQLite(legacyProviders) {
-                _ = Persistence.removeAuxiliaryBlob(forKey: providersBlobKey)
+                removeLegacyProviderBlobs()
             }
             return legacyProviders
         }
@@ -430,9 +431,35 @@ public struct ConfigLoader {
         } ?? false
 
         if didSave {
-            _ = Persistence.removeAuxiliaryBlob(forKey: providersBlobKey)
+            removeLegacyProviderBlobs()
         }
         return didSave
+    }
+
+    private static func hasMigratedToolCapability() -> Bool {
+        UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
+        || UserDefaults.standard.bool(forKey: legacyToolCapabilityMigrationFlagKey)
+    }
+
+    private static func markToolCapabilityMigrated() {
+        UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+        UserDefaults.standard.set(true, forKey: legacyToolCapabilityMigrationFlagKey)
+    }
+
+    private static func loadLegacyProvidersFromBlob() -> [Provider]? {
+        for key in legacyProvidersBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else {
+                continue
+            }
+            return Persistence.loadAuxiliaryBlob([Provider].self, forKey: key) ?? []
+        }
+        return nil
+    }
+
+    private static func removeLegacyProviderBlobs() {
+        for key in legacyProvidersBlobKeys {
+            _ = Persistence.removeAuxiliaryBlob(forKey: key)
+        }
     }
 
     private static func loadProvidersFromRelationalStore(_ db: Database) throws -> [Provider] {

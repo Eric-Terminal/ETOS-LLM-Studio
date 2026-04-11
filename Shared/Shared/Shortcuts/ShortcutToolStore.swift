@@ -18,7 +18,9 @@ public struct ShortcutToolStore {
     }
 
     public static let currentSchemaVersion = 1
-    private static let grdbBlobKey = "shortcut_tools_v1"
+    private static let grdbBlobKey = "shortcut_tools"
+    private static let legacyGrdbBlobKey = "shortcut_tools_v1"
+    private static let legacyBlobKeys = [grdbBlobKey, legacyGrdbBlobKey]
 
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -102,7 +104,7 @@ public struct ShortcutToolStore {
            let legacyTools = loadLegacyToolsFromBlob(),
            !legacyTools.isEmpty {
             if saveToolsToSQLite(legacyTools) {
-                _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+                removeLegacyToolBlobs()
             }
             return legacyTools
         }
@@ -111,13 +113,18 @@ public struct ShortcutToolStore {
     }
 
     private static func loadLegacyToolsFromBlob() -> [ShortcutToolDefinition]? {
-        guard Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) else {
-            return nil
+        for key in legacyBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else {
+                continue
+            }
+            if let envelope = Persistence.loadAuxiliaryBlob(StoredEnvelope.self, forKey: key) {
+                return envelope.tools
+            }
+            if let tools = Persistence.loadAuxiliaryBlob([ShortcutToolDefinition].self, forKey: key) {
+                return tools
+            }
         }
-        if let envelope = Persistence.loadAuxiliaryBlob(StoredEnvelope.self, forKey: grdbBlobKey) {
-            return envelope.tools
-        }
-        return Persistence.loadAuxiliaryBlob([ShortcutToolDefinition].self, forKey: grdbBlobKey) ?? []
+        return nil
     }
 
     @discardableResult
@@ -172,9 +179,15 @@ public struct ShortcutToolStore {
         } ?? false
 
         if didSave {
-            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            removeLegacyToolBlobs()
         }
         return didSave
+    }
+
+    private static func removeLegacyToolBlobs() {
+        for key in legacyBlobKeys {
+            _ = Persistence.removeAuxiliaryBlob(forKey: key)
+        }
     }
 
     private static func loadToolsFromRelationalStore(_ db: Database) throws -> [ShortcutToolDefinition] {

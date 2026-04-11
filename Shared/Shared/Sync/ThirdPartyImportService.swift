@@ -628,7 +628,7 @@ private extension ThirdPartyImportService {
         let sessions = parseKelivoSessions(chats)
 
         if providers.isEmpty {
-            warnings.append("Kelivo 备份中未识别到 provider_configs_v1。")
+            warnings.append("Kelivo 备份中未识别到 provider_configs。")
         }
         if sessions.isEmpty {
             warnings.append("Kelivo 备份中未识别到 chats.json 会话。")
@@ -650,7 +650,7 @@ private extension ThirdPartyImportService {
     static func parseKelivoProviders(_ settings: [String: Any]) -> [Provider] {
         var result: [Provider] = []
 
-        let rawConfigs = settings["provider_configs_v1"]
+        let rawConfigs = settings["provider_configs"] ?? settings["provider_configs_v1"]
         var configs: [String: Any] = [:]
 
         if let rawString = string(rawConfigs), let parsed = parseJSONStringToDictionary(rawString) {
