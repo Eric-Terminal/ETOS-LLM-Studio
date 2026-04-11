@@ -2342,7 +2342,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let containsMathContent: Bool
     let containsMermaidContent: Bool
 
-    nonisolated static func build(from sourceText: String) -> ETPreparedMarkdownRenderPayload {
+    nonisolated static func build(from sourceText: String) async -> ETPreparedMarkdownRenderPayload {
         let normalizedText = normalizedMarkdownForStreaming(sourceText)
         let mathSegments = ETMathContentParser.parseSegments(in: normalizedText)
         let containsMath = mathSegments.contains { segment in
@@ -2437,7 +2437,7 @@ private actor ETMarkdownPrecomputeWorker {
             return cached
         }
 
-        let prepared = ETPreparedMarkdownRenderPayload.build(from: source)
+        let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
         cache[source] = prepared
         keyOrder.append(source)
         trimIfNeeded()
