@@ -1971,7 +1971,11 @@ final class PersistenceGRDBStore {
 
     private func decodeJSON<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
         guard let data else { return nil }
-        return try? JSONDecoder().decode(T.self, from: data)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            return nil
+        }
     }
 
     private func uuid(from rawValue: String?) -> UUID? {
