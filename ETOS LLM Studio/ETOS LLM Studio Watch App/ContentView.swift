@@ -152,9 +152,8 @@ struct ContentView: View {
             refreshRootBodyFont()
         }
         .onChange(of: isCustomFontEnabled) { _, isEnabled in
-            if isEnabled {
-                FontLibrary.registerAllFontsIfNeeded()
-            }
+            _ = isEnabled
+            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
@@ -304,8 +303,7 @@ struct ContentView: View {
     }
 
     private func refreshRootBodyFont() {
-        let sample = "The quick brown fox 你好こんにちは"
-        if let postScriptName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sample) {
+        if let postScriptName = FontLibrary.resolvedPostScriptName(for: .body) {
             rootBodyFont = .custom(postScriptName, size: 15, relativeTo: .body)
         } else {
             rootBodyFont = .body
@@ -316,6 +314,7 @@ struct ContentView: View {
     @ViewBuilder
     private func messageRow(for state: ChatMessageRenderState, mergeWithPrevious: Bool, mergeWithNext: Bool) -> some View {
         let message = state.message
+        let preparedPayload = viewModel.preparedMarkdownByMessageID[message.id]
         let isReasoningExpandedBinding = Binding<Bool>(
             get: { viewModel.reasoningExpandedState[message.id, default: false] },
             set: { viewModel.reasoningExpandedState[message.id] = $0 }
@@ -330,6 +329,7 @@ struct ContentView: View {
 
         let bubble = ChatBubble(
             messageState: state,
+            preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
             isReasoningExpanded: isReasoningExpandedBinding,
             isToolCallsExpanded: isToolCallsExpandedBinding,
             enableMarkdown: viewModel.enableMarkdown,
@@ -413,7 +413,7 @@ struct ContentView: View {
                 onShowFullError: { content in
                     fullErrorContent = content
                 },
-                supportsMathRenderToggle: viewModel.enableAdvancedRenderer && messageContainsMath(message.content),
+                supportsMathRenderToggle: viewModel.enableAdvancedRenderer && (preparedPayload?.containsMathContent ?? false),
                 isMathRenderingEnabled: viewModel.isMathRenderingEnabled(for: message.id),
                 onToggleMathRendering: {
                     viewModel.toggleMathRendering(for: message.id)
@@ -464,10 +464,6 @@ struct ContentView: View {
     private func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
-    }
-
-    private func messageContainsMath(_ text: String) -> Bool {
-        ETMathContentParser.containsMath(in: text)
     }
 
     private func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
@@ -1174,11 +1170,22 @@ extension View {
 }
 
 private enum AppFontAdapter {
+    private static let cacheLock = NSLock()
+    private static var adaptedFontCache: [String: Font] = [:]
+    private static var adaptedFontCacheToken: String = ""
+
     static func adaptedFont(from original: Font) -> Font {
-        let descriptor = FontDescriptorInfo(font: original)
+        let rawDescriptor = String(describing: original)
+        let cacheToken = FontLibrary.adapterCacheToken()
+
+        if let cached = cachedFont(for: rawDescriptor, cacheToken: cacheToken) {
+            return cached
+        }
+
+        let descriptor = FontDescriptorInfo(rawDescription: rawDescriptor)
         let role = inferredRole(from: descriptor)
-        let sample = sampleText(for: role)
-        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) else {
+        guard let postScriptName = FontLibrary.resolvedPostScriptName(for: role) else {
+            storeAdaptedFont(original, for: rawDescriptor, cacheToken: cacheToken)
             return original
         }
 
@@ -1189,6 +1196,7 @@ private enum AppFontAdapter {
         if let weight = descriptor.weight {
             mapped = mapped.weight(weight)
         }
+        storeAdaptedFont(mapped, for: rawDescriptor, cacheToken: cacheToken)
         return mapped
     }
 
@@ -1217,19 +1225,6 @@ private enum AppFontAdapter {
             )
         }
         return .custom(postScriptName, size: 15, relativeTo: .body)
-    }
-
-    private static func sampleText(for role: FontSemanticRole) -> String {
-        switch role {
-        case .body:
-            return "The quick brown fox 你好こんにちは"
-        case .emphasis:
-            return "Emphasis 斜体预览 こんにちは"
-        case .strong:
-            return "Strong 粗体预览 こんにちは"
-        case .code:
-            return "let value = 42 // 代码"
-        }
     }
 
     private static func defaultPointSize(for textStyle: Font.TextStyle) -> CGFloat {
@@ -1285,21 +1280,40 @@ private enum AppFontAdapter {
             return 4
         }
     }
+
+    private static func cachedFont(for key: String, cacheToken: String) -> Font? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if adaptedFontCacheToken != cacheToken {
+            adaptedFontCacheToken = cacheToken
+            adaptedFontCache.removeAll(keepingCapacity: true)
+        }
+        return adaptedFontCache[key]
+    }
+
+    private static func storeAdaptedFont(_ font: Font, for key: String, cacheToken: String) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if adaptedFontCacheToken != cacheToken {
+            adaptedFontCacheToken = cacheToken
+            adaptedFontCache.removeAll(keepingCapacity: true)
+        }
+        adaptedFontCache[key] = font
+    }
 }
 
 private struct FontDescriptorInfo {
     let raw: String
     let lowercasedRaw: String
 
-    init(font: Font) {
-        let description = String(describing: font)
-        self.raw = description
-        self.lowercasedRaw = description.lowercased()
+    init(rawDescription: String) {
+        self.raw = rawDescription
+        self.lowercasedRaw = rawDescription.lowercased()
     }
 
     var explicitSize: CGFloat? {
-        firstMatchedNumber(pattern: "size:\\s*([0-9]+(?:\\.[0-9]+)?)")
-            ?? firstMatchedNumber(pattern: "size\\s*([0-9]+(?:\\.[0-9]+)?)")
+        firstMatchedNumber(after: "size:")
+            ?? firstMatchedNumber(after: "size ")
     }
 
     var textStyle: Font.TextStyle? {
@@ -1328,8 +1342,8 @@ private struct FontDescriptorInfo {
     var weight: Font.Weight? {
         if lowercasedRaw.contains("black") { return .black }
         if lowercasedRaw.contains("heavy") { return .heavy }
-        if lowercasedRaw.contains("bold") { return .bold }
         if lowercasedRaw.contains("semibold") { return .semibold }
+        if lowercasedRaw.contains("bold") { return .bold }
         if lowercasedRaw.contains("medium") { return .medium }
         if lowercasedRaw.contains("light") { return .light }
         if lowercasedRaw.contains("thin") { return .thin }
@@ -1337,19 +1351,24 @@ private struct FontDescriptorInfo {
         return nil
     }
 
-    private func firstMatchedNumber(pattern: String) -> CGFloat? {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
-            return nil
+    private func firstMatchedNumber(after marker: String) -> CGFloat? {
+        guard let markerRange = lowercasedRaw.range(of: marker) else { return nil }
+        var cursor = markerRange.upperBound
+        var digits = ""
+        var hasStarted = false
+
+        while cursor < lowercasedRaw.endIndex {
+            let character = lowercasedRaw[cursor]
+            if character.isNumber || character == "." {
+                digits.append(character)
+                hasStarted = true
+            } else if hasStarted {
+                break
+            }
+            cursor = lowercasedRaw.index(after: cursor)
         }
-        let nsRange = NSRange(raw.startIndex..<raw.endIndex, in: raw)
-        guard let match = regex.firstMatch(in: raw, options: [], range: nsRange),
-              match.numberOfRanges >= 2,
-              let range = Range(match.range(at: 1), in: raw) else {
-            return nil
-        }
-        guard let value = Double(raw[range]) else {
-            return nil
-        }
+
+        guard !digits.isEmpty, let value = Double(digits) else { return nil }
         return CGFloat(value)
     }
 }

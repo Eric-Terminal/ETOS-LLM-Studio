@@ -2885,6 +2885,19 @@ public enum FontLibrary {
     private static let supportedFontFileExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
     public static let customFontEnabledStorageKey = "font.useCustomFonts"
     public static let fallbackScopeStorageKey = "font.fallbackScope"
+    private static let cacheLock = NSLock()
+
+    private struct RuntimeSnapshot {
+        var isPrepared = false
+        var assets: [FontAssetRecord] = []
+        var routeConfiguration = FontRouteConfiguration()
+        var fallbackPostScriptNamesByRole: [FontSemanticRole: [String]] = [:]
+        var preferredPostScriptNameByRole: [FontSemanticRole: String] = [:]
+        var isCustomFontEnabled = true
+        var fallbackScope: FontFallbackScope = .segment
+    }
+
+    private static var runtimeSnapshot = RuntimeSnapshot()
 
     private static var manifestURL: URL {
         Persistence.getFontDirectory().appendingPathComponent(manifestFileName)
@@ -2896,24 +2909,56 @@ public enum FontLibrary {
 
     /// 全局开关：是否启用自定义字体（默认启用）。
     public static var isCustomFontEnabled: Bool {
-        (UserDefaults.standard.object(forKey: customFontEnabledStorageKey) as? Bool) ?? true
+        withRuntimeSnapshot { $0.isCustomFontEnabled }
     }
 
     /// 字体回退范围设置（默认整段）。
     public static var fallbackScope: FontFallbackScope {
-        guard let rawValue = UserDefaults.standard.string(forKey: fallbackScopeStorageKey),
-              let scope = FontFallbackScope(rawValue: rawValue) else {
-            return .segment
+        withRuntimeSnapshot { $0.fallbackScope }
+    }
+
+    public static func preloadRuntimeCacheAsync(forceReload: Bool = false) {
+        Task.detached(priority: .utility) {
+            preloadRuntimeCache(forceReload: forceReload)
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
-        return scope
+    }
+
+    public static func preloadRuntimeCache(forceReload: Bool = false) {
+        if !forceReload, withRuntimeSnapshot({ $0.isPrepared }) {
+            return
+        }
+
+        let assets = loadAssetsFromDisk()
+        let routeConfiguration = loadRouteConfigurationFromDisk()
+        let settings = loadFontSettingsFromUserDefaults()
+
+        if settings.isCustomFontEnabled {
+            for asset in assets where asset.isEnabled {
+                registerFontFileIfNeeded(fileName: asset.fileName)
+            }
+        }
+
+        let roleMappings = buildRoleMappings(
+            assets: assets,
+            routeConfiguration: routeConfiguration,
+            isCustomFontEnabled: settings.isCustomFontEnabled
+        )
+
+        updateRuntimeSnapshot { snapshot in
+            snapshot.isPrepared = true
+            snapshot.assets = assets
+            snapshot.routeConfiguration = routeConfiguration
+            snapshot.fallbackPostScriptNamesByRole = roleMappings.fallback
+            snapshot.preferredPostScriptNameByRole = roleMappings.preferred
+            snapshot.isCustomFontEnabled = settings.isCustomFontEnabled
+            snapshot.fallbackScope = settings.fallbackScope
+        }
     }
 
     public static func loadAssets() -> [FontAssetRecord] {
-        guard let data = try? Data(contentsOf: manifestURL),
-              let assets = try? JSONDecoder().decode([FontAssetRecord].self, from: data) else {
-            return []
-        }
-        return assets
+        ensureRuntimeCachePrepared()
+        return withRuntimeSnapshot { $0.assets }
     }
 
     @discardableResult
@@ -2927,6 +2972,7 @@ public enum FontLibrary {
         guard let data = try? JSONEncoder().encode(sorted) else { return false }
         do {
             try data.write(to: manifestURL, options: [.atomic])
+            preloadRuntimeCache(forceReload: true)
             return true
         } catch {
             logger.error("Failed to save font manifest: \(error.localizedDescription)")
@@ -2935,11 +2981,8 @@ public enum FontLibrary {
     }
 
     public static func loadRouteConfiguration() -> FontRouteConfiguration {
-        guard let data = try? Data(contentsOf: routeConfigURL),
-              let configuration = try? JSONDecoder().decode(FontRouteConfiguration.self, from: data) else {
-            return FontRouteConfiguration()
-        }
-        return configuration
+        ensureRuntimeCachePrepared()
+        return withRuntimeSnapshot { $0.routeConfiguration }
     }
 
     @discardableResult
@@ -2947,6 +2990,7 @@ public enum FontLibrary {
         guard let data = try? JSONEncoder().encode(configuration) else { return false }
         do {
             try data.write(to: routeConfigURL, options: [.atomic])
+            preloadRuntimeCache(forceReload: true)
             return true
         } catch {
             logger.error("Failed to save font route configuration: \(error.localizedDescription)")
@@ -2969,6 +3013,7 @@ public enum FontLibrary {
                 if FileManager.default.fileExists(atPath: routeConfigURL.path) {
                     try FileManager.default.removeItem(at: routeConfigURL)
                 }
+                preloadRuntimeCache(forceReload: true)
                 return true
             } catch {
                 logger.error("Failed to remove route config file: \(error.localizedDescription)")
@@ -2977,6 +3022,7 @@ public enum FontLibrary {
         }
         do {
             try data.write(to: routeConfigURL, options: [.atomic])
+            preloadRuntimeCache(forceReload: true)
             return true
         } catch {
             logger.error("Failed to save route config data: \(error.localizedDescription)")
@@ -3072,19 +3118,30 @@ public enum FontLibrary {
     }
 
     public static func registerAllFontsIfNeeded() {
-        guard isCustomFontEnabled else { return }
-        let assets = loadAssets()
-        for asset in assets where asset.isEnabled {
-            registerFontFileIfNeeded(fileName: asset.fileName)
-        }
+        preloadRuntimeCache(forceReload: true)
     }
 
     public static func fallbackPostScriptNames(for role: FontSemanticRole) -> [String] {
-        guard isCustomFontEnabled else { return [] }
-        let assets = loadAssets()
-        let enabledMap = Dictionary(uniqueKeysWithValues: assets.filter(\.isEnabled).map { ($0.id, $0) })
-        let route = loadRouteConfiguration().chain(for: role)
-        return route.compactMap { enabledMap[$0]?.postScriptName }.filter { !$0.isEmpty }
+        withRuntimeSnapshot { snapshot in
+            guard snapshot.isPrepared else { return [] }
+            return snapshot.fallbackPostScriptNamesByRole[role] ?? []
+        }
+    }
+
+    public static func resolvedPostScriptName(for role: FontSemanticRole) -> String? {
+        withRuntimeSnapshot { snapshot in
+            guard snapshot.isPrepared else { return nil }
+            return snapshot.preferredPostScriptNameByRole[role]
+        }
+    }
+
+    public static func adapterCacheToken() -> String {
+        withRuntimeSnapshot { snapshot in
+            let roleSignature = FontSemanticRole.allCases
+                .map { snapshot.preferredPostScriptNameByRole[$0] ?? "-" }
+                .joined(separator: "|")
+            return "\(snapshot.isPrepared ? 1 : 0)|\(snapshot.isCustomFontEnabled ? 1 : 0)|\(roleSignature)"
+        }
     }
 
     /// 按优先级链路查找可用字体；若无命中则返回 nil 由系统字体兜底。
@@ -3092,23 +3149,8 @@ public enum FontLibrary {
         for role: FontSemanticRole,
         sampleText: String
     ) -> String? {
-        guard isCustomFontEnabled else { return nil }
-        let candidates = fallbackPostScriptNames(for: role)
-        guard !candidates.isEmpty else { return nil }
-
-        let normalizedSample = normalizeSampleText(sampleText)
-        switch fallbackScope {
-        case .segment:
-            return resolveFontForSegmentFallback(
-                candidates: candidates,
-                normalizedSample: normalizedSample
-            )
-        case .character:
-            return resolveFontForCharacterFallback(
-                candidates: candidates,
-                normalizedSample: normalizedSample
-            )
-        }
+        _ = sampleText
+        return resolvedPostScriptName(for: role)
     }
 
     private static func sanitizeBaseName(_ value: String) -> String {
@@ -3131,39 +3173,6 @@ public enum FontLibrary {
         return candidate
     }
 
-    private static func normalizeSampleText(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Aa测试あア한ع" }
-        let scalars = trimmed.unicodeScalars
-            .filter { !$0.properties.isWhitespace && $0.properties.generalCategory != .control }
-        let prefix = String(String.UnicodeScalarView(scalars.prefix(96)))
-        return prefix.isEmpty ? "Aa测试あア한ع" : prefix
-    }
-
-    private static func resolveFontForSegmentFallback(
-        candidates: [String],
-        normalizedSample: String
-    ) -> String? {
-        for postScriptName in candidates {
-            if fontCanRenderSample(postScriptName: postScriptName, sample: normalizedSample) {
-                return postScriptName
-            }
-        }
-        return nil
-    }
-
-    private static func resolveFontForCharacterFallback(
-        candidates: [String],
-        normalizedSample: String
-    ) -> String? {
-        for postScriptName in candidates {
-            if fontCanRenderAnyCharacter(postScriptName: postScriptName, sample: normalizedSample) {
-                return postScriptName
-            }
-        }
-        return nil
-    }
-
     private static func registerFontFileIfNeeded(fileName: String) {
 #if canImport(CoreText)
         let fileURL = Persistence.getFontDirectory().appendingPathComponent(fileName)
@@ -3177,6 +3186,83 @@ public enum FontLibrary {
 #else
         _ = fileName
 #endif
+    }
+
+    private static func ensureRuntimeCachePrepared() {
+        if withRuntimeSnapshot({ !$0.isPrepared }) {
+            preloadRuntimeCache(forceReload: false)
+        }
+    }
+
+    private static func withRuntimeSnapshot<T>(_ body: (RuntimeSnapshot) -> T) -> T {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return body(runtimeSnapshot)
+    }
+
+    private static func updateRuntimeSnapshot(_ body: (inout RuntimeSnapshot) -> Void) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        body(&runtimeSnapshot)
+    }
+
+    private static func loadAssetsFromDisk() -> [FontAssetRecord] {
+        guard let data = try? Data(contentsOf: manifestURL),
+              let assets = try? JSONDecoder().decode([FontAssetRecord].self, from: data) else {
+            return []
+        }
+        return assets
+    }
+
+    private static func loadRouteConfigurationFromDisk() -> FontRouteConfiguration {
+        guard let data = try? Data(contentsOf: routeConfigURL),
+              let configuration = try? JSONDecoder().decode(FontRouteConfiguration.self, from: data) else {
+            return FontRouteConfiguration()
+        }
+        return configuration
+    }
+
+    private static func loadFontSettingsFromUserDefaults() -> (isCustomFontEnabled: Bool, fallbackScope: FontFallbackScope) {
+        let customEnabled = (UserDefaults.standard.object(forKey: customFontEnabledStorageKey) as? Bool) ?? true
+        let scope: FontFallbackScope
+        if let rawValue = UserDefaults.standard.string(forKey: fallbackScopeStorageKey),
+           let parsedScope = FontFallbackScope(rawValue: rawValue) {
+            scope = parsedScope
+        } else {
+            scope = .segment
+        }
+        return (customEnabled, scope)
+    }
+
+    private static func buildRoleMappings(
+        assets: [FontAssetRecord],
+        routeConfiguration: FontRouteConfiguration,
+        isCustomFontEnabled: Bool
+    ) -> (fallback: [FontSemanticRole: [String]], preferred: [FontSemanticRole: String]) {
+        guard isCustomFontEnabled else {
+            return ([:], [:])
+        }
+
+        let enabledAssets = Dictionary(
+            uniqueKeysWithValues: assets
+                .filter(\.isEnabled)
+                .map { ($0.id, $0) }
+        )
+
+        var fallbackByRole: [FontSemanticRole: [String]] = [:]
+        var preferredByRole: [FontSemanticRole: String] = [:]
+
+        for role in FontSemanticRole.allCases {
+            let names = routeConfiguration
+                .chain(for: role)
+                .compactMap { enabledAssets[$0]?.postScriptName }
+                .filter { !$0.isEmpty }
+            fallbackByRole[role] = names
+            if let first = names.first {
+                preferredByRole[role] = first
+            }
+        }
+        return (fallbackByRole, preferredByRole)
     }
 
     private static func extractPostScriptName(from data: Data) -> String? {
@@ -3197,67 +3283,6 @@ public enum FontLibrary {
 #endif
     }
 
-    private static func fontCanRenderSample(postScriptName: String, sample: String) -> Bool {
-#if canImport(CoreText)
-        guard !sample.isEmpty else { return true }
-        guard let font = createFontIfExists(postScriptName: postScriptName) else { return false }
-        let characters = sampleCharacters(sample)
-        guard !characters.isEmpty else { return true }
-
-        var mutableCharacters = characters
-        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
-        let mapped = CTFontGetGlyphsForCharacters(font, &mutableCharacters, &glyphs, mutableCharacters.count)
-        return mapped && !glyphs.contains(0)
-#else
-        _ = postScriptName
-        _ = sample
-        return true
-#endif
-    }
-
-    private static func fontCanRenderAnyCharacter(postScriptName: String, sample: String) -> Bool {
-#if canImport(CoreText)
-        guard !sample.isEmpty else { return true }
-        guard let font = createFontIfExists(postScriptName: postScriptName) else { return false }
-        let characters = sampleCharacters(sample)
-        guard !characters.isEmpty else { return true }
-
-        var mutableCharacters = characters
-        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
-        _ = CTFontGetGlyphsForCharacters(font, &mutableCharacters, &glyphs, mutableCharacters.count)
-        return glyphs.contains { $0 != 0 }
-#else
-        _ = postScriptName
-        _ = sample
-        return true
-#endif
-    }
-
-    private static func sampleCharacters(_ sample: String) -> [UniChar] {
-        let filteredScalars = sample.unicodeScalars.filter { scalar in
-            !scalar.properties.isWhitespace && scalar.properties.generalCategory != .control
-        }
-        return filteredScalars.prefix(96).map { scalar -> UniChar in
-            if scalar.value <= 0xFFFF {
-                return UniChar(scalar.value)
-            }
-            return UniChar(0xFFFD)
-        }
-    }
-
-    private static func createFontIfExists(postScriptName: String) -> CTFont? {
-#if canImport(CoreText)
-        let font = CTFontCreateWithName(postScriptName as CFString, 16, nil)
-        let resolvedPostScriptName = CTFontCopyPostScriptName(font) as String
-        guard resolvedPostScriptName.caseInsensitiveCompare(postScriptName) == .orderedSame else {
-            return nil
-        }
-        return font
-#else
-        _ = postScriptName
-        return nil
-#endif
-    }
 }
 
 private extension String {

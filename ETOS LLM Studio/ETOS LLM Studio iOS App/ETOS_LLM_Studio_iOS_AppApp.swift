@@ -31,7 +31,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
             SQLiteStoreMigrationBootstrap.migrateJSONStoresIfNeeded()
         }
         DailyPulseDeliveryCoordinator.shared.activate()
-        FontLibrary.registerAllFontsIfNeeded()
+        FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
     }
 
     var body: some Scene {
