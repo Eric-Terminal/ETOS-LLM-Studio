@@ -86,7 +86,7 @@ struct MCPMigrationV4Tests {
 
         let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
 
-        let verification = try store.read { db -> (Int, Int, String?, String?, Bool, Bool) in
+        let verification = try store.read { db -> (Int, Int, String?, String?, Bool, Bool, Int) in
             let serverCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers_v2") ?? 0
             let toolCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_tools_v2") ?? 0
             let migratedName = try String.fetchOne(
@@ -107,7 +107,12 @@ struct MCPMigrationV4Tests {
                 db,
                 sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'mcp_tools'"
             ) ?? 0) == 0
-            return (serverCount, toolCount, migratedName, migratedToolDescription, legacyServerTableDropped, legacyToolTableDropped)
+            let verifyPassed = try Int.fetchOne(
+                db,
+                sql: "SELECT passed FROM migration_checks WHERE check_key = ?",
+                arguments: ["mcp_v2_migration_verified"]
+            ) ?? 0
+            return (serverCount, toolCount, migratedName, migratedToolDescription, legacyServerTableDropped, legacyToolTableDropped, verifyPassed)
         }
 
         #expect(verification.0 == 1)
@@ -116,6 +121,7 @@ struct MCPMigrationV4Tests {
         #expect(verification.3 == "来自旧关系表")
         #expect(verification.4)
         #expect(verification.5)
+        #expect(verification.6 == 1)
     }
 
     @Test("仅有 json_blobs 时也可迁移到 v2 混合表")
@@ -142,7 +148,8 @@ struct MCPMigrationV4Tests {
 
         try prepareLegacyConfigDatabase(
             at: databaseURL,
-            appliedMigrations: ["v1_create_json_blobs"]
+            appliedMigrations: ["v1_create_json_blobs"],
+            createLegacyMcpTables: false
         ) { db in
             try db.execute(
                 sql: "INSERT INTO json_blobs (key, json_data, updated_at) VALUES (?, ?, ?)",
@@ -241,8 +248,8 @@ struct MCPMigrationV4Tests {
         #expect(migratedCount == 1)
     }
 
-    @Test("mcp_tools_v2 复合主键可避免重复并执行覆盖")
-    func testCompositePrimaryKeyDeduplicatesTools() throws {
+    @Test("优先使用旧关系表数据，json_blobs 仅补缺不覆盖")
+    func testRelationalSourceKeepsPriorityOverBlob() throws {
         let databaseURL = try makeTemporaryConfigDatabaseURL()
         defer { cleanupTemporaryDatabase(at: databaseURL) }
 
@@ -325,7 +332,80 @@ struct MCPMigrationV4Tests {
         }
 
         #expect(verification.0 == 1)
-        #expect(verification.1 == "来自 Blob 覆盖")
+        #expect(verification.1 == "来自旧表")
+    }
+
+    @Test("无旧关系表时 json_blobs 冲突按 updated_at 取较新记录")
+    func testBlobConflictsUseNewerUpdatedAtWhenNoRelationalSource() throws {
+        let databaseURL = try makeTemporaryConfigDatabaseURL()
+        defer { cleanupTemporaryDatabase(at: databaseURL) }
+
+        let serverID = UUID()
+        let latestServer = MCPServerConfiguration(
+            id: serverID,
+            displayName: "Blob 最新",
+            transport: .http(
+                endpoint: URL(string: "https://newer.example.com/mcp")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            )
+        )
+        let olderServer = MCPServerConfiguration(
+            id: serverID,
+            displayName: "Blob 旧版本",
+            transport: .http(
+                endpoint: URL(string: "https://older.example.com/mcp")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            )
+        )
+
+        let latestMetadata = makeMetadata(
+            cachedAt: Date(timeIntervalSince1970: 1_750_000_000),
+            toolDescription: "来自最新记录"
+        )
+        let olderMetadata = makeMetadata(
+            cachedAt: Date(timeIntervalSince1970: 1_740_000_000),
+            toolDescription: "来自旧记录"
+        )
+        let records: [LegacyBlobRecord] = [
+            LegacyBlobRecord(schemaVersion: 3, server: latestServer, metadata: latestMetadata),
+            LegacyBlobRecord(schemaVersion: 3, server: olderServer, metadata: olderMetadata)
+        ]
+
+        try prepareLegacyConfigDatabase(
+            at: databaseURL,
+            appliedMigrations: ["v1_create_json_blobs"],
+            createLegacyMcpTables: false
+        ) { db in
+            try db.execute(
+                sql: "INSERT INTO json_blobs (key, json_data, updated_at) VALUES (?, ?, ?)",
+                arguments: [
+                    "mcp_servers_records_v1",
+                    try encodeJSONData(records),
+                    Date().timeIntervalSince1970
+                ]
+            )
+        }
+
+        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
+
+        let verification = try store.read { db -> (String?, String?) in
+            let displayName = try String.fetchOne(
+                db,
+                sql: "SELECT display_name FROM mcp_servers_v2 WHERE id = ?",
+                arguments: [serverID.uuidString]
+            )
+            let toolDescription = try String.fetchOne(
+                db,
+                sql: "SELECT description FROM mcp_tools_v2 WHERE server_id = ? AND tool_name = ?",
+                arguments: [serverID.uuidString, "tool.alpha"]
+            )
+            return (displayName, toolDescription)
+        }
+
+        #expect(verification.0 == "Blob 最新")
+        #expect(verification.1 == "来自最新记录")
     }
 }
 
@@ -369,6 +449,7 @@ private func cleanupTemporaryDatabase(at databaseURL: URL) {
 private func prepareLegacyConfigDatabase(
     at databaseURL: URL,
     appliedMigrations: [String],
+    createLegacyMcpTables: Bool = true,
     seed: (Database) throws -> Void
 ) throws {
     let databaseQueue = try DatabaseQueue(path: databaseURL.path)
@@ -389,34 +470,36 @@ private func prepareLegacyConfigDatabase(
             )
         """)
 
-        try db.execute(sql: """
-            CREATE TABLE IF NOT EXISTS mcp_servers (
-                id TEXT PRIMARY KEY NOT NULL,
-                name TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'idle',
-                configuration_data BLOB NOT NULL,
-                metadata_cached_at REAL,
-                info_data BLOB,
-                resources_data BLOB,
-                resource_templates_data BLOB,
-                prompts_data BLOB,
-                roots_data BLOB,
-                updated_at REAL NOT NULL
-            )
-        """)
+        if createLegacyMcpTables {
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS mcp_servers (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    name TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'idle',
+                    configuration_data BLOB NOT NULL,
+                    metadata_cached_at REAL,
+                    info_data BLOB,
+                    resources_data BLOB,
+                    resource_templates_data BLOB,
+                    prompts_data BLOB,
+                    roots_data BLOB,
+                    updated_at REAL NOT NULL
+                )
+            """)
 
-        try db.execute(sql: """
-            CREATE TABLE IF NOT EXISTS mcp_tools (
-                id TEXT PRIMARY KEY NOT NULL,
-                server_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                description TEXT,
-                input_schema_data BLOB,
-                examples_data BLOB,
-                sort_index INTEGER NOT NULL DEFAULT 0,
-                updated_at REAL NOT NULL
-            )
-        """)
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS mcp_tools (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    server_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    input_schema_data BLOB,
+                    examples_data BLOB,
+                    sort_index INTEGER NOT NULL DEFAULT 0,
+                    updated_at REAL NOT NULL
+                )
+            """)
+        }
 
         try seed(db)
     }

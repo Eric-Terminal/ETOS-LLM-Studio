@@ -121,4 +121,73 @@ struct MCPServerStoreRelationalTests {
         let signatureAfter = MCPServerStore.configurationSnapshotSignature()
         #expect(signatureAfter != signatureBefore)
     }
+
+    @MainActor
+    @Test("配置签名查询仅读 Header 列，不受 Payload 变更影响")
+    func testConfigurationSignatureDoesNotDependOnPayloadColumns() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+
+        let originalServers = MCPServerStore.loadServers()
+        let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
+            (server.id, MCPServerStore.loadMetadata(for: server.id))
+        })
+
+        defer {
+            for server in MCPServerStore.loadServers() {
+                MCPServerStore.delete(server)
+            }
+
+            for server in originalServers {
+                MCPServerStore.save(server)
+                if let metadata = originalMetadata[server.id] {
+                    MCPServerStore.saveMetadata(metadata, for: server.id)
+                }
+            }
+
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        for server in MCPServerStore.loadServers() {
+            MCPServerStore.delete(server)
+        }
+
+        let server = MCPServerConfiguration(
+            displayName: "签名轻查询测试服务器",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/signature")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            isSelectedForChat: false
+        )
+        MCPServerStore.save(server)
+
+        let signatureBefore = MCPServerStore.configurationSnapshotSignature()
+
+        let didInjectPayload = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(
+                sql: """
+                UPDATE mcp_servers_v2
+                SET info_json = ?, resources_json = ?, resource_templates_json = ?, prompts_json = ?, roots_json = ?
+                WHERE id = ?
+                """,
+                arguments: [
+                    "{invalid-json",
+                    "[invalid-json",
+                    "{invalid-json",
+                    "{invalid-json",
+                    "{invalid-json",
+                    server.id.uuidString
+                ]
+            )
+            return true
+        } ?? false
+        #expect(didInjectPayload)
+
+        let signatureAfter = MCPServerStore.configurationSnapshotSignature()
+        #expect(signatureAfter == signatureBefore)
+    }
 }
