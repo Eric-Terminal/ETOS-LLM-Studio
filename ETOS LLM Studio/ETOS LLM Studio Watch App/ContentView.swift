@@ -361,7 +361,7 @@ struct ContentView: View {
         } else {
             bubble
                 .swipeActions(edge: .leading) {
-                    messageActionsNavigationLink(for: message)
+                    messageActionsNavigationLink(for: message, preparedPayload: preparedPayload)
                 }
         }
     }
@@ -380,7 +380,10 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func messageActionsNavigationLink(for message: ChatMessage) -> some View {
+    private func messageActionsNavigationLink(
+        for message: ChatMessage,
+        preparedPayload: ETPreparedMarkdownRenderPayload?
+    ) -> some View {
         NavigationLink {
             MessageActionsView(
                 message: message,

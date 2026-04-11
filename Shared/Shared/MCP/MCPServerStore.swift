@@ -284,16 +284,32 @@ public struct MCPServerStore {
             bootstrapRelationalStoreIfNeeded()
         }
 
+        final class SignatureStateBox: @unchecked Sendable {
+            let lock = NSLock()
+            var lastSignature: String?
+        }
+        let signatureState = SignatureStateBox()
+
         let observation = ValueObservation
             .tracking { db in
                 try configurationSignatureFromRelationalDatabase(db)
             }
-            .removeDuplicates()
 
         return Persistence.observeConfigDatabase(
             observation,
             onError: onError,
-            onChange: onChange
+            onChange: { signature in
+                var shouldForward = false
+                signatureState.lock.withLock {
+                    if signatureState.lastSignature != signature {
+                        signatureState.lastSignature = signature
+                        shouldForward = true
+                    }
+                }
+                if shouldForward {
+                    onChange(signature)
+                }
+            }
         )
     }
 
@@ -309,7 +325,8 @@ public struct MCPServerStore {
 
     private static func migrateLegacyRecordsToRelationalStoreIfNeeded() {
         guard let existingServerCount = Persistence.withConfigDatabaseRead({ db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
+            let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers")
+            return count ?? 0
         }) else {
             return
         }
