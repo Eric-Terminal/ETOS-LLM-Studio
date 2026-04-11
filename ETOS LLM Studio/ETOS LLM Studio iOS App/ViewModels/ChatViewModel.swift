@@ -13,7 +13,7 @@ import Combine
 import CoreImage
 import Foundation
 import SwiftUI
-import MarkdownUI
+@preconcurrency import MarkdownUI
 import Shared
 import os.log
 #if canImport(Accelerate)

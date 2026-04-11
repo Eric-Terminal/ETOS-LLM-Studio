@@ -11,7 +11,7 @@
 
 import Foundation
 import SwiftUI
-import MarkdownUI
+@preconcurrency import MarkdownUI
 import WatchKit
 import os.log
 import Combine
