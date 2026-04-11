@@ -393,19 +393,30 @@ public final class MCPManager: ObservableObject {
                     status.tools = MCPServerStore.loadTools(for: server.id)
                 }
 
-                if let cache = MCPServerStore.loadMetadata(for: server.id, includeTools: false) {
-                    if status.info == nil {
-                        status.info = cache.info
-                    }
-                    if status.resources.isEmpty && status.resourceTemplates.isEmpty && status.prompts.isEmpty && status.roots.isEmpty {
-                        status.resources = cache.resources
-                        status.resourceTemplates = cache.resourceTemplates
-                        status.prompts = cache.prompts
-                        status.roots = cache.roots
-                    }
-                    if status.metadataCachedAt == nil || !status.tools.isEmpty || !status.resources.isEmpty || !status.resourceTemplates.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty {
-                        status.metadataCachedAt = cache.cachedAt
-                    }
+                if status.info == nil {
+                    status.info = MCPServerStore.loadServerInfo(for: server.id)
+                }
+                if status.resources.isEmpty {
+                    status.resources = MCPServerStore.loadResources(for: server.id)
+                }
+                if status.resourceTemplates.isEmpty {
+                    status.resourceTemplates = MCPServerStore.loadResourceTemplates(for: server.id)
+                }
+                if status.prompts.isEmpty {
+                    status.prompts = MCPServerStore.loadPrompts(for: server.id)
+                }
+                if status.roots.isEmpty {
+                    status.roots = MCPServerStore.loadRoots(for: server.id)
+                }
+
+                let hasMetadataCache = status.info != nil ||
+                    !status.tools.isEmpty ||
+                    !status.resources.isEmpty ||
+                    !status.resourceTemplates.isEmpty ||
+                    !status.prompts.isEmpty ||
+                    !status.roots.isEmpty
+                if hasMetadataCache {
+                    status.metadataCachedAt = MCPServerStore.loadMetadataCachedAt(for: server.id) ?? status.metadataCachedAt ?? Date()
                     // 首次加载时，若服务器已加入聊天路由且有可用缓存，先乐观恢复为 ready。
                     // 后台会继续发起 initialize 握手校验，失败后再回落到 failed。
                     if existingStatus == nil, server.isSelectedForChat {
@@ -587,8 +598,11 @@ public final class MCPManager: ObservableObject {
             cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         }
         mcpManagerLogger.info("开始连接 MCP 服务器 \(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))，传输=\(self.transportLabel(for: server), privacy: .public)，地址=\(server.humanReadableEndpoint, privacy: .public)")
-        let cachedMetadata = MCPServerStore.loadMetadata(for: server.id)
-        let shouldRefreshMetadata = refreshMetadataIfCacheMissing && (cachedMetadata == nil || isMetadataStale(cachedMetadata?.cachedAt))
+        let cachedMetadata = MCPServerStore.loadMetadata(for: server.id, includeTools: false)
+        let cachedTools = MCPServerStore.loadTools(for: server.id)
+        let cachedMetadataCachedAt = cachedMetadata?.cachedAt ?? MCPServerStore.loadMetadataCachedAt(for: server.id)
+        let hasCachedMetadata = cachedMetadata != nil || !cachedTools.isEmpty
+        let shouldRefreshMetadata = refreshMetadataIfCacheMissing && (!hasCachedMetadata || isMetadataStale(cachedMetadataCachedAt))
         appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "开始连接服务器，传输=\(transportLabel(for: server))，将刷新元数据=\(shouldRefreshMetadata ? "是" : "否")")
         let shouldKeepReadyState = keepReadyStateDuringHandshake
             && clients[server.id] == nil
@@ -645,12 +659,12 @@ public final class MCPManager: ObservableObject {
                 }
                 if let cache = cachedMetadata,
                    $0.tools.isEmpty && $0.resources.isEmpty && $0.resourceTemplates.isEmpty && $0.prompts.isEmpty && $0.roots.isEmpty {
-                    $0.tools = cache.tools
+                    $0.tools = cachedTools
                     $0.resources = cache.resources
                     $0.resourceTemplates = cache.resourceTemplates
                     $0.prompts = cache.prompts
                     $0.roots = cache.roots
-                    $0.metadataCachedAt = cache.cachedAt
+                    $0.metadataCachedAt = cachedMetadataCachedAt ?? cache.cachedAt
                 }
             }
             if shouldSelectForChat {
@@ -660,6 +674,7 @@ public final class MCPManager: ObservableObject {
             if let cache = cachedMetadata, cache.info != info {
                 var updatedCache = cache
                 updatedCache.info = info
+                updatedCache.tools = cachedTools
                 MCPServerStore.saveMetadata(updatedCache, for: server.id)
             }
             cancelAutoConnectRetry(for: server.id, resetAttempts: true)

@@ -179,6 +179,90 @@ public struct MCPServerStore {
         }
     }
 
+    /// 按需读取 Server info，避免解码整份元数据。
+    public static func loadServerInfo(for serverID: UUID) -> MCPServerInfo? {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let info = loadServerInfoFromRelationalStore(serverID: serverID) {
+                return info
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata?
+                .info
+        }
+    }
+
+    /// 按需读取资源列表，避免解码整份元数据。
+    public static func loadResources(for serverID: UUID) -> [MCPResourceDescription] {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let resources = loadResourcesFromRelationalStore(serverID: serverID) {
+                return resources
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata?
+                .resources ?? []
+        }
+    }
+
+    /// 按需读取资源模板列表，避免解码整份元数据。
+    public static func loadResourceTemplates(for serverID: UUID) -> [MCPResourceTemplate] {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let resourceTemplates = loadResourceTemplatesFromRelationalStore(serverID: serverID) {
+                return resourceTemplates
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata?
+                .resourceTemplates ?? []
+        }
+    }
+
+    /// 按需读取提示词列表，避免解码整份元数据。
+    public static func loadPrompts(for serverID: UUID) -> [MCPPromptDescription] {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let prompts = loadPromptsFromRelationalStore(serverID: serverID) {
+                return prompts
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata?
+                .prompts ?? []
+        }
+    }
+
+    /// 按需读取 roots 列表，避免解码整份元数据。
+    public static func loadRoots(for serverID: UUID) -> [MCPRoot] {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let roots = loadRootsFromRelationalStore(serverID: serverID) {
+                return roots
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata?
+                .roots ?? []
+        }
+    }
+
+    /// 按需读取元数据缓存时间，仅用于刷新策略判断。
+    public static func loadMetadataCachedAt(for serverID: UUID) -> Date? {
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if let cachedAt = loadMetadataCachedAtFromRelationalStore(serverID: serverID) {
+                return cachedAt
+            }
+            return loadLegacyRecords(usingBlobCache: true)
+                .first(where: { $0.server.id == serverID })?
+                .metadata?
+                .cachedAt
+        }
+    }
+
     /// 返回用于快速判断配置是否变化的签名。
     /// 仅抓取 mcp_servers 轻量列，避免深层 JSON 反序列化带来的 CPU 抖动。
     public static func configurationSnapshotSignature() -> String {
@@ -366,6 +450,126 @@ public struct MCPServerStore {
                 .fetchAll(db)
                 .compactMap { $0.toToolDescription() }
         }
+    }
+
+    private static func loadServerInfoFromRelationalStore(serverID: UUID) -> MCPServerInfo? {
+        Persistence.withConfigDatabaseRead { db in
+            let infoData = try Data.fetchOne(
+                db,
+                sql: """
+                SELECT info_data
+                FROM mcp_servers
+                WHERE id = ?
+                """,
+                arguments: [serverID.uuidString]
+            )
+            return MCPServerStoreCodec.decodeIfPresent(MCPServerInfo.self, from: infoData)
+        } ?? nil
+    }
+
+    private static func loadResourcesFromRelationalStore(serverID: UUID) -> [MCPResourceDescription]? {
+        Persistence.withConfigDatabaseRead { db in
+            let resourcesData = try Data.fetchOne(
+                db,
+                sql: """
+                SELECT resources_data
+                FROM mcp_servers
+                WHERE id = ?
+                """,
+                arguments: [serverID.uuidString]
+            )
+            return MCPServerStoreCodec.decodeIfPresent([MCPResourceDescription].self, from: resourcesData) ?? []
+        }
+    }
+
+    private static func loadResourceTemplatesFromRelationalStore(serverID: UUID) -> [MCPResourceTemplate]? {
+        Persistence.withConfigDatabaseRead { db in
+            let resourceTemplatesData = try Data.fetchOne(
+                db,
+                sql: """
+                SELECT resource_templates_data
+                FROM mcp_servers
+                WHERE id = ?
+                """,
+                arguments: [serverID.uuidString]
+            )
+            return MCPServerStoreCodec.decodeIfPresent([MCPResourceTemplate].self, from: resourceTemplatesData) ?? []
+        }
+    }
+
+    private static func loadPromptsFromRelationalStore(serverID: UUID) -> [MCPPromptDescription]? {
+        Persistence.withConfigDatabaseRead { db in
+            let promptsData = try Data.fetchOne(
+                db,
+                sql: """
+                SELECT prompts_data
+                FROM mcp_servers
+                WHERE id = ?
+                """,
+                arguments: [serverID.uuidString]
+            )
+            return MCPServerStoreCodec.decodeIfPresent([MCPPromptDescription].self, from: promptsData) ?? []
+        }
+    }
+
+    private static func loadRootsFromRelationalStore(serverID: UUID) -> [MCPRoot]? {
+        Persistence.withConfigDatabaseRead { db in
+            let rootsData = try Data.fetchOne(
+                db,
+                sql: """
+                SELECT roots_data
+                FROM mcp_servers
+                WHERE id = ?
+                """,
+                arguments: [serverID.uuidString]
+            )
+            return MCPServerStoreCodec.decodeIfPresent([MCPRoot].self, from: rootsData) ?? []
+        }
+    }
+
+    private static func loadMetadataCachedAtFromRelationalStore(serverID: UUID) -> Date? {
+        Persistence.withConfigDatabaseRead { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT
+                    metadata_cached_at,
+                    updated_at,
+                    info_data,
+                    resources_data,
+                    resource_templates_data,
+                    prompts_data,
+                    roots_data,
+                    (SELECT COUNT(*) FROM mcp_tools t WHERE t.server_id = mcp_servers.id) AS tools_count
+                FROM mcp_servers
+                WHERE id = ?
+                """,
+                arguments: [serverID.uuidString]
+            ) else {
+                return nil
+            }
+
+            if let cachedAt: Double = row["metadata_cached_at"] {
+                return Date(timeIntervalSince1970: cachedAt)
+            }
+
+            let hasInfoData: Data? = row["info_data"]
+            let hasResourcesData: Data? = row["resources_data"]
+            let hasResourceTemplatesData: Data? = row["resource_templates_data"]
+            let hasPromptsData: Data? = row["prompts_data"]
+            let hasRootsData: Data? = row["roots_data"]
+            let toolCount: Int = row["tools_count"]
+            let hasMetadata = toolCount > 0 ||
+                hasInfoData != nil ||
+                hasResourcesData != nil ||
+                hasResourceTemplatesData != nil ||
+                hasPromptsData != nil ||
+                hasRootsData != nil
+            guard hasMetadata else { return nil }
+
+            let updatedAt: Double = row["updated_at"]
+            return Date(timeIntervalSince1970: updatedAt)
+        } ?? nil
     }
 
     private static func saveMetadataToRelationalStore(_ metadata: MCPServerMetadataCache?, for serverID: UUID) -> Bool {

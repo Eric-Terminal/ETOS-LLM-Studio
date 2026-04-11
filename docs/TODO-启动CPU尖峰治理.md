@@ -17,10 +17,10 @@
 - [x] 使用 `ValueObservation` 监听 `mcp_servers + mcp_tools` 签名变化。
 - [x] 仅在数据库真实写入变更时触发 `reloadServers()`。
 
-### 阶段三：按需查询（进行中）
+### 阶段三：按需查询（已完成）
 - [x] 新增 `MCPServerStore.loadTools(for:)`，直接查询 `mcp_tools`。
-- [ ] 在工具中心界面链路上优先使用 `loadTools(for:)`，避免无关字段解码。
-- [ ] 为资源/提示词提供同类按需读取 API（仅在确有调用点时落地）。
+- [x] 在工具中心界面链路上优先使用 `loadTools(for:)`，避免无关字段解码。
+- [x] 为资源/提示词提供同类按需读取 API（`loadResources/loadResourceTemplates/loadPrompts/loadRoots/loadServerInfo`）并接入关键调用点。
 
 ## 非 MCP（后续排查）
 - [x] 盘点仍存在“定时检查 + 大对象解码”的模块（Provider/Worldbook/Feedback 等）。
