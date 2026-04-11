@@ -3474,7 +3474,7 @@ fileprivate struct ChatSessionTests {
 @Suite("Persistence Tests")
 fileprivate struct PersistenceTests {
 
-    private struct SessionRecordV3: Decodable {
+    private struct LegacySessionRecord: Decodable {
         struct SessionMeta: Decodable {
             let id: UUID
             let name: String
@@ -3509,12 +3509,12 @@ fileprivate struct PersistenceTests {
         chatsDirectory.appendingPathComponent("folders.json")
     }
 
-    private var legacyV3Directory: URL {
+    private var legacySessionDirectory: URL {
         chatsDirectory.appendingPathComponent("v3")
     }
 
-    private var legacyV3IndexFileURL: URL {
-        legacyV3Directory.appendingPathComponent("index.json")
+    private var legacySessionIndexFileURL: URL {
+        legacySessionDirectory.appendingPathComponent("index.json")
     }
 
     private var legacyRootDirectory: URL {
@@ -3630,8 +3630,8 @@ fileprivate struct PersistenceTests {
             .appendingPathComponent("\(sessionID.uuidString).json")
     }
 
-    private func legacyV3SessionFileURL(_ sessionID: UUID) -> URL {
-        legacyV3Directory
+    private func legacySessionFileURL(_ sessionID: UUID) -> URL {
+        legacySessionDirectory
             .appendingPathComponent("sessions")
             .appendingPathComponent("\(sessionID.uuidString).json")
     }
@@ -3698,7 +3698,7 @@ fileprivate struct PersistenceTests {
         removeIfExists(foldersFileURL)
         removeIfExists(currentSessionsDirectory)
         removeIfExists(requestLogsDirectory)
-        removeIfExists(legacyV3Directory)
+        removeIfExists(legacySessionDirectory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyRootDirectory)
         removeIfExists(chatStoreSQLiteURL)
@@ -3801,7 +3801,7 @@ fileprivate struct PersistenceTests {
         let sessionFileURL = currentSessionFileURL(sessionId)
         #expect(FileManager.default.fileExists(atPath: sessionFileURL.path))
         if let migratedData = try? Data(contentsOf: sessionFileURL),
-           let record = try? JSONDecoder().decode(SessionRecordV3.self, from: migratedData) {
+           let record = try? JSONDecoder().decode(LegacySessionRecord.self, from: migratedData) {
             #expect(record.schemaVersion == 3)
             #expect(record.messages.count == 2)
             #expect(record.messages.first?.content == "Hello")
@@ -3878,7 +3878,7 @@ fileprivate struct PersistenceTests {
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
         defer {
-            _ = Persistence.removeAuxiliaryBlob(forKey: "test_auxiliary_blob_v1")
+            _ = Persistence.removeAuxiliaryBlob(forKey: "test_auxiliary_blob")
             Persistence.grdbEnabledOverrideForTests = previousOverride
             Persistence.resetGRDBStoreForTests()
             cleanup(sessions: [])
@@ -3886,7 +3886,7 @@ fileprivate struct PersistenceTests {
 
         cleanup(sessions: [])
         let payload: [String: Int] = ["a": 1, "b": 2]
-        let key = "test_auxiliary_blob_v1"
+        let key = "test_auxiliary_blob"
 
         #expect(Persistence.saveAuxiliaryBlob(payload, forKey: key))
         #expect(Persistence.auxiliaryBlobExists(forKey: key))
@@ -4179,7 +4179,7 @@ fileprivate struct PersistenceTests {
 
         removeIfExists(currentIndexFileURL)
         removeIfExists(currentSessionsDirectory)
-        removeIfExists(legacyV3Directory)
+        removeIfExists(legacySessionDirectory)
         removeIfExists(legacyRootDirectory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyMessageFileURL(sessionId))
@@ -4201,7 +4201,7 @@ fileprivate struct PersistenceTests {
         let migratedFileURL = currentSessionFileURL(sessionId)
         #expect(FileManager.default.fileExists(atPath: migratedFileURL.path))
         let migratedData = try Data(contentsOf: migratedFileURL)
-        let record = try JSONDecoder().decode(SessionRecordV3.self, from: migratedData)
+        let record = try JSONDecoder().decode(LegacySessionRecord.self, from: migratedData)
         #expect(record.schemaVersion == 3)
         #expect(record.session.id == sessionId)
         #expect(record.session.name == "Legacy Session")
@@ -4216,9 +4216,9 @@ fileprivate struct PersistenceTests {
         cleanup(sessions: [legacySession])
     }
 
-    @Test("Migrate Legacy v3 Directory To Root Layout And Delete v3 Folder")
-    func testMigrateLegacyV3DirectoryToRootLayoutAndDeleteV3Folder() throws {
-        struct LegacyV3IndexFile: Encodable {
+    @Test("Migrate Legacy Directory To Root Layout And Delete Old Folder")
+    func testMigrateLegacyDirectoryToRootLayoutAndDeleteOldFolder() throws {
+        struct LegacySessionIndexFile: Encodable {
             struct Item: Encodable {
                 let id: UUID
                 let name: String
@@ -4230,7 +4230,7 @@ fileprivate struct PersistenceTests {
             let sessions: [Item]
         }
 
-        struct LegacyV3SessionRecord: Encodable {
+        struct LegacySessionRecordFile: Encodable {
             struct SessionMeta: Encodable {
                 let id: UUID
                 let name: String
@@ -4249,43 +4249,43 @@ fileprivate struct PersistenceTests {
         }
 
         let sessionId = UUID()
-        let sessionName = "V3 Session"
+        let sessionName = "Legacy Session"
         let now = ISO8601DateFormatter().string(from: Date())
         let messages = [
-            ChatMessage(role: .user, content: "from-v3-user"),
-            ChatMessage(role: .assistant, content: "from-v3-assistant")
+            ChatMessage(role: .user, content: "from-legacy-user"),
+            ChatMessage(role: .assistant, content: "from-legacy-assistant")
         ]
 
         removeIfExists(currentIndexFileURL)
         removeIfExists(currentSessionsDirectory)
-        removeIfExists(legacyV3Directory)
+        removeIfExists(legacySessionDirectory)
         removeIfExists(legacySessionsIndexURL)
         removeIfExists(legacyRootDirectory)
         removeIfExists(legacyMessageFileURL(sessionId))
 
         try FileManager.default.createDirectory(
-            at: legacyV3SessionFileURL(sessionId).deletingLastPathComponent(),
+            at: legacySessionFileURL(sessionId).deletingLastPathComponent(),
             withIntermediateDirectories: true,
             attributes: nil
         )
 
-        let index = LegacyV3IndexFile(
+        let index = LegacySessionIndexFile(
             schemaVersion: 3,
             updatedAt: now,
             sessions: [.init(id: sessionId, name: sessionName, updatedAt: now)]
         )
         let indexData = try JSONEncoder().encode(index)
-        try indexData.write(to: legacyV3IndexFileURL, options: .atomic)
+        try indexData.write(to: legacySessionIndexFileURL, options: .atomic)
 
         let recordData = try JSONEncoder().encode(
-            LegacyV3SessionRecord(
+            LegacySessionRecordFile(
                 schemaVersion: 3,
                 session: .init(id: sessionId, name: sessionName, lorebookIDs: []),
                 prompts: .init(topicPrompt: nil, enhancedPrompt: nil),
                 messages: messages
             )
         )
-        try recordData.write(to: legacyV3SessionFileURL(sessionId), options: .atomic)
+        try recordData.write(to: legacySessionFileURL(sessionId), options: .atomic)
 
         let loadedSessions = Persistence.loadChatSessions()
         #expect(loadedSessions.count == 1)
@@ -4293,11 +4293,11 @@ fileprivate struct PersistenceTests {
         #expect(loadedSessions.first?.name == sessionName)
 
         let loadedMessages = Persistence.loadMessages(for: sessionId)
-        #expect(loadedMessages.map(\.content) == ["from-v3-user", "from-v3-assistant"])
+        #expect(loadedMessages.map(\.content) == ["from-legacy-user", "from-legacy-assistant"])
 
         #expect(FileManager.default.fileExists(atPath: currentIndexFileURL.path))
         #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(sessionId).path))
-        #expect(!FileManager.default.fileExists(atPath: legacyV3Directory.path))
+        #expect(!FileManager.default.fileExists(atPath: legacySessionDirectory.path))
 
         cleanup(sessions: [ChatSession(id: sessionId, name: sessionName, isTemporary: false)])
     }

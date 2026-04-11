@@ -22,7 +22,7 @@ final class PersistenceGRDBStore {
         static let dailyPulseTasks = "daily_pulse_tasks"
     }
 
-    private struct SessionIndexFileV3: Decodable {
+    private struct LegacySessionIndexFile: Decodable {
         struct Item: Decodable {
             let id: UUID
             let name: String
@@ -34,12 +34,12 @@ final class PersistenceGRDBStore {
         let sessions: [Item]
     }
 
-    private struct SessionPromptsV3: Decodable {
+    private struct LegacySessionPrompts: Decodable {
         let topicPrompt: String?
         let enhancedPrompt: String?
     }
 
-    private struct SessionMetaV3: Decodable {
+    private struct LegacySessionMeta: Decodable {
         let id: UUID
         let name: String
         let folderID: UUID?
@@ -49,10 +49,10 @@ final class PersistenceGRDBStore {
         let conversationSummaryUpdatedAt: String?
     }
 
-    private struct SessionRecordFileV3: Decodable {
+    private struct LegacySessionRecordFile: Decodable {
         let schemaVersion: Int
-        let session: SessionMetaV3
-        let prompts: SessionPromptsV3
+        let session: LegacySessionMeta
+        let prompts: LegacySessionPrompts
         let messages: [ChatMessage]
     }
 
@@ -1575,7 +1575,7 @@ final class PersistenceGRDBStore {
 
     private func readCurrentLayoutSessions() -> [LegacySessionSnapshot]? {
         let indexURL = chatsDirectory.appendingPathComponent("index.json")
-        guard let index: SessionIndexFileV3 = decodeFile(SessionIndexFileV3.self, at: indexURL) else {
+        guard let index: LegacySessionIndexFile = decodeFile(LegacySessionIndexFile.self, at: indexURL) else {
             return nil
         }
 
@@ -1587,7 +1587,7 @@ final class PersistenceGRDBStore {
             let sessionFileURL = sessionsDirectory.appendingPathComponent("\(item.id.uuidString).json")
             let fallbackUpdatedAt = parseISO8601Date(item.updatedAt) ?? Date()
 
-            if let record: SessionRecordFileV3 = decodeFile(SessionRecordFileV3.self, at: sessionFileURL) {
+            if let record: LegacySessionRecordFile = decodeFile(LegacySessionRecordFile.self, at: sessionFileURL) {
                 let session = ChatSession(
                     id: record.session.id,
                     name: record.session.name.isEmpty ? item.name : record.session.name,

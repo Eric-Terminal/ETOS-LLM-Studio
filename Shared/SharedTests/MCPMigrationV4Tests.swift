@@ -1,7 +1,7 @@
 // ============================================================================
-// MCPMigrationV4Tests.swift
+// MCPMigrationTests.swift
 // ============================================================================
-// 验证 MCP v4 迁移：旧关系表/json_blobs -> 混合表。
+// 验证 MCP 迁移：旧关系表/json_blobs -> 混合表。
 // ============================================================================
 
 import Foundation
@@ -9,8 +9,8 @@ import GRDB
 import Testing
 @testable import Shared
 
-@Suite("MCP v4 迁移测试")
-struct MCPMigrationV4Tests {
+@Suite("MCP 迁移测试")
+struct MCPMigrationTests {
     @Test("旧 mcp_servers/mcp_tools 可迁移到混合表")
     func testMigrateFromLegacyRelationalTables() throws {
         let databaseURL = try makeTemporaryConfigDatabaseURL()
@@ -84,7 +84,7 @@ struct MCPMigrationV4Tests {
             )
         }
 
-        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
+        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationTests")
 
         let verification = try store.read { db -> (Int, Int, String?, String?, Bool, Bool, Int) in
             let serverCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
@@ -171,7 +171,7 @@ struct MCPMigrationV4Tests {
             )
         }
 
-        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
+        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationTests")
 
         let verification = try store.read { db -> (Int, Int, String?, Int) in
             let serverCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
@@ -249,7 +249,7 @@ struct MCPMigrationV4Tests {
             )
         }
 
-        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
+        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationTests")
 
         let migratedCount = try store.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
@@ -325,7 +325,7 @@ struct MCPMigrationV4Tests {
             )
         }
 
-        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
+        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationTests")
 
         let verification = try store.read { db -> (Int, String?) in
             let toolCount = try Int.fetchOne(
@@ -398,7 +398,7 @@ struct MCPMigrationV4Tests {
             )
         }
 
-        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationV4Tests")
+        let store = try PersistenceAuxiliaryGRDBStore(databaseURL: databaseURL, loggerCategory: "MCPMigrationTests")
 
         let verification = try store.read { db -> (String?, String?) in
             let displayName = try String.fetchOne(
@@ -446,7 +446,7 @@ private func makeMetadata(cachedAt: Date, toolDescription: String) -> MCPServerM
 
 private func makeTemporaryConfigDatabaseURL() throws -> URL {
     let rootDirectory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("MCPMigrationV4Tests-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("MCPMigrationTests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     return rootDirectory.appendingPathComponent("config-store.sqlite")
 }
