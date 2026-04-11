@@ -311,7 +311,9 @@ public enum SyncEngine {
 
             if fileResult.imported > 0 || routeResult.imported > 0 {
                 FontLibrary.registerAllFontsIfNeeded()
-                NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+                }
             }
         }
 

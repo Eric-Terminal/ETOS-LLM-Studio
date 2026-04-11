@@ -2920,7 +2920,9 @@ public enum FontLibrary {
     public static func preloadRuntimeCacheAsync(forceReload: Bool = false) {
         Task.detached(priority: .utility) {
             preloadRuntimeCache(forceReload: forceReload)
-            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+            await MainActor.run {
+                NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+            }
         }
     }
 
