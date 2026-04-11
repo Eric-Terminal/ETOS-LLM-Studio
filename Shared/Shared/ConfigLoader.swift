@@ -10,6 +10,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import os.log
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConfigLoader")
@@ -299,15 +300,300 @@ public struct ConfigLoader {
     }
 
     private static func loadProvidersFromSQLite() -> [Provider]? {
-        guard Persistence.auxiliaryBlobExists(forKey: providersBlobKey) else {
+        guard let providers = Persistence.withConfigDatabaseRead({ db in
+            try loadProvidersFromRelationalStore(db)
+        }) else {
             return nil
         }
-        return Persistence.loadAuxiliaryBlob([Provider].self, forKey: providersBlobKey) ?? []
+
+        if providers.isEmpty,
+           Persistence.auxiliaryBlobExists(forKey: providersBlobKey),
+           let legacyProviders = Persistence.loadAuxiliaryBlob([Provider].self, forKey: providersBlobKey),
+           !legacyProviders.isEmpty {
+            if saveProvidersToSQLite(legacyProviders) {
+                _ = Persistence.removeAuxiliaryBlob(forKey: providersBlobKey)
+            }
+            return legacyProviders
+        }
+
+        return providers
     }
 
     @discardableResult
     private static func saveProvidersToSQLite(_ providers: [Provider]) -> Bool {
-        Persistence.saveAuxiliaryBlob(providers, forKey: providersBlobKey)
+        let didSave = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(sql: "DELETE FROM providers")
+
+            let now = Date().timeIntervalSince1970
+            for provider in providers {
+                let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+                let proxy = provider.proxyConfiguration
+
+                try db.execute(
+                    sql: """
+                    INSERT INTO providers (
+                        id, name, base_url, api_format,
+                        proxy_is_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        provider.id.uuidString,
+                        provider.name,
+                        provider.baseURL,
+                        provider.apiFormat,
+                        proxy.map { $0.isEnabled ? 1 : 0 },
+                        proxy?.type.rawValue,
+                        proxy?.host,
+                        proxy?.port,
+                        proxy?.username,
+                        proxy?.password,
+                        now
+                    ]
+                )
+
+                for (index, apiKey) in normalizedAPIKeys.enumerated() {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO provider_api_keys (provider_id, key_index, api_key)
+                        VALUES (?, ?, ?)
+                        """,
+                        arguments: [provider.id.uuidString, index, apiKey]
+                    )
+                }
+
+                for headerKey in provider.headerOverrides.keys.sorted() {
+                    let headerValue = provider.headerOverrides[headerKey] ?? ""
+                    try db.execute(
+                        sql: """
+                        INSERT INTO provider_header_overrides (provider_id, header_key, header_value)
+                        VALUES (?, ?, ?)
+                        """,
+                        arguments: [provider.id.uuidString, headerKey, headerValue]
+                    )
+                }
+
+                for (modelIndex, model) in provider.models.enumerated() {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO provider_models (
+                            id, provider_id, model_name, display_name, is_activated,
+                            request_body_override_mode, raw_request_body_json, sort_index, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            model.id.uuidString,
+                            provider.id.uuidString,
+                            model.modelName,
+                            model.displayName,
+                            model.isActivated ? 1 : 0,
+                            model.requestBodyOverrideMode.rawValue,
+                            model.rawRequestBodyJSON,
+                            modelIndex,
+                            now
+                        ]
+                    )
+
+                    for (capabilityIndex, capability) in model.capabilities.enumerated() {
+                        try db.execute(
+                            sql: """
+                            INSERT INTO provider_model_capabilities (model_id, capability, sort_index)
+                            VALUES (?, ?, ?)
+                            """,
+                            arguments: [model.id.uuidString, capability.rawValue, capabilityIndex]
+                        )
+                    }
+
+                    for parameterKey in model.overrideParameters.keys.sorted() {
+                        let value = model.overrideParameters[parameterKey] ?? .null
+                        let encodedValue = RelationalJSONValueCodec.encode(value)
+                        try db.execute(
+                            sql: """
+                            INSERT INTO provider_model_override_parameters (
+                                model_id, param_key, value_type, string_value, number_value, bool_value, json_value_text
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            arguments: [
+                                model.id.uuidString,
+                                parameterKey,
+                                encodedValue.type,
+                                encodedValue.stringValue,
+                                encodedValue.numberValue,
+                                encodedValue.boolValue,
+                                encodedValue.jsonValueText
+                            ]
+                        )
+                    }
+                }
+            }
+            return true
+        } ?? false
+
+        if didSave {
+            _ = Persistence.removeAuxiliaryBlob(forKey: providersBlobKey)
+        }
+        return didSave
+    }
+
+    private static func loadProvidersFromRelationalStore(_ db: Database) throws -> [Provider] {
+        let providerRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT id, name, base_url, api_format,
+                   proxy_is_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password
+            FROM providers
+            ORDER BY LOWER(name) ASC, id ASC
+            """
+        )
+
+        var providers: [Provider] = []
+        providers.reserveCapacity(providerRows.count)
+
+        for row in providerRows {
+            let providerIDRaw: String = row["id"]
+            let providerID = UUID(uuidString: providerIDRaw) ?? UUID()
+
+            let apiKeys = try String.fetchAll(
+                db,
+                sql: """
+                SELECT api_key
+                FROM provider_api_keys
+                WHERE provider_id = ?
+                ORDER BY key_index ASC
+                """,
+                arguments: [providerIDRaw]
+            )
+
+            let headerRows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT header_key, header_value
+                FROM provider_header_overrides
+                WHERE provider_id = ?
+                ORDER BY header_key ASC
+                """,
+                arguments: [providerIDRaw]
+            )
+            var headerOverrides: [String: String] = [:]
+            for headerRow in headerRows {
+                let key: String = headerRow["header_key"]
+                let value: String = headerRow["header_value"]
+                headerOverrides[key] = value
+            }
+
+            let modelRows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT id, model_name, display_name, is_activated,
+                       request_body_override_mode, raw_request_body_json
+                FROM provider_models
+                WHERE provider_id = ?
+                ORDER BY sort_index ASC, id ASC
+                """,
+                arguments: [providerIDRaw]
+            )
+
+            var models: [Model] = []
+            models.reserveCapacity(modelRows.count)
+            for modelRow in modelRows {
+                let modelIDRaw: String = modelRow["id"]
+                let modelID = UUID(uuidString: modelIDRaw) ?? UUID()
+
+                let capabilityValues = try String.fetchAll(
+                    db,
+                    sql: """
+                    SELECT capability
+                    FROM provider_model_capabilities
+                    WHERE model_id = ?
+                    ORDER BY sort_index ASC
+                    """,
+                    arguments: [modelIDRaw]
+                )
+                let capabilities = capabilityValues.compactMap(Model.Capability.init(rawValue:))
+
+                let overrideRows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT param_key, value_type, string_value, number_value, bool_value, json_value_text
+                    FROM provider_model_override_parameters
+                    WHERE model_id = ?
+                    ORDER BY param_key ASC
+                    """,
+                    arguments: [modelIDRaw]
+                )
+                var overrideParameters: [String: JSONValue] = [:]
+                for overrideRow in overrideRows {
+                    let key: String = overrideRow["param_key"]
+                    let valueType: String = overrideRow["value_type"]
+                    let stringValue: String? = overrideRow["string_value"]
+                    let numberValue: Double? = overrideRow["number_value"]
+                    let boolValue: Int? = overrideRow["bool_value"]
+                    let jsonValueText: String? = overrideRow["json_value_text"]
+                    overrideParameters[key] = RelationalJSONValueCodec.decode(
+                        type: valueType,
+                        stringValue: stringValue,
+                        numberValue: numberValue,
+                        boolValue: boolValue,
+                        jsonValueText: jsonValueText
+                    )
+                }
+
+                let requestBodyOverrideModeRaw: String? = modelRow["request_body_override_mode"]
+                let requestBodyOverrideMode = requestBodyOverrideModeRaw
+                    .flatMap(Model.RequestBodyOverrideMode.init(rawValue:))
+                    ?? .expression
+
+                let model = Model(
+                    id: modelID,
+                    modelName: modelRow["model_name"],
+                    displayName: modelRow["display_name"],
+                    isActivated: {
+                        let value: Int = modelRow["is_activated"]
+                        return value != 0
+                    }(),
+                    overrideParameters: overrideParameters,
+                    capabilities: capabilities,
+                    requestBodyOverrideMode: requestBodyOverrideMode,
+                    rawRequestBodyJSON: modelRow["raw_request_body_json"]
+                )
+                models.append(model)
+            }
+
+            let proxyIsEnabled: Int? = row["proxy_is_enabled"]
+            let proxyTypeRaw: String? = row["proxy_type"]
+            let proxyHost: String? = row["proxy_host"]
+            let proxyPort: Int? = row["proxy_port"]
+            let proxyUsername: String? = row["proxy_username"]
+            let proxyPassword: String? = row["proxy_password"]
+            let proxyConfiguration: NetworkProxyConfiguration?
+            if proxyIsEnabled != nil || proxyTypeRaw != nil || proxyHost != nil || proxyPort != nil {
+                proxyConfiguration = NetworkProxyConfiguration(
+                    isEnabled: (proxyIsEnabled ?? 0) != 0,
+                    type: proxyTypeRaw.flatMap(NetworkProxyType.init(rawValue:)) ?? .http,
+                    host: proxyHost ?? "",
+                    port: proxyPort ?? 8080,
+                    username: proxyUsername ?? "",
+                    password: proxyPassword ?? ""
+                )
+            } else {
+                proxyConfiguration = nil
+            }
+
+            providers.append(
+                Provider(
+                    id: providerID,
+                    name: row["name"],
+                    baseURL: row["base_url"],
+                    apiKeys: apiKeys,
+                    apiFormat: row["api_format"],
+                    models: models,
+                    headerOverrides: headerOverrides,
+                    proxyConfiguration: proxyConfiguration
+                )
+            )
+        }
+
+        return providers
     }
 
     private static func cleanupLegacyProviderFiles() {

@@ -9,6 +9,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import os.log
 
 public struct ConversationSessionSummary: Identifiable, Codable, Hashable, Sendable {
@@ -132,8 +133,11 @@ private struct ConversationUserProfileStore {
     }
 
     func loadProfile() -> ConversationUserProfile? {
-        if canUseGRDB, Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
-            return Persistence.loadAuxiliaryBlob(ConversationUserProfile.self, forKey: grdbBlobKey)
+        if canUseGRDB {
+            let sqliteResult = loadProfileFromSQLite()
+            if sqliteResult.didRead {
+                return sqliteResult.profile
+            }
         }
 
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
@@ -144,7 +148,7 @@ private struct ConversationUserProfileStore {
         do {
             let data = try Data(contentsOf: fileURL)
             let profile = try decoder.decode(ConversationUserProfile.self, from: data)
-            if canUseGRDB, Persistence.saveAuxiliaryBlob(profile, forKey: grdbBlobKey) {
+            if canUseGRDB, saveProfileToSQLite(profile) {
                 try? FileManager.default.removeItem(at: fileURL)
             }
             return profile
@@ -155,7 +159,7 @@ private struct ConversationUserProfileStore {
     }
 
     func saveProfile(_ profile: ConversationUserProfile) throws {
-        if canUseGRDB, Persistence.saveAuxiliaryBlob(profile, forKey: grdbBlobKey) {
+        if canUseGRDB, saveProfileToSQLite(profile) {
             let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 try? FileManager.default.removeItem(at: fileURL)
@@ -171,6 +175,7 @@ private struct ConversationUserProfileStore {
 
     func clearProfile() throws {
         if canUseGRDB {
+            _ = clearProfileFromSQLite()
             _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
         }
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
@@ -180,5 +185,75 @@ private struct ConversationUserProfileStore {
 
     private var canUseGRDB: Bool {
         rootDirectory == nil
+    }
+
+    private func loadProfileFromSQLite() -> (didRead: Bool, profile: ConversationUserProfile?) {
+        guard let profile = Persistence.withMemoryDatabaseRead({ db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT content, updated_at, source_session_id
+                FROM conversation_user_profile
+                WHERE singleton_key = 1
+                """
+            ) else {
+                return nil
+            }
+
+            let sourceSessionIDRaw: String? = row["source_session_id"]
+            return ConversationUserProfile(
+                content: row["content"],
+                updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
+                sourceSessionID: sourceSessionIDRaw.flatMap(UUID.init(uuidString:))
+            )
+        }) else {
+            return (false, nil)
+        }
+
+        if profile == nil,
+           Persistence.auxiliaryBlobExists(forKey: grdbBlobKey),
+           let legacy = Persistence.loadAuxiliaryBlob(ConversationUserProfile.self, forKey: grdbBlobKey) {
+            if saveProfileToSQLite(legacy) {
+                _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            }
+            return (true, legacy)
+        }
+
+        return (true, profile)
+    }
+
+    @discardableResult
+    private func saveProfileToSQLite(_ profile: ConversationUserProfile) -> Bool {
+        let didSave = Persistence.withMemoryDatabaseWrite { db in
+            try db.execute(
+                sql: """
+                INSERT INTO conversation_user_profile (singleton_key, content, updated_at, source_session_id)
+                VALUES (1, ?, ?, ?)
+                ON CONFLICT(singleton_key) DO UPDATE SET
+                    content = excluded.content,
+                    updated_at = excluded.updated_at,
+                    source_session_id = excluded.source_session_id
+                """,
+                arguments: [
+                    profile.content,
+                    profile.updatedAt.timeIntervalSince1970,
+                    profile.sourceSessionID?.uuidString
+                ]
+            )
+            return true
+        } ?? false
+
+        if didSave {
+            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+        }
+        return didSave
+    }
+
+    @discardableResult
+    private func clearProfileFromSQLite() -> Bool {
+        Persistence.withMemoryDatabaseWrite { db in
+            try db.execute(sql: "DELETE FROM conversation_user_profile WHERE singleton_key = 1")
+            return true
+        } ?? false
     }
 }

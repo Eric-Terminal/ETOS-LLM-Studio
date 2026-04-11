@@ -23,9 +23,15 @@
 - [ ] 为资源/提示词提供同类按需读取 API（仅在确有调用点时落地）。
 
 ## 非 MCP（后续排查）
-- [ ] 盘点仍存在“定时检查 + 大对象解码”的模块（Provider/Worldbook/Feedback 等）。
+- [x] 盘点仍存在“定时检查 + 大对象解码”的模块（Provider/Worldbook/Feedback 等）。
+- [x] Provider 配置改为关系表读写（`providers` / `provider_models` / `provider_model_capabilities` 等），并清理旧 Blob。
+- [x] Worldbook 改为关系表读写（`worldbooks` / `worldbook_entries` / `worldbook_entry_keys` / metadata），并清理旧 Blob。
+- [x] ShortcutTools 改为关系表读写（`shortcut_tools` / `shortcut_tool_metadata`），并清理旧 Blob。
+- [x] FeedbackTickets 改为关系表读写（`feedback_tickets`），并清理旧 Blob。
+- [x] Memory 原始记忆改为关系表读写（`memory_items`），并清理旧 Blob。
+- [x] Conversation 用户画像改为关系表读写（`conversation_user_profile`），并清理旧 Blob。
 - [ ] 对高频路径补充 Instruments 基线（主线程占比、JSON 解码耗时、DB 读次数）。
-- [ ] 对确认热点模块复用同样策略：关系化 + ValueObservation + 按需查询。
+- [ ] 对仍存在轮询热点的模块继续推进 ValueObservation（若后续定位到新热点再落地）。
 
 ## 验收标准
 - [ ] watchOS 启动后 60 秒内不再出现固定周期的 JSON 解码尖峰。

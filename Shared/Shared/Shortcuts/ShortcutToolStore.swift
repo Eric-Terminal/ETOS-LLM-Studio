@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import os.log
 
 private let shortcutStoreLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ShortcutToolStore")
@@ -46,11 +47,8 @@ public struct ShortcutToolStore {
     }
 
     public static func loadTools() -> [ShortcutToolDefinition] {
-        if Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
-            if let envelope = Persistence.loadAuxiliaryBlob(StoredEnvelope.self, forKey: grdbBlobKey) {
-                return envelope.tools
-            }
-            return Persistence.loadAuxiliaryBlob([ShortcutToolDefinition].self, forKey: grdbBlobKey) ?? []
+        if let tools = loadToolsFromSQLite() {
+            return tools
         }
 
         setupDirectoryIfNeeded()
@@ -63,8 +61,7 @@ public struct ShortcutToolStore {
             } else {
                 loadedTools = try decoder.decode([ShortcutToolDefinition].self, from: data)
             }
-            let migratedEnvelope = StoredEnvelope(schemaVersion: currentSchemaVersion, tools: loadedTools)
-            if Persistence.saveAuxiliaryBlob(migratedEnvelope, forKey: grdbBlobKey) {
+            if saveToolsToSQLite(loadedTools) {
                 cleanupLegacyFileArtifacts()
             }
             return loadedTools
@@ -75,8 +72,7 @@ public struct ShortcutToolStore {
     }
 
     public static func saveTools(_ tools: [ShortcutToolDefinition]) {
-        let envelope = StoredEnvelope(schemaVersion: currentSchemaVersion, tools: tools)
-        if Persistence.saveAuxiliaryBlob(envelope, forKey: grdbBlobKey) {
+        if saveToolsToSQLite(tools) {
             cleanupLegacyFileArtifacts()
             shortcutStoreLogger.info("已保存快捷指令工具到 SQLite: \(tools.count)")
             return
@@ -84,6 +80,7 @@ public struct ShortcutToolStore {
 
         setupDirectoryIfNeeded()
         do {
+            let envelope = StoredEnvelope(schemaVersion: currentSchemaVersion, tools: tools)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(envelope)
@@ -91,6 +88,152 @@ public struct ShortcutToolStore {
             shortcutStoreLogger.info("已保存快捷指令工具: \(tools.count)")
         } catch {
             shortcutStoreLogger.error("保存快捷指令工具失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func loadToolsFromSQLite() -> [ShortcutToolDefinition]? {
+        guard let tools = Persistence.withConfigDatabaseRead({ db in
+            try loadToolsFromRelationalStore(db)
+        }) else {
+            return nil
+        }
+
+        if tools.isEmpty,
+           let legacyTools = loadLegacyToolsFromBlob(),
+           !legacyTools.isEmpty {
+            if saveToolsToSQLite(legacyTools) {
+                _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            }
+            return legacyTools
+        }
+
+        return tools
+    }
+
+    private static func loadLegacyToolsFromBlob() -> [ShortcutToolDefinition]? {
+        guard Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) else {
+            return nil
+        }
+        if let envelope = Persistence.loadAuxiliaryBlob(StoredEnvelope.self, forKey: grdbBlobKey) {
+            return envelope.tools
+        }
+        return Persistence.loadAuxiliaryBlob([ShortcutToolDefinition].self, forKey: grdbBlobKey) ?? []
+    }
+
+    @discardableResult
+    private static func saveToolsToSQLite(_ tools: [ShortcutToolDefinition]) -> Bool {
+        let didSave = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(sql: "DELETE FROM shortcut_tools")
+
+            for tool in tools {
+                try db.execute(
+                    sql: """
+                    INSERT INTO shortcut_tools (
+                        id, name, external_id, source, run_mode_hint, is_enabled,
+                        user_description, generated_description, created_at, updated_at, last_imported_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        tool.id.uuidString,
+                        tool.name,
+                        tool.externalID,
+                        tool.source,
+                        tool.runModeHint.rawValue,
+                        tool.isEnabled ? 1 : 0,
+                        tool.userDescription,
+                        tool.generatedDescription,
+                        tool.createdAt.timeIntervalSince1970,
+                        tool.updatedAt.timeIntervalSince1970,
+                        tool.lastImportedAt.timeIntervalSince1970
+                    ]
+                )
+
+                for metadataKey in tool.metadata.keys.sorted() {
+                    let encodedValue = RelationalJSONValueCodec.encode(tool.metadata[metadataKey] ?? .null)
+                    try db.execute(
+                        sql: """
+                        INSERT INTO shortcut_tool_metadata (
+                            tool_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            tool.id.uuidString,
+                            metadataKey,
+                            encodedValue.type,
+                            encodedValue.stringValue,
+                            encodedValue.numberValue,
+                            encodedValue.boolValue,
+                            encodedValue.jsonValueText
+                        ]
+                    )
+                }
+            }
+            return true
+        } ?? false
+
+        if didSave {
+            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+        }
+        return didSave
+    }
+
+    private static func loadToolsFromRelationalStore(_ db: Database) throws -> [ShortcutToolDefinition] {
+        let toolRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT id, name, external_id, source, run_mode_hint, is_enabled,
+                   user_description, generated_description, created_at, updated_at, last_imported_at
+            FROM shortcut_tools
+            ORDER BY LOWER(name) ASC, id ASC
+            """
+        )
+
+        let metadataRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT tool_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
+            FROM shortcut_tool_metadata
+            ORDER BY tool_id ASC, meta_key ASC
+            """
+        )
+
+        var metadataByToolID: [String: [String: JSONValue]] = [:]
+        for row in metadataRows {
+            let toolID: String = row["tool_id"]
+            let key: String = row["meta_key"]
+            let valueType: String = row["value_type"]
+            let stringValue: String? = row["string_value"]
+            let numberValue: Double? = row["number_value"]
+            let boolValue: Int? = row["bool_value"]
+            let jsonValueText: String? = row["json_value_text"]
+            let decoded = RelationalJSONValueCodec.decode(
+                type: valueType,
+                stringValue: stringValue,
+                numberValue: numberValue,
+                boolValue: boolValue,
+                jsonValueText: jsonValueText
+            )
+            metadataByToolID[toolID, default: [:]][key] = decoded
+        }
+
+        return toolRows.map { row in
+            let idRaw: String = row["id"]
+            let runModeRaw: String = row["run_mode_hint"]
+            let isEnabledValue: Int = row["is_enabled"]
+            return ShortcutToolDefinition(
+                id: UUID(uuidString: idRaw) ?? UUID(),
+                name: row["name"],
+                externalID: row["external_id"],
+                metadata: metadataByToolID[idRaw] ?? [:],
+                source: row["source"],
+                runModeHint: ShortcutRunModeHint(rawValue: runModeRaw) ?? .direct,
+                isEnabled: isEnabledValue != 0,
+                userDescription: row["user_description"],
+                generatedDescription: row["generated_description"],
+                createdAt: Date(timeIntervalSince1970: row["created_at"]),
+                updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
+                lastImportedAt: Date(timeIntervalSince1970: row["last_imported_at"])
+            )
         }
     }
 

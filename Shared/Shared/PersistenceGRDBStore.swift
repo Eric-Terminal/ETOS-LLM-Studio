@@ -121,6 +121,7 @@ final class PersistenceGRDBStore {
         configuration.qos = .userInitiated
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA foreign_keys=ON")
             try db.execute(sql: "PRAGMA journal_mode=WAL")
             try db.execute(sql: "PRAGMA synchronous=NORMAL")
             try db.execute(sql: "PRAGMA busy_timeout=5000")
@@ -2122,18 +2123,21 @@ final class PersistenceAuxiliaryGRDBStore {
     private static let incrementalVacuumTriggerRatio = 0.25
     private static let incrementalVacuumBatchPages = 512
     private let databaseURL: URL
-    private let supportsMCPRelationalSchema: Bool
+    private let supportsConfigRelationalSchema: Bool
+    private let supportsMemoryRelationalSchema: Bool
     private let dbPool: DatabasePool
 
     init(databaseURL: URL, loggerCategory: String) throws {
         self.databaseURL = databaseURL
         self.logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: loggerCategory)
-        self.supportsMCPRelationalSchema = databaseURL.lastPathComponent == "config-store.sqlite"
+        self.supportsConfigRelationalSchema = databaseURL.lastPathComponent == "config-store.sqlite"
+        self.supportsMemoryRelationalSchema = databaseURL.lastPathComponent == "memory-store.sqlite"
 
         var configuration = Configuration()
         configuration.qos = .userInitiated
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA foreign_keys=ON")
             try db.execute(sql: "PRAGMA journal_mode=WAL")
             try db.execute(sql: "PRAGMA synchronous=NORMAL")
             try db.execute(sql: "PRAGMA busy_timeout=5000")
@@ -2269,7 +2273,7 @@ final class PersistenceAuxiliaryGRDBStore {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_json_blobs_updated_at ON json_blobs(updated_at DESC)")
         }
 
-        if supportsMCPRelationalSchema {
+        if supportsConfigRelationalSchema {
             migrator.registerMigration("v2_create_mcp_relational_tables") { db in
                 try db.execute(sql: """
                     CREATE TABLE IF NOT EXISTS mcp_servers (
@@ -2303,6 +2307,262 @@ final class PersistenceAuxiliaryGRDBStore {
                 try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_tools_server_name ON mcp_tools(server_id, name)")
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_updated_at ON mcp_servers(updated_at DESC)")
+            }
+
+            migrator.registerMigration("v3_create_config_domain_tables") { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS providers (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        base_url TEXT NOT NULL,
+                        api_format TEXT NOT NULL,
+                        proxy_is_enabled INTEGER,
+                        proxy_type TEXT,
+                        proxy_host TEXT,
+                        proxy_port INTEGER,
+                        proxy_username TEXT,
+                        proxy_password TEXT,
+                        updated_at REAL NOT NULL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_providers_updated_at ON providers(updated_at DESC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS provider_api_keys (
+                        provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+                        key_index INTEGER NOT NULL,
+                        api_key TEXT NOT NULL,
+                        PRIMARY KEY(provider_id, key_index)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_provider_api_keys_provider ON provider_api_keys(provider_id)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS provider_header_overrides (
+                        provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+                        header_key TEXT NOT NULL,
+                        header_value TEXT NOT NULL,
+                        PRIMARY KEY(provider_id, header_key)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_provider_headers_provider ON provider_header_overrides(provider_id)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS provider_models (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+                        model_name TEXT NOT NULL,
+                        display_name TEXT NOT NULL,
+                        is_activated INTEGER NOT NULL,
+                        request_body_override_mode TEXT NOT NULL,
+                        raw_request_body_json TEXT,
+                        sort_index INTEGER NOT NULL,
+                        updated_at REAL NOT NULL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_provider_models_provider_sort ON provider_models(provider_id, sort_index ASC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS provider_model_capabilities (
+                        model_id TEXT NOT NULL REFERENCES provider_models(id) ON DELETE CASCADE,
+                        capability TEXT NOT NULL,
+                        sort_index INTEGER NOT NULL,
+                        PRIMARY KEY(model_id, capability)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_provider_model_capabilities_model ON provider_model_capabilities(model_id, sort_index ASC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS provider_model_override_parameters (
+                        model_id TEXT NOT NULL REFERENCES provider_models(id) ON DELETE CASCADE,
+                        param_key TEXT NOT NULL,
+                        value_type TEXT NOT NULL,
+                        string_value TEXT,
+                        number_value REAL,
+                        bool_value INTEGER,
+                        json_value_text TEXT,
+                        PRIMARY KEY(model_id, param_key)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_provider_model_override_model ON provider_model_override_parameters(model_id)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS worldbooks (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        is_enabled INTEGER NOT NULL,
+                        created_at REAL NOT NULL,
+                        updated_at REAL NOT NULL,
+                        scan_depth INTEGER NOT NULL,
+                        max_recursion_depth INTEGER NOT NULL,
+                        max_injected_entries INTEGER NOT NULL,
+                        max_injected_characters INTEGER NOT NULL,
+                        fallback_position TEXT NOT NULL,
+                        source_file_name TEXT
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_worldbooks_updated_at ON worldbooks(updated_at DESC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS worldbook_metadata (
+                        worldbook_id TEXT NOT NULL REFERENCES worldbooks(id) ON DELETE CASCADE,
+                        meta_key TEXT NOT NULL,
+                        value_type TEXT NOT NULL,
+                        string_value TEXT,
+                        number_value REAL,
+                        bool_value INTEGER,
+                        json_value_text TEXT,
+                        PRIMARY KEY(worldbook_id, meta_key)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_worldbook_metadata_worldbook ON worldbook_metadata(worldbook_id)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS worldbook_entries (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        worldbook_id TEXT NOT NULL REFERENCES worldbooks(id) ON DELETE CASCADE,
+                        uid INTEGER,
+                        comment TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        selective_logic TEXT NOT NULL,
+                        is_enabled INTEGER NOT NULL,
+                        constant_flag INTEGER NOT NULL,
+                        position TEXT NOT NULL,
+                        outlet_name TEXT,
+                        entry_order INTEGER NOT NULL,
+                        depth INTEGER,
+                        scan_depth INTEGER,
+                        case_sensitive INTEGER NOT NULL,
+                        match_whole_words INTEGER NOT NULL,
+                        use_regex INTEGER NOT NULL,
+                        use_probability INTEGER NOT NULL,
+                        probability REAL NOT NULL,
+                        group_name TEXT,
+                        group_override INTEGER NOT NULL,
+                        group_weight REAL NOT NULL,
+                        use_group_scoring INTEGER NOT NULL,
+                        role TEXT NOT NULL,
+                        sticky INTEGER,
+                        cooldown INTEGER,
+                        delay INTEGER,
+                        exclude_recursion INTEGER NOT NULL,
+                        prevent_recursion INTEGER NOT NULL,
+                        delay_until_recursion INTEGER NOT NULL,
+                        sort_index INTEGER NOT NULL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_worldbook_entries_worldbook_sort ON worldbook_entries(worldbook_id, sort_index ASC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS worldbook_entry_keys (
+                        entry_id TEXT NOT NULL REFERENCES worldbook_entries(id) ON DELETE CASCADE,
+                        key_value TEXT NOT NULL,
+                        key_kind TEXT NOT NULL,
+                        sort_index INTEGER NOT NULL,
+                        PRIMARY KEY(entry_id, key_kind, sort_index)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_worldbook_entry_keys_entry ON worldbook_entry_keys(entry_id, key_kind, sort_index ASC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS worldbook_entry_metadata (
+                        entry_id TEXT NOT NULL REFERENCES worldbook_entries(id) ON DELETE CASCADE,
+                        meta_key TEXT NOT NULL,
+                        value_type TEXT NOT NULL,
+                        string_value TEXT,
+                        number_value REAL,
+                        bool_value INTEGER,
+                        json_value_text TEXT,
+                        PRIMARY KEY(entry_id, meta_key)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_worldbook_entry_metadata_entry ON worldbook_entry_metadata(entry_id)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS shortcut_tools (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        external_id TEXT,
+                        source TEXT,
+                        run_mode_hint TEXT NOT NULL,
+                        is_enabled INTEGER NOT NULL,
+                        user_description TEXT,
+                        generated_description TEXT,
+                        created_at REAL NOT NULL,
+                        updated_at REAL NOT NULL,
+                        last_imported_at REAL NOT NULL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_shortcut_tools_updated_at ON shortcut_tools(updated_at DESC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS shortcut_tool_metadata (
+                        tool_id TEXT NOT NULL REFERENCES shortcut_tools(id) ON DELETE CASCADE,
+                        meta_key TEXT NOT NULL,
+                        value_type TEXT NOT NULL,
+                        string_value TEXT,
+                        number_value REAL,
+                        bool_value INTEGER,
+                        json_value_text TEXT,
+                        PRIMARY KEY(tool_id, meta_key)
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_shortcut_tool_metadata_tool ON shortcut_tool_metadata(tool_id)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS feedback_tickets (
+                        issue_number INTEGER PRIMARY KEY NOT NULL,
+                        ticket_token TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        created_at REAL NOT NULL,
+                        last_known_status TEXT NOT NULL,
+                        last_checked_at REAL,
+                        last_known_updated_at REAL,
+                        public_url TEXT,
+                        moderation_blocked INTEGER,
+                        moderation_message TEXT,
+                        archive_id TEXT,
+                        submitted_title TEXT,
+                        submitted_detail TEXT,
+                        submitted_reproduction_steps TEXT,
+                        submitted_expected_behavior TEXT,
+                        submitted_actual_behavior TEXT,
+                        submitted_extra_context TEXT,
+                        last_known_comment_count INTEGER,
+                        last_known_developer_comment_id TEXT,
+                        last_known_developer_comment_at REAL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_feedback_tickets_checked ON feedback_tickets(last_checked_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_feedback_tickets_created ON feedback_tickets(created_at DESC)")
+            }
+        }
+
+        if supportsMemoryRelationalSchema {
+            migrator.registerMigration("v2_create_memory_domain_tables") { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS memory_items (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        content TEXT NOT NULL,
+                        embedding_data BLOB NOT NULL,
+                        created_at REAL NOT NULL,
+                        updated_at REAL,
+                        is_archived INTEGER NOT NULL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_memory_items_created_at ON memory_items(created_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_memory_items_updated_at ON memory_items(updated_at DESC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS conversation_user_profile (
+                        singleton_key INTEGER PRIMARY KEY NOT NULL CHECK(singleton_key = 1),
+                        content TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        source_session_id TEXT
+                    )
+                """)
             }
         }
         try migrator.migrate(self.dbPool)

@@ -4584,7 +4584,7 @@ fileprivate struct ConfigLoaderTests {
         #expect(foundProvider?.name == "Test Provider")
         #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
-        #expect(Persistence.auxiliaryBlobExists(forKey: "providers_v1"))
+        #expect(!Persistence.auxiliaryBlobExists(forKey: "providers_v1"))
     }
 
     @Test("同步包编码会包含 Provider JSON 中的 API Key")
@@ -4629,7 +4629,7 @@ fileprivate struct ConfigLoaderTests {
 
         let firstLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })
         #expect(firstLoad?.apiKeys == ["legacy-key-1", "legacy-key-2"])
-        #expect(Persistence.auxiliaryBlobExists(forKey: "providers_v1"))
+        #expect(!Persistence.auxiliaryBlobExists(forKey: "providers_v1"))
         #expect(ProviderCredentialStore.shared.loadAPIKeys(for: provider.id).isEmpty)
 
         let secondLoad = ConfigLoader.loadProviders().first(where: { $0.id == provider.id })

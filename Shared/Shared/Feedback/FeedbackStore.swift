@@ -9,6 +9,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import os.log
 
 private let feedbackStoreLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "FeedbackStore")
@@ -106,8 +107,7 @@ public enum FeedbackStore {
     // MARK: - 私有实现
 
     private static func loadTicketsWithoutLock() -> [FeedbackTicket] {
-        if Persistence.auxiliaryBlobExists(forKey: grdbBlobKey) {
-            let tickets = Persistence.loadAuxiliaryBlob([FeedbackTicket].self, forKey: grdbBlobKey) ?? []
+        if let tickets = loadTicketsFromSQLite() {
             return sortTickets(tickets)
         }
 
@@ -119,7 +119,7 @@ public enum FeedbackStore {
             let data = try Data(contentsOf: fileURL)
             let decoder = FeedbackDateCodec.makeJSONDecoder()
             let tickets = try decoder.decode([FeedbackTicket].self, from: data)
-            if Persistence.saveAuxiliaryBlob(tickets, forKey: grdbBlobKey) {
+            if saveTicketsToSQLite(tickets) {
                 cleanupLegacyFileArtifactsWithoutLock()
             }
             return sortTickets(tickets)
@@ -130,7 +130,7 @@ public enum FeedbackStore {
     }
 
     private static func writeTicketsWithoutLock(_ tickets: [FeedbackTicket]) {
-        if Persistence.saveAuxiliaryBlob(tickets, forKey: grdbBlobKey) {
+        if saveTicketsToSQLite(tickets) {
             cleanupLegacyFileArtifactsWithoutLock()
             return
         }
@@ -143,6 +143,118 @@ public enum FeedbackStore {
         } catch {
             feedbackStoreLogger.error("保存反馈工单失败: \(error.localizedDescription)")
         }
+    }
+
+    private static func loadTicketsFromSQLite() -> [FeedbackTicket]? {
+        guard let tickets = Persistence.withConfigDatabaseRead({ db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT issue_number, ticket_token, category, title,
+                       created_at, last_known_status, last_checked_at, last_known_updated_at,
+                       public_url, moderation_blocked, moderation_message, archive_id,
+                       submitted_title, submitted_detail, submitted_reproduction_steps,
+                       submitted_expected_behavior, submitted_actual_behavior, submitted_extra_context,
+                       last_known_comment_count, last_known_developer_comment_id, last_known_developer_comment_at
+                FROM feedback_tickets
+                ORDER BY COALESCE(last_checked_at, created_at) DESC, issue_number DESC
+                """
+            )
+
+            return rows.map { row in
+                let categoryRaw: String = row["category"]
+                let statusRaw: String = row["last_known_status"]
+                let publicURLString: String? = row["public_url"]
+                let publicURL = publicURLString.flatMap(URL.init(string:))
+                let moderationBlockedValue: Int? = row["moderation_blocked"]
+                return FeedbackTicket(
+                    issueNumber: row["issue_number"],
+                    ticketToken: row["ticket_token"],
+                    category: FeedbackCategory(rawValue: categoryRaw) ?? .other,
+                    title: row["title"],
+                    createdAt: Date(timeIntervalSince1970: row["created_at"]),
+                    lastKnownStatus: FeedbackTicketStatus(rawValue: statusRaw) ?? .inProgress,
+                    lastCheckedAt: (row["last_checked_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
+                    lastKnownUpdatedAt: (row["last_known_updated_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
+                    publicURL: publicURL,
+                    moderationBlocked: moderationBlockedValue.map { $0 != 0 },
+                    moderationMessage: row["moderation_message"],
+                    archiveID: row["archive_id"],
+                    submittedTitle: row["submitted_title"],
+                    submittedDetail: row["submitted_detail"],
+                    submittedReproductionSteps: row["submitted_reproduction_steps"],
+                    submittedExpectedBehavior: row["submitted_expected_behavior"],
+                    submittedActualBehavior: row["submitted_actual_behavior"],
+                    submittedExtraContext: row["submitted_extra_context"],
+                    lastKnownCommentCount: row["last_known_comment_count"],
+                    lastKnownDeveloperCommentID: row["last_known_developer_comment_id"],
+                    lastKnownDeveloperCommentAt: (row["last_known_developer_comment_at"] as Double?).map(Date.init(timeIntervalSince1970:))
+                )
+            }
+        }) else {
+            return nil
+        }
+
+        if tickets.isEmpty,
+           Persistence.auxiliaryBlobExists(forKey: grdbBlobKey),
+           let legacy = Persistence.loadAuxiliaryBlob([FeedbackTicket].self, forKey: grdbBlobKey),
+           !legacy.isEmpty {
+            if saveTicketsToSQLite(legacy) {
+                _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+            }
+            return legacy
+        }
+        return tickets
+    }
+
+    @discardableResult
+    private static func saveTicketsToSQLite(_ tickets: [FeedbackTicket]) -> Bool {
+        let didSave = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(sql: "DELETE FROM feedback_tickets")
+            for ticket in tickets {
+                try db.execute(
+                    sql: """
+                    INSERT INTO feedback_tickets (
+                        issue_number, ticket_token, category, title,
+                        created_at, last_known_status, last_checked_at, last_known_updated_at,
+                        public_url, moderation_blocked, moderation_message, archive_id,
+                        submitted_title, submitted_detail, submitted_reproduction_steps,
+                        submitted_expected_behavior, submitted_actual_behavior, submitted_extra_context,
+                        last_known_comment_count, last_known_developer_comment_id, last_known_developer_comment_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        ticket.issueNumber,
+                        ticket.ticketToken,
+                        ticket.category.rawValue,
+                        ticket.title,
+                        ticket.createdAt.timeIntervalSince1970,
+                        ticket.lastKnownStatus.rawValue,
+                        ticket.lastCheckedAt?.timeIntervalSince1970,
+                        ticket.lastKnownUpdatedAt?.timeIntervalSince1970,
+                        ticket.publicURL?.absoluteString,
+                        ticket.moderationBlocked.map { $0 ? 1 : 0 },
+                        ticket.moderationMessage,
+                        ticket.archiveID,
+                        ticket.submittedTitle,
+                        ticket.submittedDetail,
+                        ticket.submittedReproductionSteps,
+                        ticket.submittedExpectedBehavior,
+                        ticket.submittedActualBehavior,
+                        ticket.submittedExtraContext,
+                        ticket.lastKnownCommentCount,
+                        ticket.lastKnownDeveloperCommentID,
+                        ticket.lastKnownDeveloperCommentAt?.timeIntervalSince1970
+                    ]
+                )
+            }
+            return true
+        } ?? false
+
+        if didSave {
+            _ = Persistence.removeAuxiliaryBlob(forKey: grdbBlobKey)
+        }
+        return didSave
     }
 
     private static func ensureDirectoryExists() throws {

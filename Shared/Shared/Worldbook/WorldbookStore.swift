@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import os.log
 
 public struct WorldbookImportReport: Hashable, Sendable {
@@ -269,8 +270,9 @@ public final class WorldbookStore {
             return cachedWorldbooks
         }
 
-        if canUseGRDB, Persistence.auxiliaryBlobExists(forKey: Self.grdbBlobKey) {
-            let storedWorldbooks = Persistence.loadAuxiliaryBlob([Worldbook].self, forKey: Self.grdbBlobKey) ?? []
+        if canUseGRDB,
+           let storedWorldbooks = loadWorldbooksFromSQLite(),
+           !storedWorldbooks.isEmpty {
             let sortedStoredWorldbooks = deduplicatedAndSortedWorldbooks(storedWorldbooks)
             updateCaches(with: sortedStoredWorldbooks)
             cleanupLegacyFilesAfterGRDBSave(removeLegacyAggregate: true)
@@ -303,7 +305,7 @@ public final class WorldbookStore {
     ) {
         let sorted = deduplicatedAndSortedWorldbooks(worldbooks)
 
-        if canUseGRDB, Persistence.saveAuxiliaryBlob(sorted, forKey: Self.grdbBlobKey) {
+        if canUseGRDB, saveWorldbooksToSQLite(sorted) {
             cleanupLegacyFilesAfterGRDBSave(removeLegacyAggregate: removeLegacyAggregate)
             logger.info("已保存世界书到 SQLite: \(sorted.count)")
             updateCaches(with: sorted)
@@ -329,6 +331,359 @@ public final class WorldbookStore {
             updateCaches(with: sorted)
         } catch {
             logger.error("保存世界书失败: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func loadWorldbooksFromSQLite() -> [Worldbook]? {
+        guard let worldbooks = Persistence.withConfigDatabaseRead({ db in
+            try loadWorldbooksFromRelationalStore(db)
+        }) else {
+            return nil
+        }
+
+        if worldbooks.isEmpty,
+           let legacyWorldbooks = loadLegacyWorldbooksFromBlob(),
+           !legacyWorldbooks.isEmpty {
+            if saveWorldbooksToSQLite(legacyWorldbooks) {
+                _ = Persistence.removeAuxiliaryBlob(forKey: Self.grdbBlobKey)
+            }
+            return legacyWorldbooks
+        }
+
+        return worldbooks
+    }
+
+    private func loadLegacyWorldbooksFromBlob() -> [Worldbook]? {
+        guard Persistence.auxiliaryBlobExists(forKey: Self.grdbBlobKey) else {
+            return nil
+        }
+        return Persistence.loadAuxiliaryBlob([Worldbook].self, forKey: Self.grdbBlobKey) ?? []
+    }
+
+    @discardableResult
+    private func saveWorldbooksToSQLite(_ worldbooks: [Worldbook]) -> Bool {
+        let didSave = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(sql: "DELETE FROM worldbooks")
+
+            for worldbook in worldbooks {
+                try db.execute(
+                    sql: """
+                    INSERT INTO worldbooks (
+                        id, name, description, is_enabled, created_at, updated_at,
+                        scan_depth, max_recursion_depth, max_injected_entries,
+                        max_injected_characters, fallback_position, source_file_name
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        worldbook.id.uuidString,
+                        worldbook.name,
+                        worldbook.description,
+                        worldbook.isEnabled ? 1 : 0,
+                        worldbook.createdAt.timeIntervalSince1970,
+                        worldbook.updatedAt.timeIntervalSince1970,
+                        worldbook.settings.scanDepth,
+                        worldbook.settings.maxRecursionDepth,
+                        worldbook.settings.maxInjectedEntries,
+                        worldbook.settings.maxInjectedCharacters,
+                        worldbook.settings.fallbackPosition.stRawValue,
+                        worldbook.sourceFileName
+                    ]
+                )
+
+                for metadataKey in worldbook.metadata.keys.sorted() {
+                    let encodedValue = RelationalJSONValueCodec.encode(worldbook.metadata[metadataKey] ?? .null)
+                    try db.execute(
+                        sql: """
+                        INSERT INTO worldbook_metadata (
+                            worldbook_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            worldbook.id.uuidString,
+                            metadataKey,
+                            encodedValue.type,
+                            encodedValue.stringValue,
+                            encodedValue.numberValue,
+                            encodedValue.boolValue,
+                            encodedValue.jsonValueText
+                        ]
+                    )
+                }
+
+                for (entryIndex, entry) in worldbook.entries.enumerated() {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO worldbook_entries (
+                            id, worldbook_id, uid, comment, content, selective_logic, is_enabled,
+                            constant_flag, position, outlet_name, entry_order, depth, scan_depth,
+                            case_sensitive, match_whole_words, use_regex, use_probability, probability,
+                            group_name, group_override, group_weight, use_group_scoring, role, sticky,
+                            cooldown, delay, exclude_recursion, prevent_recursion, delay_until_recursion,
+                            sort_index
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            entry.id.uuidString,
+                            worldbook.id.uuidString,
+                            entry.uid,
+                            entry.comment,
+                            entry.content,
+                            entry.selectiveLogic.rawValue,
+                            entry.isEnabled ? 1 : 0,
+                            entry.constant ? 1 : 0,
+                            entry.position.stRawValue,
+                            entry.outletName,
+                            entry.order,
+                            entry.depth,
+                            entry.scanDepth,
+                            entry.caseSensitive ? 1 : 0,
+                            entry.matchWholeWords ? 1 : 0,
+                            entry.useRegex ? 1 : 0,
+                            entry.useProbability ? 1 : 0,
+                            entry.probability,
+                            entry.group,
+                            entry.groupOverride ? 1 : 0,
+                            entry.groupWeight,
+                            entry.useGroupScoring ? 1 : 0,
+                            entry.role.rawValue,
+                            entry.sticky,
+                            entry.cooldown,
+                            entry.delay,
+                            entry.excludeRecursion ? 1 : 0,
+                            entry.preventRecursion ? 1 : 0,
+                            entry.delayUntilRecursion ? 1 : 0,
+                            entryIndex
+                        ]
+                    )
+
+                    for (keyIndex, keyValue) in entry.keys.enumerated() {
+                        try db.execute(
+                            sql: """
+                            INSERT INTO worldbook_entry_keys (entry_id, key_value, key_kind, sort_index)
+                            VALUES (?, ?, 'primary', ?)
+                            """,
+                            arguments: [entry.id.uuidString, keyValue, keyIndex]
+                        )
+                    }
+
+                    for (keyIndex, keyValue) in entry.secondaryKeys.enumerated() {
+                        try db.execute(
+                            sql: """
+                            INSERT INTO worldbook_entry_keys (entry_id, key_value, key_kind, sort_index)
+                            VALUES (?, ?, 'secondary', ?)
+                            """,
+                            arguments: [entry.id.uuidString, keyValue, keyIndex]
+                        )
+                    }
+
+                    for metadataKey in entry.metadata.keys.sorted() {
+                        let encodedValue = RelationalJSONValueCodec.encode(entry.metadata[metadataKey] ?? .null)
+                        try db.execute(
+                            sql: """
+                            INSERT INTO worldbook_entry_metadata (
+                                entry_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            arguments: [
+                                entry.id.uuidString,
+                                metadataKey,
+                                encodedValue.type,
+                                encodedValue.stringValue,
+                                encodedValue.numberValue,
+                                encodedValue.boolValue,
+                                encodedValue.jsonValueText
+                            ]
+                        )
+                    }
+                }
+            }
+
+            return true
+        } ?? false
+
+        if didSave {
+            _ = Persistence.removeAuxiliaryBlob(forKey: Self.grdbBlobKey)
+        }
+        return didSave
+    }
+
+    private func loadWorldbooksFromRelationalStore(_ db: Database) throws -> [Worldbook] {
+        let worldbookRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT id, name, description, is_enabled, created_at, updated_at,
+                   scan_depth, max_recursion_depth, max_injected_entries,
+                   max_injected_characters, fallback_position, source_file_name
+            FROM worldbooks
+            ORDER BY updated_at DESC, id ASC
+            """
+        )
+
+        let worldbookMetadataRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT worldbook_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
+            FROM worldbook_metadata
+            ORDER BY worldbook_id ASC, meta_key ASC
+            """
+        )
+        var worldbookMetadataByID: [String: [String: JSONValue]] = [:]
+        for row in worldbookMetadataRows {
+            let worldbookID: String = row["worldbook_id"]
+            let key: String = row["meta_key"]
+            let valueType: String = row["value_type"]
+            let stringValue: String? = row["string_value"]
+            let numberValue: Double? = row["number_value"]
+            let boolValue: Int? = row["bool_value"]
+            let jsonValueText: String? = row["json_value_text"]
+            worldbookMetadataByID[worldbookID, default: [:]][key] = RelationalJSONValueCodec.decode(
+                type: valueType,
+                stringValue: stringValue,
+                numberValue: numberValue,
+                boolValue: boolValue,
+                jsonValueText: jsonValueText
+            )
+        }
+
+        let entryRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT id, worldbook_id, uid, comment, content, selective_logic, is_enabled,
+                   constant_flag, position, outlet_name, entry_order, depth, scan_depth,
+                   case_sensitive, match_whole_words, use_regex, use_probability, probability,
+                   group_name, group_override, group_weight, use_group_scoring, role, sticky,
+                   cooldown, delay, exclude_recursion, prevent_recursion, delay_until_recursion
+            FROM worldbook_entries
+            ORDER BY worldbook_id ASC, sort_index ASC, id ASC
+            """
+        )
+
+        let entryKeyRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT entry_id, key_value, key_kind
+            FROM worldbook_entry_keys
+            ORDER BY entry_id ASC, key_kind ASC, sort_index ASC
+            """
+        )
+        var primaryKeysByEntryID: [String: [String]] = [:]
+        var secondaryKeysByEntryID: [String: [String]] = [:]
+        for row in entryKeyRows {
+            let entryID: String = row["entry_id"]
+            let kind: String = row["key_kind"]
+            let value: String = row["key_value"]
+            if kind == "secondary" {
+                secondaryKeysByEntryID[entryID, default: []].append(value)
+            } else {
+                primaryKeysByEntryID[entryID, default: []].append(value)
+            }
+        }
+
+        let entryMetadataRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT entry_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
+            FROM worldbook_entry_metadata
+            ORDER BY entry_id ASC, meta_key ASC
+            """
+        )
+        var entryMetadataByID: [String: [String: JSONValue]] = [:]
+        for row in entryMetadataRows {
+            let entryID: String = row["entry_id"]
+            let key: String = row["meta_key"]
+            let valueType: String = row["value_type"]
+            let stringValue: String? = row["string_value"]
+            let numberValue: Double? = row["number_value"]
+            let boolValue: Int? = row["bool_value"]
+            let jsonValueText: String? = row["json_value_text"]
+            entryMetadataByID[entryID, default: [:]][key] = RelationalJSONValueCodec.decode(
+                type: valueType,
+                stringValue: stringValue,
+                numberValue: numberValue,
+                boolValue: boolValue,
+                jsonValueText: jsonValueText
+            )
+        }
+
+        var entriesByWorldbookID: [String: [WorldbookEntry]] = [:]
+        for row in entryRows {
+            let entryIDRaw: String = row["id"]
+            let worldbookID: String = row["worldbook_id"]
+            let enabledValue: Int = row["is_enabled"]
+            let constantValue: Int = row["constant_flag"]
+            let caseSensitiveValue: Int = row["case_sensitive"]
+            let matchWholeWordsValue: Int = row["match_whole_words"]
+            let useRegexValue: Int = row["use_regex"]
+            let useProbabilityValue: Int = row["use_probability"]
+            let groupOverrideValue: Int = row["group_override"]
+            let useGroupScoringValue: Int = row["use_group_scoring"]
+            let excludeRecursionValue: Int = row["exclude_recursion"]
+            let preventRecursionValue: Int = row["prevent_recursion"]
+            let delayUntilRecursionValue: Int = row["delay_until_recursion"]
+            let positionRaw: String = row["position"]
+            let roleRaw: String = row["role"]
+            let selectiveLogicRaw: String = row["selective_logic"]
+
+            let entry = WorldbookEntry(
+                id: UUID(uuidString: entryIDRaw) ?? UUID(),
+                uid: row["uid"],
+                comment: row["comment"],
+                content: row["content"],
+                keys: primaryKeysByEntryID[entryIDRaw] ?? [],
+                secondaryKeys: secondaryKeysByEntryID[entryIDRaw] ?? [],
+                selectiveLogic: WorldbookSelectiveLogic(rawOrLegacyValue: selectiveLogicRaw),
+                isEnabled: enabledValue != 0,
+                constant: constantValue != 0,
+                position: WorldbookPosition(stRawValue: positionRaw),
+                outletName: row["outlet_name"],
+                order: row["entry_order"],
+                depth: row["depth"],
+                scanDepth: row["scan_depth"],
+                caseSensitive: caseSensitiveValue != 0,
+                matchWholeWords: matchWholeWordsValue != 0,
+                useRegex: useRegexValue != 0,
+                useProbability: useProbabilityValue != 0,
+                probability: row["probability"],
+                group: row["group_name"],
+                groupOverride: groupOverrideValue != 0,
+                groupWeight: row["group_weight"],
+                useGroupScoring: useGroupScoringValue != 0,
+                role: WorldbookEntryRole(rawOrLegacyValue: roleRaw),
+                sticky: row["sticky"],
+                cooldown: row["cooldown"],
+                delay: row["delay"],
+                excludeRecursion: excludeRecursionValue != 0,
+                preventRecursion: preventRecursionValue != 0,
+                delayUntilRecursion: delayUntilRecursionValue != 0,
+                metadata: entryMetadataByID[entryIDRaw] ?? [:]
+            )
+            entriesByWorldbookID[worldbookID, default: []].append(entry)
+        }
+
+        return worldbookRows.map { row in
+            let worldbookIDRaw: String = row["id"]
+            let isEnabledValue: Int = row["is_enabled"]
+            let fallbackPositionRaw: String = row["fallback_position"]
+            let settings = WorldbookSettings(
+                scanDepth: row["scan_depth"],
+                maxRecursionDepth: row["max_recursion_depth"],
+                maxInjectedEntries: row["max_injected_entries"],
+                maxInjectedCharacters: row["max_injected_characters"],
+                fallbackPosition: WorldbookPosition(stRawValue: fallbackPositionRaw)
+            )
+
+            return Worldbook(
+                id: UUID(uuidString: worldbookIDRaw) ?? UUID(),
+                name: row["name"],
+                description: row["description"],
+                isEnabled: isEnabledValue != 0,
+                createdAt: Date(timeIntervalSince1970: row["created_at"]),
+                updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
+                entries: entriesByWorldbookID[worldbookIDRaw] ?? [],
+                settings: settings,
+                sourceFileName: row["source_file_name"],
+                metadata: worldbookMetadataByID[worldbookIDRaw] ?? [:]
+            )
         }
     }
 
