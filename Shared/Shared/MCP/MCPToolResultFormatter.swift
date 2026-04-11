@@ -46,23 +46,10 @@ public struct ToolWidgetPayload: Equatable, Sendable {
 
 /// 从工具参数或工具结果中提取 Widget 载荷。
 public enum ToolWidgetPayloadParser {
-    private static let maxJSONDecodeBytes = 262_144
-    private static let widgetKeyMarkers = [
-        "\"widget_code\"",
-        "\"widgetCode\"",
-        "\"widget_html\"",
-        "\"widgetHtml\"",
-        "\"html\""
-    ]
-
     public static func parse(from rawText: String) -> ToolWidgetPayload? {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.first == "{" else { return nil }
-        guard likelyContainsWidgetPayload(in: trimmed) else { return nil }
-        guard let data = trimmed.data(using: .utf8),
-              data.count <= maxJSONDecodeBytes else {
-            return nil
-        }
+        guard !trimmed.isEmpty else { return nil }
+        guard let data = trimmed.data(using: .utf8) else { return nil }
         do {
             let value = try JSONDecoder().decode(JSONValue.self, from: data)
             return parse(from: value)
@@ -102,10 +89,6 @@ public enum ToolWidgetPayloadParser {
             widgetCode: widgetCode,
             loadingMessages: loadingMessages
         )
-    }
-
-    private static func likelyContainsWidgetPayload(in rawText: String) -> Bool {
-        widgetKeyMarkers.contains { rawText.contains($0) }
     }
 
     private static func firstNonEmptyString(
@@ -149,8 +132,6 @@ public enum ToolWidgetPayloadParser {
 }
 
 public enum MCPToolResultFormatter {
-    private static let maxJSONDecodeBytes = 262_144
-
     public static func displayModel(from rawResult: String, summaryLimit: Int = 90) -> MCPToolResultDisplayModel {
         let trimmedRaw = rawResult.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedRaw.isEmpty else {
@@ -163,8 +144,7 @@ public enum MCPToolResultFormatter {
             )
         }
 
-        guard let data = trimmedRaw.data(using: .utf8),
-              data.count <= maxJSONDecodeBytes else {
+        guard let data = trimmedRaw.data(using: .utf8) else {
             return plainTextFallbackModel(from: trimmedRaw, summaryLimit: summaryLimit)
         }
 

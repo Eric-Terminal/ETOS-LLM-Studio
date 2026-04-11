@@ -1464,6 +1464,9 @@ final class PersistenceGRDBStore {
         ) else {
             return nil
         }
+        guard isValidUTF8JSONData(data) else {
+            return nil
+        }
         return try makeISO8601Decoder().decode(T.self, from: data)
     }
 
@@ -1936,6 +1939,9 @@ final class PersistenceGRDBStore {
                 ) else {
                     return nil
                 }
+                guard isValidUTF8JSONData(data) else {
+                    return nil
+                }
                 return try makeISO8601Decoder().decode(T.self, from: data)
             }
         } catch {
@@ -1958,6 +1964,7 @@ final class PersistenceGRDBStore {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
             let data = try Data(contentsOf: url)
+            guard isValidUTF8JSONData(data) else { return nil }
             return try decoder.decode(T.self, from: data)
         } catch {
             return nil
@@ -1971,11 +1978,16 @@ final class PersistenceGRDBStore {
 
     private func decodeJSON<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
         guard let data else { return nil }
+        guard isValidUTF8JSONData(data) else { return nil }
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
             return nil
         }
+    }
+
+    private func isValidUTF8JSONData(_ data: Data) -> Bool {
+        String(data: data, encoding: .utf8) != nil
     }
 
     private func uuid(from rawValue: String?) -> UUID? {
@@ -2193,6 +2205,9 @@ final class PersistenceAuxiliaryGRDBStore {
 
     func loadAuxiliaryBlob<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
         guard let data = loadAuxiliaryBlobRawData(forKey: key) else {
+            return nil
+        }
+        guard isValidUTF8JSONData(data) else {
             return nil
         }
         do {
@@ -2624,5 +2639,9 @@ final class PersistenceAuxiliaryGRDBStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }
+
+    private func isValidUTF8JSONData(_ data: Data) -> Bool {
+        String(data: data, encoding: .utf8) != nil
     }
 }

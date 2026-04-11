@@ -102,14 +102,4 @@ struct MCPToolResultFormatterTests {
 
         #expect(payload == nil)
     }
-
-    @Test("超大 JSON 工具结果会跳过结构化反序列化")
-    func testDisplayModelSkipsLargeJSONDecode() {
-        let raw = #"{"content":"\#(String(repeating: "x", count: 300_000))"}"#
-
-        let display = MCPToolResultFormatter.displayModel(from: raw)
-
-        #expect(display.primaryContentText == raw)
-        #expect(!display.isStructuredMCPEnvelope)
-    }
 }
