@@ -242,114 +242,11 @@ private struct FontSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("回退范围") {
-                Picker("字体回退范围", selection: fallbackScopeBinding) {
-                    ForEach(FontFallbackScope.allCases) { scope in
-                        Text(scope.title).tag(scope)
-                    }
-                }
-                .pickerStyle(.segmented)
-            } footer: {
-                Text(fallbackScope.summary)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            fallbackScopeSection
 
-            Section("字体文件") {
-                Button {
-                    showImporter = true
-                } label: {
-                    Label("上传字体文件", systemImage: "square.and.arrow.down")
-                }
-                if assets.isEmpty {
-                    Text("还没有导入字体。支持 TTF / OTF / TTC / WOFF / WOFF2。")
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(assets) { asset in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(asset.displayName)
-                            Text(asset.postScriptName)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .onDelete(perform: deleteAssets)
-                }
-            }
-
-            Section(
-                header: Text("样式优先级"),
-                footer: Text("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。")
-            ) {
-                Picker("样式槽位", selection: $selectedRole) {
-                    ForEach(FontSemanticRole.allCases) { role in
-                        Text(role.title).tag(role)
-                    }
-                }
-                if chainRecords.isEmpty {
-                    Text("当前槽位没有可用字体，将使用系统默认字体。")
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(chainRecords) { asset in
-                        HStack {
-                            Text(asset.displayName)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            HStack(spacing: 6) {
-                                Text(asset.postScriptName)
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                removeAssetFromSelectedRole(asset.id)
-                            } label: {
-                                Label("移除", systemImage: "trash")
-                            }
-                        }
-                    }
-                    .onMove(perform: movePriority)
-                    .onDelete(perform: removeAssetsFromSelectedRole)
-                }
-
-                if isEditing {
-                    if availableAssetsForSelectedRole.isEmpty {
-                        Text("当前槽位没有可添加字体。")
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Menu {
-                            ForEach(availableAssetsForSelectedRole) { asset in
-                                Button {
-                                    addAssetToSelectedRole(asset.id)
-                                } label: {
-                                    Text(asset.displayName)
-                                }
-                            }
-                        } label: {
-                            Label("添加字体到当前槽位", systemImage: "plus.circle")
-                        }
-                    }
-                }
-            }
-
-            Section("预览") {
-                Text("The quick brown fox jumps over the lazy dog.")
-                    .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
-                Text("中文：风来疏竹，风过而竹不留声。")
-                    .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
-                Text("斜体预览 / Emphasis")
-                    .font(FontRoutePreview.font(for: .emphasis, sample: "斜体预览 Emphasis"))
-                    .italic()
-                Text("粗体预览 / Strong")
-                    .font(FontRoutePreview.font(for: .strong, sample: "粗体预览 Strong"))
-                    .fontWeight(.bold)
-                Text("let message = \"Code Preview\"")
-                    .font(FontRoutePreview.font(for: .code, sample: "let message = \"Code Preview\""))
-            }
+            fontFilesSection
+            stylePrioritySection
+            previewSection
         }
         .navigationTitle("字体设置")
         .toolbar {
@@ -458,6 +355,129 @@ private struct FontSettingsView: View {
             get: { fallbackScope },
             set: { fallbackScopeRawValue = $0.rawValue }
         )
+    }
+
+    private var allFallbackScopes: [FontFallbackScope] {
+        FontFallbackScope.allCases
+    }
+
+    private var fallbackScopeSection: some View {
+        Section {
+            Picker("字体回退范围", selection: fallbackScopeBinding) {
+                ForEach(allFallbackScopes, id: \.rawValue) { scope in
+                    Text(scope.title).tag(scope)
+                }
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("回退范围")
+        } footer: {
+            Text(fallbackScope.summary)
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var fontFilesSection: some View {
+        Section("字体文件") {
+            Button {
+                showImporter = true
+            } label: {
+                Label("上传字体文件", systemImage: "square.and.arrow.down")
+            }
+            if assets.isEmpty {
+                Text("还没有导入字体。支持 TTF / OTF / TTC / WOFF / WOFF2。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(assets) { asset in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(asset.displayName)
+                        Text(asset.postScriptName)
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onDelete(perform: deleteAssets)
+            }
+        }
+    }
+
+    private var stylePrioritySection: some View {
+        Section(
+            header: Text("样式优先级"),
+            footer: Text("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。")
+        ) {
+            Picker("样式槽位", selection: $selectedRole) {
+                ForEach(FontSemanticRole.allCases) { role in
+                    Text(role.title).tag(role)
+                }
+            }
+            if chainRecords.isEmpty {
+                Text("当前槽位没有可用字体，将使用系统默认字体。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(chainRecords) { asset in
+                    HStack {
+                        Text(asset.displayName)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        HStack(spacing: 6) {
+                            Text(asset.postScriptName)
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            removeAssetFromSelectedRole(asset.id)
+                        } label: {
+                            Label("移除", systemImage: "trash")
+                        }
+                    }
+                }
+                .onMove(perform: movePriority)
+                .onDelete(perform: removeAssetsFromSelectedRole)
+            }
+
+            if isEditing {
+                if availableAssetsForSelectedRole.isEmpty {
+                    Text("当前槽位没有可添加字体。")
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Menu {
+                        ForEach(availableAssetsForSelectedRole) { asset in
+                            Button {
+                                addAssetToSelectedRole(asset.id)
+                            } label: {
+                                Text(asset.displayName)
+                            }
+                        }
+                    } label: {
+                        Label("添加字体到当前槽位", systemImage: "plus.circle")
+                    }
+                }
+            }
+        }
+    }
+
+    private var previewSection: some View {
+        Section("预览") {
+            Text("The quick brown fox jumps over the lazy dog.")
+                .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
+            Text("中文：风来疏竹，风过而竹不留声。")
+                .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
+            Text("斜体预览 / Emphasis")
+                .font(FontRoutePreview.font(for: .emphasis, sample: "斜体预览 Emphasis"))
+                .italic()
+            Text("粗体预览 / Strong")
+                .font(FontRoutePreview.font(for: .strong, sample: "粗体预览 Strong"))
+                .fontWeight(.bold)
+            Text("let message = \"Code Preview\"")
+                .font(FontRoutePreview.font(for: .code, sample: "let message = \"Code Preview\""))
+        }
     }
 
     private var supportedFontTypes: [UTType] {
