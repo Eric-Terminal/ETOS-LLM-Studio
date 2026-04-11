@@ -2640,6 +2640,12 @@ final class PersistenceAuxiliaryGRDBStore {
                     var codeVerifier: String?
                 }
 
+                enum UpsertMode {
+                    case overwrite
+                    case newerOnly
+                    case insertIfMissing
+                }
+
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.sortedKeys]
                 encoder.dateEncodingStrategy = .iso8601
@@ -2652,6 +2658,10 @@ final class PersistenceAuxiliaryGRDBStore {
                         sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
                         arguments: [name]
                     ) ?? 0) > 0
+                }
+
+                func rowCount(of tableName: String) throws -> Int {
+                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(tableName)") ?? 0
                 }
 
                 func jsonTextFromData(_ data: Data?) -> String? {
@@ -2672,6 +2682,90 @@ final class PersistenceAuxiliaryGRDBStore {
                     return text
                 }
 
+                func serverConflictClause(for mode: UpsertMode) -> String {
+                    switch mode {
+                    case .overwrite:
+                        return """
+                        ON CONFLICT(id) DO UPDATE SET
+                            display_name = excluded.display_name,
+                            notes = excluded.notes,
+                            is_selected_for_chat = excluded.is_selected_for_chat,
+                            status = excluded.status,
+                            transport_kind = excluded.transport_kind,
+                            endpoint_url = excluded.endpoint_url,
+                            message_endpoint_url = excluded.message_endpoint_url,
+                            sse_endpoint_url = excluded.sse_endpoint_url,
+                            metadata_cached_at = excluded.metadata_cached_at,
+                            updated_at = excluded.updated_at,
+                            api_key = excluded.api_key,
+                            additional_headers_json = excluded.additional_headers_json,
+                            disabled_tool_ids_json = excluded.disabled_tool_ids_json,
+                            tool_approval_policies_json = excluded.tool_approval_policies_json,
+                            oauth_payload_json = excluded.oauth_payload_json,
+                            stream_resumption_token = excluded.stream_resumption_token,
+                            info_json = excluded.info_json,
+                            resources_json = excluded.resources_json,
+                            resource_templates_json = excluded.resource_templates_json,
+                            prompts_json = excluded.prompts_json,
+                            roots_json = excluded.roots_json
+                        """
+                    case .newerOnly:
+                        return """
+                        ON CONFLICT(id) DO UPDATE SET
+                            display_name = excluded.display_name,
+                            notes = excluded.notes,
+                            is_selected_for_chat = excluded.is_selected_for_chat,
+                            status = excluded.status,
+                            transport_kind = excluded.transport_kind,
+                            endpoint_url = excluded.endpoint_url,
+                            message_endpoint_url = excluded.message_endpoint_url,
+                            sse_endpoint_url = excluded.sse_endpoint_url,
+                            metadata_cached_at = excluded.metadata_cached_at,
+                            updated_at = excluded.updated_at,
+                            api_key = excluded.api_key,
+                            additional_headers_json = excluded.additional_headers_json,
+                            disabled_tool_ids_json = excluded.disabled_tool_ids_json,
+                            tool_approval_policies_json = excluded.tool_approval_policies_json,
+                            oauth_payload_json = excluded.oauth_payload_json,
+                            stream_resumption_token = excluded.stream_resumption_token,
+                            info_json = excluded.info_json,
+                            resources_json = excluded.resources_json,
+                            resource_templates_json = excluded.resource_templates_json,
+                            prompts_json = excluded.prompts_json,
+                            roots_json = excluded.roots_json
+                        WHERE excluded.updated_at > mcp_servers_v2.updated_at
+                        """
+                    case .insertIfMissing:
+                        return "ON CONFLICT(id) DO NOTHING"
+                    }
+                }
+
+                func toolConflictClause(for mode: UpsertMode) -> String {
+                    switch mode {
+                    case .overwrite:
+                        return """
+                        ON CONFLICT(server_id, tool_name) DO UPDATE SET
+                            description = excluded.description,
+                            sort_index = excluded.sort_index,
+                            updated_at = excluded.updated_at,
+                            input_schema_json = excluded.input_schema_json,
+                            examples_json = excluded.examples_json
+                        """
+                    case .newerOnly:
+                        return """
+                        ON CONFLICT(server_id, tool_name) DO UPDATE SET
+                            description = excluded.description,
+                            sort_index = excluded.sort_index,
+                            updated_at = excluded.updated_at,
+                            input_schema_json = excluded.input_schema_json,
+                            examples_json = excluded.examples_json
+                        WHERE excluded.updated_at > mcp_tools_v2.updated_at
+                        """
+                    case .insertIfMissing:
+                        return "ON CONFLICT(server_id, tool_name) DO NOTHING"
+                    }
+                }
+
                 func upsertServer(
                     server: MCPServerConfiguration,
                     status: String,
@@ -2681,7 +2775,8 @@ final class PersistenceAuxiliaryGRDBStore {
                     resourcesJSON: String?,
                     resourceTemplatesJSON: String?,
                     promptsJSON: String?,
-                    rootsJSON: String?
+                    rootsJSON: String?,
+                    mode: UpsertMode
                 ) throws {
                     var endpointURL: String?
                     var messageEndpointURL: String?
@@ -2730,28 +2825,7 @@ final class PersistenceAuxiliaryGRDBStore {
                             stream_resumption_token, info_json, resources_json, resource_templates_json,
                             prompts_json, roots_json
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET
-                            display_name = excluded.display_name,
-                            notes = excluded.notes,
-                            is_selected_for_chat = excluded.is_selected_for_chat,
-                            status = excluded.status,
-                            transport_kind = excluded.transport_kind,
-                            endpoint_url = excluded.endpoint_url,
-                            message_endpoint_url = excluded.message_endpoint_url,
-                            sse_endpoint_url = excluded.sse_endpoint_url,
-                            metadata_cached_at = excluded.metadata_cached_at,
-                            updated_at = excluded.updated_at,
-                            api_key = excluded.api_key,
-                            additional_headers_json = excluded.additional_headers_json,
-                            disabled_tool_ids_json = excluded.disabled_tool_ids_json,
-                            tool_approval_policies_json = excluded.tool_approval_policies_json,
-                            oauth_payload_json = excluded.oauth_payload_json,
-                            stream_resumption_token = excluded.stream_resumption_token,
-                            info_json = excluded.info_json,
-                            resources_json = excluded.resources_json,
-                            resource_templates_json = excluded.resource_templates_json,
-                            prompts_json = excluded.prompts_json,
-                            roots_json = excluded.roots_json
+                        \(serverConflictClause(for: mode))
                         """,
                         arguments: [
                             server.id.uuidString,
@@ -2787,7 +2861,8 @@ final class PersistenceAuxiliaryGRDBStore {
                     sortIndex: Int,
                     updatedAt: Double,
                     inputSchemaJSON: String?,
-                    examplesJSON: String?
+                    examplesJSON: String?,
+                    mode: UpsertMode
                 ) throws {
                     guard !toolName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                     try db.execute(
@@ -2795,12 +2870,7 @@ final class PersistenceAuxiliaryGRDBStore {
                         INSERT INTO mcp_tools_v2 (
                             server_id, tool_name, description, sort_index, updated_at, input_schema_json, examples_json
                         ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(server_id, tool_name) DO UPDATE SET
-                            description = excluded.description,
-                            sort_index = excluded.sort_index,
-                            updated_at = excluded.updated_at,
-                            input_schema_json = excluded.input_schema_json,
-                            examples_json = excluded.examples_json
+                        \(toolConflictClause(for: mode))
                         """,
                         arguments: [
                             serverID,
@@ -2814,7 +2884,14 @@ final class PersistenceAuxiliaryGRDBStore {
                     )
                 }
 
-                if try tableExists("mcp_servers") {
+                let hasLegacyServersTable = try tableExists("mcp_servers")
+                let hasLegacyToolsTable = try tableExists("mcp_tools")
+                let legacyServerRows = hasLegacyServersTable ? (try rowCount(of: "mcp_servers")) : 0
+                let legacyToolRows = hasLegacyToolsTable ? (try rowCount(of: "mcp_tools")) : 0
+                let blobServerMode: UpsertMode = legacyServerRows > 0 ? .insertIfMissing : .newerOnly
+                let blobToolMode: UpsertMode = legacyToolRows > 0 ? .insertIfMissing : .newerOnly
+
+                if hasLegacyServersTable {
                     let rows = try Row.fetchAll(
                         db,
                         sql: """
@@ -2846,7 +2923,8 @@ final class PersistenceAuxiliaryGRDBStore {
                                 resourcesJSON: jsonTextFromData(resourcesData),
                                 resourceTemplatesJSON: jsonTextFromData(resourceTemplatesData),
                                 promptsJSON: jsonTextFromData(promptsData),
-                                rootsJSON: jsonTextFromData(rootsData)
+                                rootsJSON: jsonTextFromData(rootsData),
+                                mode: .overwrite
                             )
                         } catch {
                             continue
@@ -2854,7 +2932,7 @@ final class PersistenceAuxiliaryGRDBStore {
                     }
                 }
 
-                if try tableExists("mcp_tools") {
+                if hasLegacyToolsTable {
                     let rows = try Row.fetchAll(
                         db,
                         sql: """
@@ -2878,7 +2956,8 @@ final class PersistenceAuxiliaryGRDBStore {
                                 sortIndex: sortIndex,
                                 updatedAt: updatedAt,
                                 inputSchemaJSON: jsonTextFromData(inputSchemaData),
-                                examplesJSON: jsonTextFromData(examplesData)
+                                examplesJSON: jsonTextFromData(examplesData),
+                                mode: .overwrite
                             )
                         } catch {
                             continue
@@ -2907,7 +2986,8 @@ final class PersistenceAuxiliaryGRDBStore {
                                 resourcesJSON: (metadata?.resources.isEmpty == false) ? jsonTextFromValue(metadata?.resources) : nil,
                                 resourceTemplatesJSON: (metadata?.resourceTemplates.isEmpty == false) ? jsonTextFromValue(metadata?.resourceTemplates) : nil,
                                 promptsJSON: (metadata?.prompts.isEmpty == false) ? jsonTextFromValue(metadata?.prompts) : nil,
-                                rootsJSON: (metadata?.roots.isEmpty == false) ? jsonTextFromValue(metadata?.roots) : nil
+                                rootsJSON: (metadata?.roots.isEmpty == false) ? jsonTextFromValue(metadata?.roots) : nil,
+                                mode: blobServerMode
                             )
                             if let metadata {
                                 for (index, tool) in metadata.tools.enumerated() {
@@ -2918,7 +2998,8 @@ final class PersistenceAuxiliaryGRDBStore {
                                         sortIndex: index,
                                         updatedAt: metadata.cachedAt.timeIntervalSince1970,
                                         inputSchemaJSON: jsonTextFromValue(tool.inputSchema),
-                                        examplesJSON: jsonTextFromValue(tool.examples)
+                                        examplesJSON: jsonTextFromValue(tool.examples),
+                                        mode: blobToolMode
                                     )
                                 }
                             }
@@ -2929,7 +3010,18 @@ final class PersistenceAuxiliaryGRDBStore {
                 }
             }
 
-            migrator.registerMigration("v6_cleanup_legacy_mcp_tables_if_safe") { db in
+            migrator.registerMigration("v6_verify_mcp_v2_migration") { db in
+                struct OAuthPayload: Decodable {
+                    var tokenEndpoint: String
+                    var clientID: String
+                    var clientSecret: String?
+                    var scope: String?
+                    var grantType: MCPOAuthGrantType
+                    var authorizationCode: String?
+                    var redirectURI: String?
+                    var codeVerifier: String?
+                }
+
                 func tableExists(_ name: String) throws -> Bool {
                     (try Int.fetchOne(
                         db,
@@ -2938,20 +3030,210 @@ final class PersistenceAuxiliaryGRDBStore {
                     ) ?? 0) > 0
                 }
 
-                guard try tableExists("mcp_servers"),
-                      try tableExists("mcp_tools") else {
+                func rowCount(of tableName: String) throws -> Int {
+                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(tableName)") ?? 0
+                }
+
+                func decodeJSONText<T: Decodable>(_ type: T.Type, from text: String?, decoder: JSONDecoder) -> T? {
+                    guard let text,
+                          let data = text.data(using: .utf8) else {
+                        return nil
+                    }
+                    return try? decoder.decode(type, from: data)
+                }
+
+                func canDecodeServerConfiguration(_ row: Row, decoder: JSONDecoder) -> Bool {
+                    let idRaw: String = row["id"]
+                    guard UUID(uuidString: idRaw) != nil else { return false }
+                    let transportKind: String = row["transport_kind"]
+                    let endpointURLRaw: String? = row["endpoint_url"]
+                    let messageEndpointURLRaw: String? = row["message_endpoint_url"]
+                    let sseEndpointURLRaw: String? = row["sse_endpoint_url"]
+                    let additionalHeadersJSON: String? = row["additional_headers_json"]
+                    let disabledToolIDsJSON: String? = row["disabled_tool_ids_json"]
+                    let toolPoliciesJSON: String? = row["tool_approval_policies_json"]
+                    let oauthPayloadJSON: String? = row["oauth_payload_json"]
+
+                    if additionalHeadersJSON != nil,
+                       decodeJSONText([String: String].self, from: additionalHeadersJSON, decoder: decoder) == nil {
+                        return false
+                    }
+                    if disabledToolIDsJSON != nil,
+                       decodeJSONText([String].self, from: disabledToolIDsJSON, decoder: decoder) == nil {
+                        return false
+                    }
+                    if toolPoliciesJSON != nil,
+                       decodeJSONText([String: MCPToolApprovalPolicy].self, from: toolPoliciesJSON, decoder: decoder) == nil {
+                        return false
+                    }
+
+                    switch transportKind {
+                    case "http":
+                        guard let endpointURLRaw,
+                              URL(string: endpointURLRaw) != nil else { return false }
+                    case "sse":
+                        guard let messageEndpointURLRaw,
+                              URL(string: messageEndpointURLRaw) != nil,
+                              let sseEndpointURLRaw,
+                              URL(string: sseEndpointURLRaw) != nil else { return false }
+                    case "oauth":
+                        guard let endpointURLRaw,
+                              URL(string: endpointURLRaw) != nil,
+                              let payload = decodeJSONText(OAuthPayload.self, from: oauthPayloadJSON, decoder: decoder),
+                              URL(string: payload.tokenEndpoint) != nil else {
+                            return false
+                        }
+                    default:
+                        return false
+                    }
+                    return true
+                }
+
+                func canDecodeToolPayload(_ row: Row, decoder: JSONDecoder) -> Bool {
+                    let inputSchemaJSON: String? = row["input_schema_json"]
+                    let examplesJSON: String? = row["examples_json"]
+                    if inputSchemaJSON != nil,
+                       decodeJSONText(JSONValue.self, from: inputSchemaJSON, decoder: decoder) == nil {
+                        return false
+                    }
+                    if examplesJSON != nil,
+                       decodeJSONText([JSONValue].self, from: examplesJSON, decoder: decoder) == nil {
+                        return false
+                    }
+                    return true
+                }
+
+                var passed = false
+                defer {
+                    let checkedAt = Date().timeIntervalSince1970
+                    try? db.execute(sql: """
+                        CREATE TABLE IF NOT EXISTS migration_checks (
+                            check_key TEXT PRIMARY KEY NOT NULL,
+                            passed INTEGER NOT NULL,
+                            checked_at REAL NOT NULL
+                        )
+                    """)
+                    try? db.execute(
+                        sql: """
+                        INSERT INTO migration_checks (check_key, passed, checked_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(check_key) DO UPDATE SET
+                            passed = excluded.passed,
+                            checked_at = excluded.checked_at
+                        """,
+                        arguments: ["mcp_v2_migration_verified", passed ? 1 : 0, checkedAt]
+                    )
+                }
+
+                let hasV2Servers = try tableExists("mcp_servers_v2")
+                let hasV2Tools = try tableExists("mcp_tools_v2")
+                guard hasV2Servers, hasV2Tools else { return }
+
+                let legacyServerRows = (try tableExists("mcp_servers")) ? (try rowCount(of: "mcp_servers")) : 0
+                let legacyToolRows = (try tableExists("mcp_tools")) ? (try rowCount(of: "mcp_tools")) : 0
+                let legacyBlobRows = (try tableExists("json_blobs")) ? (
+                    try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                        arguments: ["mcp_servers_records_v1"]
+                    ) ?? 0
+                ) : 0
+                let requiresMigratedData = legacyServerRows > 0 || legacyToolRows > 0 || legacyBlobRows > 0
+
+                let migratedServerRows = try rowCount(of: "mcp_servers_v2")
+                if requiresMigratedData, migratedServerRows == 0 {
                     return
                 }
 
-                let legacyCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers") ?? 0
-                let migratedCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM mcp_servers_v2") ?? 0
-                let safeToDrop = legacyCount == 0 || migratedCount > 0
-                guard safeToDrop else { return }
+                let orphanToolCount = try Int.fetchOne(
+                    db,
+                    sql: """
+                    SELECT COUNT(*)
+                    FROM mcp_tools_v2 t
+                    LEFT JOIN mcp_servers_v2 s ON s.id = t.server_id
+                    WHERE s.id IS NULL
+                    """
+                ) ?? 0
+                if orphanToolCount > 0 {
+                    return
+                }
 
-                try db.execute(sql: "DROP TABLE IF EXISTS mcp_tools")
-                try db.execute(sql: "DROP TABLE IF EXISTS mcp_servers")
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
 
-                if try tableExists("json_blobs") {
+                let sampledServers = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT
+                        id, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
+                        additional_headers_json, disabled_tool_ids_json, tool_approval_policies_json, oauth_payload_json
+                    FROM mcp_servers_v2
+                    ORDER BY updated_at DESC, id ASC
+                    LIMIT 20
+                    """
+                )
+                for row in sampledServers where !canDecodeServerConfiguration(row, decoder: decoder) {
+                    return
+                }
+
+                let sampledTools = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT input_schema_json, examples_json
+                    FROM mcp_tools_v2
+                    ORDER BY updated_at DESC, server_id ASC, tool_name ASC
+                    LIMIT 50
+                    """
+                )
+                for row in sampledTools where !canDecodeToolPayload(row, decoder: decoder) {
+                    return
+                }
+
+                passed = true
+            }
+
+            migrator.registerMigration("v7_cleanup_legacy_mcp_tables_if_safe") { db in
+                func tableExists(_ name: String) throws -> Bool {
+                    (try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        arguments: [name]
+                    ) ?? 0) > 0
+                }
+
+                let hasLegacyServers = try tableExists("mcp_servers")
+                let hasLegacyTools = try tableExists("mcp_tools")
+                let hasJSONBlobs = try tableExists("json_blobs")
+                let legacyBlobKeyCount = hasJSONBlobs ? (
+                    try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                        arguments: ["mcp_servers_records_v1"]
+                    ) ?? 0
+                ) : 0
+                let hasLegacyArtifacts = hasLegacyServers || hasLegacyTools || legacyBlobKeyCount > 0
+                guard hasLegacyArtifacts else { return }
+
+                let verificationPassed: Bool
+                if try tableExists("migration_checks") {
+                    verificationPassed = (try Int.fetchOne(
+                        db,
+                        sql: "SELECT passed FROM migration_checks WHERE check_key = ?",
+                        arguments: ["mcp_v2_migration_verified"]
+                    ) ?? 0) != 0
+                } else {
+                    verificationPassed = false
+                }
+
+                guard verificationPassed else { return }
+
+                if hasLegacyTools {
+                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_tools")
+                }
+                if hasLegacyServers {
+                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_servers")
+                }
+                if hasJSONBlobs {
                     try db.execute(
                         sql: "DELETE FROM json_blobs WHERE key = ?",
                         arguments: ["mcp_servers_records_v1"]
