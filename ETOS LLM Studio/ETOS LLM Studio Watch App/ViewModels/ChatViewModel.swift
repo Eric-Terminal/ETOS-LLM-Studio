@@ -2596,7 +2596,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let containsMathContent: Bool
     let containsMermaidContent: Bool
 
-    static func build(from sourceText: String) -> ETPreparedMarkdownRenderPayload {
+    nonisolated static func build(from sourceText: String) -> ETPreparedMarkdownRenderPayload {
         let normalizedText = normalizedMarkdownForStreaming(sourceText)
         let mathSegments = ETMathContentParser.parseSegments(in: normalizedText)
         let containsMath = mathSegments.contains { segment in
@@ -2617,7 +2617,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         )
     }
 
-    private static func normalizedMarkdownForStreaming(_ text: String) -> String {
+    nonisolated private static func normalizedMarkdownForStreaming(_ text: String) -> String {
         let lines = text.components(separatedBy: "\n")
         var openedFence: (marker: Character, count: Int)?
 
@@ -2644,7 +2644,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         return text + "\n" + closingFence
     }
 
-    private static func containsMermaidFence(in text: String) -> Bool {
+    nonisolated private static func containsMermaidFence(in text: String) -> Bool {
         let lines = text.components(separatedBy: "\n")
         for line in lines {
             guard let fence = parseFenceLine(line) else { continue }
@@ -2660,7 +2660,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         return false
     }
 
-    private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
+    nonisolated private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard let marker = trimmed.first, marker == "`" || marker == "~" else {
             return nil
