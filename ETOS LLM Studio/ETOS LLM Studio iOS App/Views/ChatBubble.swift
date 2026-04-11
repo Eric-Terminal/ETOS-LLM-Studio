@@ -89,6 +89,7 @@ private struct BubbleCornerShape: Shape {
 
 struct ChatBubble: View {
     @ObservedObject var messageState: ChatMessageRenderState
+    let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
     @Binding var isReasoningExpanded: Bool
     @Binding var isToolCallsExpanded: Bool
     let enableMarkdown: Bool
@@ -124,6 +125,7 @@ struct ChatBubble: View {
 
     init(
         messageState: ChatMessageRenderState,
+        preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         isReasoningExpanded: Binding<Bool>,
         isToolCallsExpanded: Binding<Bool>,
         enableMarkdown: Bool,
@@ -142,6 +144,7 @@ struct ChatBubble: View {
         onSwitchToNextVersion: @escaping () -> Void
     ) {
         self.messageState = messageState
+        self.preparedMarkdownPayload = preparedMarkdownPayload
         self._isReasoningExpanded = isReasoningExpanded
         self._isToolCallsExpanded = isToolCallsExpanded
         self.enableMarkdown = enableMarkdown
@@ -1252,6 +1255,7 @@ struct ChatBubble: View {
         let shouldRenderAsOutgoing = isOutgoing || isError
         ETAdvancedMarkdownRenderer(
             content: content,
+            preparedContent: preparedMarkdownPayload,
             enableMarkdown: enableMarkdown,
             isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,

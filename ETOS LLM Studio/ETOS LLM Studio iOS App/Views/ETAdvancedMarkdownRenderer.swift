@@ -15,6 +15,7 @@ import UIKit
 
 struct ETAdvancedMarkdownRenderer: View {
     let content: String
+    let preparedContent: ETPreparedMarkdownRenderPayload?
     let enableMarkdown: Bool
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
@@ -22,109 +23,58 @@ struct ETAdvancedMarkdownRenderer: View {
     let customTextColor: Color?
     @Environment(\.colorScheme) private var colorScheme
 
-    private var shouldUseWebRenderer: Bool {
-        enableAdvancedRenderer && (containsMathContent || containsMermaidContent)
-    }
-
-    private var containsMathContent: Bool {
-        enableMathRendering && ETMathContentParser.containsMath(in: content)
-    }
-
-    private var containsMermaidContent: Bool {
-        enableMarkdown && Self.containsMermaidFence(in: content)
+    private var effectivePreparedContent: ETPreparedMarkdownRenderPayload? {
+        guard let preparedContent, preparedContent.sourceText == content else {
+            return nil
+        }
+        return preparedContent
     }
 
     var body: some View {
-        let normalizedContent = Self.normalizedMarkdownForStreaming(content)
-        if shouldUseWebRenderer {
-            ETMathWebMarkdownView(
-                content: normalizedContent,
-                enableMarkdown: enableMarkdown,
-                isOutgoing: isOutgoing,
-                customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
-                prefersDarkPalette: colorScheme == .dark
-            )
-        } else {
-            baseTextView(normalizedContent)
-        }
-    }
-
-    private static func normalizedMarkdownForStreaming(_ text: String) -> String {
-        let lines = text.components(separatedBy: "\n")
-        var openedFence: (marker: Character, count: Int)?
-
-        for line in lines {
-            guard let fence = parseFenceLine(line) else { continue }
-            if let currentFence = openedFence {
-                let isClosingFence = currentFence.marker == fence.marker
-                    && fence.count >= currentFence.count
-                    && fence.tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                if isClosingFence {
-                    openedFence = nil
-                }
+        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
+        if let prepared = effectivePreparedContent {
+            if shouldUseWebRenderer(prepared) {
+                ETMathWebMarkdownView(
+                    content: prepared.normalizedText,
+                    enableMarkdown: enableMarkdown,
+                    isOutgoing: isOutgoing,
+                    customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
+                    prefersDarkPalette: colorScheme == .dark
+                )
             } else {
-                openedFence = (marker: fence.marker, count: fence.count)
+                baseTextView(prepared, textColor: textColor)
             }
+        } else {
+            fallbackTextView(textColor: textColor)
         }
-
-        guard let openedFence else { return text }
-
-        let closingFence = String(repeating: String(openedFence.marker), count: max(3, openedFence.count))
-        if text.hasSuffix("\n") {
-            return text + closingFence
-        }
-        return text + "\n" + closingFence
     }
 
-    private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard let marker = trimmed.first, marker == "`" || marker == "~" else {
-            return nil
-        }
-
-        var count = 0
-        for character in trimmed {
-            guard character == marker else { break }
-            count += 1
-        }
-        guard count >= 3 else { return nil }
-
-        let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
-        let tail = String(trimmed[startIndex...])
-        return (marker: marker, count: count, tail: tail)
-    }
-
-    private static func containsMermaidFence(in text: String) -> Bool {
-        let lines = text.components(separatedBy: "\n")
-        for line in lines {
-            guard let fence = parseFenceLine(line) else { continue }
-            let infoToken = fence.tail
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .split(whereSeparator: \.isWhitespace)
-                .first?
-                .lowercased()
-            if infoToken == "mermaid" || infoToken == "mmd" {
-                return true
-            }
-        }
-        return false
+    private func shouldUseWebRenderer(_ prepared: ETPreparedMarkdownRenderPayload) -> Bool {
+        guard enableAdvancedRenderer else { return false }
+        let hasMath = enableMathRendering && prepared.containsMathContent
+        let hasMermaid = enableMarkdown && prepared.containsMermaidContent
+        return hasMath || hasMermaid
     }
 
     @ViewBuilder
-    private func baseTextView(_ text: String) -> some View {
-        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
+    private func baseTextView(_ prepared: ETPreparedMarkdownRenderPayload, textColor: Color) -> some View {
         if enableMarkdown {
-            Markdown(text)
+            Markdown(prepared.markdownContent)
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
                     isOutgoing: isOutgoing,
-                    prefersDarkPalette: colorScheme == .dark,
-                    sampleText: text
+                    prefersDarkPalette: colorScheme == .dark
                 )
         } else {
-            Text(text)
+            Text(prepared.sourceText)
                 .foregroundStyle(textColor)
         }
+    }
+
+    @ViewBuilder
+    private func fallbackTextView(textColor: Color) -> some View {
+        Text(content)
+                .foregroundStyle(textColor)
     }
 }
 
@@ -1200,8 +1150,7 @@ private extension View {
     func etChatMarkdownBaseStyle(
         textColor: Color,
         isOutgoing: Bool,
-        prefersDarkPalette: Bool,
-        sampleText: String
+        prefersDarkPalette: Bool
     ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
@@ -1215,10 +1164,10 @@ private extension View {
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
-        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
-        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
-        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
-        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
+        let bodyFontName = FontLibrary.resolvedPostScriptName(for: .body)
+        let emphasisFontName = FontLibrary.resolvedPostScriptName(for: .emphasis)
+        let strongFontName = FontLibrary.resolvedPostScriptName(for: .strong)
+        let codeFontName = FontLibrary.resolvedPostScriptName(for: .code)
 
         self
             .markdownSoftBreakMode(.lineBreak)

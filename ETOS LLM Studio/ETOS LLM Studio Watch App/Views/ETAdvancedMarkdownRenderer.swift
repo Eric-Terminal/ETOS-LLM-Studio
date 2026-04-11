@@ -13,6 +13,7 @@ import Shared
 
 struct ETAdvancedMarkdownRenderer: View {
     let content: String
+    let preparedContent: ETPreparedMarkdownRenderPayload?
     let enableMarkdown: Bool
     let isOutgoing: Bool
     let enableAdvancedRenderer: Bool
@@ -23,6 +24,7 @@ struct ETAdvancedMarkdownRenderer: View {
 
     init(
         content: String,
+        preparedContent: ETPreparedMarkdownRenderPayload? = nil,
         enableMarkdown: Bool,
         isOutgoing: Bool,
         enableAdvancedRenderer: Bool,
@@ -31,6 +33,7 @@ struct ETAdvancedMarkdownRenderer: View {
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) {
         self.content = content
+        self.preparedContent = preparedContent
         self.enableMarkdown = enableMarkdown
         self.isOutgoing = isOutgoing
         self.enableAdvancedRenderer = enableAdvancedRenderer
@@ -39,105 +42,68 @@ struct ETAdvancedMarkdownRenderer: View {
         self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
     }
 
-    private var shouldUseMathEngine: Bool {
-        enableAdvancedRenderer
-            && enableMathRendering
-            && ETMathContentParser.containsMath(in: content)
+    private var effectivePreparedContent: ETPreparedMarkdownRenderPayload? {
+        guard let preparedContent, preparedContent.sourceText == content else {
+            return nil
+        }
+        return preparedContent
     }
 
     var body: some View {
-        let normalizedContent = Self.normalizedMarkdownForStreaming(content)
-        if shouldUseMathEngine {
-            ETMathAwareMarkdownView(
-                content: normalizedContent,
-                enableMarkdown: enableMarkdown,
-                isOutgoing: isOutgoing,
-                customTextColor: customTextColor,
-                onCodeBlockHeaderTap: onCodeBlockHeaderTap
-            )
-        } else {
-            baseTextView(normalizedContent)
-        }
-    }
-
-    private static func normalizedMarkdownForStreaming(_ text: String) -> String {
-        let lines = text.components(separatedBy: "\n")
-        var openedFence: (marker: Character, count: Int)?
-
-        for line in lines {
-            guard let fence = parseFenceLine(line) else { continue }
-            if let currentFence = openedFence {
-                let isClosingFence = currentFence.marker == fence.marker
-                    && fence.count >= currentFence.count
-                    && fence.tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                if isClosingFence {
-                    openedFence = nil
-                }
+        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
+        if let prepared = effectivePreparedContent {
+            if shouldUseMathEngine(prepared) {
+                ETMathAwareMarkdownView(
+                    preparedContent: prepared,
+                    isOutgoing: isOutgoing,
+                    customTextColor: customTextColor
+                )
             } else {
-                openedFence = (marker: fence.marker, count: fence.count)
+                baseTextView(prepared, textColor: textColor)
             }
+        } else {
+            fallbackTextView(textColor: textColor)
         }
-
-        guard let openedFence else { return text }
-
-        let closingFence = String(repeating: String(openedFence.marker), count: max(3, openedFence.count))
-        if text.hasSuffix("\n") {
-            return text + closingFence
-        }
-        return text + "\n" + closingFence
     }
 
-    private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard let marker = trimmed.first, marker == "`" || marker == "~" else {
-            return nil
-        }
-
-        var count = 0
-        for character in trimmed {
-            guard character == marker else { break }
-            count += 1
-        }
-        guard count >= 3 else { return nil }
-
-        let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
-        let tail = String(trimmed[startIndex...])
-        return (marker: marker, count: count, tail: tail)
+    private func shouldUseMathEngine(_ prepared: ETPreparedMarkdownRenderPayload) -> Bool {
+        enableAdvancedRenderer && enableMathRendering && prepared.containsMathContent
     }
 
     @ViewBuilder
-    private func baseTextView(_ text: String) -> some View {
-        let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
+    private func baseTextView(_ prepared: ETPreparedMarkdownRenderPayload, textColor: Color) -> some View {
         if enableMarkdown {
-            Markdown(text)
+            Markdown(prepared.markdownContent)
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
                     isOutgoing: isOutgoing,
                     prefersDarkPalette: colorScheme == .dark,
-                    sampleText: text,
                     onCodeBlockHeaderTap: onCodeBlockHeaderTap
                 )
         } else {
-            Text(text)
+            Text(prepared.sourceText)
                 .foregroundStyle(textColor)
         }
+    }
+
+    @ViewBuilder
+    private func fallbackTextView(textColor: Color) -> some View {
+        Text(content)
+            .foregroundStyle(textColor)
     }
 }
 
 private struct ETMathAwareMarkdownView: View {
-    let content: String
-    let enableMarkdown: Bool
+    let preparedContent: ETPreparedMarkdownRenderPayload
     let isOutgoing: Bool
     let customTextColor: Color?
-    let onCodeBlockHeaderTap: ((String) -> Void)?
-    @Environment(\.colorScheme) private var colorScheme
 
     private var textColor: Color {
         customTextColor ?? (isOutgoing ? .white : .primary)
     }
 
     private var blocks: [ETMathRenderBlock] {
-        ETMathRenderBlock.build(from: ETMathContentParser.parseSegments(in: content))
+        ETMathRenderBlock.build(from: preparedContent.mathSegments)
     }
 
     var body: some View {
@@ -189,19 +155,8 @@ private struct ETMathAwareMarkdownView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             let text = parts.compactMap(\.textValue).joined()
-            if enableMarkdown {
-                Markdown(text)
-                    .etChatMarkdownBaseStyle(
-                        textColor: textColor,
-                        isOutgoing: isOutgoing,
-                        prefersDarkPalette: colorScheme == .dark,
-                        sampleText: text,
-                        onCodeBlockHeaderTap: onCodeBlockHeaderTap
-                    )
-            } else {
-                Text(text)
-                    .foregroundStyle(textColor)
-            }
+            Text(verbatim: text)
+                .foregroundStyle(textColor)
         }
     }
 }
@@ -212,7 +167,6 @@ private extension View {
         textColor: Color,
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
-        sampleText: String,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) -> some View {
         let codeBlockBackground = isOutgoing
@@ -227,10 +181,10 @@ private extension View {
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
-        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
-        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
-        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
-        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
+        let bodyFontName = FontLibrary.resolvedPostScriptName(for: .body)
+        let emphasisFontName = FontLibrary.resolvedPostScriptName(for: .emphasis)
+        let strongFontName = FontLibrary.resolvedPostScriptName(for: .strong)
+        let codeFontName = FontLibrary.resolvedPostScriptName(for: .code)
 
         self
             .markdownSoftBreakMode(.lineBreak)

@@ -42,7 +42,7 @@ public struct ETMathStyle {
     }
 }
 
-public enum ETMathContentSegment: Equatable {
+public enum ETMathContentSegment: Equatable, Sendable {
     case text(String)
     case inlineMath(String)
     case blockMath(String)

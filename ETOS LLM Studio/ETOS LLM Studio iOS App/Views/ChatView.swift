@@ -188,6 +188,7 @@ struct ChatView: View {
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
                                 ChatBubble(
                                     messageState: state,
+                                    preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
                                     isReasoningExpanded: Binding(
                                         get: { viewModel.reasoningExpandedState[message.id, default: false] },
                                         set: { viewModel.reasoningExpandedState[message.id] = $0 }

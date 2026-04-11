@@ -11,6 +11,7 @@
 
 import Foundation
 import SwiftUI
+import MarkdownUI
 import WatchKit
 import os.log
 import Combine
@@ -38,6 +39,7 @@ class ChatViewModel: ObservableObject {
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
     @Published private(set) var displayMessages: [ChatMessageRenderState] = []
+    @Published private(set) var preparedMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
     private(set) var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
@@ -245,6 +247,7 @@ class ChatViewModel: ObservableObject {
     private var recordingTimer: Timer?
     private let waveformSampleCount: Int = 24
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    private var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     private var autoReasoningPreviewMessageIDs: Set<UUID> = []
     private var isPersistingGlobalSystemPrompts = false
     private var lastAutoPlayedAssistantMessageID: UUID?
@@ -2043,18 +2046,50 @@ class ChatViewModel: ObservableObject {
                 state = created
             }
             state.update(with: message)
+            scheduleMarkdownPreparationIfNeeded(for: message)
             newStates.append(state)
         }
 
         if !messageStateByID.isEmpty {
             messageStateByID = messageStateByID.filter { visibleIDSet.contains($0.key) }
         }
+        cleanupPreparedMarkdownCache(validIDs: visibleIDSet)
 
         if currentIDs != newIDs {
             messages = newStates
             updateDisplayMessagesIfNeeded(with: newStates)
         } else {
             updateDisplayMessagesIfNeeded()
+        }
+    }
+
+    private func scheduleMarkdownPreparationIfNeeded(for message: ChatMessage) {
+        let messageID = message.id
+        let sourceText = message.content
+
+        if preparedMarkdownByMessageID[messageID]?.sourceText == sourceText {
+            return
+        }
+
+        markdownPrepareTasks[messageID]?.cancel()
+        markdownPrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceText] in
+            let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: sourceText)
+            guard !Task.isCancelled, let self else { return }
+            guard self.messageStateByID[messageID]?.message.content == sourceText else { return }
+            self.preparedMarkdownByMessageID[messageID] = prepared
+            self.markdownPrepareTasks[messageID] = nil
+        }
+    }
+
+    private func cleanupPreparedMarkdownCache(validIDs: Set<UUID>) {
+        if !preparedMarkdownByMessageID.isEmpty {
+            preparedMarkdownByMessageID = preparedMarkdownByMessageID.filter { validIDs.contains($0.key) }
+        }
+        if !markdownPrepareTasks.isEmpty {
+            for (messageID, task) in markdownPrepareTasks where !validIDs.contains(messageID) {
+                task.cancel()
+            }
+            markdownPrepareTasks = markdownPrepareTasks.filter { validIDs.contains($0.key) }
         }
     }
     
@@ -2112,6 +2147,7 @@ class ChatViewModel: ObservableObject {
         for (oldMessage, newMessage) in zip(previousMessages, incomingMessages) where oldMessage != newMessage {
             if visibleIDs.contains(newMessage.id) {
                 messageStateByID[newMessage.id]?.update(with: newMessage)
+                scheduleMarkdownPreparationIfNeeded(for: newMessage)
             }
 
             let oldResultIDs = toolCallResultIDs(for: oldMessage)
@@ -2550,4 +2586,122 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+}
+
+struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
+    let sourceText: String
+    let normalizedText: String
+    let markdownContent: MarkdownContent
+    let mathSegments: [ETMathContentSegment]
+    let containsMathContent: Bool
+    let containsMermaidContent: Bool
+
+    static func build(from sourceText: String) -> ETPreparedMarkdownRenderPayload {
+        let normalizedText = normalizedMarkdownForStreaming(sourceText)
+        let mathSegments = ETMathContentParser.parseSegments(in: normalizedText)
+        let containsMath = mathSegments.contains { segment in
+            switch segment {
+            case .text:
+                return false
+            case .inlineMath, .blockMath:
+                return true
+            }
+        }
+        return ETPreparedMarkdownRenderPayload(
+            sourceText: sourceText,
+            normalizedText: normalizedText,
+            markdownContent: MarkdownContent(normalizedText),
+            mathSegments: mathSegments,
+            containsMathContent: containsMath,
+            containsMermaidContent: containsMermaidFence(in: normalizedText)
+        )
+    }
+
+    private static func normalizedMarkdownForStreaming(_ text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        var openedFence: (marker: Character, count: Int)?
+
+        for line in lines {
+            guard let fence = parseFenceLine(line) else { continue }
+            if let currentFence = openedFence {
+                let isClosingFence = currentFence.marker == fence.marker
+                    && fence.count >= currentFence.count
+                    && fence.tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if isClosingFence {
+                    openedFence = nil
+                }
+            } else {
+                openedFence = (marker: fence.marker, count: fence.count)
+            }
+        }
+
+        guard let openedFence else { return text }
+
+        let closingFence = String(repeating: String(openedFence.marker), count: max(3, openedFence.count))
+        if text.hasSuffix("\n") {
+            return text + closingFence
+        }
+        return text + "\n" + closingFence
+    }
+
+    private static func containsMermaidFence(in text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+        for line in lines {
+            guard let fence = parseFenceLine(line) else { continue }
+            let infoToken = fence.tail
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isWhitespace)
+                .first?
+                .lowercased()
+            if infoToken == "mermaid" || infoToken == "mmd" {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let marker = trimmed.first, marker == "`" || marker == "~" else {
+            return nil
+        }
+
+        var count = 0
+        for character in trimmed {
+            guard character == marker else { break }
+            count += 1
+        }
+        guard count >= 3 else { return nil }
+
+        let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
+        let tail = String(trimmed[startIndex...])
+        return (marker: marker, count: count, tail: tail)
+    }
+}
+
+private actor ETMarkdownPrecomputeWorker {
+    static let shared = ETMarkdownPrecomputeWorker()
+
+    private var cache: [String: ETPreparedMarkdownRenderPayload] = [:]
+    private var keyOrder: [String] = []
+    private let cacheLimit = 240
+
+    func prepare(source: String) -> ETPreparedMarkdownRenderPayload {
+        if let cached = cache[source] {
+            return cached
+        }
+
+        let prepared = ETPreparedMarkdownRenderPayload.build(from: source)
+        cache[source] = prepared
+        keyOrder.append(source)
+        trimIfNeeded()
+        return prepared
+    }
+
+    private func trimIfNeeded() {
+        while keyOrder.count > cacheLimit {
+            let removed = keyOrder.removeFirst()
+            cache.removeValue(forKey: removed)
+        }
+    }
 }

@@ -75,6 +75,7 @@ struct ChatBubble: View {
     // MARK: - 属性与绑定
     
     @ObservedObject var messageState: ChatMessageRenderState
+    let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
     @Binding var isReasoningExpanded: Bool
     @Binding var isToolCallsExpanded: Bool
     
@@ -112,6 +113,7 @@ struct ChatBubble: View {
 
     init(
         messageState: ChatMessageRenderState,
+        preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         isReasoningExpanded: Binding<Bool>,
         isToolCallsExpanded: Binding<Bool>,
         enableMarkdown: Bool,
@@ -129,6 +131,7 @@ struct ChatBubble: View {
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) {
         self.messageState = messageState
+        self.preparedMarkdownPayload = preparedMarkdownPayload
         self._isReasoningExpanded = isReasoningExpanded
         self._isToolCallsExpanded = isToolCallsExpanded
         self.enableMarkdown = enableMarkdown
@@ -1009,6 +1012,7 @@ struct ChatBubble: View {
             || (message.role == .assistant && message.content.hasPrefix("重试失败"))
         ETAdvancedMarkdownRenderer(
             content: content,
+            preparedContent: preparedMarkdownPayload,
             enableMarkdown: enableMarkdown,
             isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
