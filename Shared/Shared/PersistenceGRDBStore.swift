@@ -1183,20 +1183,31 @@ final class PersistenceGRDBStore {
             let cleanupValue = try readMetaValue(db, candidateKeys: MetaKey.jsonCleanupCompletedCandidates)
             return (importValue == "1", cleanupValue == "1")
         }
+        var importCompleted = metaState.importCompleted
 
         let existingMessageCountBeforeImport = try totalMessageCount()
         if snapshot.messageCount == 0, existingMessageCountBeforeImport > 0 {
             self.logger.error("检测到旧 JSON 快照消息为 0，但数据库已有 \(existingMessageCountBeforeImport) 条消息，已跳过导入与清理。")
             return
         }
-        if existingMessageCountBeforeImport > 0, !metaState.importCompleted {
-            self.logger.error("检测到数据库已有 \(existingMessageCountBeforeImport) 条消息且 JSON 导入状态未完成，已跳过自动导入与清理以避免覆盖现有数据。")
-            return
+        var importedBefore = try isLegacySnapshotImported(snapshot)
+        if existingMessageCountBeforeImport > 0, !importCompleted {
+            if importedBefore {
+                self.logger.info("检测到数据库已有消息且旧 JSON 快照已完成导入，补写导入完成标记并继续清理流程。")
+                try dbPool.write { db in
+                    try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
+                    try removeMetaEntries(db, keys: [MetaKey.legacyJSONImportCompleted])
+                }
+                importCompleted = true
+            } else {
+                self.logger.error("检测到数据库已有 \(existingMessageCountBeforeImport) 条消息且 JSON 导入状态未完成，已跳过自动导入与清理以避免覆盖现有数据。")
+                return
+            }
         }
 
-        let importedBefore = try isLegacySnapshotImported(snapshot)
-        if !metaState.importCompleted || !importedBefore {
+        if !importCompleted || !importedBefore {
             try mergeLegacySnapshotIntoDatabase(snapshot)
+            importedBefore = true
         }
 
         let existingMessageCountAfterImport = try totalMessageCount()

@@ -3686,6 +3686,16 @@ fileprivate struct PersistenceTests {
         }
         return Int(sqlite3_column_int(statement, 0))
     }
+
+    private func sqliteExecute(_ url: URL, sql: String) {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
+              let database else {
+            return
+        }
+        defer { sqlite3_close(database) }
+        _ = sqlite3_exec(database, sql, nil, nil, nil)
+    }
     
     // Clean up files created during tests
     private func cleanup(sessions: [ChatSession]) {
@@ -4100,6 +4110,55 @@ fileprivate struct PersistenceTests {
         #expect(loadedMessages.map(\.content) == persistedMessages.map(\.content))
         #expect(FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
         #expect(FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
+    }
+
+    @Test("旧 JSON 快照已导入但缺少标记时会自动清理遗留 JSON")
+    func testBootstrapGRDBCleansLegacyJSONWhenSnapshotAlreadyImportedWithoutMeta() throws {
+        cleanup(sessions: [])
+
+        let sessionID = UUID()
+        let persistedSession = ChatSession(id: sessionID, name: "Persisted Session", isTemporary: false)
+        let persistedMessages = [
+            ChatMessage(role: .user, content: "db-user"),
+            ChatMessage(role: .assistant, content: "db-assistant")
+        ]
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [persistedSession])
+        }
+
+        Persistence.saveChatSessions([persistedSession])
+        Persistence.saveMessages(persistedMessages, for: sessionID)
+
+        let legacySessionsData = try JSONEncoder().encode([persistedSession])
+        try legacySessionsData.write(to: legacySessionsIndexURL, options: .atomic)
+        let legacyMessagesData = try JSONEncoder().encode(persistedMessages)
+        try legacyMessagesData.write(to: legacyMessageFileURL(sessionID), options: .atomic)
+
+        sqliteExecute(
+            chatStoreSQLiteURL,
+            sql: """
+            DELETE FROM meta
+            WHERE key IN ('json_import_completed', 'json_cleanup_completed', 'json_import_completed_v1', 'json_cleanup_completed_v1')
+            """
+        )
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM meta WHERE key = 'json_import_completed'") == 0)
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM meta WHERE key = 'json_cleanup_completed'") == 0)
+
+        Persistence.resetGRDBStoreForTests()
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        let loadedMessages = Persistence.loadMessages(for: sessionID)
+        #expect(loadedMessages.map(\.content) == persistedMessages.map(\.content))
+        #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
+        #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(sessionID).path))
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM meta WHERE key = 'json_import_completed' AND value = '1'") == 1)
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM meta WHERE key = 'json_cleanup_completed' AND value = '1'") == 1)
     }
 
     @Test("GRDB 在缺失会话索引时不会清理孤立消息 JSON 文件")
