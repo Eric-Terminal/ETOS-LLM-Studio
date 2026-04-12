@@ -49,6 +49,8 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private var pendingTransfers: [ObjectIdentifier: PendingTransferContext] = [:]
     /// 标记是否为静默同步（启动时自动同步）
     private var isSilentSync = false
+    /// 标记自动同步是否已在队列中（防止重复触发）
+    private var autoSyncPending = false
     private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
@@ -100,16 +102,14 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     /// 启动时自动同步（静默模式）
     public func performAutoSyncIfEnabled() {
         guard UserDefaults.standard.bool(forKey: Self.autoSyncEnabledKey) else { return }
+        guard !autoSyncPending else { return }  // 防止重复触发
         
         // 构建同步选项
         let options = buildSyncOptionsFromSettings()
         guard !options.isEmpty else { return }
         
-        // 延迟一小段时间确保 WCSession 已激活
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2秒
-            performSync(options: options, silent: true)
-        }
+        // 标记为待处理，等 WCSession 激活完成后再执行
+        autoSyncPending = true
     }
     
     /// 从用户设置构建同步选项
@@ -304,7 +304,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             // 发送通知（仅静默模式下）
             sendSyncSuccessNotification(summary: summary)
             
-            if !isResponse && expectsResponse {
+            if expectsResponse {
                 // 主动回传对端最新数据，实现双向同步
                 sendPackage(options: package.options, isResponse: true, expectsResponse: false)
             }
@@ -328,8 +328,20 @@ extension WatchSyncManager: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        if let error, !isSilentSync {
-            state = .failed("会话激活失败: \(error.localizedDescription)")
+        if let error {
+            if !isSilentSync {
+                state = .failed("会话激活失败: \(error.localizedDescription)")
+            }
+            autoSyncPending = false
+            return
+        }
+        
+        // WCSession 激活成功后，执行队列中的自动同步
+        if autoSyncPending && activationState == .activated {
+            autoSyncPending = false
+            let options = buildSyncOptionsFromSettings()
+            guard !options.isEmpty else { return }
+            performSync(options: options, silent: true)
         }
     }
     

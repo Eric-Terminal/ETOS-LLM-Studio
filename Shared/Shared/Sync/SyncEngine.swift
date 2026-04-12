@@ -2457,6 +2457,21 @@ public enum SyncEngine {
         for fileName in message.fileFileNames ?? [] {
             hasher.combine(fileName)
         }
+        // 附件内容数据也参与 hash，避免文本相同但内容不同被错误去重
+        if let audioFileName = message.audioFileName,
+           let data = Persistence.loadAudio(fileName: audioFileName) {
+            hasher.combine(data)
+        }
+        for imageFileName in message.imageFileNames ?? [] {
+            if let data = Persistence.loadImage(fileName: imageFileName) {
+                hasher.combine(data)
+            }
+        }
+        for fileName in message.fileFileNames ?? [] {
+            if let data = Persistence.loadFile(fileName: fileName) {
+                hasher.combine(data)
+            }
+        }
         hasher.combine(message.requestedAt?.timeIntervalSince1970 ?? -1)
         hasher.combine(message.fullErrorContent ?? "")
         hasher.combine(message.tokenUsage?.promptTokens ?? -1)
