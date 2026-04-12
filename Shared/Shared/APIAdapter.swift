@@ -27,7 +27,11 @@ private func appendSegment(_ segment: String, to target: inout String?, separato
     target = existing + joiner + segment
 }
 
-private let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+private let imagePlaceholders: Set<String> = [
+    "[图片]", "[圖片]", "[Image]", "[画像]", 
+    "[Imagen]", "[Image]", "[Изображение]", "[صورة]"
+]
+
 private let audioPlaceholders: Set<String> = ["[语音消息]", "[語音訊息]", "[音声メッセージ]", "[Voice message]"]
 private let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]"]
 
