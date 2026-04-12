@@ -108,8 +108,12 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let options = buildSyncOptionsFromSettings()
         guard !options.isEmpty else { return }
         
-        // 标记为待处理，等 WCSession 激活完成后再执行
-        autoSyncPending = true
+        // 如果 session 已经激活，立即同步；否则等 activationDidCompleteWith 触发
+        if let session, session.activationState == .activated {
+            performSync(options: options, silent: true)
+        } else {
+            autoSyncPending = true
+        }
     }
     
     /// 从用户设置构建同步选项

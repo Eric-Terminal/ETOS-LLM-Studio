@@ -1458,6 +1458,37 @@ public enum Persistence {
     
     // MARK: - 音频文件持久化
     
+    /// 文件元数据（用于同步 hash，避免大文件二进制加载）
+    public struct FileMetadata {
+        public let size: Int64
+        public let modifiedAt: Date?
+        public init(size: Int64, modifiedAt: Date?) {
+            self.size = size
+            self.modifiedAt = modifiedAt
+        }
+    }
+
+    /// 加载文件元数据（大小 + 修改时间）
+    public static func loadFileMetadata(fileName: String, directory: PersistenceDirectory) -> FileMetadata? {
+        let dirURL: URL
+        switch directory {
+        case .audio: dirURL = getAudioDirectory()
+        case .image: dirURL = getImageDirectory()
+        case .file: dirURL = getFileDirectory()
+        }
+        let fileURL = dirURL.appendingPathComponent(fileName)
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path) else {
+            return nil
+        }
+        let size = attrs[.size] as? Int64 ?? 0
+        let modDate = attrs[.modificationDate] as? Date
+        return FileMetadata(size: size, modifiedAt: modDate)
+    }
+
+    public enum PersistenceDirectory {
+        case audio, image, file
+    }
+
     /// 获取用于存储音频文件的目录URL
     /// - Returns: 音频存储目录的URL路径
     public static func getAudioDirectory() -> URL {

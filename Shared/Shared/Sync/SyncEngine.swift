@@ -2457,19 +2457,24 @@ public enum SyncEngine {
         for fileName in message.fileFileNames ?? [] {
             hasher.combine(fileName)
         }
-        // 附件内容数据也参与 hash，避免文本相同但内容不同被错误去重
-        if let audioFileName = message.audioFileName,
-           let data = Persistence.loadAudio(fileName: audioFileName) {
-            hasher.combine(data)
+        // 附件元数据参与 hash（避免文本相同但附件不同被错误去重）
+        // 使用文件大小+mtime而非二进制内容，防止大文件导致同步时 OOM
+        if let audioFileName = message.audioFileName {
+            if let meta = Persistence.loadFileMetadata(fileName: audioFileName, directory: .audio) {
+                hasher.combine(meta.size)
+                hasher.combine(meta.modifiedAt?.timeIntervalSince1970 ?? -1)
+            }
         }
         for imageFileName in message.imageFileNames ?? [] {
-            if let data = Persistence.loadImage(fileName: imageFileName) {
-                hasher.combine(data)
+            if let meta = Persistence.loadFileMetadata(fileName: imageFileName, directory: .image) {
+                hasher.combine(meta.size)
+                hasher.combine(meta.modifiedAt?.timeIntervalSince1970 ?? -1)
             }
         }
         for fileName in message.fileFileNames ?? [] {
-            if let data = Persistence.loadFile(fileName: fileName) {
-                hasher.combine(data)
+            if let meta = Persistence.loadFileMetadata(fileName: fileName, directory: .file) {
+                hasher.combine(meta.size)
+                hasher.combine(meta.modifiedAt?.timeIntervalSince1970 ?? -1)
             }
         }
         hasher.combine(message.requestedAt?.timeIntervalSince1970 ?? -1)
