@@ -1184,6 +1184,7 @@ final class PersistenceGRDBStore {
             return (importValue == "1", cleanupValue == "1")
         }
         var importCompleted = metaState.importCompleted
+        var didRepairIncompleteImport = false
 
         let existingMessageCountBeforeImport = try totalMessageCount()
         if snapshot.messageCount == 0, existingMessageCountBeforeImport > 0 {
@@ -1199,13 +1200,18 @@ final class PersistenceGRDBStore {
                     try removeMetaEntries(db, keys: [MetaKey.legacyJSONImportCompleted])
                 }
                 importCompleted = true
+            } else if try canRepairIncompleteImport(snapshot) {
+                self.logger.warning("检测到未完成的历史 JSON 导入，已进入修复性重导入流程。")
+                try mergeLegacySnapshotIntoDatabase(snapshot)
+                importedBefore = true
+                didRepairIncompleteImport = true
             } else {
                 self.logger.error("检测到数据库已有 \(existingMessageCountBeforeImport) 条消息且 JSON 导入状态未完成，已跳过自动导入与清理以避免覆盖现有数据。")
                 return
             }
         }
 
-        if !importCompleted || !importedBefore {
+        if (!importCompleted || !importedBefore), !didRepairIncompleteImport {
             try mergeLegacySnapshotIntoDatabase(snapshot)
             importedBefore = true
         }
@@ -1464,6 +1470,16 @@ final class PersistenceGRDBStore {
             }
 
             return true
+        }
+    }
+
+    private func canRepairIncompleteImport(_ snapshot: LegacySnapshot) throws -> Bool {
+        guard !snapshot.sessions.isEmpty else { return false }
+        let snapshotSessionIDs = Set(snapshot.sessions.map { $0.session.id.uuidString })
+        return try dbPool.read { db in
+            let dbSessionIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM sessions"))
+            guard !dbSessionIDs.isEmpty else { return false }
+            return dbSessionIDs.isSubset(of: snapshotSessionIDs)
         }
     }
 
@@ -1848,6 +1864,12 @@ final class PersistenceGRDBStore {
         position: Int,
         fallbackTimestamp: Date
     ) throws {
+        let messagePrimaryID = try resolveMessagePrimaryID(
+            db,
+            originalID: message.id,
+            sessionID: sessionID,
+            position: position
+        )
         let versions = message.getAllVersions()
         let safeVersions = versions.isEmpty ? [message.content] : versions
         let currentVersionIndex = min(max(0, message.getCurrentVersionIndex()), safeVersions.count - 1)
@@ -1880,7 +1902,7 @@ final class PersistenceGRDBStore {
                 created_at = excluded.created_at
             """,
             arguments: [
-                message.id.uuidString,
+                messagePrimaryID,
                 sessionID.uuidString,
                 message.role.rawValue,
                 message.requestedAt?.timeIntervalSince1970,
@@ -1900,6 +1922,34 @@ final class PersistenceGRDBStore {
                 (message.requestedAt ?? fallbackTimestamp).timeIntervalSince1970
             ]
         )
+    }
+
+    private func resolveMessagePrimaryID(
+        _ db: Database,
+        originalID: UUID,
+        sessionID: UUID,
+        position: Int
+    ) throws -> String {
+        let originalIDString = originalID.uuidString
+        guard let existing = try Row.fetchOne(
+            db,
+            sql: "SELECT session_id, position FROM messages WHERE id = ?",
+            arguments: [originalIDString]
+        ) else {
+            return originalIDString
+        }
+
+        let existingSessionID: String = existing["session_id"]
+        let existingPosition: Int = existing["position"]
+        if existingSessionID == sessionID.uuidString, existingPosition == position {
+            return originalIDString
+        }
+
+        var newID = UUID().uuidString
+        while (try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE id = ?", arguments: [newID]) ?? 0) > 0 {
+            newID = UUID().uuidString
+        }
+        return newID
     }
 
     private func writeMeta(_ db: Database, key: String, value: String) throws {

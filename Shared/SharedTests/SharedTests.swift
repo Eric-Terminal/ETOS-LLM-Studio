@@ -4161,6 +4161,49 @@ fileprivate struct PersistenceTests {
         #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM meta WHERE key = 'json_cleanup_completed' AND value = '1'") == 1)
     }
 
+    @Test("跨会话重复消息ID不会阻止 GRDB 启动迁移清理旧 JSON")
+    func testBootstrapGRDBMigratesDuplicateMessageIDsAcrossSessions() throws {
+        cleanup(sessions: [])
+
+        let duplicatedMessageID = UUID()
+        let firstSession = ChatSession(id: UUID(), name: "First Session", isTemporary: false)
+        let secondSession = ChatSession(id: UUID(), name: "Second Session", isTemporary: false)
+
+        let firstMessages = [
+            ChatMessage(id: duplicatedMessageID, role: .user, content: "first-user"),
+            ChatMessage(role: .assistant, content: "first-assistant")
+        ]
+        let secondMessages = [
+            ChatMessage(id: duplicatedMessageID, role: .user, content: "second-user"),
+            ChatMessage(role: .assistant, content: "second-assistant")
+        ]
+
+        let legacySessionsData = try JSONEncoder().encode([firstSession, secondSession])
+        try legacySessionsData.write(to: legacySessionsIndexURL, options: .atomic)
+        try JSONEncoder().encode(firstMessages).write(to: legacyMessageFileURL(firstSession.id), options: .atomic)
+        try JSONEncoder().encode(secondMessages).write(to: legacyMessageFileURL(secondSession.id), options: .atomic)
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [firstSession, secondSession])
+        }
+
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        let loadedFirst = Persistence.loadMessages(for: firstSession.id)
+        let loadedSecond = Persistence.loadMessages(for: secondSession.id)
+        #expect(loadedFirst.map(\.content) == firstMessages.map(\.content))
+        #expect(loadedSecond.map(\.content) == secondMessages.map(\.content))
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM messages") == firstMessages.count + secondMessages.count)
+        #expect(!FileManager.default.fileExists(atPath: legacySessionsIndexURL.path))
+        #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(firstSession.id).path))
+        #expect(!FileManager.default.fileExists(atPath: legacyMessageFileURL(secondSession.id).path))
+    }
+
     @Test("GRDB 在缺失会话索引时不会清理孤立消息 JSON 文件")
     func testBootstrapGRDBKeepsOrphanLegacyMessageJSONWithoutIndex() throws {
         struct LegacyRequestLogEnvelope: Encodable {
