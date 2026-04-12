@@ -2316,35 +2316,49 @@ final class PersistenceAuxiliaryGRDBStore {
                 try db.execute(sql: """
                     CREATE TABLE IF NOT EXISTS mcp_servers (
                         id TEXT PRIMARY KEY NOT NULL,
-                        name TEXT NOT NULL,
+                        display_name TEXT NOT NULL,
+                        notes TEXT,
+                        is_selected_for_chat INTEGER NOT NULL DEFAULT 0,
                         status TEXT NOT NULL DEFAULT 'idle',
-                        configuration_data BLOB NOT NULL,
+                        transport_kind TEXT NOT NULL,
+                        endpoint_url TEXT,
+                        message_endpoint_url TEXT,
+                        sse_endpoint_url TEXT,
                         metadata_cached_at REAL,
-                        info_data BLOB,
-                        resources_data BLOB,
-                        resource_templates_data BLOB,
-                        prompts_data BLOB,
-                        roots_data BLOB,
-                        updated_at REAL NOT NULL
+                        updated_at REAL NOT NULL,
+                        api_key TEXT,
+                        additional_headers_json TEXT,
+                        disabled_tool_ids_json TEXT,
+                        tool_approval_policies_json TEXT,
+                        oauth_payload_json TEXT,
+                        stream_resumption_token TEXT,
+                        info_json TEXT,
+                        resources_json TEXT,
+                        resource_templates_json TEXT,
+                        prompts_json TEXT,
+                        roots_json TEXT
                     )
                 """)
 
                 try db.execute(sql: """
                     CREATE TABLE IF NOT EXISTS mcp_tools (
-                        id TEXT PRIMARY KEY NOT NULL,
                         server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
-                        name TEXT NOT NULL,
+                        tool_name TEXT NOT NULL,
                         description TEXT,
-                        input_schema_data BLOB,
-                        examples_data BLOB,
                         sort_index INTEGER NOT NULL DEFAULT 0,
-                        updated_at REAL NOT NULL
+                        updated_at REAL NOT NULL,
+                        input_schema_json TEXT,
+                        examples_json TEXT,
+                        PRIMARY KEY(server_id, tool_name)
                     )
                 """)
 
-                try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_tools_server_name ON mcp_tools(server_id, name)")
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_updated_at ON mcp_servers(updated_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_selected ON mcp_servers(is_selected_for_chat, updated_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_status ON mcp_servers(status, updated_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_display_name ON mcp_servers(display_name COLLATE NOCASE)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_updated_at ON mcp_tools(updated_at DESC)")
             }
 
             migrator.registerMigration("v3_create_config_domain_tables") { db in
@@ -2577,9 +2591,81 @@ final class PersistenceAuxiliaryGRDBStore {
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_feedback_tickets_created ON feedback_tickets(created_at DESC)")
             }
 
-            migrator.registerMigration("v4_create_mcp_hybrid_tables") { db in
+            // 82b6 之后的本地测试期曾多次改动 MCP 表结构；该迁移用于清理这些未发布路径。
+            migrator.registerMigration("v4_cleanup_unreleased_mcp_schema_artifacts") { db in
+                func tableExists(_ name: String) throws -> Bool {
+                    (try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        arguments: [name]
+                    ) ?? 0) > 0
+                }
+
+                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
+                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+                    for column in columns {
+                        let name: String = column["name"]
+                        if name == columnName {
+                            return true
+                        }
+                    }
+                    return false
+                }
+
+                let hasLegacyServers = try tableExists("mcp_servers") && !(try tableHasColumn("mcp_servers", columnName: "display_name"))
+                let hasLegacyTools = try tableExists("mcp_tools") && !(try tableHasColumn("mcp_tools", columnName: "tool_name"))
+
+                if hasLegacyServers {
+                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_tools")
+                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_servers")
+                } else if hasLegacyTools {
+                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_tools")
+                }
+
+                if try tableExists("mcp_tools_v2") {
+                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_tools_v2")
+                }
+                if try tableExists("mcp_servers_v2") {
+                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_servers_v2")
+                }
+                if try tableExists("migration_checks") {
+                    try db.execute(sql: "DROP TABLE IF EXISTS migration_checks")
+                }
+
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_updated_at")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_selected")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_status")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_display_name")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_v2_server_sort")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_v2_updated_at")
+                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_server_name")
+
+                if try tableExists("json_blobs") {
+                    let newKeyCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                        arguments: ["mcp_servers_records"]
+                    ) ?? 0
+                    let oldKeyCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
+                        arguments: ["mcp_servers_records_v1"]
+                    ) ?? 0
+                    if oldKeyCount > 0, newKeyCount == 0 {
+                        try db.execute(
+                            sql: "UPDATE json_blobs SET key = ? WHERE key = ?",
+                            arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
+                        )
+                    } else if oldKeyCount > 0 {
+                        try db.execute(
+                            sql: "DELETE FROM json_blobs WHERE key = ?",
+                            arguments: ["mcp_servers_records_v1"]
+                        )
+                    }
+                }
+
                 try db.execute(sql: """
-                    CREATE TABLE IF NOT EXISTS mcp_servers_v2 (
+                    CREATE TABLE IF NOT EXISTS mcp_servers (
                         id TEXT PRIMARY KEY NOT NULL,
                         display_name TEXT NOT NULL,
                         notes TEXT,
@@ -2606,8 +2692,8 @@ final class PersistenceAuxiliaryGRDBStore {
                 """)
 
                 try db.execute(sql: """
-                    CREATE TABLE IF NOT EXISTS mcp_tools_v2 (
-                        server_id TEXT NOT NULL REFERENCES mcp_servers_v2(id) ON DELETE CASCADE,
+                    CREATE TABLE IF NOT EXISTS mcp_tools (
+                        server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
                         tool_name TEXT NOT NULL,
                         description TEXT,
                         sort_index INTEGER NOT NULL DEFAULT 0,
@@ -2618,808 +2704,12 @@ final class PersistenceAuxiliaryGRDBStore {
                     )
                 """)
 
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_v2_updated_at ON mcp_servers_v2(updated_at DESC)")
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_v2_selected ON mcp_servers_v2(is_selected_for_chat, updated_at DESC)")
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_v2_status ON mcp_servers_v2(status, updated_at DESC)")
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_v2_display_name ON mcp_servers_v2(display_name COLLATE NOCASE)")
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_v2_server_sort ON mcp_tools_v2(server_id, sort_index ASC)")
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_v2_updated_at ON mcp_tools_v2(updated_at DESC)")
-            }
-
-            migrator.registerMigration("v5_migrate_mcp_data_to_hybrid_tables") { db in
-                struct LegacyBlobRecord: Decodable {
-                    var server: MCPServerConfiguration
-                    var metadata: MCPServerMetadataCache?
-
-                    private enum CodingKeys: String, CodingKey {
-                        case server
-                        case metadata
-                    }
-
-                    init(from decoder: Decoder) throws {
-                        if let container = try? decoder.container(keyedBy: CodingKeys.self),
-                           container.contains(.server) {
-                            server = try container.decode(MCPServerConfiguration.self, forKey: .server)
-                            metadata = try container.decodeIfPresent(MCPServerMetadataCache.self, forKey: .metadata)
-                        } else {
-                            server = try MCPServerConfiguration(from: decoder)
-                            metadata = nil
-                        }
-                    }
-                }
-
-                struct OAuthPayload: Encodable {
-                    var tokenEndpoint: String
-                    var clientID: String
-                    var clientSecret: String?
-                    var scope: String?
-                    var grantType: MCPOAuthGrantType
-                    var authorizationCode: String?
-                    var redirectURI: String?
-                    var codeVerifier: String?
-                }
-
-                enum UpsertMode {
-                    case overwrite
-                    case newerOnly
-                    case insertIfMissing
-                }
-
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.sortedKeys]
-                encoder.dateEncodingStrategy = .iso8601
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-
-                func tableExists(_ name: String) throws -> Bool {
-                    (try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
-                        arguments: [name]
-                    ) ?? 0) > 0
-                }
-
-                func rowCount(of tableName: String) throws -> Int {
-                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(tableName)") ?? 0
-                }
-
-                func jsonTextFromData(_ data: Data?) -> String? {
-                    guard let data, !data.isEmpty else { return nil }
-                    if let text = String(data: data, encoding: .utf8) {
-                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        return trimmed.isEmpty ? nil : trimmed
-                    }
-                    return nil
-                }
-
-                func jsonTextFromValue<T: Encodable>(_ value: T?) -> String? {
-                    guard let value,
-                          let data = try? encoder.encode(value),
-                          let text = String(data: data, encoding: .utf8) else {
-                        return nil
-                    }
-                    return text
-                }
-
-                func serverConflictClause(for mode: UpsertMode) -> String {
-                    switch mode {
-                    case .overwrite:
-                        return """
-                        ON CONFLICT(id) DO UPDATE SET
-                            display_name = excluded.display_name,
-                            notes = excluded.notes,
-                            is_selected_for_chat = excluded.is_selected_for_chat,
-                            status = excluded.status,
-                            transport_kind = excluded.transport_kind,
-                            endpoint_url = excluded.endpoint_url,
-                            message_endpoint_url = excluded.message_endpoint_url,
-                            sse_endpoint_url = excluded.sse_endpoint_url,
-                            metadata_cached_at = excluded.metadata_cached_at,
-                            updated_at = excluded.updated_at,
-                            api_key = excluded.api_key,
-                            additional_headers_json = excluded.additional_headers_json,
-                            disabled_tool_ids_json = excluded.disabled_tool_ids_json,
-                            tool_approval_policies_json = excluded.tool_approval_policies_json,
-                            oauth_payload_json = excluded.oauth_payload_json,
-                            stream_resumption_token = excluded.stream_resumption_token,
-                            info_json = excluded.info_json,
-                            resources_json = excluded.resources_json,
-                            resource_templates_json = excluded.resource_templates_json,
-                            prompts_json = excluded.prompts_json,
-                            roots_json = excluded.roots_json
-                        """
-                    case .newerOnly:
-                        return """
-                        ON CONFLICT(id) DO UPDATE SET
-                            display_name = excluded.display_name,
-                            notes = excluded.notes,
-                            is_selected_for_chat = excluded.is_selected_for_chat,
-                            status = excluded.status,
-                            transport_kind = excluded.transport_kind,
-                            endpoint_url = excluded.endpoint_url,
-                            message_endpoint_url = excluded.message_endpoint_url,
-                            sse_endpoint_url = excluded.sse_endpoint_url,
-                            metadata_cached_at = excluded.metadata_cached_at,
-                            updated_at = excluded.updated_at,
-                            api_key = excluded.api_key,
-                            additional_headers_json = excluded.additional_headers_json,
-                            disabled_tool_ids_json = excluded.disabled_tool_ids_json,
-                            tool_approval_policies_json = excluded.tool_approval_policies_json,
-                            oauth_payload_json = excluded.oauth_payload_json,
-                            stream_resumption_token = excluded.stream_resumption_token,
-                            info_json = excluded.info_json,
-                            resources_json = excluded.resources_json,
-                            resource_templates_json = excluded.resource_templates_json,
-                            prompts_json = excluded.prompts_json,
-                            roots_json = excluded.roots_json
-                        WHERE excluded.updated_at > mcp_servers_v2.updated_at
-                        """
-                    case .insertIfMissing:
-                        return "ON CONFLICT(id) DO NOTHING"
-                    }
-                }
-
-                func toolConflictClause(for mode: UpsertMode) -> String {
-                    switch mode {
-                    case .overwrite:
-                        return """
-                        ON CONFLICT(server_id, tool_name) DO UPDATE SET
-                            description = excluded.description,
-                            sort_index = excluded.sort_index,
-                            updated_at = excluded.updated_at,
-                            input_schema_json = excluded.input_schema_json,
-                            examples_json = excluded.examples_json
-                        """
-                    case .newerOnly:
-                        return """
-                        ON CONFLICT(server_id, tool_name) DO UPDATE SET
-                            description = excluded.description,
-                            sort_index = excluded.sort_index,
-                            updated_at = excluded.updated_at,
-                            input_schema_json = excluded.input_schema_json,
-                            examples_json = excluded.examples_json
-                        WHERE excluded.updated_at > mcp_tools_v2.updated_at
-                        """
-                    case .insertIfMissing:
-                        return "ON CONFLICT(server_id, tool_name) DO NOTHING"
-                    }
-                }
-
-                func upsertServer(
-                    server: MCPServerConfiguration,
-                    status: String,
-                    updatedAt: Double,
-                    metadataCachedAt: Double?,
-                    infoJSON: String?,
-                    resourcesJSON: String?,
-                    resourceTemplatesJSON: String?,
-                    promptsJSON: String?,
-                    rootsJSON: String?,
-                    mode: UpsertMode
-                ) throws {
-                    var endpointURL: String?
-                    var messageEndpointURL: String?
-                    var sseEndpointURL: String?
-                    var apiKey: String?
-                    var headersJSON: String?
-                    var oauthJSON: String?
-                    let transportKind: String
-
-                    switch server.transport {
-                    case .http(let endpoint, let token, let headers):
-                        transportKind = "http"
-                        endpointURL = endpoint.absoluteString
-                        apiKey = token
-                        headersJSON = headers.isEmpty ? nil : jsonTextFromValue(headers)
-                    case .httpSSE(let messageEndpoint, let sseEndpoint, let token, let headers):
-                        transportKind = "sse"
-                        messageEndpointURL = messageEndpoint.absoluteString
-                        sseEndpointURL = sseEndpoint.absoluteString
-                        apiKey = token
-                        headersJSON = headers.isEmpty ? nil : jsonTextFromValue(headers)
-                    case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
-                        transportKind = "oauth"
-                        endpointURL = endpoint.absoluteString
-                        oauthJSON = jsonTextFromValue(
-                            OAuthPayload(
-                                tokenEndpoint: tokenEndpoint.absoluteString,
-                                clientID: clientID,
-                                clientSecret: clientSecret,
-                                scope: scope,
-                                grantType: grantType,
-                                authorizationCode: authorizationCode,
-                                redirectURI: redirectURI,
-                                codeVerifier: codeVerifier
-                            )
-                        )
-                    }
-
-                    try db.execute(
-                        sql: """
-                        INSERT INTO mcp_servers_v2 (
-                            id, display_name, notes, is_selected_for_chat, status, transport_kind,
-                            endpoint_url, message_endpoint_url, sse_endpoint_url,
-                            metadata_cached_at, updated_at, api_key, additional_headers_json,
-                            disabled_tool_ids_json, tool_approval_policies_json, oauth_payload_json,
-                            stream_resumption_token, info_json, resources_json, resource_templates_json,
-                            prompts_json, roots_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        \(serverConflictClause(for: mode))
-                        """,
-                        arguments: [
-                            server.id.uuidString,
-                            server.displayName,
-                            server.notes,
-                            server.isSelectedForChat ? 1 : 0,
-                            status,
-                            transportKind,
-                            endpointURL,
-                            messageEndpointURL,
-                            sseEndpointURL,
-                            metadataCachedAt,
-                            updatedAt,
-                            apiKey,
-                            headersJSON,
-                            server.disabledToolIds.isEmpty ? nil : jsonTextFromValue(server.disabledToolIds),
-                            server.toolApprovalPolicies.isEmpty ? nil : jsonTextFromValue(server.toolApprovalPolicies),
-                            oauthJSON,
-                            server.streamResumptionToken,
-                            infoJSON,
-                            resourcesJSON,
-                            resourceTemplatesJSON,
-                            promptsJSON,
-                            rootsJSON
-                        ]
-                    )
-                }
-
-                func upsertTool(
-                    serverID: String,
-                    toolName: String,
-                    description: String?,
-                    sortIndex: Int,
-                    updatedAt: Double,
-                    inputSchemaJSON: String?,
-                    examplesJSON: String?,
-                    mode: UpsertMode
-                ) throws {
-                    guard !toolName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                    try db.execute(
-                        sql: """
-                        INSERT INTO mcp_tools_v2 (
-                            server_id, tool_name, description, sort_index, updated_at, input_schema_json, examples_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                        \(toolConflictClause(for: mode))
-                        """,
-                        arguments: [
-                            serverID,
-                            toolName,
-                            description,
-                            sortIndex,
-                            updatedAt,
-                            inputSchemaJSON,
-                            examplesJSON
-                        ]
-                    )
-                }
-
-                let hasLegacyServersTable = try tableExists("mcp_servers")
-                let hasLegacyToolsTable = try tableExists("mcp_tools")
-                let legacyServerRows = hasLegacyServersTable ? (try rowCount(of: "mcp_servers")) : 0
-                let legacyToolRows = hasLegacyToolsTable ? (try rowCount(of: "mcp_tools")) : 0
-                let blobServerMode: UpsertMode = legacyServerRows > 0 ? .insertIfMissing : .newerOnly
-                let blobToolMode: UpsertMode = legacyToolRows > 0 ? .insertIfMissing : .newerOnly
-
-                if hasLegacyServersTable {
-                    let rows = try Row.fetchAll(
-                        db,
-                        sql: """
-                        SELECT
-                            id, status, configuration_data,
-                            metadata_cached_at, info_data, resources_data, resource_templates_data, prompts_data, roots_data,
-                            updated_at
-                        FROM mcp_servers
-                        """
-                    )
-                    for row in rows {
-                        do {
-                            let configData: Data = row["configuration_data"]
-                            let server = try decoder.decode(MCPServerConfiguration.self, from: configData)
-                            let status: String = row["status"]
-                            let updatedAt: Double = row["updated_at"]
-                            let metadataCachedAt: Double? = row["metadata_cached_at"]
-                            let infoData: Data? = row["info_data"]
-                            let resourcesData: Data? = row["resources_data"]
-                            let resourceTemplatesData: Data? = row["resource_templates_data"]
-                            let promptsData: Data? = row["prompts_data"]
-                            let rootsData: Data? = row["roots_data"]
-                            try upsertServer(
-                                server: server,
-                                status: status,
-                                updatedAt: updatedAt,
-                                metadataCachedAt: metadataCachedAt,
-                                infoJSON: jsonTextFromData(infoData),
-                                resourcesJSON: jsonTextFromData(resourcesData),
-                                resourceTemplatesJSON: jsonTextFromData(resourceTemplatesData),
-                                promptsJSON: jsonTextFromData(promptsData),
-                                rootsJSON: jsonTextFromData(rootsData),
-                                mode: .overwrite
-                            )
-                        } catch {
-                            continue
-                        }
-                    }
-                }
-
-                if hasLegacyToolsTable {
-                    let rows = try Row.fetchAll(
-                        db,
-                        sql: """
-                        SELECT server_id, name, description, sort_index, updated_at, input_schema_data, examples_data
-                        FROM mcp_tools
-                        """
-                    )
-                    for row in rows {
-                        do {
-                            let serverID: String = row["server_id"]
-                            let toolName: String = row["name"]
-                            let description: String? = row["description"]
-                            let sortIndex: Int = row["sort_index"]
-                            let updatedAt: Double = row["updated_at"]
-                            let inputSchemaData: Data? = row["input_schema_data"]
-                            let examplesData: Data? = row["examples_data"]
-                            try upsertTool(
-                                serverID: serverID,
-                                toolName: toolName,
-                                description: description,
-                                sortIndex: sortIndex,
-                                updatedAt: updatedAt,
-                                inputSchemaJSON: jsonTextFromData(inputSchemaData),
-                                examplesJSON: jsonTextFromData(examplesData),
-                                mode: .overwrite
-                            )
-                        } catch {
-                            continue
-                        }
-                    }
-                }
-
-                if try tableExists("json_blobs"),
-                   let blobData = try Data.fetchOne(
-                        db,
-                        sql: """
-                        SELECT json_data
-                        FROM json_blobs
-                        WHERE key IN (?, ?)
-                        ORDER BY CASE key
-                            WHEN ? THEN 0
-                            WHEN ? THEN 1
-                            ELSE 2
-                        END
-                        LIMIT 1
-                        """,
-                        arguments: [
-                            "mcp_servers_records",
-                            "mcp_servers_records_v1",
-                            "mcp_servers_records",
-                            "mcp_servers_records_v1"
-                        ]
-                   ) {
-                    let records = (try? decoder.decode([LegacyBlobRecord].self, from: blobData)) ?? []
-                    for record in records {
-                        do {
-                            let metadata = record.metadata
-                            let metadataCachedAt = metadata?.cachedAt.timeIntervalSince1970
-                            let updatedAt = metadataCachedAt ?? Date().timeIntervalSince1970
-                            try upsertServer(
-                                server: record.server,
-                                status: metadata == nil ? "idle" : "ready",
-                                updatedAt: updatedAt,
-                                metadataCachedAt: metadataCachedAt,
-                                infoJSON: jsonTextFromValue(metadata?.info),
-                                resourcesJSON: (metadata?.resources.isEmpty == false) ? jsonTextFromValue(metadata?.resources) : nil,
-                                resourceTemplatesJSON: (metadata?.resourceTemplates.isEmpty == false) ? jsonTextFromValue(metadata?.resourceTemplates) : nil,
-                                promptsJSON: (metadata?.prompts.isEmpty == false) ? jsonTextFromValue(metadata?.prompts) : nil,
-                                rootsJSON: (metadata?.roots.isEmpty == false) ? jsonTextFromValue(metadata?.roots) : nil,
-                                mode: blobServerMode
-                            )
-                            if let metadata {
-                                for (index, tool) in metadata.tools.enumerated() {
-                                    try upsertTool(
-                                        serverID: record.server.id.uuidString,
-                                        toolName: tool.toolId,
-                                        description: tool.description,
-                                        sortIndex: index,
-                                        updatedAt: metadata.cachedAt.timeIntervalSince1970,
-                                        inputSchemaJSON: jsonTextFromValue(tool.inputSchema),
-                                        examplesJSON: jsonTextFromValue(tool.examples),
-                                        mode: blobToolMode
-                                    )
-                                }
-                            }
-                        } catch {
-                            continue
-                        }
-                    }
-                }
-            }
-
-            migrator.registerMigration("v6_verify_mcp_v2_migration") { db in
-                struct OAuthPayload: Decodable {
-                    var tokenEndpoint: String
-                    var clientID: String
-                    var clientSecret: String?
-                    var scope: String?
-                    var grantType: MCPOAuthGrantType
-                    var authorizationCode: String?
-                    var redirectURI: String?
-                    var codeVerifier: String?
-                }
-
-                func tableExists(_ name: String) throws -> Bool {
-                    (try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
-                        arguments: [name]
-                    ) ?? 0) > 0
-                }
-
-                func rowCount(of tableName: String) throws -> Int {
-                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(tableName)") ?? 0
-                }
-
-                func decodeJSONText<T: Decodable>(_ type: T.Type, from text: String?, decoder: JSONDecoder) -> T? {
-                    guard let text,
-                          let data = text.data(using: .utf8) else {
-                        return nil
-                    }
-                    return try? decoder.decode(type, from: data)
-                }
-
-                func canDecodeServerConfiguration(_ row: Row, decoder: JSONDecoder) -> Bool {
-                    let idRaw: String = row["id"]
-                    guard UUID(uuidString: idRaw) != nil else { return false }
-                    let transportKind: String = row["transport_kind"]
-                    let endpointURLRaw: String? = row["endpoint_url"]
-                    let messageEndpointURLRaw: String? = row["message_endpoint_url"]
-                    let sseEndpointURLRaw: String? = row["sse_endpoint_url"]
-                    let additionalHeadersJSON: String? = row["additional_headers_json"]
-                    let disabledToolIDsJSON: String? = row["disabled_tool_ids_json"]
-                    let toolPoliciesJSON: String? = row["tool_approval_policies_json"]
-                    let oauthPayloadJSON: String? = row["oauth_payload_json"]
-
-                    if additionalHeadersJSON != nil,
-                       decodeJSONText([String: String].self, from: additionalHeadersJSON, decoder: decoder) == nil {
-                        return false
-                    }
-                    if disabledToolIDsJSON != nil,
-                       decodeJSONText([String].self, from: disabledToolIDsJSON, decoder: decoder) == nil {
-                        return false
-                    }
-                    if toolPoliciesJSON != nil,
-                       decodeJSONText([String: MCPToolApprovalPolicy].self, from: toolPoliciesJSON, decoder: decoder) == nil {
-                        return false
-                    }
-
-                    switch transportKind {
-                    case "http":
-                        guard let endpointURLRaw,
-                              URL(string: endpointURLRaw) != nil else { return false }
-                    case "sse":
-                        guard let messageEndpointURLRaw,
-                              URL(string: messageEndpointURLRaw) != nil,
-                              let sseEndpointURLRaw,
-                              URL(string: sseEndpointURLRaw) != nil else { return false }
-                    case "oauth":
-                        guard let endpointURLRaw,
-                              URL(string: endpointURLRaw) != nil,
-                              let payload = decodeJSONText(OAuthPayload.self, from: oauthPayloadJSON, decoder: decoder),
-                              URL(string: payload.tokenEndpoint) != nil else {
-                            return false
-                        }
-                    default:
-                        return false
-                    }
-                    return true
-                }
-
-                func canDecodeToolPayload(_ row: Row, decoder: JSONDecoder) -> Bool {
-                    let inputSchemaJSON: String? = row["input_schema_json"]
-                    let examplesJSON: String? = row["examples_json"]
-                    if inputSchemaJSON != nil,
-                       decodeJSONText(JSONValue.self, from: inputSchemaJSON, decoder: decoder) == nil {
-                        return false
-                    }
-                    if examplesJSON != nil,
-                       decodeJSONText([JSONValue].self, from: examplesJSON, decoder: decoder) == nil {
-                        return false
-                    }
-                    return true
-                }
-
-                var passed = false
-                defer {
-                    let checkedAt = Date().timeIntervalSince1970
-                    try? db.execute(sql: """
-                        CREATE TABLE IF NOT EXISTS migration_checks (
-                            check_key TEXT PRIMARY KEY NOT NULL,
-                            passed INTEGER NOT NULL,
-                            checked_at REAL NOT NULL
-                        )
-                    """)
-                    try? db.execute(
-                        sql: """
-                        INSERT INTO migration_checks (check_key, passed, checked_at)
-                        VALUES (?, ?, ?)
-                        ON CONFLICT(check_key) DO UPDATE SET
-                            passed = excluded.passed,
-                            checked_at = excluded.checked_at
-                        """,
-                        arguments: ["mcp_migration_verified", passed ? 1 : 0, checkedAt]
-                    )
-                }
-
-                let hasHybridServersTable = try tableExists("mcp_servers_v2")
-                let hasHybridToolsTable = try tableExists("mcp_tools_v2")
-                guard hasHybridServersTable, hasHybridToolsTable else { return }
-
-                let legacyServerRows = (try tableExists("mcp_servers")) ? (try rowCount(of: "mcp_servers")) : 0
-                let legacyToolRows = (try tableExists("mcp_tools")) ? (try rowCount(of: "mcp_tools")) : 0
-                let legacyBlobRows = (try tableExists("json_blobs")) ? (
-                    try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key IN (?, ?)",
-                        arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
-                    ) ?? 0
-                ) : 0
-                let requiresMigratedData = legacyServerRows > 0 || legacyToolRows > 0 || legacyBlobRows > 0
-
-                let migratedServerRows = try rowCount(of: "mcp_servers_v2")
-                if requiresMigratedData, migratedServerRows == 0 {
-                    return
-                }
-
-                let orphanToolCount = try Int.fetchOne(
-                    db,
-                    sql: """
-                    SELECT COUNT(*)
-                    FROM mcp_tools_v2 t
-                    LEFT JOIN mcp_servers_v2 s ON s.id = t.server_id
-                    WHERE s.id IS NULL
-                    """
-                ) ?? 0
-                if orphanToolCount > 0 {
-                    return
-                }
-
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-
-                let sampledServers = try Row.fetchAll(
-                    db,
-                    sql: """
-                    SELECT
-                        id, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
-                        additional_headers_json, disabled_tool_ids_json, tool_approval_policies_json, oauth_payload_json
-                    FROM mcp_servers_v2
-                    ORDER BY updated_at DESC, id ASC
-                    LIMIT 20
-                    """
-                )
-                for row in sampledServers where !canDecodeServerConfiguration(row, decoder: decoder) {
-                    return
-                }
-
-                let sampledTools = try Row.fetchAll(
-                    db,
-                    sql: """
-                    SELECT input_schema_json, examples_json
-                    FROM mcp_tools_v2
-                    ORDER BY updated_at DESC, server_id ASC, tool_name ASC
-                    LIMIT 50
-                    """
-                )
-                for row in sampledTools where !canDecodeToolPayload(row, decoder: decoder) {
-                    return
-                }
-
-                passed = true
-            }
-
-            migrator.registerMigration("v7_cleanup_legacy_mcp_tables_if_safe") { db in
-                func tableExists(_ name: String) throws -> Bool {
-                    (try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
-                        arguments: [name]
-                    ) ?? 0) > 0
-                }
-
-                let hasLegacyServers = try tableExists("mcp_servers")
-                let hasLegacyTools = try tableExists("mcp_tools")
-                let hasJSONBlobs = try tableExists("json_blobs")
-                let legacyBlobKeyCount = hasJSONBlobs ? (
-                    try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key IN (?, ?)",
-                        arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
-                    ) ?? 0
-                ) : 0
-                let hasLegacyArtifacts = hasLegacyServers || hasLegacyTools || legacyBlobKeyCount > 0
-                guard hasLegacyArtifacts else { return }
-
-                let verificationPassed: Bool
-                if try tableExists("migration_checks") {
-                    verificationPassed = (try Int.fetchOne(
-                        db,
-                        sql: """
-                        SELECT passed
-                        FROM migration_checks
-                        WHERE check_key IN (?, ?)
-                        ORDER BY CASE check_key
-                            WHEN ? THEN 0
-                            WHEN ? THEN 1
-                            ELSE 2
-                        END
-                        LIMIT 1
-                        """,
-                        arguments: [
-                            "mcp_migration_verified",
-                            "mcp_v2_migration_verified",
-                            "mcp_migration_verified",
-                            "mcp_v2_migration_verified"
-                        ]
-                    ) ?? 0) != 0
-                } else {
-                    verificationPassed = false
-                }
-
-                guard verificationPassed else { return }
-
-                if hasLegacyTools {
-                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_tools")
-                }
-                if hasLegacyServers {
-                    try db.execute(sql: "DROP TABLE IF EXISTS mcp_servers")
-                }
-                if hasJSONBlobs {
-                    try db.execute(
-                        sql: "DELETE FROM json_blobs WHERE key IN (?, ?)",
-                        arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
-                    )
-                }
-            }
-
-            migrator.registerMigration("v8_finalize_mcp_table_names") { db in
-                func tableExists(_ name: String) throws -> Bool {
-                    (try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
-                        arguments: [name]
-                    ) ?? 0) > 0
-                }
-
-                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
-                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
-                    for column in columns {
-                        let name: String = column["name"]
-                        if name == columnName {
-                            return true
-                        }
-                    }
-                    return false
-                }
-
-                func nextBackupTableName(baseName: String) throws -> String {
-                    var candidate = baseName
-                    var suffix = 1
-                    while try tableExists(candidate) {
-                        candidate = "\(baseName)_\(suffix)"
-                        suffix += 1
-                    }
-                    return candidate
-                }
-
-                let hasCurrentServers = try tableExists("mcp_servers")
-                let hasCurrentTools = try tableExists("mcp_tools")
-                let hasHybridServers = try tableExists("mcp_servers_v2")
-                let hasHybridTools = try tableExists("mcp_tools_v2")
-
-                if hasCurrentServers {
-                    let isCurrentSchema = try tableHasColumn("mcp_servers", columnName: "display_name")
-                    if !isCurrentSchema {
-                        let backupName = try nextBackupTableName(baseName: "mcp_servers_legacy_backup")
-                        try db.execute(sql: "ALTER TABLE mcp_servers RENAME TO \(backupName)")
-                    }
-                }
-
-                if hasCurrentTools {
-                    let isCurrentSchema = try tableHasColumn("mcp_tools", columnName: "tool_name")
-                    if !isCurrentSchema {
-                        let backupName = try nextBackupTableName(baseName: "mcp_tools_legacy_backup")
-                        try db.execute(sql: "ALTER TABLE mcp_tools RENAME TO \(backupName)")
-                    }
-                }
-
-                if hasHybridServers, !(try tableExists("mcp_servers")) {
-                    try db.execute(sql: "ALTER TABLE mcp_servers_v2 RENAME TO mcp_servers")
-                }
-                if hasHybridTools, !(try tableExists("mcp_tools")) {
-                    try db.execute(sql: "ALTER TABLE mcp_tools_v2 RENAME TO mcp_tools")
-                }
-
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_updated_at")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_selected")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_status")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_v2_display_name")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_v2_server_sort")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_v2_updated_at")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_updated_at")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_selected")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_status")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_servers_display_name")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_server_sort")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_updated_at")
-                try db.execute(sql: "DROP INDEX IF EXISTS idx_mcp_tools_server_name")
-
-                if try tableExists("mcp_servers"), try tableHasColumn("mcp_servers", columnName: "display_name") {
-                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_updated_at ON mcp_servers(updated_at DESC)")
-                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_selected ON mcp_servers(is_selected_for_chat, updated_at DESC)")
-                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_status ON mcp_servers(status, updated_at DESC)")
-                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_display_name ON mcp_servers(display_name COLLATE NOCASE)")
-                }
-                if try tableExists("mcp_tools"), try tableHasColumn("mcp_tools", columnName: "tool_name") {
-                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
-                    try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_updated_at ON mcp_tools(updated_at DESC)")
-                }
-
-                if try tableExists("json_blobs") {
-                    let newKeyCount = try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
-                        arguments: ["mcp_servers_records"]
-                    ) ?? 0
-                    let oldKeyCount = try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM json_blobs WHERE key = ?",
-                        arguments: ["mcp_servers_records_v1"]
-                    ) ?? 0
-                    if oldKeyCount > 0, newKeyCount == 0 {
-                        try db.execute(
-                            sql: "UPDATE json_blobs SET key = ? WHERE key = ?",
-                            arguments: ["mcp_servers_records", "mcp_servers_records_v1"]
-                        )
-                    } else if oldKeyCount > 0 {
-                        try db.execute(
-                            sql: "DELETE FROM json_blobs WHERE key = ?",
-                            arguments: ["mcp_servers_records_v1"]
-                        )
-                    }
-                }
-
-                if try tableExists("migration_checks") {
-                    let newKeyCount = try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM migration_checks WHERE check_key = ?",
-                        arguments: ["mcp_migration_verified"]
-                    ) ?? 0
-                    let oldKeyCount = try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM migration_checks WHERE check_key = ?",
-                        arguments: ["mcp_v2_migration_verified"]
-                    ) ?? 0
-                    if oldKeyCount > 0, newKeyCount == 0 {
-                        try db.execute(
-                            sql: "UPDATE migration_checks SET check_key = ? WHERE check_key = ?",
-                            arguments: ["mcp_migration_verified", "mcp_v2_migration_verified"]
-                        )
-                    } else if oldKeyCount > 0 {
-                        try db.execute(
-                            sql: "DELETE FROM migration_checks WHERE check_key = ?",
-                            arguments: ["mcp_v2_migration_verified"]
-                        )
-                    }
-                }
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_updated_at ON mcp_servers(updated_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_selected ON mcp_servers(is_selected_for_chat, updated_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_status ON mcp_servers(status, updated_at DESC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_display_name ON mcp_servers(display_name COLLATE NOCASE)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_updated_at ON mcp_tools(updated_at DESC)")
             }
         }
 
