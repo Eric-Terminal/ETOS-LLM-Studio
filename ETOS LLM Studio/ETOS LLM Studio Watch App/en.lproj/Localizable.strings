@@ -1174,3 +1174,6 @@
 "你收到了新的语音回复。" = "You received a new audio reply.";
 "你收到了新的文件回复。" = "You received a new file reply.";
 "你收到了新的回复。" = "You received a new reply.";
+
+/* Localization completion (English additions) */
+"新的对话" = "New Chat";
