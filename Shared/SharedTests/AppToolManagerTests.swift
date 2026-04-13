@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import SQLite3
 @testable import Shared
 
 @Suite("拓展工具管理器测试")
@@ -53,6 +54,9 @@ struct AppToolManagerTests {
         #expect(kinds.contains(.createSandboxDirectory))
         #expect(kinds.contains(.batchEditSandboxFile))
         #expect(kinds.contains(.listMemories))
+        #expect(kinds.contains(.listSQLiteTables))
+        #expect(kinds.contains(.querySQLite))
+        #expect(kinds.contains(.mutateSQLite))
         #expect(kinds.contains(.undoSandboxMutation))
         #expect(kinds.contains(.diffSandboxFile))
         #expect(kinds.contains(.editSandboxFile))
@@ -536,6 +540,135 @@ struct AppToolManagerTests {
         #expect(latestRequest?.mode == .append)
     }
 
+    @MainActor
+    @Test("SQLite 表结构工具可列出目标表")
+    func testExecuteListSQLiteTablesToolReturnsCreatedTable() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.listSQLiteTables]
+        )
+
+        let tableName = "tool_test_tables_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
+        let chatDatabaseURL = Persistence.getChatsDirectory().appendingPathComponent("chat-store.sqlite", isDirectory: false)
+        try Self.prepareSQLiteFixture(at: chatDatabaseURL, tableName: tableName, rows: [(1, "初始化标题")])
+        defer {
+            try? Self.dropSQLiteFixture(at: chatDatabaseURL, tableName: tableName)
+        }
+
+        let result = try await manager.executeToolFromChat(
+            toolName: AppToolKind.listSQLiteTables.toolName,
+            argumentsJSON: #"{"database":"chat","include_internal":false}"#
+        )
+
+        let payload = try Self.parseJSONObject(result)
+        let tables = payload["tables"] as? [[String: Any]] ?? []
+        let tableNames = Set(tables.compactMap { $0["name"] as? String })
+        #expect(tableNames.contains(tableName))
+    }
+
+    @MainActor
+    @Test("SQLite 查询与写入工具支持增删改查流程")
+    func testExecuteQueryAndMutateSQLiteTools() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.querySQLite, .mutateSQLite]
+        )
+
+        let tableName = "tool_test_crud_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
+        let chatDatabaseURL = Persistence.getChatsDirectory().appendingPathComponent("chat-store.sqlite", isDirectory: false)
+        try Self.prepareSQLiteFixture(at: chatDatabaseURL, tableName: tableName, rows: [(1, "初始标题")])
+        defer {
+            try? Self.dropSQLiteFixture(at: chatDatabaseURL, tableName: tableName)
+        }
+
+        let insertArguments = try Self.makeJSONString([
+            "database": "chat",
+            "sql": "INSERT INTO \"\(tableName)\" (id, title) VALUES (?, ?)",
+            "parameters": [2, "新增标题"]
+        ])
+        let insertResult = try await manager.executeToolFromChat(
+            toolName: AppToolKind.mutateSQLite.toolName,
+            argumentsJSON: insertArguments
+        )
+        let insertPayload = try Self.parseJSONObject(insertResult)
+        #expect((insertPayload["affectedRows"] as? NSNumber)?.intValue == 1)
+
+        let queryArguments = try Self.makeJSONString([
+            "database": "chat",
+            "sql": "SELECT id, title FROM \"\(tableName)\" ORDER BY id ASC",
+            "max_rows": 10
+        ])
+        let queryResult = try await manager.executeToolFromChat(
+            toolName: AppToolKind.querySQLite.toolName,
+            argumentsJSON: queryArguments
+        )
+        let queryPayload = try Self.parseJSONObject(queryResult)
+        let queryRows = queryPayload["rows"] as? [[String: Any]] ?? []
+        #expect(queryRows.count == 2)
+        #expect(queryRows.last?["title"] as? String == "新增标题")
+
+        let updateArguments = try Self.makeJSONString([
+            "database": "chat",
+            "sql": "UPDATE \"\(tableName)\" SET title = ? WHERE id = ?",
+            "parameters": ["已更新标题", 2]
+        ])
+        let updateResult = try await manager.executeToolFromChat(
+            toolName: AppToolKind.mutateSQLite.toolName,
+            argumentsJSON: updateArguments
+        )
+        let updatePayload = try Self.parseJSONObject(updateResult)
+        #expect((updatePayload["affectedRows"] as? NSNumber)?.intValue == 1)
+
+        let verifyArguments = try Self.makeJSONString([
+            "database": "chat",
+            "sql": "SELECT title FROM \"\(tableName)\" WHERE id = ?",
+            "parameters": [2]
+        ])
+        let verifyResult = try await manager.executeToolFromChat(
+            toolName: AppToolKind.querySQLite.toolName,
+            argumentsJSON: verifyArguments
+        )
+        let verifyPayload = try Self.parseJSONObject(verifyResult)
+        let verifyRows = verifyPayload["rows"] as? [[String: Any]] ?? []
+        #expect(verifyRows.first?["title"] as? String == "已更新标题")
+
+        let deleteArguments = try Self.makeJSONString([
+            "database": "chat",
+            "sql": "DELETE FROM \"\(tableName)\" WHERE id = ?",
+            "parameters": [2]
+        ])
+        let deleteResult = try await manager.executeToolFromChat(
+            toolName: AppToolKind.mutateSQLite.toolName,
+            argumentsJSON: deleteArguments
+        )
+        let deletePayload = try Self.parseJSONObject(deleteResult)
+        #expect((deletePayload["affectedRows"] as? NSNumber)?.intValue == 1)
+    }
+
     @Test("当前会话文件路径命中时应触发会话刷新判断")
     func testShouldRefreshCurrentSessionMessagesWhenCurrentSessionFileMutated() {
         let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
@@ -580,5 +713,102 @@ struct AppToolManagerTests {
             Thread.isMainThread
         }
         #expect(!isMainThread)
+    }
+
+    private static func makeJSONString(_ payload: [String: Any]) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw NSError(domain: "AppToolManagerTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "JSON 编码失败"])
+        }
+        return string
+    }
+
+    private static func parseJSONObject(_ text: String) throws -> [String: Any] {
+        guard let data = text.data(using: .utf8) else {
+            throw NSError(domain: "AppToolManagerTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "结果不是 UTF-8 文本"])
+        }
+        guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(domain: "AppToolManagerTests", code: 3, userInfo: [NSLocalizedDescriptionKey: "结果不是 JSON 对象"])
+        }
+        return payload
+    }
+
+    private static func prepareSQLiteFixture(
+        at databaseURL: URL,
+        tableName: String,
+        rows: [(id: Int, title: String)]
+    ) throws {
+        try FileManager.default.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        var connection: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            databaseURL.path,
+            &connection,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let connection else {
+            let message = connection.flatMap { sqliteMessage(from: $0) } ?? "打开数据库失败"
+            throw NSError(domain: "AppToolManagerTests", code: 4, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        defer { sqlite3_close(connection) }
+
+        let escapedTableName = tableName.replacingOccurrences(of: "\"", with: "\"\"")
+        try executeSQLite(
+            "DROP TABLE IF EXISTS \"\(escapedTableName)\"",
+            on: connection
+        )
+        try executeSQLite(
+            "CREATE TABLE \"\(escapedTableName)\" (id INTEGER PRIMARY KEY, title TEXT NOT NULL)",
+            on: connection
+        )
+        for row in rows {
+            let escapedTitle = row.title.replacingOccurrences(of: "'", with: "''")
+            try executeSQLite(
+                "INSERT INTO \"\(escapedTableName)\" (id, title) VALUES (\(row.id), '\(escapedTitle)')",
+                on: connection
+            )
+        }
+    }
+
+    private static func dropSQLiteFixture(at databaseURL: URL, tableName: String) throws {
+        var connection: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            databaseURL.path,
+            &connection,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let connection else {
+            let message = connection.flatMap { sqliteMessage(from: $0) } ?? "打开数据库失败"
+            throw NSError(domain: "AppToolManagerTests", code: 5, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        defer { sqlite3_close(connection) }
+
+        let escapedTableName = tableName.replacingOccurrences(of: "\"", with: "\"\"")
+        try executeSQLite(
+            "DROP TABLE IF EXISTS \"\(escapedTableName)\"",
+            on: connection
+        )
+    }
+
+    private static func executeSQLite(_ sql: String, on connection: OpaquePointer) throws {
+        guard sqlite3_exec(connection, sql, nil, nil, nil) == SQLITE_OK else {
+            throw NSError(
+                domain: "AppToolManagerTests",
+                code: 6,
+                userInfo: [
+                    NSLocalizedDescriptionKey: sqliteMessage(from: connection) ?? "执行 SQL 失败"
+                ]
+            )
+        }
+    }
+
+    private static func sqliteMessage(from connection: OpaquePointer) -> String? {
+        guard let message = sqlite3_errmsg(connection) else { return nil }
+        return String(cString: message)
     }
 }

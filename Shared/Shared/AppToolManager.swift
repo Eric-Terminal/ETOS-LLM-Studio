@@ -9,6 +9,7 @@
 import Foundation
 import Combine
 import os.log
+import SQLite3
 
 public enum AppToolInputDraftMode: String, Codable, Hashable, Sendable {
     case replace
@@ -269,6 +270,25 @@ public extension Notification.Name {
     static let appToolAskUserInputRequested = Notification.Name("com.ETOS.LLM.Studio.appTool.askUserInput")
 }
 
+public enum AppToolSQLiteDatabase: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case chat
+    case config
+    case memory
+
+    public var id: String { rawValue }
+
+    fileprivate var displayName: String {
+        switch self {
+        case .chat:
+            return "聊天"
+        case .config:
+            return "配置"
+        case .memory:
+            return "记忆"
+        }
+    }
+}
+
 public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable {
     case showWidget = "show_widget"
     case askUserInput = "ask_user_input"
@@ -286,6 +306,9 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
     case createSandboxDirectory = "create_sandbox_directory"
     case batchEditSandboxFile = "batch_edit_sandbox_file"
     case listMemories = "list_memories"
+    case listSQLiteTables = "list_sqlite_tables"
+    case querySQLite = "query_sqlite"
+    case mutateSQLite = "mutate_sqlite"
     case undoSandboxMutation = "undo_sandbox_mutation"
     case diffSandboxFile = "diff_sandbox_file"
     case editSandboxFile = "edit_sandbox_file"
@@ -336,6 +359,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "app_batch_edit_sandbox_file"
         case .listMemories:
             return "app_list_memories"
+        case .listSQLiteTables:
+            return "app_list_sqlite_tables"
+        case .querySQLite:
+            return "app_query_sqlite"
+        case .mutateSQLite:
+            return "app_mutate_sqlite"
         case .undoSandboxMutation:
             return "app_undo_sandbox_mutation"
         case .diffSandboxFile:
@@ -381,6 +410,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("批量编辑沙盒文件", comment: "Batch edit sandbox file tool name")
         case .listMemories:
             return NSLocalizedString("列出记忆", comment: "List memories tool name")
+        case .listSQLiteTables:
+            return NSLocalizedString("列出数据库表", comment: "List SQLite tables tool name")
+        case .querySQLite:
+            return NSLocalizedString("查询数据库", comment: "Query SQLite tool name")
+        case .mutateSQLite:
+            return NSLocalizedString("修改数据库", comment: "Mutate SQLite tool name")
         case .undoSandboxMutation:
             return NSLocalizedString("撤销沙盒修改", comment: "Undo sandbox mutation tool name")
         case .diffSandboxFile:
@@ -426,6 +461,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("按多条规则批量替换沙盒文本文件内容。", comment: "Batch edit sandbox file tool summary")
         case .listMemories:
             return NSLocalizedString("分页查看记忆列表并支持关键词筛选。", comment: "List memories tool summary")
+        case .listSQLiteTables:
+            return NSLocalizedString("查看聊天/配置/记忆 SQLite 数据库中的表结构。", comment: "List SQLite tables tool summary")
+        case .querySQLite:
+            return NSLocalizedString("执行只读 SQL 查询并返回结果行。", comment: "Query SQLite tool summary")
+        case .mutateSQLite:
+            return NSLocalizedString("执行 INSERT/UPDATE/DELETE 等写入 SQL。", comment: "Mutate SQLite tool summary")
         case .undoSandboxMutation:
             return NSLocalizedString("撤销最近一次沙盒文件修改。", comment: "Undo sandbox mutation tool summary")
         case .diffSandboxFile:
@@ -471,6 +512,12 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("工具详情：批量编辑沙盒文件", comment: "Batch edit sandbox file tool detail description")
         case .listMemories:
             return NSLocalizedString("工具详情：列出记忆", comment: "List memories tool detail description")
+        case .listSQLiteTables:
+            return NSLocalizedString("工具详情：列出数据库表", comment: "List SQLite tables tool detail description")
+        case .querySQLite:
+            return NSLocalizedString("工具详情：查询数据库", comment: "Query SQLite tool detail description")
+        case .mutateSQLite:
+            return NSLocalizedString("工具详情：修改数据库", comment: "Mutate SQLite tool detail description")
         case .undoSandboxMutation:
             return NSLocalizedString("工具详情：撤销沙盒修改", comment: "Undo sandbox mutation tool detail description")
         case .diffSandboxFile:
@@ -877,6 +924,78 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                     ])
                 ])
             ])
+        case .listSQLiteTables:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "database": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("目标数据库：chat（聊天）、config（配置）、memory（记忆）。", comment: "List SQLite tables database parameter description")),
+                        "enum": .array(AppToolSQLiteDatabase.allCases.map { .string($0.rawValue) })
+                    ]),
+                    "include_internal": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("是否包含 sqlite_ 开头的内部表，默认 false。", comment: "List SQLite tables include internal parameter description"))
+                    ]),
+                    "include_create_sql": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("是否返回建表 SQL，默认 false。", comment: "List SQLite tables include create sql parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("database")])
+            ])
+        case .querySQLite:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "database": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("目标数据库：chat（聊天）、config（配置）、memory（记忆）。", comment: "Query SQLite database parameter description")),
+                        "enum": .array(AppToolSQLiteDatabase.allCases.map { .string($0.rawValue) })
+                    ]),
+                    "sql": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("只读 SQL，支持 SELECT / WITH / PRAGMA，且仅允许单条语句。", comment: "Query SQLite sql parameter description"))
+                    ]),
+                    "parameters": .dictionary([
+                        "type": .string("array"),
+                        "description": .string(NSLocalizedString("按顺序绑定到 SQL 占位符 ? 的参数数组，支持 string/int/double/bool/null。", comment: "Query SQLite parameters description"))
+                    ]),
+                    "max_rows": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("最多返回行数，默认 50，最大 500。", comment: "Query SQLite max rows description"))
+                    ])
+                ]),
+                "required": .array([.string("database"), .string("sql")])
+            ])
+        case .mutateSQLite:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "database": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("目标数据库：chat（聊天）、config（配置）、memory（记忆）。", comment: "Mutate SQLite database parameter description")),
+                        "enum": .array(AppToolSQLiteDatabase.allCases.map { .string($0.rawValue) })
+                    ]),
+                    "sql": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("写入 SQL，仅支持 INSERT / UPDATE / DELETE / REPLACE，且仅允许单条语句。", comment: "Mutate SQLite sql parameter description"))
+                    ]),
+                    "parameters": .dictionary([
+                        "type": .string("array"),
+                        "description": .string(NSLocalizedString("按顺序绑定到 SQL 占位符 ? 的参数数组，支持 string/int/double/bool/null。", comment: "Mutate SQLite parameters description"))
+                    ]),
+                    "allow_without_where": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("当 UPDATE/DELETE 不带 WHERE 时，是否允许执行。默认 false。", comment: "Mutate SQLite allow without where description"))
+                    ]),
+                    "returning_max_rows": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("当 SQL 使用 RETURNING 时，最多返回行数，默认 50，最大 500。", comment: "Mutate SQLite returning max rows description"))
+                    ])
+                ]),
+                "required": .array([.string("database"), .string("sql")])
+            ])
         case .undoSandboxMutation:
             return JSONValue.dictionary([
                 "type": .string("object"),
@@ -1016,6 +1135,21 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                 "分页列出长期记忆并支持关键词筛选，可选择是否包含归档记忆。",
                 comment: "List memories description sent to model"
             )
+        case .listSQLiteTables:
+            return NSLocalizedString(
+                "列出指定 SQLite 数据库（chat/config/memory）的表与字段结构，可选返回建表 SQL。",
+                comment: "List SQLite tables description sent to model"
+            )
+        case .querySQLite:
+            return NSLocalizedString(
+                "执行只读 SQL 查询。database 选择 chat/config/memory；sql 仅支持 SELECT/WITH/PRAGMA 且必须是单条语句；parameters 可选，用于按顺序绑定 ? 占位符；max_rows 默认 50。",
+                comment: "Query SQLite description sent to model"
+            )
+        case .mutateSQLite:
+            return NSLocalizedString(
+                "执行写入 SQL。database 选择 chat/config/memory；sql 仅支持 INSERT/UPDATE/DELETE/REPLACE 且必须是单条语句；parameters 可选；UPDATE/DELETE 默认要求带 WHERE，除非 allow_without_where=true。",
+                comment: "Mutate SQLite description sent to model"
+            )
         case .undoSandboxMutation:
             return NSLocalizedString(
                 "撤销最近一次由拓展工具造成的沙盒文件修改。",
@@ -1118,6 +1252,10 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput]
     #endif
     private nonisolated static let builtInToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput]
+    private nonisolated static let sqliteToolDefaultMaxRows = 50
+    private nonisolated static let sqliteToolMaximumMaxRows = 500
+    private nonisolated static let sqliteToolMaxBlobPreviewBytes = 1024
+    private nonisolated static let sqliteTransientDestructor = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
     @Published public private(set) var chatToolsEnabled: Bool
     @Published private var enabledToolIDs: Set<String>
@@ -1898,6 +2036,131 @@ public final class AppToolManager: ObservableObject {
                 }
             ]
             return prettyPrintedJSONString(from: payload)
+        case .listSQLiteTables:
+            struct ListSQLiteTablesArgs: Decodable {
+                let database: String
+                let include_internal: Bool?
+                let include_create_sql: Bool?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(ListSQLiteTablesArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 list_sqlite_tables 的参数，请提供 database。", comment: "List SQLite tables invalid arguments")
+                )
+            }
+
+            guard let database = Self.parseSQLiteDatabase(rawValue: args.database) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：list_sqlite_tables 的 database 必须是 chat、config 或 memory。", comment: "List SQLite tables invalid database")
+                )
+            }
+
+            do {
+                let payload = try await Self.runSQLiteOperationOffMainThread {
+                    try Self.listSQLiteTables(
+                        in: database,
+                        includeInternal: args.include_internal ?? false,
+                        includeCreateSQL: args.include_create_sql ?? false
+                    )
+                }
+                return prettyPrintedJSONString(from: payload)
+            } catch let appToolError as AppToolExecutionError {
+                throw appToolError
+            } catch {
+                throw AppToolExecutionError.invalidArguments(
+                    String(
+                        format: NSLocalizedString("错误：list_sqlite_tables 执行失败：%@", comment: "List SQLite tables execution error"),
+                        error.localizedDescription
+                    )
+                )
+            }
+        case .querySQLite:
+            struct QuerySQLiteArgs: Decodable {
+                let database: String
+                let sql: String
+                let parameters: [JSONValue]?
+                let max_rows: Int?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(QuerySQLiteArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 query_sqlite 的参数，请提供 database 和 sql。", comment: "Query SQLite invalid arguments")
+                )
+            }
+
+            guard let database = Self.parseSQLiteDatabase(rawValue: args.database) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：query_sqlite 的 database 必须是 chat、config 或 memory。", comment: "Query SQLite invalid database")
+                )
+            }
+
+            let maxRows = Self.sanitizedSQLiteMaxRows(args.max_rows)
+            do {
+                let payload = try await Self.runSQLiteOperationOffMainThread {
+                    try Self.querySQLite(
+                        in: database,
+                        sql: args.sql,
+                        parameters: args.parameters ?? [],
+                        maxRows: maxRows
+                    )
+                }
+                return prettyPrintedJSONString(from: payload)
+            } catch let appToolError as AppToolExecutionError {
+                throw appToolError
+            } catch {
+                throw AppToolExecutionError.invalidArguments(
+                    String(
+                        format: NSLocalizedString("错误：query_sqlite 执行失败：%@", comment: "Query SQLite execution error"),
+                        error.localizedDescription
+                    )
+                )
+            }
+        case .mutateSQLite:
+            struct MutateSQLiteArgs: Decodable {
+                let database: String
+                let sql: String
+                let parameters: [JSONValue]?
+                let allow_without_where: Bool?
+                let returning_max_rows: Int?
+            }
+
+            guard let argsData = argumentsJSON.data(using: .utf8),
+                  let args = try? JSONDecoder().decode(MutateSQLiteArgs.self, from: argsData) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：无法解析 mutate_sqlite 的参数，请提供 database 和 sql。", comment: "Mutate SQLite invalid arguments")
+                )
+            }
+
+            guard let database = Self.parseSQLiteDatabase(rawValue: args.database) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：mutate_sqlite 的 database 必须是 chat、config 或 memory。", comment: "Mutate SQLite invalid database")
+                )
+            }
+
+            let returningMaxRows = Self.sanitizedSQLiteMaxRows(args.returning_max_rows)
+            do {
+                let payload = try await Self.runSQLiteOperationOffMainThread {
+                    try Self.mutateSQLite(
+                        in: database,
+                        sql: args.sql,
+                        parameters: args.parameters ?? [],
+                        allowWithoutWhere: args.allow_without_where ?? false,
+                        returningMaxRows: returningMaxRows
+                    )
+                }
+                return prettyPrintedJSONString(from: payload)
+            } catch let appToolError as AppToolExecutionError {
+                throw appToolError
+            } catch {
+                throw AppToolExecutionError.invalidArguments(
+                    String(
+                        format: NSLocalizedString("错误：mutate_sqlite 执行失败：%@", comment: "Mutate SQLite execution error"),
+                        error.localizedDescription
+                    )
+                )
+            }
         case .undoSandboxMutation:
             let result = try await Self.runSandboxFileOperationOffMainThread {
                 try SandboxFileToolSupport.undoLastMutation()
@@ -1980,6 +2243,536 @@ public final class AppToolManager: ObservableObject {
         }
     }
 
+    private nonisolated static func parseSQLiteDatabase(rawValue: String) -> AppToolSQLiteDatabase? {
+        AppToolSQLiteDatabase(
+            rawValue: rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        )
+    }
+
+    private nonisolated static func sanitizedSQLiteMaxRows(_ rawValue: Int?) -> Int {
+        let value = rawValue ?? sqliteToolDefaultMaxRows
+        return min(max(1, value), sqliteToolMaximumMaxRows)
+    }
+
+    private nonisolated static func sqliteDatabaseURL(for database: AppToolSQLiteDatabase) -> URL {
+        switch database {
+        case .chat:
+            return Persistence.getChatsDirectory().appendingPathComponent("chat-store.sqlite", isDirectory: false)
+        case .config:
+            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+                ?? Persistence.getChatsDirectory().deletingLastPathComponent()
+            let configDirectory = documents.appendingPathComponent("Config", isDirectory: true)
+            if !FileManager.default.fileExists(atPath: configDirectory.path) {
+                try? FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
+            }
+            return configDirectory.appendingPathComponent("config-store.sqlite", isDirectory: false)
+        case .memory:
+            return MemoryStoragePaths.rootDirectory().appendingPathComponent("memory-store.sqlite", isDirectory: false)
+        }
+    }
+
+    private nonisolated static func withSQLiteConnection<T>(
+        database: AppToolSQLiteDatabase,
+        readOnly: Bool,
+        operation: (OpaquePointer) throws -> T
+    ) throws -> T {
+        let databaseURL = sqliteDatabaseURL(for: database)
+        guard FileManager.default.fileExists(atPath: databaseURL.path) else {
+            throw AppToolExecutionError.invalidArguments(
+                String(
+                    format: NSLocalizedString("错误：%@数据库文件不存在，请先在应用内加载对应模块完成初始化。", comment: "SQLite database missing"),
+                    database.displayName
+                )
+            )
+        }
+
+        let flags: Int32
+        if readOnly {
+            flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
+        } else {
+            flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
+        }
+
+        var connection: OpaquePointer?
+        let openResult = sqlite3_open_v2(databaseURL.path, &connection, flags, nil)
+        guard openResult == SQLITE_OK, let connection else {
+            let fallback = NSLocalizedString("打开数据库失败。", comment: "SQLite open database failure")
+            let message = sqliteErrorMessage(database: connection, fallback: fallback)
+            if let connection {
+                sqlite3_close(connection)
+            }
+            throw AppToolExecutionError.invalidArguments(
+                String(
+                    format: NSLocalizedString("错误：无法打开%@数据库：%@", comment: "SQLite open database error"),
+                    database.displayName,
+                    message
+                )
+            )
+        }
+
+        defer {
+            sqlite3_close(connection)
+        }
+
+        sqlite3_busy_timeout(connection, 5_000)
+        return try operation(connection)
+    }
+
+    private nonisolated static func listSQLiteTables(
+        in database: AppToolSQLiteDatabase,
+        includeInternal: Bool,
+        includeCreateSQL: Bool
+    ) throws -> [String: Any] {
+        try withSQLiteConnection(database: database, readOnly: true) { connection in
+            let sql: String
+            if includeInternal {
+                sql = """
+                SELECT name, type, sql
+                FROM sqlite_master
+                WHERE type IN ('table', 'view')
+                ORDER BY type ASC, name COLLATE NOCASE ASC
+                """
+            } else {
+                sql = """
+                SELECT name, type, sql
+                FROM sqlite_master
+                WHERE type IN ('table', 'view')
+                  AND name NOT LIKE 'sqlite_%'
+                ORDER BY type ASC, name COLLATE NOCASE ASC
+                """
+            }
+
+            let statement = try prepareSQLiteStatement(
+                on: connection,
+                sql: sql,
+                allowedLeadingKeywords: ["SELECT"]
+            )
+            defer { sqlite3_finalize(statement) }
+
+            var tables: [[String: Any]] = []
+            while true {
+                let stepResult = sqlite3_step(statement)
+                if stepResult == SQLITE_DONE {
+                    break
+                }
+                guard stepResult == SQLITE_ROW else {
+                    throw AppToolExecutionError.invalidArguments(
+                        sqliteErrorMessage(
+                            database: connection,
+                            fallback: NSLocalizedString("读取数据库表结构失败。", comment: "SQLite list tables step failure")
+                        )
+                    )
+                }
+
+                let tableName = sqliteTextColumn(from: statement, at: 0) ?? ""
+                let tableType = sqliteTextColumn(from: statement, at: 1) ?? "table"
+                let createSQL = sqliteTextColumn(from: statement, at: 2)
+                let columns = try loadSQLiteTableColumns(connection: connection, tableName: tableName)
+
+                var item: [String: Any] = [
+                    "name": tableName,
+                    "type": tableType,
+                    "columnCount": columns.count,
+                    "columns": columns
+                ]
+                if includeCreateSQL {
+                    item["createSQL"] = createSQL ?? NSNull()
+                }
+                tables.append(item)
+            }
+
+            return [
+                "database": database.rawValue,
+                "databasePath": sqliteDatabaseURL(for: database).path,
+                "tableCount": tables.count,
+                "tables": tables
+            ]
+        }
+    }
+
+    private nonisolated static func querySQLite(
+        in database: AppToolSQLiteDatabase,
+        sql: String,
+        parameters: [JSONValue],
+        maxRows: Int
+    ) throws -> [String: Any] {
+        try withSQLiteConnection(database: database, readOnly: true) { connection in
+            let statement = try prepareSQLiteStatement(
+                on: connection,
+                sql: sql,
+                allowedLeadingKeywords: ["SELECT", "WITH", "PRAGMA"]
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindSQLiteParameters(parameters, to: statement, connection: connection)
+            let columnNames = sqliteColumnNames(from: statement)
+            var rows: [[String: Any]] = []
+            var wasTruncated = false
+
+            while true {
+                let stepResult = sqlite3_step(statement)
+                if stepResult == SQLITE_DONE {
+                    break
+                }
+                guard stepResult == SQLITE_ROW else {
+                    throw AppToolExecutionError.invalidArguments(
+                        sqliteErrorMessage(
+                            database: connection,
+                            fallback: NSLocalizedString("执行查询失败。", comment: "SQLite query step failure")
+                        )
+                    )
+                }
+
+                if rows.count >= maxRows {
+                    wasTruncated = true
+                    continue
+                }
+
+                var rowPayload: [String: Any] = [:]
+                for (index, name) in columnNames.enumerated() {
+                    rowPayload[name] = sqliteColumnValue(from: statement, at: Int32(index))
+                }
+                rows.append(rowPayload)
+            }
+
+            return [
+                "database": database.rawValue,
+                "rowCount": rows.count,
+                "truncated": wasTruncated,
+                "columns": columnNames,
+                "rows": rows
+            ]
+        }
+    }
+
+    private nonisolated static func mutateSQLite(
+        in database: AppToolSQLiteDatabase,
+        sql: String,
+        parameters: [JSONValue],
+        allowWithoutWhere: Bool,
+        returningMaxRows: Int
+    ) throws -> [String: Any] {
+        let keyword = leadingSQLiteKeyword(from: sql)
+        if (keyword == "UPDATE" || keyword == "DELETE"),
+           !allowWithoutWhere,
+           sql.range(of: #"\bWHERE\b"#, options: [.regularExpression, .caseInsensitive]) == nil {
+            throw AppToolExecutionError.invalidArguments(
+                NSLocalizedString("错误：UPDATE/DELETE 语句默认必须包含 WHERE；如需全表操作，请显式设置 allow_without_where=true。", comment: "Mutate SQLite where required")
+            )
+        }
+
+        return try withSQLiteConnection(database: database, readOnly: false) { connection in
+            let statement = try prepareSQLiteStatement(
+                on: connection,
+                sql: sql,
+                allowedLeadingKeywords: ["INSERT", "UPDATE", "DELETE", "REPLACE"]
+            )
+            defer { sqlite3_finalize(statement) }
+
+            try bindSQLiteParameters(parameters, to: statement, connection: connection)
+
+            let returningColumns = sqliteColumnNames(from: statement)
+            let hasReturningRows = !returningColumns.isEmpty
+            var returningRows: [[String: Any]] = []
+            var returningTruncated = false
+
+            while true {
+                let stepResult = sqlite3_step(statement)
+                if stepResult == SQLITE_DONE {
+                    break
+                }
+                guard stepResult == SQLITE_ROW else {
+                    throw AppToolExecutionError.invalidArguments(
+                        sqliteErrorMessage(
+                            database: connection,
+                            fallback: NSLocalizedString("执行写入 SQL 失败。", comment: "Mutate SQLite step failure")
+                        )
+                    )
+                }
+
+                if returningRows.count >= returningMaxRows {
+                    returningTruncated = true
+                    continue
+                }
+
+                var rowPayload: [String: Any] = [:]
+                for (index, name) in returningColumns.enumerated() {
+                    rowPayload[name] = sqliteColumnValue(from: statement, at: Int32(index))
+                }
+                returningRows.append(rowPayload)
+            }
+
+            var payload: [String: Any] = [
+                "database": database.rawValue,
+                "affectedRows": Int(sqlite3_changes(connection)),
+                "totalChanges": Int(sqlite3_total_changes(connection)),
+                "lastInsertRowID": Int64(sqlite3_last_insert_rowid(connection))
+            ]
+
+            if hasReturningRows {
+                payload["returningColumns"] = returningColumns
+                payload["returningRowCount"] = returningRows.count
+                payload["returningTruncated"] = returningTruncated
+                payload["returningRows"] = returningRows
+            }
+            return payload
+        }
+    }
+
+    private nonisolated static func prepareSQLiteStatement(
+        on connection: OpaquePointer,
+        sql: String,
+        allowedLeadingKeywords: Set<String>
+    ) throws -> OpaquePointer {
+        let trimmedSQL = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSQL.isEmpty else {
+            throw AppToolExecutionError.invalidArguments(
+                NSLocalizedString("错误：SQL 不能为空。", comment: "SQLite empty SQL")
+            )
+        }
+
+        guard let keyword = leadingSQLiteKeyword(from: trimmedSQL),
+              allowedLeadingKeywords.contains(keyword) else {
+            let allowed = allowedLeadingKeywords.sorted().joined(separator: "/")
+            throw AppToolExecutionError.invalidArguments(
+                String(
+                    format: NSLocalizedString("错误：SQL 首关键字不受支持，仅允许：%@。", comment: "SQLite invalid leading keyword"),
+                    allowed
+                )
+            )
+        }
+
+        var statement: OpaquePointer?
+        var tail: UnsafePointer<Int8>?
+        let prepareResult = sqlite3_prepare_v2(connection, trimmedSQL, -1, &statement, &tail)
+        guard prepareResult == SQLITE_OK, let statement else {
+            throw AppToolExecutionError.invalidArguments(
+                sqliteErrorMessage(
+                    database: connection,
+                    fallback: NSLocalizedString("SQL 预编译失败。", comment: "SQLite prepare failure")
+                )
+            )
+        }
+
+        let remainingText = tail.map { String(cString: $0) } ?? ""
+        let normalizedRemaining = remainingText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ";"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedRemaining.isEmpty {
+            sqlite3_finalize(statement)
+            throw AppToolExecutionError.invalidArguments(
+                NSLocalizedString("错误：仅支持执行单条 SQL 语句。", comment: "SQLite multiple statements unsupported")
+            )
+        }
+
+        return statement
+    }
+
+    private nonisolated static func bindSQLiteParameters(
+        _ parameters: [JSONValue],
+        to statement: OpaquePointer,
+        connection: OpaquePointer
+    ) throws {
+        let expectedCount = Int(sqlite3_bind_parameter_count(statement))
+        guard expectedCount == parameters.count else {
+            throw AppToolExecutionError.invalidArguments(
+                String(
+                    format: NSLocalizedString("错误：SQL 需要 %d 个参数，但实际提供了 %d 个。", comment: "SQLite parameter count mismatch"),
+                    expectedCount,
+                    parameters.count
+                )
+            )
+        }
+
+        for (index, parameter) in parameters.enumerated() {
+            let bindIndex = Int32(index + 1)
+            let result: Int32
+            switch parameter {
+            case .string(let value):
+                result = sqlite3_bind_text(
+                    statement,
+                    bindIndex,
+                    value,
+                    -1,
+                    sqliteTransientDestructor
+                )
+            case .int(let value):
+                result = sqlite3_bind_int64(statement, bindIndex, Int64(value))
+            case .double(let value):
+                result = sqlite3_bind_double(statement, bindIndex, value)
+            case .bool(let value):
+                result = sqlite3_bind_int(statement, bindIndex, value ? 1 : 0)
+            case .null:
+                result = sqlite3_bind_null(statement, bindIndex)
+            case .dictionary, .array:
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                let encodedText: String
+                if let data = try? encoder.encode(parameter),
+                   let text = String(data: data, encoding: .utf8) {
+                    encodedText = text
+                } else {
+                    encodedText = "null"
+                }
+                result = sqlite3_bind_text(
+                    statement,
+                    bindIndex,
+                    encodedText,
+                    -1,
+                    sqliteTransientDestructor
+                )
+            }
+
+            guard result == SQLITE_OK else {
+                throw AppToolExecutionError.invalidArguments(
+                    sqliteErrorMessage(
+                        database: connection,
+                        fallback: NSLocalizedString("绑定 SQL 参数失败。", comment: "SQLite bind parameter failure")
+                    )
+                )
+            }
+        }
+    }
+
+    private nonisolated static func sqliteColumnNames(from statement: OpaquePointer) -> [String] {
+        let count = Int(sqlite3_column_count(statement))
+        var seenNames: [String: Int] = [:]
+        var names: [String] = []
+        names.reserveCapacity(count)
+
+        for index in 0..<count {
+            let rawName: String
+            if let cName = sqlite3_column_name(statement, Int32(index)) {
+                rawName = String(cString: cName)
+            } else {
+                rawName = ""
+            }
+
+            let baseName = rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "column_\(index + 1)"
+                : rawName
+            let nextCount = (seenNames[baseName] ?? 0) + 1
+            seenNames[baseName] = nextCount
+            if nextCount == 1 {
+                names.append(baseName)
+            } else {
+                names.append("\(baseName)_\(nextCount)")
+            }
+        }
+        return names
+    }
+
+    private nonisolated static func sqliteColumnValue(from statement: OpaquePointer, at index: Int32) -> Any {
+        switch sqlite3_column_type(statement, index) {
+        case SQLITE_INTEGER:
+            return Int64(sqlite3_column_int64(statement, index))
+        case SQLITE_FLOAT:
+            return sqlite3_column_double(statement, index)
+        case SQLITE_TEXT:
+            return sqliteTextColumn(from: statement, at: index) ?? ""
+        case SQLITE_BLOB:
+            let byteCount = Int(sqlite3_column_bytes(statement, index))
+            guard byteCount > 0, let rawBuffer = sqlite3_column_blob(statement, index) else {
+                return [
+                    "kind": "blob",
+                    "byteCount": 0
+                ]
+            }
+            let data = Data(bytes: rawBuffer, count: byteCount)
+            if let utf8Text = String(data: data, encoding: .utf8) {
+                if utf8Text.count <= sqliteToolMaxBlobPreviewBytes {
+                    return utf8Text
+                }
+                return [
+                    "kind": "blob_utf8",
+                    "byteCount": byteCount,
+                    "preview": String(utf8Text.prefix(sqliteToolMaxBlobPreviewBytes)),
+                    "truncated": true
+                ]
+            }
+
+            let previewData = data.prefix(sqliteToolMaxBlobPreviewBytes)
+            return [
+                "kind": "blob_base64",
+                "byteCount": byteCount,
+                "base64Preview": previewData.base64EncodedString(),
+                "truncated": data.count > previewData.count
+            ]
+        default:
+            return NSNull()
+        }
+    }
+
+    private nonisolated static func sqliteTextColumn(from statement: OpaquePointer, at index: Int32) -> String? {
+        guard let cText = sqlite3_column_text(statement, index) else { return nil }
+        return String(cString: cText)
+    }
+
+    private nonisolated static func loadSQLiteTableColumns(
+        connection: OpaquePointer,
+        tableName: String
+    ) throws -> [[String: Any]] {
+        let escapedTableName = tableName.replacingOccurrences(of: "\"", with: "\"\"")
+        let pragmaSQL = "PRAGMA table_info(\"\(escapedTableName)\")"
+        let statement = try prepareSQLiteStatement(
+            on: connection,
+            sql: pragmaSQL,
+            allowedLeadingKeywords: ["PRAGMA"]
+        )
+        defer { sqlite3_finalize(statement) }
+
+        var columns: [[String: Any]] = []
+        while true {
+            let stepResult = sqlite3_step(statement)
+            if stepResult == SQLITE_DONE {
+                break
+            }
+            guard stepResult == SQLITE_ROW else {
+                throw AppToolExecutionError.invalidArguments(
+                    sqliteErrorMessage(
+                        database: connection,
+                        fallback: NSLocalizedString("读取字段信息失败。", comment: "SQLite load table columns step failure")
+                    )
+                )
+            }
+
+            let name = sqliteTextColumn(from: statement, at: 1) ?? ""
+            let type = sqliteTextColumn(from: statement, at: 2) ?? ""
+            let notNull = sqlite3_column_int(statement, 3) != 0
+            let defaultValue = sqliteTextColumn(from: statement, at: 4)
+            let primaryKey = sqlite3_column_int(statement, 5) != 0
+            columns.append([
+                "name": name,
+                "type": type,
+                "notNull": notNull,
+                "defaultValue": defaultValue ?? NSNull(),
+                "isPrimaryKey": primaryKey
+            ])
+        }
+        return columns
+    }
+
+    private nonisolated static func sqliteErrorMessage(
+        database: OpaquePointer?,
+        fallback: String
+    ) -> String {
+        guard let database,
+              let cMessage = sqlite3_errmsg(database) else {
+            return fallback
+        }
+        let message = String(cString: cMessage).trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? fallback : message
+    }
+
+    private nonisolated static func leadingSQLiteKeyword(from sql: String) -> String? {
+        let trimmedSQL = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let range = trimmedSQL.range(of: "^[A-Za-z]+", options: .regularExpression) else {
+            return nil
+        }
+        return String(trimmedSQL[range]).uppercased()
+    }
+
     internal func restoreStateForTests(
         chatToolsEnabled: Bool,
         enabledKinds: Set<AppToolKind>,
@@ -2000,6 +2793,20 @@ public final class AppToolManager: ObservableObject {
     }
 
     internal nonisolated static func runSandboxFileOperationOffMainThread<T>(
+        _ operation: @escaping () throws -> T
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    continuation.resume(returning: try operation())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    internal nonisolated static func runSQLiteOperationOffMainThread<T>(
         _ operation: @escaping () throws -> T
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
