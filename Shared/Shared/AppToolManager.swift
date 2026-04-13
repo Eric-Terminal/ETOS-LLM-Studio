@@ -1255,7 +1255,11 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let sqliteToolDefaultMaxRows = 50
     private nonisolated static let sqliteToolMaximumMaxRows = 500
     private nonisolated static let sqliteToolMaxBlobPreviewBytes = 1024
-    private nonisolated static let sqliteTransientDestructor = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    /// 使用 SQLite 官方约定的 transient 析构标记，强制 SQLite 复制绑定文本。
+    /// 这里改为从指针位模式转换，避免在 arm64_32（watchOS 真机）上因 Int/函数指针尺寸不一致触发启动崩溃。
+    private nonisolated static var sqliteTransientDestructor: sqlite3_destructor_type {
+        unsafeBitCast(UnsafeMutableRawPointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+    }
 
     @Published public private(set) var chatToolsEnabled: Bool
     @Published private var enabledToolIDs: Set<String>

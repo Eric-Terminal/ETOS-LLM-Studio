@@ -196,4 +196,8 @@ private extension SQLiteVectorStore {
 
 // MARK: - SQLite helpers bridging
 
-private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+/// 使用 SQLite 官方约定的 transient 析构标记，确保 SQLite 复制绑定内容。
+/// 通过指针位模式转换，避免 arm64_32（watchOS 真机）上的尺寸不匹配崩溃。
+private var SQLITE_TRANSIENT: sqlite3_destructor_type {
+    unsafeBitCast(UnsafeMutableRawPointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+}
