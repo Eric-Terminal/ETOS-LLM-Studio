@@ -45,6 +45,11 @@ private struct SessionFolderBrowserView: View {
     @State private var isBatchSelecting = false
     @State private var selectedSessionIDs: Set<UUID> = []
     @State private var showBatchDeleteConfirm = false
+    @State private var searchText: String = ""
+    @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
+    @State private var isSearching: Bool = false
+    @State private var latestSearchToken: Int = 0
+    @State private var pendingSearchWorkItem: DispatchWorkItem?
 
     private var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: viewModel.sessionFolders.map { ($0.id, $0) })
@@ -116,6 +121,19 @@ private struct SessionFolderBrowserView: View {
         directSessions.filter { selectedSessionIDs.contains($0.id) }
     }
 
+    private var normalizedSearchQuery: String {
+        SessionHistorySearchSupport.normalizedQuery(searchText)
+    }
+
+    private var isSearchActive: Bool {
+        isRoot && !normalizedSearchQuery.isEmpty
+    }
+
+    private var searchResultSessions: [ChatSession] {
+        guard isSearchActive else { return [] }
+        return viewModel.chatSessions.filter { searchHits[$0.id] != nil }
+    }
+
     private var emptyStateText: String {
         folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
     }
@@ -134,14 +152,18 @@ private struct SessionFolderBrowserView: View {
 
     private var listScaffold: some View {
         let entries = mergedEntries
-        return List {
-            if entries.isEmpty {
-                Text(emptyStateText)
-                    .foregroundStyle(.secondary)
-            }
+        let baseList = List {
+            if isSearchActive {
+                searchResultSection
+            } else {
+                if entries.isEmpty {
+                    Text(emptyStateText)
+                        .foregroundStyle(.secondary)
+                }
 
-            ForEach(entries) { entry in
-                mergedEntryRow(entry)
+                ForEach(entries) { entry in
+                    mergedEntryRow(entry)
+                }
             }
         }
         .navigationTitle(isRoot ? "会话管理" : (currentFolder?.name ?? "文件夹"))
@@ -158,13 +180,15 @@ private struct SessionFolderBrowserView: View {
                 } label: {
                     Image(systemName: isBatchSelecting ? "checkmark.circle.fill" : "pencil")
                 }
+                .disabled(isSearchActive)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if isBatchSelecting {
+            if isBatchSelecting && !isSearchActive {
                 batchActionBar
             }
         }
+        return applySearchModifier(to: baseList)
     }
 
     private var directSessionIDs: [UUID] {
@@ -181,6 +205,35 @@ private struct SessionFolderBrowserView: View {
             }
             .onChange(of: directSessionIDs) { _, visibleIDs in
                 selectedSessionIDs.formIntersection(Set(visibleIDs))
+            }
+            .onAppear {
+                guard isRoot else { return }
+                scheduleSearch(for: searchText)
+            }
+            .onChange(of: searchText) { _, newValue in
+                guard isRoot else { return }
+                if !SessionHistorySearchSupport.normalizedQuery(newValue).isEmpty, isBatchSelecting {
+                    isBatchSelecting = false
+                    selectedSessionIDs.removeAll()
+                }
+                scheduleSearch(for: newValue)
+            }
+            .onChange(of: viewModel.chatSessions) { _, _ in
+                guard isRoot else { return }
+                scheduleSearch(for: searchText)
+            }
+            .onChange(of: viewModel.currentSession?.id) { _, _ in
+                guard isRoot else { return }
+                scheduleSearch(for: searchText)
+            }
+            .onChange(of: viewModel.allMessagesForSession) { _, _ in
+                guard isRoot else { return }
+                scheduleSearch(for: searchText)
+            }
+            .onDisappear {
+                guard isRoot else { return }
+                pendingSearchWorkItem?.cancel()
+                pendingSearchWorkItem = nil
             }
     }
 
@@ -310,6 +363,51 @@ private struct SessionFolderBrowserView: View {
             }
     }
 
+    private func applySearchModifier<Content: View>(to content: Content) -> some View {
+        if isRoot {
+            return AnyView(
+                content
+                    .searchable(
+                        text: $searchText,
+                        placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: Text("搜索会话标题或消息")
+                    )
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            )
+        }
+        return AnyView(content)
+    }
+
+    @ViewBuilder
+    private var searchResultSection: some View {
+        Section("搜索结果") {
+            if isSearching {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("正在搜索历史会话…")
+                        .foregroundStyle(.secondary)
+                }
+            } else if searchResultSessions.isEmpty {
+                Text("未找到匹配会话。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(searchResultSessions) { session in
+                    sessionRow(
+                        session,
+                        forceRegularMode: true,
+                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: true),
+                        locationSummary: folderLocationSummary(for: session)
+                    )
+                }
+            }
+        } footer: {
+            if !isSearching {
+                Text("匹配 \(searchResultSessions.count) / \(viewModel.chatSessions.count) 个会话")
+            }
+        }
+    }
+
     private var batchActionBar: some View {
         HStack(spacing: 12) {
             Menu {
@@ -383,8 +481,13 @@ private struct SessionFolderBrowserView: View {
     }
 
     @ViewBuilder
-    private func sessionRow(_ session: ChatSession) -> some View {
-        if isBatchSelecting {
+    private func sessionRow(
+        _ session: ChatSession,
+        forceRegularMode: Bool = false,
+        searchSummary: String? = nil,
+        locationSummary: String? = nil
+    ) -> some View {
+        if isBatchSelecting && !forceRegularMode {
             BatchSelectableSessionRow(
                 session: session,
                 isSelected: selectedSessionIDs.contains(session.id),
@@ -400,6 +503,8 @@ private struct SessionFolderBrowserView: View {
                 draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
                 currentFolderID: normalizedFolderID(of: session),
                 moveOptions: moveFolderOptions,
+                searchSummary: searchSummary,
+                locationSummary: locationSummary,
                 onCommit: { newName in
                     viewModel.updateSessionName(session, newName: newName)
                     editingSessionID = nil
@@ -562,6 +667,100 @@ private struct SessionFolderBrowserView: View {
         return parts.reversed().joined(separator: " /")
     }
 
+    private func folderLocationSummary(for session: ChatSession) -> String {
+        guard let folderID = normalizedFolderID(of: session),
+              let folder = folderByID[folderID] else {
+            return "位置：未分类"
+        }
+        return "位置：\(folderDisplayPath(folder))"
+    }
+
+    private func searchSummary(
+        for session: ChatSession,
+        in hits: [UUID: SessionHistorySearchHit],
+        queryActive: Bool
+    ) -> String? {
+        guard queryActive, let hit = hits[session.id] else { return nil }
+        let detailLines = hit.matches.map { match in
+            let preview = compactSearchPreview(match.preview)
+            if let messageOrdinal = match.messageOrdinal {
+                return "• \(sourceLabel(for: match.source)) 第\(messageOrdinal)条：\(preview)"
+            }
+            return "• \(sourceLabel(for: match.source))：\(preview)"
+        }
+        if detailLines.count <= 1 {
+            return detailLines.first
+        }
+        return "共命中 \(hit.matchCount) 处\n" + detailLines.joined(separator: "\n")
+    }
+
+    private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
+        switch source {
+        case .sessionName:
+            return "标题"
+        case .topicPrompt:
+            return "主题提示"
+        case .enhancedPrompt:
+            return "增强提示词"
+        case .userMessage:
+            return "用户消息"
+        case .assistantMessage:
+            return "助手消息"
+        case .systemMessage:
+            return "系统消息"
+        case .toolMessage:
+            return "工具消息"
+        case .errorMessage:
+            return "错误消息"
+        }
+    }
+
+    private func compactSearchPreview(_ text: String, maxLength: Int = 48) -> String {
+        guard text.count > maxLength else { return text }
+        return String(text.prefix(maxLength)) + "…"
+    }
+
+    private func scheduleSearch(for query: String) {
+        pendingSearchWorkItem?.cancel()
+        pendingSearchWorkItem = nil
+
+        let normalized = SessionHistorySearchSupport.normalizedQuery(query)
+        guard !normalized.isEmpty else {
+            searchHits = [:]
+            isSearching = false
+            return
+        }
+
+        isSearching = true
+        latestSearchToken += 1
+        let searchToken = latestSearchToken
+        let sessionsSnapshot = viewModel.chatSessions
+        let currentSessionIDSnapshot = viewModel.currentSession?.id
+        let currentMessagesSnapshot = viewModel.allMessagesForSession
+        let querySnapshot = query
+
+        let workItem = DispatchWorkItem {
+            let hits = SessionHistorySearchSupport.searchHits(
+                sessions: sessionsSnapshot,
+                query: querySnapshot,
+                currentSessionID: currentSessionIDSnapshot,
+                currentSessionMessages: currentMessagesSnapshot,
+                messageLoader: { sessionID in
+                    Persistence.loadMessages(for: sessionID)
+                }
+            )
+            DispatchQueue.main.async {
+                guard searchToken == latestSearchToken else { return }
+                searchHits = hits
+                isSearching = false
+                pendingSearchWorkItem = nil
+            }
+        }
+
+        pendingSearchWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
+    }
+
     private func presentCreateFolder(parentID: UUID?) {
         createFolderParentID = parentID
         createFolderName = ""
@@ -664,6 +863,8 @@ private struct SessionRow: View {
     @Binding var draftName: String
     let currentFolderID: UUID?
     let moveOptions: [SessionMoveFolderOption]
+    let searchSummary: String?
+    let locationSummary: String?
 
     let onCommit: (String) -> Void
     let onSelect: () -> Void
@@ -711,6 +912,18 @@ private struct SessionRow: View {
                                 .etFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                        }
+                        if let locationSummary, !locationSummary.isEmpty {
+                            Text(locationSummary)
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        if let searchSummary, !searchSummary.isEmpty {
+                            Text(searchSummary)
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
                         }
                     }
 
