@@ -190,22 +190,13 @@ private struct ConversationUserProfileStore {
 
     private func loadProfileFromSQLite() -> (didRead: Bool, profile: ConversationUserProfile?) {
         guard let profile = Persistence.withMemoryDatabaseRead({ db -> ConversationUserProfile? in
-            guard let row = try Row.fetchOne(
-                db,
-                sql: """
-                SELECT content, updated_at, source_session_id
-                FROM conversation_user_profile
-                WHERE singleton_key = 1
-                """
-            ) else {
+            guard let record = try RelationalConversationUserProfileRecord.fetchOne(db, key: 1) else {
                 return nil
             }
-
-            let sourceSessionIDRaw: String? = row["source_session_id"]
             return ConversationUserProfile(
-                content: row["content"],
-                updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
-                sourceSessionID: sourceSessionIDRaw.flatMap(UUID.init(uuidString:))
+                content: record.content,
+                updatedAt: Date(timeIntervalSince1970: record.updatedAt),
+                sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:))
             )
         }) else {
             return (false, nil)
@@ -225,21 +216,13 @@ private struct ConversationUserProfileStore {
     @discardableResult
     private func saveProfileToSQLite(_ profile: ConversationUserProfile) -> Bool {
         let didSave = Persistence.withMemoryDatabaseWrite { db in
-            try db.execute(
-                sql: """
-                INSERT INTO conversation_user_profile (singleton_key, content, updated_at, source_session_id)
-                VALUES (1, ?, ?, ?)
-                ON CONFLICT(singleton_key) DO UPDATE SET
-                    content = excluded.content,
-                    updated_at = excluded.updated_at,
-                    source_session_id = excluded.source_session_id
-                """,
-                arguments: [
-                    profile.content,
-                    profile.updatedAt.timeIntervalSince1970,
-                    profile.sourceSessionID?.uuidString
-                ]
+            var record = RelationalConversationUserProfileRecord(
+                singletonKey: 1,
+                content: profile.content,
+                updatedAt: profile.updatedAt.timeIntervalSince1970,
+                sourceSessionID: profile.sourceSessionID?.uuidString
             )
+            try record.save(db)
             return true
         } ?? false
 
@@ -252,7 +235,9 @@ private struct ConversationUserProfileStore {
     @discardableResult
     private func clearProfileFromSQLite() -> Bool {
         Persistence.withMemoryDatabaseWrite { db in
-            try db.execute(sql: "DELETE FROM conversation_user_profile WHERE singleton_key = 1")
+            if var record = try RelationalConversationUserProfileRecord.fetchOne(db, key: 1) {
+                try record.delete(db)
+            }
             return true
         } ?? false
     }
@@ -271,5 +256,21 @@ private struct ConversationUserProfileStore {
         for key in legacyBlobKeys {
             _ = Persistence.removeAuxiliaryBlob(forKey: key)
         }
+    }
+
+    private struct RelationalConversationUserProfileRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "conversation_user_profile"
+
+        enum CodingKeys: String, CodingKey {
+            case singletonKey = "singleton_key"
+            case content
+            case updatedAt = "updated_at"
+            case sourceSessionID = "source_session_id"
+        }
+
+        var singletonKey: Int
+        var content: String
+        var updatedAt: Double
+        var sourceSessionID: String?
     }
 }

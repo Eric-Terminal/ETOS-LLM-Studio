@@ -66,27 +66,23 @@ struct MemoryRawStore {
 
     private func loadMemoriesFromSQLite() -> [MemoryItem]? {
         guard let memories = Persistence.withMemoryDatabaseRead({ db in
-            let rows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT id, content, embedding_data, created_at, updated_at, is_archived
-                FROM memory_items
-                ORDER BY created_at DESC, id ASC
-                """
-            )
-            return rows.map { row in
-                let idRaw: String = row["id"]
-                let embeddingData: Data = row["embedding_data"]
-                let archivedValue: Int = row["is_archived"]
-                return MemoryItem(
-                    id: UUID(uuidString: idRaw) ?? UUID(),
-                    content: row["content"],
-                    embedding: RelationalFloatArrayCodec.decode(embeddingData),
-                    createdAt: Date(timeIntervalSince1970: row["created_at"]),
-                    updatedAt: (row["updated_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
-                    isArchived: archivedValue != 0
-                )
-            }
+            try RelationalMemoryItemRecord.fetchAll(db)
+                .sorted {
+                    if $0.createdAt == $1.createdAt {
+                        return $0.id < $1.id
+                    }
+                    return $0.createdAt > $1.createdAt
+                }
+                .map { row in
+                    MemoryItem(
+                        id: UUID(uuidString: row.id) ?? UUID(),
+                        content: row.content,
+                        embedding: RelationalFloatArrayCodec.decode(row.embeddingData),
+                        createdAt: Date(timeIntervalSince1970: row.createdAt),
+                        updatedAt: row.updatedAt.map(Date.init(timeIntervalSince1970:)),
+                        isArchived: row.isArchived != 0
+                    )
+                }
         }) else {
             return nil
         }
@@ -106,22 +102,17 @@ struct MemoryRawStore {
     @discardableResult
     private func saveMemoriesToSQLite(_ memories: [MemoryItem]) -> Bool {
         let didSave = Persistence.withMemoryDatabaseWrite { db in
-            try db.execute(sql: "DELETE FROM memory_items")
+            try RelationalMemoryItemRecord.deleteAll(db)
             for memory in memories {
-                try db.execute(
-                    sql: """
-                    INSERT INTO memory_items (id, content, embedding_data, created_at, updated_at, is_archived)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    arguments: [
-                        memory.id.uuidString,
-                        memory.content,
-                        RelationalFloatArrayCodec.encode(memory.embedding),
-                        memory.createdAt.timeIntervalSince1970,
-                        memory.updatedAt?.timeIntervalSince1970,
-                        memory.isArchived ? 1 : 0
-                    ]
+                var record = RelationalMemoryItemRecord(
+                    id: memory.id.uuidString,
+                    content: memory.content,
+                    embeddingData: RelationalFloatArrayCodec.encode(memory.embedding),
+                    createdAt: memory.createdAt.timeIntervalSince1970,
+                    updatedAt: memory.updatedAt?.timeIntervalSince1970,
+                    isArchived: memory.isArchived ? 1 : 0
                 )
+                try record.insert(db)
             }
             return true
         } ?? false
@@ -157,5 +148,25 @@ struct MemoryRawStore {
         } catch {
             logger.error("写入 Memory JSON 镜像失败: \(error.localizedDescription)")
         }
+    }
+
+    private struct RelationalMemoryItemRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "memory_items"
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case content
+            case embeddingData = "embedding_data"
+            case createdAt = "created_at"
+            case updatedAt = "updated_at"
+            case isArchived = "is_archived"
+        }
+
+        var id: String
+        var content: String
+        var embeddingData: Data
+        var createdAt: Double
+        var updatedAt: Double?
+        var isArchived: Int
     }
 }

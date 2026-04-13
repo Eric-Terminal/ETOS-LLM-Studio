@@ -149,49 +149,38 @@ public enum FeedbackStore {
 
     private static func loadTicketsFromSQLite() -> [FeedbackTicket]? {
         guard let tickets = Persistence.withConfigDatabaseRead({ db in
-            let rows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT issue_number, ticket_token, category, title,
-                       created_at, last_known_status, last_checked_at, last_known_updated_at,
-                       public_url, moderation_blocked, moderation_message, archive_id,
-                       submitted_title, submitted_detail, submitted_reproduction_steps,
-                       submitted_expected_behavior, submitted_actual_behavior, submitted_extra_context,
-                       last_known_comment_count, last_known_developer_comment_id, last_known_developer_comment_at
-                FROM feedback_tickets
-                ORDER BY COALESCE(last_checked_at, created_at) DESC, issue_number DESC
-                """
-            )
-
+            let rows = try RelationalFeedbackTicketRecord.fetchAll(db)
             return rows.map { row in
-                let categoryRaw: String = row["category"]
-                let statusRaw: String = row["last_known_status"]
-                let publicURLString: String? = row["public_url"]
-                let publicURL = publicURLString.flatMap(URL.init(string:))
-                let moderationBlockedValue: Int? = row["moderation_blocked"]
-                return FeedbackTicket(
-                    issueNumber: row["issue_number"],
-                    ticketToken: row["ticket_token"],
-                    category: FeedbackCategory(rawValue: categoryRaw) ?? .bug,
-                    title: row["title"],
-                    createdAt: Date(timeIntervalSince1970: row["created_at"]),
-                    lastKnownStatus: FeedbackTicketStatus(rawValue: statusRaw) ?? .inProgress,
-                    lastCheckedAt: (row["last_checked_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
-                    lastKnownUpdatedAt: (row["last_known_updated_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
-                    publicURL: publicURL,
-                    moderationBlocked: moderationBlockedValue.map { $0 != 0 },
-                    moderationMessage: row["moderation_message"],
-                    archiveID: row["archive_id"],
-                    submittedTitle: row["submitted_title"],
-                    submittedDetail: row["submitted_detail"],
-                    submittedReproductionSteps: row["submitted_reproduction_steps"],
-                    submittedExpectedBehavior: row["submitted_expected_behavior"],
-                    submittedActualBehavior: row["submitted_actual_behavior"],
-                    submittedExtraContext: row["submitted_extra_context"],
-                    lastKnownCommentCount: row["last_known_comment_count"],
-                    lastKnownDeveloperCommentID: row["last_known_developer_comment_id"],
-                    lastKnownDeveloperCommentAt: (row["last_known_developer_comment_at"] as Double?).map(Date.init(timeIntervalSince1970:))
+                FeedbackTicket(
+                    issueNumber: row.issueNumber,
+                    ticketToken: row.ticketToken,
+                    category: FeedbackCategory(rawValue: row.category) ?? .bug,
+                    title: row.title,
+                    createdAt: Date(timeIntervalSince1970: row.createdAt),
+                    lastKnownStatus: FeedbackTicketStatus(rawValue: row.lastKnownStatus) ?? .inProgress,
+                    lastCheckedAt: row.lastCheckedAt.map(Date.init(timeIntervalSince1970:)),
+                    lastKnownUpdatedAt: row.lastKnownUpdatedAt.map(Date.init(timeIntervalSince1970:)),
+                    publicURL: row.publicURL.flatMap(URL.init(string:)),
+                    moderationBlocked: row.moderationBlocked.map { $0 != 0 },
+                    moderationMessage: row.moderationMessage,
+                    archiveID: row.archiveID,
+                    submittedTitle: row.submittedTitle,
+                    submittedDetail: row.submittedDetail,
+                    submittedReproductionSteps: row.submittedReproductionSteps,
+                    submittedExpectedBehavior: row.submittedExpectedBehavior,
+                    submittedActualBehavior: row.submittedActualBehavior,
+                    submittedExtraContext: row.submittedExtraContext,
+                    lastKnownCommentCount: row.lastKnownCommentCount,
+                    lastKnownDeveloperCommentID: row.lastKnownDeveloperCommentID,
+                    lastKnownDeveloperCommentAt: row.lastKnownDeveloperCommentAt.map(Date.init(timeIntervalSince1970:))
                 )
+            }.sorted { lhs, rhs in
+                let lhsDate = lhs.lastCheckedAt ?? lhs.createdAt
+                let rhsDate = rhs.lastCheckedAt ?? rhs.createdAt
+                if lhsDate != rhsDate {
+                    return lhsDate > rhsDate
+                }
+                return lhs.issueNumber > rhs.issueNumber
             }
         }) else {
             return nil
@@ -211,43 +200,32 @@ public enum FeedbackStore {
     @discardableResult
     private static func saveTicketsToSQLite(_ tickets: [FeedbackTicket]) -> Bool {
         let didSave = Persistence.withConfigDatabaseWrite { db in
-            try db.execute(sql: "DELETE FROM feedback_tickets")
+            try RelationalFeedbackTicketRecord.deleteAll(db)
             for ticket in tickets {
-                try db.execute(
-                    sql: """
-                    INSERT INTO feedback_tickets (
-                        issue_number, ticket_token, category, title,
-                        created_at, last_known_status, last_checked_at, last_known_updated_at,
-                        public_url, moderation_blocked, moderation_message, archive_id,
-                        submitted_title, submitted_detail, submitted_reproduction_steps,
-                        submitted_expected_behavior, submitted_actual_behavior, submitted_extra_context,
-                        last_known_comment_count, last_known_developer_comment_id, last_known_developer_comment_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    arguments: [
-                        ticket.issueNumber,
-                        ticket.ticketToken,
-                        ticket.category.rawValue,
-                        ticket.title,
-                        ticket.createdAt.timeIntervalSince1970,
-                        ticket.lastKnownStatus.rawValue,
-                        ticket.lastCheckedAt?.timeIntervalSince1970,
-                        ticket.lastKnownUpdatedAt?.timeIntervalSince1970,
-                        ticket.publicURL?.absoluteString,
-                        ticket.moderationBlocked.map { $0 ? 1 : 0 },
-                        ticket.moderationMessage,
-                        ticket.archiveID,
-                        ticket.submittedTitle,
-                        ticket.submittedDetail,
-                        ticket.submittedReproductionSteps,
-                        ticket.submittedExpectedBehavior,
-                        ticket.submittedActualBehavior,
-                        ticket.submittedExtraContext,
-                        ticket.lastKnownCommentCount,
-                        ticket.lastKnownDeveloperCommentID,
-                        ticket.lastKnownDeveloperCommentAt?.timeIntervalSince1970
-                    ]
+                var record = RelationalFeedbackTicketRecord(
+                    issueNumber: ticket.issueNumber,
+                    ticketToken: ticket.ticketToken,
+                    category: ticket.category.rawValue,
+                    title: ticket.title,
+                    createdAt: ticket.createdAt.timeIntervalSince1970,
+                    lastKnownStatus: ticket.lastKnownStatus.rawValue,
+                    lastCheckedAt: ticket.lastCheckedAt?.timeIntervalSince1970,
+                    lastKnownUpdatedAt: ticket.lastKnownUpdatedAt?.timeIntervalSince1970,
+                    publicURL: ticket.publicURL?.absoluteString,
+                    moderationBlocked: ticket.moderationBlocked.map { $0 ? 1 : 0 },
+                    moderationMessage: ticket.moderationMessage,
+                    archiveID: ticket.archiveID,
+                    submittedTitle: ticket.submittedTitle,
+                    submittedDetail: ticket.submittedDetail,
+                    submittedReproductionSteps: ticket.submittedReproductionSteps,
+                    submittedExpectedBehavior: ticket.submittedExpectedBehavior,
+                    submittedActualBehavior: ticket.submittedActualBehavior,
+                    submittedExtraContext: ticket.submittedExtraContext,
+                    lastKnownCommentCount: ticket.lastKnownCommentCount,
+                    lastKnownDeveloperCommentID: ticket.lastKnownDeveloperCommentID,
+                    lastKnownDeveloperCommentAt: ticket.lastKnownDeveloperCommentAt?.timeIntervalSince1970
                 )
+                try record.insert(db)
             }
             return true
         } ?? false
@@ -319,6 +297,58 @@ public enum FeedbackStore {
             }
             return lhs.issueNumber > rhs.issueNumber
         }
+    }
+
+    // MARK: - GRDB 关系模型
+
+    private struct RelationalFeedbackTicketRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "feedback_tickets"
+
+        enum CodingKeys: String, CodingKey {
+            case issueNumber = "issue_number"
+            case ticketToken = "ticket_token"
+            case category
+            case title
+            case createdAt = "created_at"
+            case lastKnownStatus = "last_known_status"
+            case lastCheckedAt = "last_checked_at"
+            case lastKnownUpdatedAt = "last_known_updated_at"
+            case publicURL = "public_url"
+            case moderationBlocked = "moderation_blocked"
+            case moderationMessage = "moderation_message"
+            case archiveID = "archive_id"
+            case submittedTitle = "submitted_title"
+            case submittedDetail = "submitted_detail"
+            case submittedReproductionSteps = "submitted_reproduction_steps"
+            case submittedExpectedBehavior = "submitted_expected_behavior"
+            case submittedActualBehavior = "submitted_actual_behavior"
+            case submittedExtraContext = "submitted_extra_context"
+            case lastKnownCommentCount = "last_known_comment_count"
+            case lastKnownDeveloperCommentID = "last_known_developer_comment_id"
+            case lastKnownDeveloperCommentAt = "last_known_developer_comment_at"
+        }
+
+        var issueNumber: Int
+        var ticketToken: String
+        var category: String
+        var title: String
+        var createdAt: Double
+        var lastKnownStatus: String
+        var lastCheckedAt: Double?
+        var lastKnownUpdatedAt: Double?
+        var publicURL: String?
+        var moderationBlocked: Int?
+        var moderationMessage: String?
+        var archiveID: String?
+        var submittedTitle: String?
+        var submittedDetail: String?
+        var submittedReproductionSteps: String?
+        var submittedExpectedBehavior: String?
+        var submittedActualBehavior: String?
+        var submittedExtraContext: String?
+        var lastKnownCommentCount: Int?
+        var lastKnownDeveloperCommentID: String?
+        var lastKnownDeveloperCommentAt: Double?
     }
 }
 

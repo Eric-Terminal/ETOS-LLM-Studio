@@ -323,107 +323,83 @@ public struct ConfigLoader {
     @discardableResult
     private static func saveProvidersToSQLite(_ providers: [Provider]) -> Bool {
         let didSave = Persistence.withConfigDatabaseWrite { db in
-            try db.execute(sql: "DELETE FROM providers")
+            try RelationalProviderRecord.deleteAll(db)
 
             let now = Date().timeIntervalSince1970
             for provider in providers {
                 let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
                 let proxy = provider.proxyConfiguration
 
-                try db.execute(
-                    sql: """
-                    INSERT INTO providers (
-                        id, name, base_url, api_format,
-                        proxy_is_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    arguments: [
-                        provider.id.uuidString,
-                        provider.name,
-                        provider.baseURL,
-                        provider.apiFormat,
-                        proxy.map { $0.isEnabled ? 1 : 0 },
-                        proxy?.type.rawValue,
-                        proxy?.host,
-                        proxy?.port,
-                        proxy?.username,
-                        proxy?.password,
-                        now
-                    ]
+                var providerRecord = RelationalProviderRecord(
+                    id: provider.id.uuidString,
+                    name: provider.name,
+                    baseURL: provider.baseURL,
+                    apiFormat: provider.apiFormat,
+                    proxyIsEnabled: proxy.map { $0.isEnabled ? 1 : 0 },
+                    proxyType: proxy?.type.rawValue,
+                    proxyHost: proxy?.host,
+                    proxyPort: proxy?.port,
+                    proxyUsername: proxy?.username,
+                    proxyPassword: proxy?.password,
+                    updatedAt: now
                 )
+                try providerRecord.insert(db)
 
                 for (index, apiKey) in normalizedAPIKeys.enumerated() {
-                    try db.execute(
-                        sql: """
-                        INSERT INTO provider_api_keys (provider_id, key_index, api_key)
-                        VALUES (?, ?, ?)
-                        """,
-                        arguments: [provider.id.uuidString, index, apiKey]
+                    var apiKeyRecord = RelationalProviderAPIKeyRecord(
+                        providerID: provider.id.uuidString,
+                        keyIndex: index,
+                        apiKey: apiKey
                     )
+                    try apiKeyRecord.insert(db)
                 }
 
                 for headerKey in provider.headerOverrides.keys.sorted() {
                     let headerValue = provider.headerOverrides[headerKey] ?? ""
-                    try db.execute(
-                        sql: """
-                        INSERT INTO provider_header_overrides (provider_id, header_key, header_value)
-                        VALUES (?, ?, ?)
-                        """,
-                        arguments: [provider.id.uuidString, headerKey, headerValue]
+                    var headerRecord = RelationalProviderHeaderOverrideRecord(
+                        providerID: provider.id.uuidString,
+                        headerKey: headerKey,
+                        headerValue: headerValue
                     )
+                    try headerRecord.insert(db)
                 }
 
                 for (modelIndex, model) in provider.models.enumerated() {
-                    try db.execute(
-                        sql: """
-                        INSERT INTO provider_models (
-                            id, provider_id, model_name, display_name, is_activated,
-                            request_body_override_mode, raw_request_body_json, sort_index, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        arguments: [
-                            model.id.uuidString,
-                            provider.id.uuidString,
-                            model.modelName,
-                            model.displayName,
-                            model.isActivated ? 1 : 0,
-                            model.requestBodyOverrideMode.rawValue,
-                            model.rawRequestBodyJSON,
-                            modelIndex,
-                            now
-                        ]
+                    var modelRecord = RelationalProviderModelRecord(
+                        id: model.id.uuidString,
+                        providerID: provider.id.uuidString,
+                        modelName: model.modelName,
+                        displayName: model.displayName,
+                        isActivated: model.isActivated ? 1 : 0,
+                        requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
+                        rawRequestBodyJSON: model.rawRequestBodyJSON,
+                        sortIndex: modelIndex,
+                        updatedAt: now
                     )
+                    try modelRecord.insert(db)
 
                     for (capabilityIndex, capability) in model.capabilities.enumerated() {
-                        try db.execute(
-                            sql: """
-                            INSERT INTO provider_model_capabilities (model_id, capability, sort_index)
-                            VALUES (?, ?, ?)
-                            """,
-                            arguments: [model.id.uuidString, capability.rawValue, capabilityIndex]
+                        var capabilityRecord = RelationalProviderModelCapabilityRecord(
+                            modelID: model.id.uuidString,
+                            capability: capability.rawValue,
+                            sortIndex: capabilityIndex
                         )
+                        try capabilityRecord.insert(db)
                     }
 
                     for parameterKey in model.overrideParameters.keys.sorted() {
                         let value = model.overrideParameters[parameterKey] ?? .null
                         let encodedValue = RelationalJSONValueCodec.encode(value)
-                        try db.execute(
-                            sql: """
-                            INSERT INTO provider_model_override_parameters (
-                                model_id, param_key, value_type, string_value, number_value, bool_value, json_value_text
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            arguments: [
-                                model.id.uuidString,
-                                parameterKey,
-                                encodedValue.type,
-                                encodedValue.stringValue,
-                                encodedValue.numberValue,
-                                encodedValue.boolValue,
-                                encodedValue.jsonValueText
-                            ]
+                        var overrideRecord = RelationalProviderModelOverrideParameterRecord(
+                            modelID: model.id.uuidString,
+                            paramKey: parameterKey,
+                            valueType: encodedValue.type,
+                            stringValue: encodedValue.stringValue,
+                            numberValue: encodedValue.numberValue,
+                            boolValue: encodedValue.boolValue,
+                            jsonValueText: encodedValue.jsonValueText
                         )
+                        try overrideRecord.insert(db)
                     }
                 }
             }
@@ -463,144 +439,101 @@ public struct ConfigLoader {
     }
 
     private static func loadProvidersFromRelationalStore(_ db: Database) throws -> [Provider] {
-        let providerRows = try Row.fetchAll(
-            db,
-            sql: """
-            SELECT id, name, base_url, api_format,
-                   proxy_is_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password
-            FROM providers
-            ORDER BY LOWER(name) ASC, id ASC
-            """
-        )
+        let providerRows = try RelationalProviderRecord.fetchAll(db)
+            .sorted { lhs, rhs in
+                let lhsName = lhs.name.lowercased()
+                let rhsName = rhs.name.lowercased()
+                if lhsName == rhsName {
+                    return lhs.id < rhs.id
+                }
+                return lhsName < rhsName
+            }
 
         var providers: [Provider] = []
         providers.reserveCapacity(providerRows.count)
 
         for row in providerRows {
-            let providerIDRaw: String = row["id"]
+            let providerIDRaw = row.id
             let providerID = UUID(uuidString: providerIDRaw) ?? UUID()
 
-            let apiKeys = try String.fetchAll(
-                db,
-                sql: """
-                SELECT api_key
-                FROM provider_api_keys
-                WHERE provider_id = ?
-                ORDER BY key_index ASC
-                """,
-                arguments: [providerIDRaw]
-            )
+            let apiKeys = try RelationalProviderAPIKeyRecord
+                .filter(RelationalProviderAPIKeyRecord.Columns.providerID == providerIDRaw)
+                .fetchAll(db)
+                .sorted { $0.keyIndex < $1.keyIndex }
+                .map(\.apiKey)
 
-            let headerRows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT header_key, header_value
-                FROM provider_header_overrides
-                WHERE provider_id = ?
-                ORDER BY header_key ASC
-                """,
-                arguments: [providerIDRaw]
-            )
+            let headerRows = try RelationalProviderHeaderOverrideRecord
+                .filter(RelationalProviderHeaderOverrideRecord.Columns.providerID == providerIDRaw)
+                .fetchAll(db)
+                .sorted { $0.headerKey < $1.headerKey }
             var headerOverrides: [String: String] = [:]
             for headerRow in headerRows {
-                let key: String = headerRow["header_key"]
-                let value: String = headerRow["header_value"]
-                headerOverrides[key] = value
+                headerOverrides[headerRow.headerKey] = headerRow.headerValue
             }
 
-            let modelRows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT id, model_name, display_name, is_activated,
-                       request_body_override_mode, raw_request_body_json
-                FROM provider_models
-                WHERE provider_id = ?
-                ORDER BY sort_index ASC, id ASC
-                """,
-                arguments: [providerIDRaw]
-            )
+            let modelRows = try RelationalProviderModelRecord
+                .filter(RelationalProviderModelRecord.Columns.providerID == providerIDRaw)
+                .fetchAll(db)
+                .sorted {
+                    if $0.sortIndex == $1.sortIndex {
+                        return $0.id < $1.id
+                    }
+                    return $0.sortIndex < $1.sortIndex
+                }
 
             var models: [Model] = []
             models.reserveCapacity(modelRows.count)
             for modelRow in modelRows {
-                let modelIDRaw: String = modelRow["id"]
+                let modelIDRaw = modelRow.id
                 let modelID = UUID(uuidString: modelIDRaw) ?? UUID()
 
-                let capabilityValues = try String.fetchAll(
-                    db,
-                    sql: """
-                    SELECT capability
-                    FROM provider_model_capabilities
-                    WHERE model_id = ?
-                    ORDER BY sort_index ASC
-                    """,
-                    arguments: [modelIDRaw]
-                )
-                let capabilities = capabilityValues.compactMap(Model.Capability.init(rawValue:))
+                let capabilities = try RelationalProviderModelCapabilityRecord
+                    .filter(RelationalProviderModelCapabilityRecord.Columns.modelID == modelIDRaw)
+                    .fetchAll(db)
+                    .sorted { $0.sortIndex < $1.sortIndex }
+                    .compactMap { Model.Capability(rawValue: $0.capability) }
 
-                let overrideRows = try Row.fetchAll(
-                    db,
-                    sql: """
-                    SELECT param_key, value_type, string_value, number_value, bool_value, json_value_text
-                    FROM provider_model_override_parameters
-                    WHERE model_id = ?
-                    ORDER BY param_key ASC
-                    """,
-                    arguments: [modelIDRaw]
-                )
+                let overrideRows = try RelationalProviderModelOverrideParameterRecord
+                    .filter(RelationalProviderModelOverrideParameterRecord.Columns.modelID == modelIDRaw)
+                    .fetchAll(db)
+                    .sorted { $0.paramKey < $1.paramKey }
                 var overrideParameters: [String: JSONValue] = [:]
                 for overrideRow in overrideRows {
-                    let key: String = overrideRow["param_key"]
-                    let valueType: String = overrideRow["value_type"]
-                    let stringValue: String? = overrideRow["string_value"]
-                    let numberValue: Double? = overrideRow["number_value"]
-                    let boolValue: Int? = overrideRow["bool_value"]
-                    let jsonValueText: String? = overrideRow["json_value_text"]
-                    overrideParameters[key] = RelationalJSONValueCodec.decode(
-                        type: valueType,
-                        stringValue: stringValue,
-                        numberValue: numberValue,
-                        boolValue: boolValue,
-                        jsonValueText: jsonValueText
+                    overrideParameters[overrideRow.paramKey] = RelationalJSONValueCodec.decode(
+                        type: overrideRow.valueType,
+                        stringValue: overrideRow.stringValue,
+                        numberValue: overrideRow.numberValue,
+                        boolValue: overrideRow.boolValue,
+                        jsonValueText: overrideRow.jsonValueText
                     )
                 }
 
-                let requestBodyOverrideModeRaw: String? = modelRow["request_body_override_mode"]
-                let requestBodyOverrideMode = requestBodyOverrideModeRaw
+                let requestBodyOverrideMode = modelRow.requestBodyOverrideMode
                     .flatMap(Model.RequestBodyOverrideMode.init(rawValue:))
                     ?? .expression
 
                 let model = Model(
                     id: modelID,
-                    modelName: modelRow["model_name"],
-                    displayName: modelRow["display_name"],
-                    isActivated: {
-                        let value: Int = modelRow["is_activated"]
-                        return value != 0
-                    }(),
+                    modelName: modelRow.modelName,
+                    displayName: modelRow.displayName,
+                    isActivated: modelRow.isActivated != 0,
                     overrideParameters: overrideParameters,
                     capabilities: capabilities,
                     requestBodyOverrideMode: requestBodyOverrideMode,
-                    rawRequestBodyJSON: modelRow["raw_request_body_json"]
+                    rawRequestBodyJSON: modelRow.rawRequestBodyJSON
                 )
                 models.append(model)
             }
 
-            let proxyIsEnabled: Int? = row["proxy_is_enabled"]
-            let proxyTypeRaw: String? = row["proxy_type"]
-            let proxyHost: String? = row["proxy_host"]
-            let proxyPort: Int? = row["proxy_port"]
-            let proxyUsername: String? = row["proxy_username"]
-            let proxyPassword: String? = row["proxy_password"]
             let proxyConfiguration: NetworkProxyConfiguration?
-            if proxyIsEnabled != nil || proxyTypeRaw != nil || proxyHost != nil || proxyPort != nil {
+            if row.proxyIsEnabled != nil || row.proxyType != nil || row.proxyHost != nil || row.proxyPort != nil {
                 proxyConfiguration = NetworkProxyConfiguration(
-                    isEnabled: (proxyIsEnabled ?? 0) != 0,
-                    type: proxyTypeRaw.flatMap(NetworkProxyType.init(rawValue:)) ?? .http,
-                    host: proxyHost ?? "",
-                    port: proxyPort ?? 8080,
-                    username: proxyUsername ?? "",
-                    password: proxyPassword ?? ""
+                    isEnabled: (row.proxyIsEnabled ?? 0) != 0,
+                    type: row.proxyType.flatMap(NetworkProxyType.init(rawValue:)) ?? .http,
+                    host: row.proxyHost ?? "",
+                    port: row.proxyPort ?? 8080,
+                    username: row.proxyUsername ?? "",
+                    password: row.proxyPassword ?? ""
                 )
             } else {
                 proxyConfiguration = nil
@@ -609,10 +542,10 @@ public struct ConfigLoader {
             providers.append(
                 Provider(
                     id: providerID,
-                    name: row["name"],
-                    baseURL: row["base_url"],
+                    name: row.name,
+                    baseURL: row.baseURL,
                     apiKeys: apiKeys,
-                    apiFormat: row["api_format"],
+                    apiFormat: row.apiFormat,
                     models: models,
                     headerOverrides: headerOverrides,
                     proxyConfiguration: proxyConfiguration
@@ -832,6 +765,148 @@ public struct ConfigLoader {
 
     private static func mergeAPIKeysPreservingOrder(_ primary: [String], _ additional: [String]) -> [String] {
         ProviderCredentialStore.normalizeAPIKeys(primary + additional)
+    }
+
+    // MARK: - GRDB 关系模型
+
+    private struct RelationalProviderRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "providers"
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case baseURL = "base_url"
+            case apiFormat = "api_format"
+            case proxyIsEnabled = "proxy_is_enabled"
+            case proxyType = "proxy_type"
+            case proxyHost = "proxy_host"
+            case proxyPort = "proxy_port"
+            case proxyUsername = "proxy_username"
+            case proxyPassword = "proxy_password"
+            case updatedAt = "updated_at"
+        }
+
+        var id: String
+        var name: String
+        var baseURL: String
+        var apiFormat: String
+        var proxyIsEnabled: Int?
+        var proxyType: String?
+        var proxyHost: String?
+        var proxyPort: Int?
+        var proxyUsername: String?
+        var proxyPassword: String?
+        var updatedAt: Double
+    }
+
+    private struct RelationalProviderAPIKeyRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "provider_api_keys"
+
+        enum CodingKeys: String, CodingKey {
+            case providerID = "provider_id"
+            case keyIndex = "key_index"
+            case apiKey = "api_key"
+        }
+
+        enum Columns {
+            static let providerID = Column(CodingKeys.providerID.rawValue)
+        }
+
+        var providerID: String
+        var keyIndex: Int
+        var apiKey: String
+    }
+
+    private struct RelationalProviderHeaderOverrideRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "provider_header_overrides"
+
+        enum CodingKeys: String, CodingKey {
+            case providerID = "provider_id"
+            case headerKey = "header_key"
+            case headerValue = "header_value"
+        }
+
+        enum Columns {
+            static let providerID = Column(CodingKeys.providerID.rawValue)
+        }
+
+        var providerID: String
+        var headerKey: String
+        var headerValue: String
+    }
+
+    private struct RelationalProviderModelRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "provider_models"
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case providerID = "provider_id"
+            case modelName = "model_name"
+            case displayName = "display_name"
+            case isActivated = "is_activated"
+            case requestBodyOverrideMode = "request_body_override_mode"
+            case rawRequestBodyJSON = "raw_request_body_json"
+            case sortIndex = "sort_index"
+            case updatedAt = "updated_at"
+        }
+
+        enum Columns {
+            static let providerID = Column(CodingKeys.providerID.rawValue)
+        }
+
+        var id: String
+        var providerID: String
+        var modelName: String
+        var displayName: String
+        var isActivated: Int
+        var requestBodyOverrideMode: String?
+        var rawRequestBodyJSON: String?
+        var sortIndex: Int
+        var updatedAt: Double
+    }
+
+    private struct RelationalProviderModelCapabilityRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "provider_model_capabilities"
+
+        enum CodingKeys: String, CodingKey {
+            case modelID = "model_id"
+            case capability
+            case sortIndex = "sort_index"
+        }
+
+        enum Columns {
+            static let modelID = Column(CodingKeys.modelID.rawValue)
+        }
+
+        var modelID: String
+        var capability: String
+        var sortIndex: Int
+    }
+
+    private struct RelationalProviderModelOverrideParameterRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "provider_model_override_parameters"
+
+        enum CodingKeys: String, CodingKey {
+            case modelID = "model_id"
+            case paramKey = "param_key"
+            case valueType = "value_type"
+            case stringValue = "string_value"
+            case numberValue = "number_value"
+            case boolValue = "bool_value"
+            case jsonValueText = "json_value_text"
+        }
+
+        enum Columns {
+            static let modelID = Column(CodingKeys.modelID.rawValue)
+        }
+
+        var modelID: String
+        var paramKey: String
+        var valueType: String
+        var stringValue: String?
+        var numberValue: Double?
+        var boolValue: Int?
+        var jsonValueText: String?
     }
     
     // MARK: - 背景图片管理

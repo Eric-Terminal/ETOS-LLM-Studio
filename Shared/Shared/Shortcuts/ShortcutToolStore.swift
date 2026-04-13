@@ -130,49 +130,36 @@ public struct ShortcutToolStore {
     @discardableResult
     private static func saveToolsToSQLite(_ tools: [ShortcutToolDefinition]) -> Bool {
         let didSave = Persistence.withConfigDatabaseWrite { db in
-            try db.execute(sql: "DELETE FROM shortcut_tools")
+            try RelationalShortcutToolRecord.deleteAll(db)
 
             for tool in tools {
-                try db.execute(
-                    sql: """
-                    INSERT INTO shortcut_tools (
-                        id, name, external_id, source, run_mode_hint, is_enabled,
-                        user_description, generated_description, created_at, updated_at, last_imported_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    arguments: [
-                        tool.id.uuidString,
-                        tool.name,
-                        tool.externalID,
-                        tool.source,
-                        tool.runModeHint.rawValue,
-                        tool.isEnabled ? 1 : 0,
-                        tool.userDescription,
-                        tool.generatedDescription,
-                        tool.createdAt.timeIntervalSince1970,
-                        tool.updatedAt.timeIntervalSince1970,
-                        tool.lastImportedAt.timeIntervalSince1970
-                    ]
+                var toolRecord = RelationalShortcutToolRecord(
+                    id: tool.id.uuidString,
+                    name: tool.name,
+                    externalID: tool.externalID,
+                    source: tool.source,
+                    runModeHint: tool.runModeHint.rawValue,
+                    isEnabled: tool.isEnabled ? 1 : 0,
+                    userDescription: tool.userDescription,
+                    generatedDescription: tool.generatedDescription,
+                    createdAt: tool.createdAt.timeIntervalSince1970,
+                    updatedAt: tool.updatedAt.timeIntervalSince1970,
+                    lastImportedAt: tool.lastImportedAt.timeIntervalSince1970
                 )
+                try toolRecord.insert(db)
 
                 for metadataKey in tool.metadata.keys.sorted() {
                     let encodedValue = RelationalJSONValueCodec.encode(tool.metadata[metadataKey] ?? .null)
-                    try db.execute(
-                        sql: """
-                        INSERT INTO shortcut_tool_metadata (
-                            tool_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        arguments: [
-                            tool.id.uuidString,
-                            metadataKey,
-                            encodedValue.type,
-                            encodedValue.stringValue,
-                            encodedValue.numberValue,
-                            encodedValue.boolValue,
-                            encodedValue.jsonValueText
-                        ]
+                    var metadataRecord = RelationalShortcutToolMetadataRecord(
+                        toolID: tool.id.uuidString,
+                        metaKey: metadataKey,
+                        valueType: encodedValue.type,
+                        stringValue: encodedValue.stringValue,
+                        numberValue: encodedValue.numberValue,
+                        boolValue: encodedValue.boolValue,
+                        jsonValueText: encodedValue.jsonValueText
                     )
+                    try metadataRecord.insert(db)
                 }
             }
             return true
@@ -191,61 +178,51 @@ public struct ShortcutToolStore {
     }
 
     private static func loadToolsFromRelationalStore(_ db: Database) throws -> [ShortcutToolDefinition] {
-        let toolRows = try Row.fetchAll(
-            db,
-            sql: """
-            SELECT id, name, external_id, source, run_mode_hint, is_enabled,
-                   user_description, generated_description, created_at, updated_at, last_imported_at
-            FROM shortcut_tools
-            ORDER BY LOWER(name) ASC, id ASC
-            """
-        )
+        let toolRows = try RelationalShortcutToolRecord.fetchAll(db)
+            .sorted { lhs, rhs in
+                let lhsName = lhs.name.lowercased()
+                let rhsName = rhs.name.lowercased()
+                if lhsName == rhsName {
+                    return lhs.id < rhs.id
+                }
+                return lhsName < rhsName
+            }
 
-        let metadataRows = try Row.fetchAll(
-            db,
-            sql: """
-            SELECT tool_id, meta_key, value_type, string_value, number_value, bool_value, json_value_text
-            FROM shortcut_tool_metadata
-            ORDER BY tool_id ASC, meta_key ASC
-            """
-        )
+        let metadataRows = try RelationalShortcutToolMetadataRecord.fetchAll(db)
+            .sorted {
+                if $0.toolID == $1.toolID {
+                    return $0.metaKey < $1.metaKey
+                }
+                return $0.toolID < $1.toolID
+            }
 
         var metadataByToolID: [String: [String: JSONValue]] = [:]
         for row in metadataRows {
-            let toolID: String = row["tool_id"]
-            let key: String = row["meta_key"]
-            let valueType: String = row["value_type"]
-            let stringValue: String? = row["string_value"]
-            let numberValue: Double? = row["number_value"]
-            let boolValue: Int? = row["bool_value"]
-            let jsonValueText: String? = row["json_value_text"]
             let decoded = RelationalJSONValueCodec.decode(
-                type: valueType,
-                stringValue: stringValue,
-                numberValue: numberValue,
-                boolValue: boolValue,
-                jsonValueText: jsonValueText
+                type: row.valueType,
+                stringValue: row.stringValue,
+                numberValue: row.numberValue,
+                boolValue: row.boolValue,
+                jsonValueText: row.jsonValueText
             )
-            metadataByToolID[toolID, default: [:]][key] = decoded
+            metadataByToolID[row.toolID, default: [:]][row.metaKey] = decoded
         }
 
         return toolRows.map { row in
-            let idRaw: String = row["id"]
-            let runModeRaw: String = row["run_mode_hint"]
-            let isEnabledValue: Int = row["is_enabled"]
+            let idRaw = row.id
             return ShortcutToolDefinition(
                 id: UUID(uuidString: idRaw) ?? UUID(),
-                name: row["name"],
-                externalID: row["external_id"],
+                name: row.name,
+                externalID: row.externalID,
                 metadata: metadataByToolID[idRaw] ?? [:],
-                source: row["source"],
-                runModeHint: ShortcutRunModeHint(rawValue: runModeRaw) ?? .direct,
-                isEnabled: isEnabledValue != 0,
-                userDescription: row["user_description"],
-                generatedDescription: row["generated_description"],
-                createdAt: Date(timeIntervalSince1970: row["created_at"]),
-                updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
-                lastImportedAt: Date(timeIntervalSince1970: row["last_imported_at"])
+                source: row.source,
+                runModeHint: ShortcutRunModeHint(rawValue: row.runModeHint) ?? .direct,
+                isEnabled: row.isEnabled != 0,
+                userDescription: row.userDescription,
+                generatedDescription: row.generatedDescription,
+                createdAt: Date(timeIntervalSince1970: row.createdAt),
+                updatedAt: Date(timeIntervalSince1970: row.updatedAt),
+                lastImportedAt: Date(timeIntervalSince1970: row.lastImportedAt)
             )
         }
     }
@@ -260,5 +237,59 @@ public struct ShortcutToolStore {
            entries.isEmpty {
             try? fm.removeItem(at: storageDirectory)
         }
+    }
+
+    // MARK: - GRDB 关系模型
+
+    private struct RelationalShortcutToolRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "shortcut_tools"
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case externalID = "external_id"
+            case source
+            case runModeHint = "run_mode_hint"
+            case isEnabled = "is_enabled"
+            case userDescription = "user_description"
+            case generatedDescription = "generated_description"
+            case createdAt = "created_at"
+            case updatedAt = "updated_at"
+            case lastImportedAt = "last_imported_at"
+        }
+
+        var id: String
+        var name: String
+        var externalID: String?
+        var source: String?
+        var runModeHint: String
+        var isEnabled: Int
+        var userDescription: String?
+        var generatedDescription: String?
+        var createdAt: Double
+        var updatedAt: Double
+        var lastImportedAt: Double
+    }
+
+    private struct RelationalShortcutToolMetadataRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+        static let databaseTableName = "shortcut_tool_metadata"
+
+        enum CodingKeys: String, CodingKey {
+            case toolID = "tool_id"
+            case metaKey = "meta_key"
+            case valueType = "value_type"
+            case stringValue = "string_value"
+            case numberValue = "number_value"
+            case boolValue = "bool_value"
+            case jsonValueText = "json_value_text"
+        }
+
+        var toolID: String
+        var metaKey: String
+        var valueType: String
+        var stringValue: String?
+        var numberValue: Double?
+        var boolValue: Int?
+        var jsonValueText: String?
     }
 }
