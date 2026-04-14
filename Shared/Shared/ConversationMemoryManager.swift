@@ -235,7 +235,7 @@ private struct ConversationUserProfileStore {
     @discardableResult
     private func clearProfileFromSQLite() -> Bool {
         Persistence.withMemoryDatabaseWrite { db in
-            if var record = try RelationalConversationUserProfileRecord.fetchOne(db, key: 1) {
+            if let record = try RelationalConversationUserProfileRecord.fetchOne(db, key: 1) {
                 try record.delete(db)
             }
             return true

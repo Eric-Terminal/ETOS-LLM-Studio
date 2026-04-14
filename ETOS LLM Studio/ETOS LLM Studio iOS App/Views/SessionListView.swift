@@ -381,7 +381,7 @@ private struct SessionFolderBrowserView: View {
 
     @ViewBuilder
     private var searchResultSection: some View {
-        Section("搜索结果") {
+        Section {
             if isSearching {
                 HStack(spacing: 8) {
                     ProgressView()
@@ -401,6 +401,8 @@ private struct SessionFolderBrowserView: View {
                     )
                 }
             }
+        } header: {
+            Text("搜索结果")
         } footer: {
             if !isSearching {
                 Text("匹配 \(searchResultSessions.count) / \(viewModel.chatSessions.count) 个会话")
