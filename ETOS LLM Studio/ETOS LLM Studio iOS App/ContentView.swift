@@ -14,12 +14,15 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
+    @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @State private var selection: Tab = .chat
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
+    @State private var legacyMigrationErrorMessage: String?
+    @State private var isLegacyMigrationErrorPresented: Bool = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     
     enum Tab: Hashable {
@@ -106,22 +109,52 @@ struct ContentView: View {
                 )
             }
         }
+        .sheet(isPresented: $legacyJSONMigrationManager.isMigrationPromptPresented) {
+            NavigationStack {
+                legacyJSONMigrationPromptSheet
+            }
+            .interactiveDismissDisabled(true)
+        }
+        .sheet(isPresented: Binding(
+            get: { legacyJSONMigrationManager.isMigrating },
+            set: { _ in }
+        )) {
+            NavigationStack {
+                legacyJSONMigrationProgressSheet
+            }
+            .interactiveDismissDisabled(true)
+        }
+        .alert(
+            "是否清理旧版 JSON 文件？",
+            isPresented: $legacyJSONMigrationManager.isCleanupPromptPresented
+        ) {
+            Button("保留 JSON（稍后再说）", role: .cancel) {
+                legacyJSONMigrationManager.keepLegacyJSONForNow()
+            }
+            Button("删除 JSON") {
+                legacyJSONMigrationManager.cleanupLegacyJSONArtifacts()
+            }
+        } message: {
+            Text("SQLite 迁移已完成。建议删除旧 JSON 文件释放空间，后续版本可能不再支持旧格式。")
+        }
+        .alert("迁移失败", isPresented: $isLegacyMigrationErrorPresented) {
+            Button("好的", role: .cancel) {
+                legacyMigrationErrorMessage = nil
+            }
+        } message: {
+            Text(legacyMigrationErrorMessage ?? "")
+        }
+        .onReceive(legacyJSONMigrationManager.$errorMessage) { message in
+            guard let message, !message.isEmpty else { return }
+            legacyMigrationErrorMessage = message
+            isLegacyMigrationErrorPresented = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
+            viewModel.reloadPersistedDataAfterLegacyJSONMigration()
+        }
         // 启动时检查公告
         .task {
-            launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
-            await announcementManager.checkAnnouncement()
-            scheduleDailyPulsePreparation(after: 1_500_000_000)
-            if openDailyPulseContinuationIfNeeded() {
-                return
-            }
-            if let pendingRoute = notificationCenter.consumePendingRoute() {
-                switch pendingRoute {
-                case .dailyPulse:
-                    openDailyPulse()
-                case .feedback:
-                    openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
-                }
-            }
+            await handleLaunchTasks()
         }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
@@ -159,6 +192,24 @@ struct ContentView: View {
                 settingsDestination = .feedbackIssue(issueNumber: issueNumber)
             } else {
                 settingsDestination = .feedbackCenter
+            }
+        }
+    }
+
+    private func handleLaunchTasks() async {
+        launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
+        legacyJSONMigrationManager.refreshStatus()
+        await announcementManager.checkAnnouncement()
+        scheduleDailyPulsePreparation(after: 1_500_000_000)
+        if openDailyPulseContinuationIfNeeded() {
+            return
+        }
+        if let pendingRoute = notificationCenter.consumePendingRoute() {
+            switch pendingRoute {
+            case .dailyPulse:
+                openDailyPulse()
+            case .feedback:
+                openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
             }
         }
     }
@@ -208,6 +259,75 @@ struct ContentView: View {
         } else {
             rootBodyFont = .body
         }
+    }
+
+    private var legacyJSONMigrationPromptSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("检测到旧版 JSON 聊天数据")
+                .font(.title3.bold())
+            Text("为避免后续兼容风险，强烈建议现在迁移到 SQLite。迁移会在后台分批进行，不会阻塞当前界面。")
+                .foregroundStyle(.secondary)
+
+            if let status = legacyJSONMigrationManager.status {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("预计会话数：\(status.estimatedSessionCount)")
+                    Text(String(format: "预计数据量：%.1f MB", status.estimatedLegacyMegabytes))
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            VStack(spacing: 10) {
+                Button("立即迁移（推荐）") {
+                    legacyJSONMigrationManager.startMigration()
+                }
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+
+                Button("稍后再说") {
+                    legacyJSONMigrationManager.postponeMigrationPrompt()
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(20)
+        .navigationTitle("数据迁移")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var legacyJSONMigrationProgressSheet: some View {
+        VStack(spacing: 16) {
+            Text("正在迁移聊天数据")
+                .font(.title3.bold())
+            if let progress = legacyJSONMigrationManager.progress {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text("已处理会话 \(progress.processedSessions)/\(max(progress.totalSessions, progress.processedSessions))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("已导入消息 \(progress.importedMessages)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let currentSessionName = progress.currentSessionName, !currentSessionName.isEmpty {
+                    Text("当前：\(currentSessionName)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } else {
+                ProgressView()
+            }
+            Text("迁移完成后会再次询问是否删除旧 JSON 文件。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(20)
+        .navigationTitle("迁移中")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

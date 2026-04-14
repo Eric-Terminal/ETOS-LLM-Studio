@@ -154,6 +154,70 @@ public enum Persistence {
         }
     }
 
+    public enum LegacyJSONMigrationStage: String, Sendable {
+        case preparing
+        case importingSessions
+        case completed
+    }
+
+    public struct LegacyJSONMigrationStatus: Sendable {
+        public let hasLegacyArtifacts: Bool
+        public let importCompleted: Bool
+        public let cleanupCompleted: Bool
+        public let requiresImportDecision: Bool
+        public let requiresCleanupDecision: Bool
+        public let estimatedLegacyBytes: Int64
+        public let estimatedSessionCount: Int
+
+        public var estimatedLegacyMegabytes: Double {
+            guard estimatedLegacyBytes > 0 else { return 0 }
+            return Double(estimatedLegacyBytes) / 1_048_576
+        }
+    }
+
+    public struct LegacyJSONMigrationProgress: Sendable {
+        public let stage: LegacyJSONMigrationStage
+        public let processedSessions: Int
+        public let totalSessions: Int
+        public let importedMessages: Int
+        public let estimatedTotalBytes: Int64
+        public let processedBytes: Int64
+        public let currentSessionName: String?
+
+        public var fractionCompleted: Double {
+            if estimatedTotalBytes > 0 {
+                return min(1, max(0, Double(processedBytes) / Double(estimatedTotalBytes)))
+            }
+            guard totalSessions > 0 else { return stage == .completed ? 1 : 0 }
+            return min(1, max(0, Double(processedSessions) / Double(totalSessions)))
+        }
+    }
+
+    public struct LegacyJSONMigrationResult: Sendable {
+        public let importedSessions: Int
+        public let importedMessages: Int
+        public let hadLegacyArtifacts: Bool
+        public let cleanupAttempted: Bool
+        public let cleanupSucceeded: Bool
+    }
+
+    public enum LegacyJSONMigrationError: LocalizedError {
+        case grdbUnavailable
+        case importFailed(String)
+        case cleanupFailed(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .grdbUnavailable:
+                return "当前无法访问 SQLite 数据库，暂时不能执行 JSON 迁移。"
+            case .importFailed(let reason):
+                return "迁移失败：\(reason)"
+            case .cleanupFailed(let reason):
+                return "清理失败：\(reason)"
+            }
+        }
+    }
+
     private enum LaunchDatabaseKind: CaseIterable {
         case chat
         case config
@@ -440,6 +504,56 @@ public enum Persistence {
             grdbStore?.rebuildMessagesFTSIndex()
         }
         createLaunchBackupPointIfEnabled()
+    }
+
+    public static func legacyJSONMigrationStatus() -> LegacyJSONMigrationStatus {
+        guard let store = activeGRDBStore() else {
+            return LegacyJSONMigrationStatus(
+                hasLegacyArtifacts: false,
+                importCompleted: false,
+                cleanupCompleted: false,
+                requiresImportDecision: false,
+                requiresCleanupDecision: false,
+                estimatedLegacyBytes: 0,
+                estimatedSessionCount: 0
+            )
+        }
+        return store.legacyJSONMigrationStatus()
+    }
+
+    public static func migrateLegacyJSONIncrementally(
+        shouldCleanupLegacyJSONAfterImport: Bool,
+        throttleInterval: TimeInterval = 0.02,
+        progressHandler: (@Sendable (LegacyJSONMigrationProgress) -> Void)? = nil
+    ) async throws -> LegacyJSONMigrationResult {
+        try await Task.detached(priority: .utility) {
+            guard let store = activeGRDBStore() else {
+                throw LegacyJSONMigrationError.grdbUnavailable
+            }
+            do {
+                return try store.migrateLegacyJSONIncrementally(
+                    shouldCleanupLegacyJSONAfterImport: shouldCleanupLegacyJSONAfterImport,
+                    throttleInterval: throttleInterval,
+                    progressHandler: progressHandler
+                )
+            } catch {
+                throw LegacyJSONMigrationError.importFailed(error.localizedDescription)
+            }
+        }.value
+    }
+
+    @discardableResult
+    public static func cleanupLegacyJSONArtifactsAfterImport() async throws -> Bool {
+        try await Task.detached(priority: .utility) {
+            guard let store = activeGRDBStore() else {
+                throw LegacyJSONMigrationError.grdbUnavailable
+            }
+            do {
+                return try store.cleanupLegacyJSONArtifactsAfterImport()
+            } catch {
+                throw LegacyJSONMigrationError.cleanupFailed(error.localizedDescription)
+            }
+        }.value
     }
 
     static func resetGRDBStoreForTests() {

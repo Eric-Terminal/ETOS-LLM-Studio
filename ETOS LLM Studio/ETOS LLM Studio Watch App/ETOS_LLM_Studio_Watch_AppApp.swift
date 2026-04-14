@@ -25,9 +25,6 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     
     init() {
         Persistence.bootstrapGRDBStoreOnLaunch()
-        DispatchQueue.global(qos: .userInitiated).async {
-            SQLiteStoreMigrationBootstrap.migrateJSONStoresIfNeeded()
-        }
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
         // 在 App 启动时预先触发本地网络权限

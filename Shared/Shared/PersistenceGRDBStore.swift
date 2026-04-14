@@ -110,6 +110,41 @@ final class PersistenceGRDBStore {
         }
     }
 
+    private struct LegacySessionImportPlan {
+        let id: UUID
+        let fallbackSession: ChatSession
+        let sortIndex: Int
+        let fallbackUpdatedAt: Date
+        let sessionRecordURL: URL?
+        let legacyMessagesURL: URL?
+        let estimatedBytes: Int64
+    }
+
+    private struct LegacyImportPlan {
+        let sessionPlans: [LegacySessionImportPlan]
+        let sessionIDsForCleanup: [UUID]
+        let estimatedBytes: Int64
+        let candidateURLs: [URL]
+
+        var hasAnyData: Bool {
+            !candidateURLs.isEmpty
+        }
+    }
+
+    private enum LegacyIncrementalImportError: LocalizedError {
+        case malformedSessionRecord(sessionID: UUID, path: String)
+        case malformedMessagesFile(sessionID: UUID, path: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .malformedSessionRecord(let sessionID, let path):
+                return "会话 \(sessionID.uuidString) 的旧版会话文件无法解析：\(path)"
+            case .malformedMessagesFile(let sessionID, let path):
+                return "会话 \(sessionID.uuidString) 的旧版消息文件无法解析：\(path)"
+            }
+        }
+    }
+
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "PersistenceGRDB")
     private static let incrementalVacuumTriggerPages = 8_192
     private static let incrementalVacuumTriggerRatio = 0.2
@@ -138,7 +173,6 @@ final class PersistenceGRDBStore {
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
 
         try migrateSchemaIfNeeded()
-        try importLegacyJSONIfNeeded()
         scheduleDatabaseMaintenanceIfNeeded()
     }
 
@@ -1167,6 +1201,441 @@ final class PersistenceGRDBStore {
         }
     }
 
+    func legacyJSONMigrationStatus() -> Persistence.LegacyJSONMigrationStatus {
+        let plan = buildLegacyImportPlan()
+        let metaState: (importCompleted: Bool, cleanupCompleted: Bool) = (try? dbPool.read { db in
+            let importValue = try readMetaValue(db, candidateKeys: MetaKey.jsonImportCompletedCandidates)
+            let cleanupValue = try readMetaValue(db, candidateKeys: MetaKey.jsonCleanupCompletedCandidates)
+            return (importValue == "1", cleanupValue == "1")
+        }) ?? (false, false)
+
+        let hasLegacyArtifacts = !plan.candidateURLs.isEmpty
+        let requiresImportDecision = hasLegacyArtifacts && !metaState.importCompleted
+        let requiresCleanupDecision = hasLegacyArtifacts && metaState.importCompleted && !metaState.cleanupCompleted
+
+        return Persistence.LegacyJSONMigrationStatus(
+            hasLegacyArtifacts: hasLegacyArtifacts,
+            importCompleted: metaState.importCompleted,
+            cleanupCompleted: metaState.cleanupCompleted,
+            requiresImportDecision: requiresImportDecision,
+            requiresCleanupDecision: requiresCleanupDecision,
+            estimatedLegacyBytes: plan.estimatedBytes,
+            estimatedSessionCount: plan.sessionPlans.count
+        )
+    }
+
+    func migrateLegacyJSONIncrementally(
+        shouldCleanupLegacyJSONAfterImport: Bool,
+        throttleInterval: TimeInterval,
+        progressHandler: (@Sendable (Persistence.LegacyJSONMigrationProgress) -> Void)?
+    ) throws -> Persistence.LegacyJSONMigrationResult {
+        let plan = buildLegacyImportPlan()
+        guard plan.hasAnyData else {
+            try dbPool.write { db in
+                try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
+                try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
+                try removeMetaEntries(db, keys: [MetaKey.legacyJSONImportCompleted, MetaKey.legacyJSONCleanupCompleted])
+            }
+            let completionProgress = Persistence.LegacyJSONMigrationProgress(
+                stage: .completed,
+                processedSessions: 0,
+                totalSessions: 0,
+                importedMessages: 0,
+                estimatedTotalBytes: 0,
+                processedBytes: 0,
+                currentSessionName: nil
+            )
+            progressHandler?(completionProgress)
+            return Persistence.LegacyJSONMigrationResult(
+                importedSessions: 0,
+                importedMessages: 0,
+                hadLegacyArtifacts: false,
+                cleanupAttempted: true,
+                cleanupSucceeded: true
+            )
+        }
+
+        let initialProgress = Persistence.LegacyJSONMigrationProgress(
+            stage: .preparing,
+            processedSessions: 0,
+            totalSessions: plan.sessionPlans.count,
+            importedMessages: 0,
+            estimatedTotalBytes: plan.estimatedBytes,
+            processedBytes: 0,
+            currentSessionName: nil
+        )
+        progressHandler?(initialProgress)
+
+        var importedSessions = 0
+        var importedMessages = 0
+        var processedBytes: Int64 = 0
+        for (index, sessionPlan) in plan.sessionPlans.enumerated() {
+            let sessionProgress = Persistence.LegacyJSONMigrationProgress(
+                stage: .importingSessions,
+                processedSessions: index,
+                totalSessions: plan.sessionPlans.count,
+                importedMessages: importedMessages,
+                estimatedTotalBytes: plan.estimatedBytes,
+                processedBytes: processedBytes,
+                currentSessionName: sessionPlan.fallbackSession.name
+            )
+            progressHandler?(sessionProgress)
+
+            let snapshot = try loadLegacySessionSnapshot(from: sessionPlan)
+            let insertedMessages = try mergeLegacySessionSnapshotIntoDatabase(snapshot)
+            importedMessages += insertedMessages
+            importedSessions += 1
+
+            processedBytes += sessionPlan.estimatedBytes
+            let afterSessionProgress = Persistence.LegacyJSONMigrationProgress(
+                stage: .importingSessions,
+                processedSessions: index + 1,
+                totalSessions: plan.sessionPlans.count,
+                importedMessages: importedMessages,
+                estimatedTotalBytes: plan.estimatedBytes,
+                processedBytes: min(processedBytes, plan.estimatedBytes),
+                currentSessionName: nil
+            )
+            progressHandler?(afterSessionProgress)
+
+            if throttleInterval > 0 {
+                Thread.sleep(forTimeInterval: throttleInterval)
+            }
+        }
+
+        try importLegacySupplementaryArtifacts()
+
+        try dbPool.write { db in
+            try writeMeta(db, key: MetaKey.jsonImportCompleted, value: "1")
+            try removeMetaEntries(db, keys: [MetaKey.legacyJSONImportCompleted])
+        }
+
+        var cleanupAttempted = false
+        var cleanupSucceeded = false
+        if shouldCleanupLegacyJSONAfterImport {
+            cleanupAttempted = true
+            cleanupSucceeded = removeLegacyJSONArtifacts(sessionIDs: plan.sessionIDsForCleanup)
+            if cleanupSucceeded {
+                try dbPool.write { db in
+                    try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
+                    try removeMetaEntries(db, keys: [MetaKey.legacyJSONCleanupCompleted])
+                }
+            }
+        } else {
+            try dbPool.write { db in
+                try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "0")
+                try removeMetaEntries(db, keys: [MetaKey.legacyJSONCleanupCompleted])
+            }
+        }
+
+        let completionProgress = Persistence.LegacyJSONMigrationProgress(
+            stage: .completed,
+            processedSessions: plan.sessionPlans.count,
+            totalSessions: plan.sessionPlans.count,
+            importedMessages: importedMessages,
+            estimatedTotalBytes: plan.estimatedBytes,
+            processedBytes: plan.estimatedBytes,
+            currentSessionName: nil
+        )
+        progressHandler?(completionProgress)
+
+        return Persistence.LegacyJSONMigrationResult(
+            importedSessions: importedSessions,
+            importedMessages: importedMessages,
+            hadLegacyArtifacts: true,
+            cleanupAttempted: cleanupAttempted,
+            cleanupSucceeded: cleanupSucceeded
+        )
+    }
+
+    @discardableResult
+    func cleanupLegacyJSONArtifactsAfterImport() throws -> Bool {
+        let plan = buildLegacyImportPlan()
+        guard plan.hasAnyData else {
+            try dbPool.write { db in
+                try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
+                try removeMetaEntries(db, keys: [MetaKey.legacyJSONCleanupCompleted])
+            }
+            return true
+        }
+
+        let didCleanup = removeLegacyJSONArtifacts(sessionIDs: plan.sessionIDsForCleanup)
+        if didCleanup {
+            try dbPool.write { db in
+                try writeMeta(db, key: MetaKey.jsonCleanupCompleted, value: "1")
+                try removeMetaEntries(db, keys: [MetaKey.legacyJSONCleanupCompleted])
+            }
+        }
+        return didCleanup
+    }
+
+    private func importLegacySupplementaryArtifacts() throws {
+        let folders = readSessionFolders()
+        let requestLogs = readRequestLogs()
+        let dailyPulseRuns = readDailyPulseRuns()
+        let dailyPulseFeedbackHistory = readDailyPulseFeedbackHistory()
+        let dailyPulsePendingCuration = readDailyPulsePendingCuration()
+        let dailyPulseExternalSignals = readDailyPulseExternalSignals()
+        let dailyPulseTasks = readDailyPulseTasks()
+
+        try dbPool.write { db in
+            for folder in folders {
+                try db.execute(
+                    sql: """
+                    INSERT INTO session_folders (id, name, parent_id, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        parent_id = excluded.parent_id,
+                        updated_at = excluded.updated_at
+                    """,
+                    arguments: [
+                        folder.id.uuidString,
+                        folder.name,
+                        folder.parentID?.uuidString,
+                        folder.updatedAt.timeIntervalSince1970
+                    ]
+                )
+            }
+
+            for entry in requestLogs {
+                try db.execute(
+                    sql: """
+                    INSERT INTO request_logs (
+                        id, request_id, session_id, provider_id, provider_name, model_id,
+                        requested_at, finished_at, is_streaming, status, token_usage_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        request_id = excluded.request_id,
+                        session_id = excluded.session_id,
+                        provider_id = excluded.provider_id,
+                        provider_name = excluded.provider_name,
+                        model_id = excluded.model_id,
+                        requested_at = excluded.requested_at,
+                        finished_at = excluded.finished_at,
+                        is_streaming = excluded.is_streaming,
+                        status = excluded.status,
+                        token_usage_json = excluded.token_usage_json
+                    """,
+                    arguments: [
+                        entry.id.uuidString,
+                        entry.requestID.uuidString,
+                        entry.sessionID?.uuidString,
+                        entry.providerID?.uuidString,
+                        entry.providerName,
+                        entry.modelID,
+                        entry.requestedAt.timeIntervalSince1970,
+                        entry.finishedAt.timeIntervalSince1970,
+                        entry.isStreaming ? 1 : 0,
+                        entry.status.rawValue,
+                        encodeJSON(entry.tokenUsage)
+                    ]
+                )
+            }
+
+            if !dailyPulseRuns.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseRuns, value: dailyPulseRuns)
+            }
+            if !dailyPulseFeedbackHistory.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseFeedbackHistory, value: dailyPulseFeedbackHistory)
+            }
+            if let note = dailyPulsePendingCuration {
+                try writeBlob(db, key: BlobKey.dailyPulsePendingCuration, value: note)
+            }
+            if !dailyPulseExternalSignals.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseExternalSignals, value: dailyPulseExternalSignals)
+            }
+            if !dailyPulseTasks.isEmpty {
+                try writeBlob(db, key: BlobKey.dailyPulseTasks, value: dailyPulseTasks)
+            }
+        }
+    }
+
+    private func mergeLegacySessionSnapshotIntoDatabase(_ snapshot: LegacySessionSnapshot) throws -> Int {
+        try dbPool.write { db in
+            try upsertSession(
+                db,
+                session: snapshot.session,
+                sortIndex: snapshot.sortIndex,
+                updatedAt: snapshot.updatedAt,
+                conversationSummary: snapshot.conversationSummary,
+                conversationSummaryUpdatedAt: snapshot.conversationSummaryUpdatedAt,
+                preserveExistingSummary: true
+            )
+
+            let existingMessageCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                arguments: [snapshot.session.id.uuidString]
+            ) ?? 0
+            if existingMessageCount > 0 {
+                self.logger.info("会话 \(snapshot.session.id.uuidString, privacy: .public) 已存在消息，跳过覆盖旧 JSON 内容。")
+                return 0
+            }
+
+            for (position, message) in snapshot.messages.enumerated() {
+                try insertMessage(
+                    db,
+                    message: message,
+                    sessionID: snapshot.session.id,
+                    position: position,
+                    fallbackTimestamp: snapshot.updatedAt.addingTimeInterval(Double(position) * 0.000_001)
+                )
+            }
+            return snapshot.messages.count
+        }
+    }
+
+    private func loadLegacySessionSnapshot(from plan: LegacySessionImportPlan) throws -> LegacySessionSnapshot {
+        if let recordURL = plan.sessionRecordURL,
+           let record: LegacySessionRecordFile = decodeFile(LegacySessionRecordFile.self, at: recordURL) {
+            let session = ChatSession(
+                id: record.session.id,
+                name: record.session.name.isEmpty ? plan.fallbackSession.name : record.session.name,
+                topicPrompt: record.prompts.topicPrompt,
+                enhancedPrompt: record.prompts.enhancedPrompt,
+                lorebookIDs: record.session.lorebookIDs,
+                worldbookContextIsolationEnabled: record.session.worldbookContextIsolationEnabled ?? false,
+                folderID: record.session.folderID,
+                isTemporary: false
+            )
+            let summary = record.session.conversationSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedSummary = (summary?.isEmpty == false) ? summary : nil
+            let summaryUpdatedAt = parseISO8601Date(record.session.conversationSummaryUpdatedAt)
+            return LegacySessionSnapshot(
+                session: session,
+                messages: normalizeToolCallsPlacement(in: record.messages),
+                sortIndex: plan.sortIndex,
+                updatedAt: plan.fallbackUpdatedAt,
+                conversationSummary: normalizedSummary,
+                conversationSummaryUpdatedAt: summaryUpdatedAt
+            )
+        }
+
+        if let recordURL = plan.sessionRecordURL, plan.legacyMessagesURL == nil {
+            logger.error("旧版会话文件解析失败，且没有可回退的消息文件: \(recordURL.path, privacy: .public)")
+            throw LegacyIncrementalImportError.malformedSessionRecord(sessionID: plan.id, path: recordURL.path)
+        }
+
+        if let recordURL = plan.sessionRecordURL, plan.legacyMessagesURL != nil {
+            logger.warning("旧版会话文件解析失败，将回退到旧版消息文件: \(recordURL.path, privacy: .public)")
+        }
+
+        let messages = try readLegacyMessagesFromURL(plan.legacyMessagesURL, sessionID: plan.id)
+        return LegacySessionSnapshot(
+            session: plan.fallbackSession,
+            messages: messages,
+            sortIndex: plan.sortIndex,
+            updatedAt: plan.fallbackUpdatedAt,
+            conversationSummary: nil,
+            conversationSummaryUpdatedAt: nil
+        )
+    }
+
+    private func buildLegacyImportPlan() -> LegacyImportPlan {
+        let sessionPlans = buildLegacySessionImportPlans()
+        let sessionIDsForCleanup = sessionPlans.map(\.id)
+        let candidateSet = Set(
+            legacyJSONArtifactURLs(sessionIDs: sessionIDsForCleanup)
+            + legacyRootMessageJSONFiles()
+            + sessionPlans.compactMap(\.sessionRecordURL)
+            + sessionPlans.compactMap(\.legacyMessagesURL)
+        )
+        let existingCandidates = candidateSet.filter { FileManager.default.fileExists(atPath: $0.path) }
+        let estimatedBytes = existingCandidates.reduce(into: Int64(0)) { partialResult, url in
+            partialResult += fileSize(at: url)
+        }
+        return LegacyImportPlan(
+            sessionPlans: sessionPlans,
+            sessionIDsForCleanup: sessionIDsForCleanup,
+            estimatedBytes: estimatedBytes,
+            candidateURLs: Array(existingCandidates)
+        )
+    }
+
+    private func buildLegacySessionImportPlans() -> [LegacySessionImportPlan] {
+        if let index: LegacySessionIndexFile = decodeFile(
+            LegacySessionIndexFile.self,
+            at: chatsDirectory.appendingPathComponent("index.json")
+        ) {
+            let sessionsDirectory = chatsDirectory.appendingPathComponent("sessions")
+            return index.sessions.enumerated().map { position, item in
+                let recordURL = sessionsDirectory.appendingPathComponent("\(item.id.uuidString).json")
+                let legacyMessagesURL = chatsDirectory.appendingPathComponent("\(item.id.uuidString).json")
+                let fallbackSession = ChatSession(id: item.id, name: item.name, isTemporary: false)
+                let fallbackUpdatedAt = parseISO8601Date(item.updatedAt) ?? Date()
+                let estimatedBytes = fileSize(at: recordURL) + fileSize(at: legacyMessagesURL)
+                return LegacySessionImportPlan(
+                    id: item.id,
+                    fallbackSession: fallbackSession,
+                    sortIndex: position,
+                    fallbackUpdatedAt: fallbackUpdatedAt,
+                    sessionRecordURL: FileManager.default.fileExists(atPath: recordURL.path) ? recordURL : nil,
+                    legacyMessagesURL: FileManager.default.fileExists(atPath: legacyMessagesURL.path) ? legacyMessagesURL : nil,
+                    estimatedBytes: estimatedBytes
+                )
+            }
+        }
+
+        if let sessions: [ChatSession] = decodeFile(
+            [ChatSession].self,
+            at: chatsDirectory.appendingPathComponent("sessions.json")
+        ) {
+            return sessions
+                .filter { !$0.isTemporary }
+                .enumerated()
+                .map { position, session in
+                    let legacyMessagesURL = chatsDirectory.appendingPathComponent("\(session.id.uuidString).json")
+                    return LegacySessionImportPlan(
+                        id: session.id,
+                        fallbackSession: session,
+                        sortIndex: position,
+                        fallbackUpdatedAt: Date(),
+                        sessionRecordURL: nil,
+                        legacyMessagesURL: FileManager.default.fileExists(atPath: legacyMessagesURL.path) ? legacyMessagesURL : nil,
+                        estimatedBytes: fileSize(at: legacyMessagesURL)
+                    )
+                }
+        }
+
+        let orphanMessageFiles = legacyRootMessageJSONFiles()
+        return orphanMessageFiles.enumerated().compactMap { position, url in
+            let baseName = url.deletingPathExtension().lastPathComponent
+            guard let sessionID = UUID(uuidString: baseName) else { return nil }
+            let fallbackSession = ChatSession(id: sessionID, name: "历史会话", isTemporary: false)
+            return LegacySessionImportPlan(
+                id: sessionID,
+                fallbackSession: fallbackSession,
+                sortIndex: position,
+                fallbackUpdatedAt: Date(),
+                sessionRecordURL: nil,
+                legacyMessagesURL: url,
+                estimatedBytes: fileSize(at: url)
+            )
+        }
+    }
+
+    private func readLegacyMessagesFromURL(_ url: URL?, sessionID: UUID) throws -> [ChatMessage] {
+        guard let url else { return [] }
+        if let envelope: ChatMessagesFileEnvelope = decodeFile(ChatMessagesFileEnvelope.self, at: url) {
+            return normalizeToolCallsPlacement(in: envelope.messages)
+        }
+        if let messages: [ChatMessage] = decodeFile([ChatMessage].self, at: url) {
+            return normalizeToolCallsPlacement(in: messages)
+        }
+        logger.error("旧版消息文件解析失败: \(url.path, privacy: .public)")
+        throw LegacyIncrementalImportError.malformedMessagesFile(sessionID: sessionID, path: url.path)
+    }
+
+    private func fileSize(at url: URL) -> Int64 {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let rawSize = attributes[.size] as? NSNumber else {
+            return 0
+        }
+        return rawSize.int64Value
+    }
+
     private func importLegacyJSONIfNeeded() throws {
         let snapshot = collectLegacySnapshot()
         guard snapshot.hasAnyData else {
@@ -2043,7 +2512,7 @@ final class PersistenceGRDBStore {
     private func decodeFile<T: Decodable>(_ type: T.Type, at url: URL, decoder: JSONDecoder = JSONDecoder()) -> T? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
-            let data = try Data(contentsOf: url)
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
             guard isValidUTF8JSONData(data) else { return nil }
             return try decoder.decode(T.self, from: data)
         } catch {

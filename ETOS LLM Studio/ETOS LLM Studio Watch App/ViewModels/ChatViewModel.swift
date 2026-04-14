@@ -1402,6 +1402,10 @@ class ChatViewModel: ObservableObject {
         chatService.createNewSession()
     }
 
+    func reloadPersistedDataAfterLegacyJSONMigration() {
+        chatService.reloadSessionStateFromPersistenceAfterMigration()
+    }
+
     func prepareDailyPulseIfNeeded() async {
         await DailyPulseManager.shared.generateIfNeeded()
     }

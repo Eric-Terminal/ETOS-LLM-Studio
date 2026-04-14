@@ -1356,6 +1356,33 @@ public class ChatService {
         publishMessages(reloadedMessages)
         logger.info("已从持久化层刷新当前会话消息: \(currentSession.id.uuidString)")
     }
+
+    /// 在 JSON→SQLite 迁移完成后，从持久化层重新同步会话/文件夹/当前消息状态。
+    public func reloadSessionStateFromPersistenceAfterMigration() {
+        let persistedSessions = Persistence.loadChatSessions()
+        let persistedFolders = Persistence.loadSessionFolders()
+        let existingTemporary = chatSessionsSubject.value.first(where: \.isTemporary)
+            ?? ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+
+        var mergedSessions = persistedSessions
+        mergedSessions.insert(existingTemporary, at: 0)
+
+        let previousCurrentSessionID = currentSessionSubject.value?.id
+        let resolvedCurrentSession = mergedSessions.first(where: { $0.id == previousCurrentSessionID })
+            ?? persistedSessions.first
+            ?? existingTemporary
+
+        chatSessionsSubject.send(mergedSessions)
+        sessionFoldersSubject.send(persistedFolders)
+        currentSessionSubject.send(resolvedCurrentSession)
+
+        let resolvedMessages = resolvedCurrentSession.isTemporary
+            ? []
+            : Persistence.loadMessages(for: resolvedCurrentSession.id)
+        publishMessages(resolvedMessages)
+
+        logger.info("JSON→SQLite 迁移后已刷新会话状态: sessions=\(persistedSessions.count), folders=\(persistedFolders.count)")
+    }
     
     public func setCurrentSession(_ session: ChatSession?) {
         let currentSession = currentSessionSubject.value
