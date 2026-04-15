@@ -29,7 +29,7 @@ struct CloudSyncManagerTests {
         defaults.set(true, forKey: CloudSyncManager.enabledKey)
 
         let now = Date(timeIntervalSince1970: 1_730_000_000)
-        let localPackage = SyncPackage(options: [.providers])
+        let localPackage = makeLocalProviderPackage()
         let remotePackage = SyncPackage(options: [.sessions])
         let remoteSnapshot = makeRemoteSnapshot(
             recordName: "snapshot.remote-device",
@@ -42,9 +42,16 @@ struct CloudSyncManagerTests {
         let manager = CloudSyncManager(
             transport: transport,
             userDefaults: defaults,
-            packageBuilder: { _ in localPackage },
-            packageApplier: { package in
-                await appliedRecorder.record(package)
+            snapshotBuilder: { _ in
+                makeSnapshot(
+                    package: localPackage,
+                    channel: "cloud.sync.tests.upload",
+                    userDefaults: defaults,
+                    generatedAt: now
+                )
+            },
+            deltaApplier: { delta in
+                await appliedRecorder.record(delta)
                 return await appliedRecorder.summary
             },
             now: { now }
@@ -60,10 +67,10 @@ struct CloudSyncManagerTests {
         #expect(uploadedSnapshots.first?.deviceID == uploadedSnapshots.last?.deviceID)
         #expect(uploadedSnapshots.first?.snapshot.options == SyncOptions.providers)
         #expect(uploadedSnapshots.last?.snapshot.options == SyncOptions.providers)
-        #expect(uploadedSnapshots.first?.snapshot.package.options == localPackage.options)
-        #expect(uploadedSnapshots.last?.snapshot.package.options == localPackage.options)
+        #expect(uploadedSnapshots.first?.snapshot.delta.package.options == localPackage.options)
+        #expect(uploadedSnapshots.last?.snapshot.delta.package.options == localPackage.options)
         #expect(appliedPackages.count == 1)
-        #expect(appliedPackages.first?.options == remotePackage.options)
+        #expect(appliedPackages.first?.package.options == remotePackage.options)
         #expect(manager.lastSummary == .summary(importedSessions: 1))
         #expect(manager.lastUpdatedAt == now)
 
@@ -88,7 +95,7 @@ struct CloudSyncManagerTests {
             defaults.removePersistentDomain(forName: suiteName)
         }
 
-        let localPackage = SyncPackage(options: [.providers])
+        let localPackage = makeLocalProviderPackage()
         let remotePackage = SyncPackage(options: [.sessions])
         let remoteSnapshot = makeRemoteSnapshot(
             recordName: "snapshot.remote-device",
@@ -101,9 +108,15 @@ struct CloudSyncManagerTests {
         let manager = CloudSyncManager(
             transport: transport,
             userDefaults: defaults,
-            packageBuilder: { _ in localPackage },
-            packageApplier: { package in
-                await appliedRecorder.record(package)
+            snapshotBuilder: { _ in
+                makeSnapshot(
+                    package: localPackage,
+                    channel: "cloud.sync.tests.disabled",
+                    userDefaults: defaults
+                )
+            },
+            deltaApplier: { delta in
+                await appliedRecorder.record(delta)
                 return await appliedRecorder.summary
             }
         )
@@ -139,7 +152,7 @@ struct CloudSyncManagerTests {
         defaults.set(true, forKey: CloudSyncManager.enabledKey)
 
         let now = Date(timeIntervalSince1970: 1_730_100_000)
-        let localPackage = SyncPackage(options: [.providers])
+        let localPackage = makeLocalProviderPackage()
         let remotePackage = SyncPackage(options: [.sessions])
         let remoteSnapshot = makeRemoteSnapshot(
             recordName: "snapshot.remote-device",
@@ -152,9 +165,16 @@ struct CloudSyncManagerTests {
         let manager = CloudSyncManager(
             transport: transport,
             userDefaults: defaults,
-            packageBuilder: { _ in localPackage },
-            packageApplier: { package in
-                await appliedRecorder.record(package)
+            snapshotBuilder: { _ in
+                makeSnapshot(
+                    package: localPackage,
+                    channel: "cloud.sync.tests.dedupe",
+                    userDefaults: defaults,
+                    generatedAt: now
+                )
+            },
+            deltaApplier: { delta in
+                await appliedRecorder.record(delta)
                 return await appliedRecorder.summary
             },
             now: { now }
@@ -167,7 +187,7 @@ struct CloudSyncManagerTests {
         let appliedPackages = await appliedRecorder.packages
 
         #expect(appliedPackages.count == 1)
-        #expect(appliedPackages.first?.options == remotePackage.options)
+        #expect(appliedPackages.first?.package.options == remotePackage.options)
         #expect(uploadedSnapshots.count == 3)
         #expect(manager.lastSummary == .empty)
 
@@ -184,18 +204,54 @@ struct CloudSyncManagerTests {
         updatedAt: Date,
         package: SyncPackage
     ) -> CloudSyncRemoteSnapshot {
-        let encodedPackage = (try? JSONEncoder().encode(package)) ?? Data()
+        let delta = SyncDeltaPackage(options: package.options, package: package)
+        let snapshot = CloudSyncSnapshot(
+            schemaVersion: SyncDeltaEngine.schemaVersion,
+            deviceID: deviceID,
+            updatedAt: updatedAt,
+            options: package.options,
+            manifest: SyncManifest(options: package.options, records: []),
+            delta: delta
+        )
+        let encodedPackage = (try? JSONEncoder().encode(snapshot)) ?? Data()
         return CloudSyncRemoteSnapshot(
             recordName: recordName,
             deviceID: deviceID,
             updatedAt: updatedAt,
             checksum: encodedPackage.sha256Hex,
-            snapshot: CloudSyncSnapshot(
-                deviceID: deviceID,
-                updatedAt: updatedAt,
-                options: package.options,
-                package: package
+            snapshot: snapshot
+        )
+    }
+
+    private func makeSnapshot(
+        package: SyncPackage,
+        channel: String,
+        userDefaults: UserDefaults,
+        generatedAt: Date = Date()
+    ) -> SyncLocalSnapshot {
+        SyncLocalSnapshot(
+            package: package,
+            manifest: SyncDeltaEngine.buildManifest(
+                from: package,
+                channel: channel,
+                userDefaults: userDefaults,
+                generatedAt: generatedAt
             )
+        )
+    }
+
+    private func makeLocalProviderPackage() -> SyncPackage {
+        let provider = Provider(
+            id: UUID(),
+            name: "本地提供商",
+            baseURL: "https://local.example.com",
+            apiKeys: ["local-key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "local-model", displayName: "Local", isActivated: true)]
+        )
+        return SyncPackage(
+            options: [.providers],
+            providers: [provider]
         )
     }
 }
@@ -218,15 +274,15 @@ private actor MockCloudSyncTransport: CloudSyncTransport {
 }
 
 private actor AppliedPackageRecorder {
-    private(set) var packages: [SyncPackage] = []
+    private(set) var packages: [SyncDeltaPackage] = []
     let summary: SyncMergeSummary
 
     init(summary: SyncMergeSummary) {
         self.summary = summary
     }
 
-    func record(_ package: SyncPackage) {
-        packages.append(package)
+    func record(_ delta: SyncDeltaPackage) {
+        packages.append(delta)
     }
 }
 

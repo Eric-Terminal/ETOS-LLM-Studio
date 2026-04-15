@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import Testing
 @testable import Shared
 
@@ -231,7 +232,10 @@ struct MCPServerStoreRelationalTests {
                 clientID: "client-id",
                 clientSecret: "secret",
                 scope: "read",
-                grantType: .clientCredentials
+                grantType: .clientCredentials,
+                authorizationCode: nil,
+                redirectURI: nil,
+                codeVerifier: nil
             ),
             isSelectedForChat: true
         )

@@ -3,7 +3,7 @@
 // ============================================================================
 // SyncPackageTransferService 导出编解码测试
 // - 验证 ETOS 导出信封可正确往返
-// - 验证兼容旧版纯 SyncPackage JSON
+// - 验证旧版纯 SyncPackage JSON 已不再支持
 // ============================================================================
 
 import Foundation
@@ -35,16 +35,19 @@ struct SyncPackageTransferServiceTests {
             exportedAt: Date(timeIntervalSince1970: 1_700_000_000)
         )
         let decoded = try SyncPackageTransferService.decodePackage(from: exported.data)
+        let envelope = try SyncPackageTransferService.decodeEnvelope(from: exported.data)
 
         #expect(exported.suggestedFileName.hasPrefix("ETOS-数据导出-"))
+        #expect(envelope.schemaVersion == SyncPackageTransferService.currentSchemaVersion)
+        #expect(envelope.delta.options == package.options)
         #expect(decoded.options == package.options)
         #expect(decoded.providers.count == 1)
         #expect(decoded.providers[0].apiKeys == ["export-key"])
         #expect(decoded.appStorageSnapshot == snapshot)
     }
 
-    @Test("兼容旧版纯 SyncPackage JSON")
-    func testDecodeLegacyRawSyncPackageJSON() throws {
+    @Test("旧版纯 SyncPackage JSON 会被拒绝")
+    func testDecodeLegacyRawSyncPackageJSONThrowsInvalidEnvelope() throws {
         let session = ChatSession(
             id: UUID(),
             name: "旧版会话",
@@ -61,11 +64,18 @@ struct SyncPackageTransferServiceTests {
         )
 
         let legacyData = try JSONEncoder().encode(package)
-        let decoded = try SyncPackageTransferService.decodePackage(from: legacyData)
-
-        #expect(decoded.options.contains(.sessions))
-        #expect(decoded.sessions.count == 1)
-        #expect(decoded.sessions[0].session.name == "旧版会话")
-        #expect(decoded.sessions[0].messages.map(\.content) == ["legacy message"])
+        do {
+            _ = try SyncPackageTransferService.decodePackage(from: legacyData)
+            Issue.record("旧版纯 SyncPackage JSON 应该被拒绝")
+        } catch let error as SyncPackageTransferError {
+            switch error {
+            case .invalidEnvelope:
+                #expect(Bool(true))
+            default:
+                Issue.record("抛出了错误类型，但不是 invalidEnvelope：\(error.localizedDescription)")
+            }
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
     }
 }
