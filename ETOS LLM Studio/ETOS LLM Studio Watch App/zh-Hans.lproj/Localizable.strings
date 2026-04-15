@@ -354,8 +354,8 @@
 "成功响应" = "成功响应";
 "多个 API Key 用英文逗号分隔。" = "多个 API Key 用英文逗号分隔。";
 "显示明文" = "显示明文";
-"privacy_storage_details_markdown" = "应用在您的设备上存储以下数据：\n• **聊天记录** - 您与 AI 的对话历史\n• **API 配置（JSON）** - 您添加的 API 提供商和密钥（以 JSON 文件形式本地保存）\n• **记忆数据** - RAG 系统的向量化记忆\n• **应用设置** - 您的偏好设置";
-"privacy_storage_details_plain" = "应用在您的设备上存储以下数据：\n• 聊天记录 - 您与 AI 的对话历史\n• API 配置（JSON） - 您添加的 API 提供商和密钥（以 JSON 文件形式本地保存）\n• 记忆数据 - RAG 系统的向量化记忆\n• 应用设置 - 您的偏好设置";
+"privacy_storage_details_markdown" = "应用在您的设备上存储以下数据：\n• **聊天记录** - 您与 AI 的对话历史\n• **API 配置与密钥（SQLite）** - 提供商配置与 API Key 保存在本地 SQLite 配置库\n• **记忆数据** - RAG 系统的向量化记忆\n• **应用设置** - 您的偏好设置";
+"privacy_storage_details_plain" = "应用在您的设备上存储以下数据：\n• 聊天记录 - 您与 AI 的对话历史\n• API 配置与密钥（SQLite） - 提供商配置与 API Key 保存在本地 SQLite 配置库\n• 记忆数据 - RAG 系统的向量化记忆\n• 应用设置 - 您的偏好设置";
 "ViewModel 应该订阅并接收提供商的更新" = "ViewModel 应该订阅并接收提供商的更新";
 "ViewModel 应该订阅并接收来自 ChatService 的会话更新" = "ViewModel 应该订阅并接收来自 ChatService 的会话更新";
 "删除后无法恢复这些模型。" = "删除后无法恢复这些模型。";
