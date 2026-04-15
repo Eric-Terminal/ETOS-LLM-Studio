@@ -136,8 +136,8 @@ private struct ConversationUserProfileStore {
     func loadProfile() -> ConversationUserProfile? {
         if canUseGRDB {
             let sqliteResult = loadProfileFromSQLite()
-            if sqliteResult.didRead {
-                return sqliteResult.profile
+            if let sqliteProfile = sqliteResult.profile {
+                return sqliteProfile
             }
         }
 

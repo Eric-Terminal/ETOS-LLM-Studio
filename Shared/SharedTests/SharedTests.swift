@@ -3549,6 +3549,22 @@ fileprivate struct PersistenceTests {
         documentsDirectory.appendingPathComponent("Memory")
     }
 
+    private var memoryRawMemoriesFileURL: URL {
+        memoryDirectory.appendingPathComponent("memories.json")
+    }
+
+    private var memoryUserProfileFileURL: URL {
+        memoryDirectory.appendingPathComponent("user_profile.json")
+    }
+
+    private var shortcutToolsDirectory: URL {
+        documentsDirectory.appendingPathComponent("ShortcutTools")
+    }
+
+    private var shortcutToolsFileURL: URL {
+        shortcutToolsDirectory.appendingPathComponent("tools.json")
+    }
+
     private var configStoreSQLiteURL: URL {
         configDirectory.appendingPathComponent("config-store.sqlite")
     }
@@ -3723,6 +3739,10 @@ fileprivate struct PersistenceTests {
         removeIfExists(memoryStoreSQLiteURL)
         removeIfExists(memoryStoreSQLiteWALURL)
         removeIfExists(memoryStoreSQLiteSHMURL)
+        removeIfExists(memoryRawMemoriesFileURL)
+        removeIfExists(memoryUserProfileFileURL)
+        removeIfExists(shortcutToolsFileURL)
+        removeIfExists(shortcutToolsDirectory)
         removeIfExists(chatStoreBackupSQLiteURL)
         removeIfExists(URL(fileURLWithPath: chatStoreBackupSQLiteURL.path + "-wal"))
         removeIfExists(URL(fileURLWithPath: chatStoreBackupSQLiteURL.path + "-shm"))
@@ -3906,6 +3926,124 @@ fileprivate struct PersistenceTests {
 
         #expect(Persistence.removeAuxiliaryBlob(forKey: key))
         #expect(!Persistence.auxiliaryBlobExists(forKey: key))
+    }
+
+    @Test("记忆存储在 SQLite 为空时会回退读取 legacy JSON 并补录")
+    func testMemoryRawStoreFallbackToLegacyJSONWhenSQLiteEmpty() throws {
+        cleanup(sessions: [])
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [])
+        }
+
+        try FileManager.default.createDirectory(at: memoryDirectory, withIntermediateDirectories: true)
+
+        let legacyMemories = [
+            MemoryItem(
+                id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+                content: "legacy-memory-entry",
+                embedding: [],
+                createdAt: Date(timeIntervalSince1970: 1_710_000_000)
+            )
+        ]
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let legacyData = try encoder.encode(legacyMemories)
+        try legacyData.write(to: memoryRawMemoriesFileURL, options: .atomic)
+
+        let loaded = MemoryRawStore().loadMemories()
+        #expect(loaded.map(\.id) == legacyMemories.map(\.id))
+        #expect(loaded.map(\.content) == legacyMemories.map(\.content))
+
+        #expect(sqliteCount(memoryStoreSQLiteURL, sql: "SELECT COUNT(*) FROM memory_items") == legacyMemories.count)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let mirroredData = try Data(contentsOf: memoryRawMemoriesFileURL)
+        let mirrored = try decoder.decode([MemoryItem].self, from: mirroredData)
+        #expect(mirrored.map(\.id) == legacyMemories.map(\.id))
+        #expect(mirrored.map(\.content) == legacyMemories.map(\.content))
+    }
+
+    @Test("快捷指令在 SQLite 为空时会回退读取 legacy JSON 并补录")
+    func testShortcutToolsFallbackToLegacyJSONWhenSQLiteEmpty() throws {
+        cleanup(sessions: [])
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [])
+        }
+
+        try FileManager.default.createDirectory(at: shortcutToolsDirectory, withIntermediateDirectories: true)
+
+        let legacyTools = [
+            ShortcutToolDefinition(
+                id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+                name: "legacy-shortcut-tool",
+                metadata: ["displayName": .string("Legacy Tool")],
+                source: "legacy-json",
+                runModeHint: .bridge,
+                isEnabled: true,
+                generatedDescription: "legacy tool description",
+                createdAt: Date(timeIntervalSince1970: 1_710_000_100),
+                updatedAt: Date(timeIntervalSince1970: 1_710_000_100),
+                lastImportedAt: Date(timeIntervalSince1970: 1_710_000_100)
+            )
+        ]
+        let legacyData = try JSONEncoder().encode(legacyTools)
+        try legacyData.write(to: shortcutToolsFileURL, options: .atomic)
+
+        let loaded = ShortcutToolStore.loadTools()
+        #expect(loaded.map(\.id) == legacyTools.map(\.id))
+        #expect(loaded.map(\.name) == legacyTools.map(\.name))
+
+        #expect(sqliteCount(configStoreSQLiteURL, sql: "SELECT COUNT(*) FROM shortcut_tools") == legacyTools.count)
+        #expect(!FileManager.default.fileExists(atPath: shortcutToolsFileURL.path))
+    }
+
+    @Test("用户画像在 SQLite 为空时会回退读取 legacy JSON 并补录")
+    func testConversationProfileFallbackToLegacyJSONWhenSQLiteEmpty() throws {
+        cleanup(sessions: [])
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [])
+        }
+
+        try FileManager.default.createDirectory(at: memoryDirectory, withIntermediateDirectories: true)
+
+        let legacyProfile = ConversationUserProfile(
+            content: "legacy-user-profile",
+            updatedAt: Date(timeIntervalSince1970: 1_710_000_200),
+            sourceSessionID: UUID(uuidString: "33333333-3333-3333-3333-333333333333")
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let profileData = try encoder.encode(legacyProfile)
+        try profileData.write(to: memoryUserProfileFileURL, options: .atomic)
+
+        let loaded = ConversationMemoryManager.loadUserProfile()
+        #expect(loaded?.content == legacyProfile.content)
+        #expect(loaded?.updatedAt == legacyProfile.updatedAt)
+        #expect(loaded?.sourceSessionID == legacyProfile.sourceSessionID)
+
+        #expect(sqliteCount(memoryStoreSQLiteURL, sql: "SELECT COUNT(*) FROM conversation_user_profile") == 1)
+        #expect(!FileManager.default.fileExists(atPath: memoryUserProfileFileURL.path))
     }
 
     @Test("GRDB 启动迁移后自动清理旧 JSON 会话文件")

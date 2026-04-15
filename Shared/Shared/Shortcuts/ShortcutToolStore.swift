@@ -49,28 +49,31 @@ public struct ShortcutToolStore {
     }
 
     public static func loadTools() -> [ShortcutToolDefinition] {
-        if let tools = loadToolsFromSQLite() {
-            return tools
+        let legacyFileTools = loadToolsFromLegacyFile()
+
+        if let sqliteTools = loadToolsFromSQLite() {
+            if !sqliteTools.isEmpty {
+                return sqliteTools
+            }
+
+            if let legacyFileTools, !legacyFileTools.isEmpty {
+                if saveToolsToSQLite(legacyFileTools) {
+                    cleanupLegacyFileArtifacts()
+                }
+                return legacyFileTools
+            }
+
+            return sqliteTools
         }
 
-        setupDirectoryIfNeeded()
-        do {
-            let data = try Data(contentsOf: toolsFileURL)
-            let decoder = JSONDecoder()
-            let loadedTools: [ShortcutToolDefinition]
-            if let envelope = try? decoder.decode(StoredEnvelope.self, from: data) {
-                loadedTools = envelope.tools
-            } else {
-                loadedTools = try decoder.decode([ShortcutToolDefinition].self, from: data)
-            }
-            if saveToolsToSQLite(loadedTools) {
+        if let legacyFileTools {
+            if saveToolsToSQLite(legacyFileTools) {
                 cleanupLegacyFileArtifacts()
             }
-            return loadedTools
-        } catch {
-            shortcutStoreLogger.info("加载快捷指令工具失败或为空，返回空数组: \(error.localizedDescription, privacy: .public)")
-            return []
+            return legacyFileTools
         }
+
+        return []
     }
 
     public static func saveTools(_ tools: [ShortcutToolDefinition]) {
@@ -236,6 +239,25 @@ public struct ShortcutToolStore {
            let entries = try? fm.contentsOfDirectory(atPath: storageDirectory.path),
            entries.isEmpty {
             try? fm.removeItem(at: storageDirectory)
+        }
+    }
+
+    private static func loadToolsFromLegacyFile() -> [ShortcutToolDefinition]? {
+        setupDirectoryIfNeeded()
+        guard FileManager.default.fileExists(atPath: toolsFileURL.path) else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: toolsFileURL)
+            let decoder = JSONDecoder()
+            if let envelope = try? decoder.decode(StoredEnvelope.self, from: data) {
+                return envelope.tools
+            }
+            return try decoder.decode([ShortcutToolDefinition].self, from: data)
+        } catch {
+            shortcutStoreLogger.info("加载快捷指令工具失败或为空，返回空数组: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 

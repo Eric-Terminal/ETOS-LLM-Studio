@@ -30,27 +30,31 @@ struct MemoryRawStore {
     }
     
     func loadMemories() -> [MemoryItem] {
-        if canUseGRDB, let memories = loadMemoriesFromSQLite() {
-            persistJSONMirror(memories)
-            return memories
+        let legacyJSONMemories = loadMemoriesFromJSONFile()
+
+        if canUseGRDB, let sqliteMemories = loadMemoriesFromSQLite() {
+            if !sqliteMemories.isEmpty {
+                persistJSONMirror(sqliteMemories)
+                return sqliteMemories
+            }
+
+            if let legacyJSONMemories, !legacyJSONMemories.isEmpty {
+                _ = saveMemoriesToSQLite(legacyJSONMemories)
+                persistJSONMirror(legacyJSONMemories)
+                return legacyJSONMemories
+            }
+
+            return sqliteMemories
         }
 
-        let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return []
-        }
-        
-        do {
-            let data = try Data(contentsOf: fileURL)
-            let memories = try decoder.decode([MemoryItem].self, from: data)
+        if let legacyJSONMemories {
             if canUseGRDB {
-                _ = saveMemoriesToSQLite(memories)
+                _ = saveMemoriesToSQLite(legacyJSONMemories)
             }
-            return memories
-        } catch {
-            logger.error("读取 Memory JSON 失败: \(error.localizedDescription)")
-            return []
+            return legacyJSONMemories
         }
+
+        return []
     }
     
     func saveMemories(_ memories: [MemoryItem]) throws {
@@ -147,6 +151,21 @@ struct MemoryRawStore {
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
         } catch {
             logger.error("写入 Memory JSON 镜像失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadMemoriesFromJSONFile() -> [MemoryItem]? {
+        let fileURL = MemoryStoragePaths.rawMemoriesFileURL(rootDirectory: rootDirectory)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try decoder.decode([MemoryItem].self, from: data)
+        } catch {
+            logger.error("读取 Memory JSON 失败: \(error.localizedDescription)")
+            return nil
         }
     }
 
