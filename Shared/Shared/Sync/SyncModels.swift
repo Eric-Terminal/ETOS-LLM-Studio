@@ -311,6 +311,134 @@ public struct SyncPackage: Codable {
     }
 }
 
+// MARK: - 差异同步模型（V2）
+
+/// 差异同步记录类型。
+public enum SyncRecordType: String, Codable, CaseIterable, Sendable {
+    case provider
+    case session
+    case background
+    case memory
+    case mcpServer
+    case audioFile
+    case imageFile
+    case skill
+    case shortcutTool
+    case worldbook
+    case feedbackTicket
+    case dailyPulseRun
+    case fontFile
+    case fontRouteConfiguration
+    case appStorage
+}
+
+/// 清单中的单条记录描述。
+public struct SyncRecordDescriptor: Codable, Hashable, Sendable {
+    public var type: SyncRecordType
+    public var recordID: String
+    public var checksum: String
+    public var updatedAt: Date
+
+    public init(
+        type: SyncRecordType,
+        recordID: String,
+        checksum: String,
+        updatedAt: Date
+    ) {
+        self.type = type
+        self.recordID = recordID
+        self.checksum = checksum
+        self.updatedAt = updatedAt
+    }
+}
+
+/// 同步清单（用于双方差异对比）。
+public struct SyncManifest: Codable, Sendable {
+    public var schemaVersion: Int
+    public var generatedAt: Date
+    public var optionsRawValue: Int
+    public var records: [SyncRecordDescriptor]
+
+    public init(
+        schemaVersion: Int = 2,
+        generatedAt: Date = Date(),
+        options: SyncOptions,
+        records: [SyncRecordDescriptor]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.generatedAt = generatedAt
+        self.optionsRawValue = options.rawValue
+        self.records = records
+    }
+
+    public var options: SyncOptions {
+        SyncOptions(rawValue: optionsRawValue)
+    }
+}
+
+/// 差异删除记录（墓碑）。
+public struct SyncDeleteRecord: Codable, Hashable, Sendable {
+    public var type: SyncRecordType
+    public var recordID: String
+    public var deletedAt: Date
+
+    public init(type: SyncRecordType, recordID: String, deletedAt: Date) {
+        self.type = type
+        self.recordID = recordID
+        self.deletedAt = deletedAt
+    }
+}
+
+/// 差异数据包，仅承载需要 upsert/delete 的变更。
+public struct SyncDeltaPackage: Codable, Sendable {
+    public var schemaVersion: Int
+    public var generatedAt: Date
+    public var sourceDeviceID: String?
+    public var optionsRawValue: Int
+    public var package: SyncPackage
+    public var deletions: [SyncDeleteRecord]
+
+    public init(
+        schemaVersion: Int = 2,
+        generatedAt: Date = Date(),
+        sourceDeviceID: String? = nil,
+        options: SyncOptions,
+        package: SyncPackage,
+        deletions: [SyncDeleteRecord] = []
+    ) {
+        self.schemaVersion = schemaVersion
+        self.generatedAt = generatedAt
+        self.sourceDeviceID = sourceDeviceID
+        self.optionsRawValue = options.rawValue
+        self.package = package
+        self.deletions = deletions
+    }
+
+    public var options: SyncOptions {
+        SyncOptions(rawValue: optionsRawValue)
+    }
+}
+
+/// V2 导出信封，统一承载 manifest 与 delta。
+public struct SyncEnvelopeV2: Codable, Sendable {
+    public var schemaVersion: Int
+    public var exportedAt: Date
+    public var manifest: SyncManifest
+    public var delta: SyncDeltaPackage
+
+    public init(
+        schemaVersion: Int = 2,
+        exportedAt: Date = Date(),
+        manifest: SyncManifest,
+        delta: SyncDeltaPackage
+    ) {
+        self.schemaVersion = schemaVersion
+        self.exportedAt = exportedAt
+        self.manifest = manifest
+        self.delta = delta
+    }
+}
+
 /// 同步合并摘要，便于 UI 呈现结果
 public struct SyncMergeSummary: Equatable {
     public var importedProviders: Int
