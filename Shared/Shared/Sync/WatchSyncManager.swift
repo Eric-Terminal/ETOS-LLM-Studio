@@ -46,7 +46,13 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let expectsResponse: Bool
     }
 
+    private struct SyncExchangePacket: Codable {
+        var manifest: SyncManifest
+        var delta: SyncDeltaPackage?
+    }
+
     private var pendingTransfers: [ObjectIdentifier: PendingTransferContext] = [:]
+    private let syncChannel = "watch.connectivity"
     /// 标记是否为静默同步（启动时自动同步）
     private var isSilentSync = false
     private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
@@ -70,9 +76,17 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             state = .syncing("正在同步数据…")
         }
         lastSummary = .empty
-        
-        // 双向同步：发送本地数据，对端会自动回传
-        sendPackage(options: options, isResponse: false)
+
+        let snapshot = SyncDeltaEngine.buildLocalSnapshot(
+            options: options,
+            channel: syncChannel
+        )
+        sendExchange(
+            manifest: snapshot.manifest,
+            delta: nil,
+            isResponse: false,
+            expectsResponse: true
+        )
     }
 
     /// 发送单个会话到对端设备（单向）
@@ -89,10 +103,22 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 
         state = .syncing("正在发送“\(selectedSession.name)”…")
         lastSummary = .empty
-        sendPackage(
+
+        let snapshot = SyncDeltaEngine.buildLocalSnapshot(
             options: [.sessions],
+            channel: "\(syncChannel).single-session",
+            sessionIDs: Set([sessionID])
+        )
+        let emptyManifest = SyncManifest(options: [.sessions], records: [])
+        let delta = SyncDeltaEngine.buildDelta(
+            localSnapshot: snapshot,
+            remoteManifest: emptyManifest,
+            channel: "\(syncChannel).single-session"
+        )
+        sendExchange(
+            manifest: snapshot.manifest,
+            delta: delta,
             isResponse: false,
-            sessionIDs: Set([sessionID]),
             expectsResponse: false
         )
     }
@@ -234,22 +260,16 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
-    private func sendPackage(
-        options: SyncOptions,
+    private func sendExchange(
+        manifest: SyncManifest,
+        delta: SyncDeltaPackage?,
         isResponse: Bool,
         requestID: String? = nil,
-        sessionIDs: Set<UUID>? = nil,
         expectsResponse: Bool = true
     ) {
         guard let session else { return }
-        let package = SyncEngine.buildPackage(options: options, sessionIDs: sessionIDs)
-        if options.contains(.sessions), sessionIDs != nil, package.sessions.isEmpty {
-            if !isSilentSync {
-                state = .failed("未找到可发送的会话。")
-            }
-            return
-        }
-        guard let data = try? JSONEncoder().encode(package) else {
+        let payload = SyncExchangePacket(manifest: manifest, delta: delta)
+        guard let data = try? JSONEncoder().encode(payload) else {
             if !isSilentSync {
                 state = .failed("无法编码同步数据。")
             }
@@ -268,7 +288,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
         
         var metadata: [String: Any] = [
-            "options": options.rawValue,
+            "options": manifest.options.rawValue,
             "response": isResponse,
             "expectsResponse": expectsResponse,
             "timestamp": Date().timeIntervalSince1970
@@ -283,7 +303,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         )
     }
     
-    private func applyPackage(
+    private func applyExchange(
         from url: URL,
         isResponse: Bool,
         requestID: String?,
@@ -292,8 +312,12 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
-            let package = try decoder.decode(SyncPackage.self, from: data)
-            let summary = await SyncEngine.apply(package: package)
+            let packet = try decoder.decode(SyncExchangePacket.self, from: data)
+
+            var summary = SyncMergeSummary.empty
+            if let delta = packet.delta {
+                summary = await SyncDeltaEngine.apply(delta: delta)
+            }
             lastSummary = summary
             lastUpdatedAt = Date()
             
@@ -304,9 +328,26 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             // 发送通知（仅静默模式下）
             sendSyncSuccessNotification(summary: summary)
             
-            if !isResponse && expectsResponse {
-                // 主动回传对端最新数据，实现双向同步
-                sendPackage(options: package.options, isResponse: true, expectsResponse: false)
+            if expectsResponse {
+                let localSnapshot = SyncDeltaEngine.buildLocalSnapshot(
+                    options: packet.manifest.options,
+                    channel: syncChannel
+                )
+                let responseDelta = SyncDeltaEngine.buildDelta(
+                    localSnapshot: localSnapshot,
+                    remoteManifest: packet.manifest,
+                    channel: syncChannel
+                )
+                if !isSilentSync {
+                    state = .syncing("正在回传差异…")
+                }
+                sendExchange(
+                    manifest: localSnapshot.manifest,
+                    delta: responseDelta,
+                    isResponse: true,
+                    requestID: requestID,
+                    expectsResponse: !isResponse
+                )
             }
             
             if let idString = requestID, let uuid = UUID(uuidString: idString) {
@@ -348,7 +389,7 @@ extension WatchSyncManager: WCSessionDelegate {
             let isResponse = (file.metadata?["response"] as? Bool) ?? false
             let requestID = file.metadata?["requestID"] as? String
             let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
-            await applyPackage(
+            await applyExchange(
                 from: file.fileURL,
                 isResponse: isResponse,
                 requestID: requestID,

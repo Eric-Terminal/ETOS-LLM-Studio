@@ -390,7 +390,7 @@ public struct SyncDeleteRecord: Codable, Hashable, Sendable {
 }
 
 /// 差异数据包，仅承载需要 upsert/delete 的变更。
-public struct SyncDeltaPackage: Codable, Sendable {
+public struct SyncDeltaPackage: Codable {
     public var schemaVersion: Int
     public var generatedAt: Date
     public var sourceDeviceID: String?
@@ -420,7 +420,7 @@ public struct SyncDeltaPackage: Codable, Sendable {
 }
 
 /// V2 导出信封，统一承载 manifest 与 delta。
-public struct SyncEnvelopeV2: Codable, Sendable {
+public struct SyncEnvelopeV2: Codable {
     public var schemaVersion: Int
     public var exportedAt: Date
     public var manifest: SyncManifest

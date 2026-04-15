@@ -27,20 +27,23 @@ public struct CloudSyncSnapshot: Codable {
     public let deviceID: String
     public let updatedAt: Date
     public let optionsRawValue: Int
-    public let package: SyncPackage
+    public let manifest: SyncManifest
+    public let delta: SyncDeltaPackage
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         deviceID: String,
         updatedAt: Date,
         options: SyncOptions,
-        package: SyncPackage
+        manifest: SyncManifest,
+        delta: SyncDeltaPackage
     ) {
         self.schemaVersion = schemaVersion
         self.deviceID = deviceID
         self.updatedAt = updatedAt
         self.optionsRawValue = options.rawValue
-        self.package = package
+        self.manifest = manifest
+        self.delta = delta
     }
 
     public var options: SyncOptions {
@@ -85,26 +88,26 @@ public final class CloudSyncManager: ObservableObject {
 
     private let transportFactory: @Sendable () -> any CloudSyncTransport
     private let userDefaults: UserDefaults
-    private let packageBuilder: @Sendable (SyncOptions) -> SyncPackage
-    private let packageApplier: @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary
+    private let snapshotBuilder: @Sendable (SyncOptions) -> SyncLocalSnapshot
+    private let deltaApplier: @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary
     private let now: @Sendable () -> Date
     private lazy var transport: any CloudSyncTransport = transportFactory()
 
     convenience init(
         userDefaults: UserDefaults = .standard,
-        packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
-            SyncEngine.buildPackage(options: options)
+        snapshotBuilder: @escaping @Sendable (SyncOptions) -> SyncLocalSnapshot = { options in
+            SyncDeltaEngine.buildLocalSnapshot(options: options, channel: "cloud.sync")
         },
-        packageApplier: @escaping @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
-            await SyncEngine.apply(package: package)
+        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary = { delta in
+            await SyncDeltaEngine.apply(delta: delta)
         },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.init(
             transportFactory: { CloudKitCloudSyncTransport() },
             userDefaults: userDefaults,
-            packageBuilder: packageBuilder,
-            packageApplier: packageApplier,
+            snapshotBuilder: snapshotBuilder,
+            deltaApplier: deltaApplier,
             now: now
         )
     }
@@ -112,19 +115,19 @@ public final class CloudSyncManager: ObservableObject {
     convenience init(
         transport: any CloudSyncTransport,
         userDefaults: UserDefaults = .standard,
-        packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
-            SyncEngine.buildPackage(options: options)
+        snapshotBuilder: @escaping @Sendable (SyncOptions) -> SyncLocalSnapshot = { options in
+            SyncDeltaEngine.buildLocalSnapshot(options: options, channel: "cloud.sync")
         },
-        packageApplier: @escaping @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
-            await SyncEngine.apply(package: package)
+        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary = { delta in
+            await SyncDeltaEngine.apply(delta: delta)
         },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.init(
             transportFactory: { transport },
             userDefaults: userDefaults,
-            packageBuilder: packageBuilder,
-            packageApplier: packageApplier,
+            snapshotBuilder: snapshotBuilder,
+            deltaApplier: deltaApplier,
             now: now
         )
     }
@@ -132,18 +135,18 @@ public final class CloudSyncManager: ObservableObject {
     private init(
         transportFactory: @escaping @Sendable () -> any CloudSyncTransport,
         userDefaults: UserDefaults = .standard,
-        packageBuilder: @escaping @Sendable (SyncOptions) -> SyncPackage = { options in
-            SyncEngine.buildPackage(options: options)
+        snapshotBuilder: @escaping @Sendable (SyncOptions) -> SyncLocalSnapshot = { options in
+            SyncDeltaEngine.buildLocalSnapshot(options: options, channel: "cloud.sync")
         },
-        packageApplier: @escaping @MainActor @Sendable (SyncPackage) async -> SyncMergeSummary = { package in
-            await SyncEngine.apply(package: package)
+        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary = { delta in
+            await SyncDeltaEngine.apply(delta: delta)
         },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.transportFactory = transportFactory
         self.userDefaults = userDefaults
-        self.packageBuilder = packageBuilder
-        self.packageApplier = packageApplier
+        self.snapshotBuilder = snapshotBuilder
+        self.deltaApplier = deltaApplier
         self.now = now
     }
 
@@ -230,21 +233,31 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     private func buildLocalSnapshot(options: SyncOptions) -> CloudSyncRemoteSnapshot {
-        let package = packageBuilder(options)
+        let localSnapshot = snapshotBuilder(options)
         let updatedAt = now()
         let recordName = "snapshot.\(currentDeviceIdentifier)"
-        let encodedPackage = (try? JSONEncoder().encode(package)) ?? Data()
+        let emptyRemoteManifest = SyncManifest(options: options, records: [])
+        let delta = SyncDeltaEngine.buildDelta(
+            localSnapshot: localSnapshot,
+            remoteManifest: emptyRemoteManifest,
+            channel: "cloud.sync.upload",
+            sourceDeviceID: currentDeviceIdentifier
+        )
+        let snapshot = CloudSyncSnapshot(
+            schemaVersion: SyncDeltaEngine.schemaVersion,
+            deviceID: currentDeviceIdentifier,
+            updatedAt: updatedAt,
+            options: options,
+            manifest: localSnapshot.manifest,
+            delta: delta
+        )
+        let encodedPackage = (try? JSONEncoder().encode(snapshot)) ?? Data()
         return CloudSyncRemoteSnapshot(
             recordName: recordName,
             deviceID: currentDeviceIdentifier,
             updatedAt: updatedAt,
             checksum: encodedPackage.sha256Hex,
-            snapshot: CloudSyncSnapshot(
-                deviceID: currentDeviceIdentifier,
-                updatedAt: updatedAt,
-                options: options,
-                package: package
-            )
+            snapshot: snapshot
         )
     }
 
@@ -257,7 +270,7 @@ public final class CloudSyncManager: ObservableObject {
                 continue
             }
 
-            let summary = await packageApplier(snapshot.snapshot.package)
+            let summary = await deltaApplier(snapshot.snapshot.delta)
             aggregate.accumulate(summary)
             appliedChecksums[snapshot.recordName] = snapshot.checksum
         }
