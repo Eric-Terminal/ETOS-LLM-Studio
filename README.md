@@ -1,5 +1,6 @@
 # ETOS LLM Studio
 
+
 ![Swift](https://img.shields.io/badge/Swift-FA7343?style=flat-square&logo=swift&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20watchOS-blue?style=flat-square&logo=apple&logoColor=white)
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
