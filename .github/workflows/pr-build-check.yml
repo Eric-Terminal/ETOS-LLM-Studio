@@ -1,0 +1,82 @@
+name: PR 编译检查
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: iOS / watchOS 编译验证
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 显示 Xcode 版本
+        run: xcodebuild -version
+
+      - name: 缓存 SwiftPM 依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: 解析依赖
+        run: |
+          env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+            xcodebuild -resolvePackageDependencies \
+            -workspace 'ETOS LLM Studio.xcworkspace'
+
+      - name: 编译 iOS App（含嵌入 watch App）
+        run: |
+          set -euo pipefail
+          mkdir -p ci-logs
+          env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+            xcodebuild \
+            -workspace 'ETOS LLM Studio.xcworkspace' \
+            -scheme 'ETOS LLM Studio App' \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee ci-logs/ios-build.log
+
+      - name: 编译 watchOS App
+        run: |
+          set -euo pipefail
+          env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+            xcodebuild \
+            -workspace 'ETOS LLM Studio.xcworkspace' \
+            -scheme 'ETOS LLM Studio Watch App' \
+            -destination 'generic/platform=watchOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee ci-logs/watch-build.log
+
+      - name: 上传编译日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-build-logs
+          path: ci-logs/
+          if-no-files-found: ignore
