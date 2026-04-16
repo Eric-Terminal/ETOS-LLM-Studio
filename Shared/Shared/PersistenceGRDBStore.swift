@@ -145,6 +145,27 @@ final class PersistenceGRDBStore {
         }
     }
 
+    private struct PersistedMessageRecord: Equatable {
+        var id: String
+        let sessionID: String
+        let role: String
+        let requestedAt: Double?
+        let content: String
+        let contentVersionsJSON: Data
+        let currentVersionIndex: Int
+        let reasoningContent: String?
+        let toolCallsJSON: Data?
+        let toolCallsPlacement: String?
+        let tokenUsageJSON: Data?
+        let audioFileName: String?
+        let imageFileNamesJSON: Data?
+        let fileFileNamesJSON: Data?
+        let fullErrorContent: String?
+        let responseMetricsJSON: Data?
+        let position: Int
+        let createdAt: Double
+    }
+
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "PersistenceGRDB")
     private static let incrementalVacuumTriggerPages = 8_192
     private static let incrementalVacuumTriggerRatio = 0.2
@@ -316,23 +337,51 @@ final class PersistenceGRDBStore {
         do {
             try dbPool.write { db in
                 try ensureSessionExists(db, sessionID: sessionID)
-                try db.execute(sql: "DELETE FROM messages WHERE session_id = ?", arguments: [sessionID.uuidString])
-
+                let existingRecords = try fetchPersistedMessageRecords(db, sessionID: sessionID)
                 let now = Date()
+                var targetIDs = Set<String>()
+                targetIDs.reserveCapacity(normalizedMessages.count)
+                var changedRowCount = 0
+
                 for (index, message) in normalizedMessages.enumerated() {
-                    try insertMessage(
+                    let fallbackTimestamp = now.addingTimeInterval(Double(index) * 0.000_001)
+                    let preferredID = message.id.uuidString
+                    let existingCreatedAt = existingRecords[preferredID]?.createdAt
+                    var record = try makePersistedMessageRecord(
                         db,
                         message: message,
                         sessionID: sessionID,
                         position: index,
-                        fallbackTimestamp: now.addingTimeInterval(Double(index) * 0.000_001)
+                        fallbackTimestamp: fallbackTimestamp,
+                        allowPositionChangeForExistingSessionID: true,
+                        existingCreatedAt: existingCreatedAt
                     )
+
+                    if targetIDs.contains(record.id) {
+                        record.id = try generateUniqueMessageID(db, excluding: targetIDs)
+                    }
+                    targetIDs.insert(record.id)
+
+                    if let existing = existingRecords[record.id], existing == record {
+                        continue
+                    }
+
+                    try upsertMessageRecord(db, record: record)
+                    changedRowCount += 1
                 }
 
-                try db.execute(
-                    sql: "UPDATE sessions SET updated_at = ? WHERE id = ?",
-                    arguments: [Date().timeIntervalSince1970, sessionID.uuidString]
-                )
+                var deletedRowCount = 0
+                for existingID in existingRecords.keys where !targetIDs.contains(existingID) {
+                    try db.execute(sql: "DELETE FROM messages WHERE id = ?", arguments: [existingID])
+                    deletedRowCount += 1
+                }
+
+                if changedRowCount > 0 || deletedRowCount > 0 {
+                    try db.execute(
+                        sql: "UPDATE sessions SET updated_at = ? WHERE id = ?",
+                        arguments: [Date().timeIntervalSince1970, sessionID.uuidString]
+                    )
+                }
             }
         } catch {
             logger.error("保存会话消息失败 \(sessionID.uuidString): \(error.localizedDescription)")
@@ -2326,23 +2375,98 @@ final class PersistenceGRDBStore {
         }
     }
 
-    private func insertMessage(
+    private func fetchPersistedMessageRecords(
+        _ db: Database,
+        sessionID: UUID
+    ) throws -> [String: PersistedMessageRecord] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT id, session_id, role, requested_at, content, content_versions_json,
+                   current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
+                   token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
+                   full_error_content, response_metrics_json, position, created_at
+            FROM messages
+            WHERE session_id = ?
+            """,
+            arguments: [sessionID.uuidString]
+        )
+
+        var records: [String: PersistedMessageRecord] = [:]
+        records.reserveCapacity(rows.count)
+        for row in rows {
+            let record = PersistedMessageRecord(
+                id: row["id"],
+                sessionID: row["session_id"],
+                role: row["role"],
+                requestedAt: row["requested_at"],
+                content: row["content"],
+                contentVersionsJSON: row["content_versions_json"],
+                currentVersionIndex: row["current_version_index"],
+                reasoningContent: row["reasoning_content"],
+                toolCallsJSON: row["tool_calls_json"],
+                toolCallsPlacement: row["tool_calls_placement"],
+                tokenUsageJSON: row["token_usage_json"],
+                audioFileName: row["audio_file_name"],
+                imageFileNamesJSON: row["image_file_names_json"],
+                fileFileNamesJSON: row["file_file_names_json"],
+                fullErrorContent: row["full_error_content"],
+                responseMetricsJSON: row["response_metrics_json"],
+                position: row["position"],
+                createdAt: row["created_at"]
+            )
+            records[record.id] = record
+        }
+        return records
+    }
+
+    private func makePersistedMessageRecord(
         _ db: Database,
         message: ChatMessage,
         sessionID: UUID,
         position: Int,
-        fallbackTimestamp: Date
-    ) throws {
+        fallbackTimestamp: Date,
+        allowPositionChangeForExistingSessionID: Bool = false,
+        existingCreatedAt: Double? = nil
+    ) throws -> PersistedMessageRecord {
         let messagePrimaryID = try resolveMessagePrimaryID(
             db,
             originalID: message.id,
             sessionID: sessionID,
-            position: position
+            position: position,
+            allowPositionChangeForExistingSessionID: allowPositionChangeForExistingSessionID
         )
         let versions = message.getAllVersions()
         let safeVersions = versions.isEmpty ? [message.content] : versions
         let currentVersionIndex = min(max(0, message.getCurrentVersionIndex()), safeVersions.count - 1)
+        let createdAt = existingCreatedAt ?? (message.requestedAt ?? fallbackTimestamp).timeIntervalSince1970
 
+        return PersistedMessageRecord(
+            id: messagePrimaryID,
+            sessionID: sessionID.uuidString,
+            role: message.role.rawValue,
+            requestedAt: message.requestedAt?.timeIntervalSince1970,
+            content: message.content,
+            contentVersionsJSON: encodeJSON(safeVersions) ?? Data("[]".utf8),
+            currentVersionIndex: currentVersionIndex,
+            reasoningContent: message.reasoningContent,
+            toolCallsJSON: encodeJSON(message.toolCalls),
+            toolCallsPlacement: message.toolCallsPlacement?.rawValue,
+            tokenUsageJSON: encodeJSON(message.tokenUsage),
+            audioFileName: message.audioFileName,
+            imageFileNamesJSON: encodeJSON(message.imageFileNames),
+            fileFileNamesJSON: encodeJSON(message.fileFileNames),
+            fullErrorContent: message.fullErrorContent,
+            responseMetricsJSON: encodeJSON(message.responseMetrics),
+            position: position,
+            createdAt: createdAt
+        )
+    }
+
+    private func upsertMessageRecord(
+        _ db: Database,
+        record: PersistedMessageRecord
+    ) throws {
         try db.execute(
             sql: """
             INSERT INTO messages (
@@ -2371,33 +2495,63 @@ final class PersistenceGRDBStore {
                 created_at = excluded.created_at
             """,
             arguments: [
-                messagePrimaryID,
-                sessionID.uuidString,
-                message.role.rawValue,
-                message.requestedAt?.timeIntervalSince1970,
-                message.content,
-                encodeJSON(safeVersions) ?? Data("[]".utf8),
-                currentVersionIndex,
-                message.reasoningContent,
-                encodeJSON(message.toolCalls),
-                message.toolCallsPlacement?.rawValue,
-                encodeJSON(message.tokenUsage),
-                message.audioFileName,
-                encodeJSON(message.imageFileNames),
-                encodeJSON(message.fileFileNames),
-                message.fullErrorContent,
-                encodeJSON(message.responseMetrics),
-                position,
-                (message.requestedAt ?? fallbackTimestamp).timeIntervalSince1970
+                record.id,
+                record.sessionID,
+                record.role,
+                record.requestedAt,
+                record.content,
+                record.contentVersionsJSON,
+                record.currentVersionIndex,
+                record.reasoningContent,
+                record.toolCallsJSON,
+                record.toolCallsPlacement,
+                record.tokenUsageJSON,
+                record.audioFileName,
+                record.imageFileNamesJSON,
+                record.fileFileNamesJSON,
+                record.fullErrorContent,
+                record.responseMetricsJSON,
+                record.position,
+                record.createdAt
             ]
         )
+    }
+
+    private func insertMessage(
+        _ db: Database,
+        message: ChatMessage,
+        sessionID: UUID,
+        position: Int,
+        fallbackTimestamp: Date
+    ) throws {
+        let record = try makePersistedMessageRecord(
+            db,
+            message: message,
+            sessionID: sessionID,
+            position: position,
+            fallbackTimestamp: fallbackTimestamp
+        )
+        try upsertMessageRecord(db, record: record)
+    }
+
+    private func generateUniqueMessageID(
+        _ db: Database,
+        excluding reservedIDs: Set<String>
+    ) throws -> String {
+        var candidate = UUID().uuidString
+        while reservedIDs.contains(candidate)
+            || (try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE id = ?", arguments: [candidate]) ?? 0) > 0 {
+            candidate = UUID().uuidString
+        }
+        return candidate
     }
 
     private func resolveMessagePrimaryID(
         _ db: Database,
         originalID: UUID,
         sessionID: UUID,
-        position: Int
+        position: Int,
+        allowPositionChangeForExistingSessionID: Bool = false
     ) throws -> String {
         let originalIDString = originalID.uuidString
         guard let existing = try Row.fetchOne(
@@ -2410,7 +2564,8 @@ final class PersistenceGRDBStore {
 
         let existingSessionID: String = existing["session_id"]
         let existingPosition: Int = existing["position"]
-        if existingSessionID == sessionID.uuidString, existingPosition == position {
+        if existingSessionID == sessionID.uuidString &&
+            (allowPositionChangeForExistingSessionID || existingPosition == position) {
             return originalIDString
         }
 

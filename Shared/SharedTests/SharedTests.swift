@@ -332,6 +332,23 @@ struct MemoryManagerTests {
             }
         }
     }
+
+    class FixedDimensionEmbeddings: EmbeddingsProtocol {
+        typealias TokenizerType = Never
+        typealias ModelType = Never
+        var tokenizer: Never { fatalError("Not implemented") }
+        var model: Never { fatalError("Not implemented") }
+
+        private let dimension: Int
+
+        init(dimension: Int = 4) {
+            self.dimension = max(1, dimension)
+        }
+
+        func encode(sentence: String) async -> [Float]? {
+            Array(repeating: 0.25, count: dimension)
+        }
+    }
     
     actor FlakyEmbeddingGenerator: MemoryEmbeddingGenerating {
         enum TestError: Error {
@@ -693,7 +710,53 @@ struct MemoryManagerTests {
         #expect(searchResults.count == 2, "Should return the requested number of unique memories when available.")
         #expect(Set(searchResults.map(\.id)).count == 2, "Returned memories must be unique.")
         #expect(searchResults.contains(where: { $0.content == longMemory }), "Chunked memory should surface as its full original text.")
-        
+
+        await cleanup(memoryManager: memoryManager)
+    }
+
+    @Test("向量分块回填原文时按 parentMemoryId 合并并返回完整记忆")
+    func testReconstructMemoriesFromVectorChunks() async throws {
+        let parentID = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_710_000_000)
+        let createdAtString = ISO8601DateFormatter().string(from: createdAt)
+
+        let index = await SimilarityIndex(
+            name: "memory-reconstruct-\(UUID().uuidString)",
+            model: FixedDimensionEmbeddings(),
+            vectorStore: JsonStore()
+        )
+        await index.addItem(
+            id: UUID().uuidString,
+            text: "用户喜欢",
+            metadata: [
+                "parentMemoryId": parentID.uuidString,
+                "chunkIndex": "0",
+                "createdAt": createdAtString
+            ],
+            embedding: [0.1, 0.2, 0.3, 0.4]
+        )
+        await index.addItem(
+            id: UUID().uuidString,
+            text: "低温慢煮咖啡。",
+            metadata: [
+                "parentMemoryId": parentID.uuidString,
+                "chunkIndex": "1",
+                "createdAt": createdAtString
+            ],
+            embedding: [0.1, 0.2, 0.3, 0.4]
+        )
+
+        let memoryManager = MemoryManager(
+            testIndex: index,
+            embeddingGenerator: MockEmbeddingGenerator()
+        )
+        await memoryManager.waitForInitialization()
+
+        let memories = await memoryManager.getAllMemories()
+        #expect(memories.count == 1)
+        #expect(memories.first?.id == parentID)
+        #expect(memories.first?.content == "用户喜欢低温慢煮咖啡。")
+
         await cleanup(memoryManager: memoryManager)
     }
 
@@ -3868,6 +3931,123 @@ fileprivate struct PersistenceTests {
         #expect(messageCount == 3)
 
         cleanup(sessions: [session])
+    }
+
+    @Test("GRDB saveMessages 仅增量更新变更行并支持位置变化")
+    func testGRDBSaveMessagesUsesIncrementalWrites() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        let session = ChatSession(id: UUID(), name: "增量写入会话", isTemporary: false)
+        let messageA = ChatMessage(id: UUID(), role: .user, content: "A")
+        let messageB = ChatMessage(id: UUID(), role: .assistant, content: "B")
+        let messageC = ChatMessage(id: UUID(), role: .assistant, content: "C")
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([messageA, messageB, messageC], for: session.id)
+
+        let rowidBBefore = sqliteCount(
+            chatStoreSQLiteURL,
+            sql: "SELECT rowid FROM messages WHERE id = '\(messageB.id.uuidString)'"
+        )
+        let rowidCBefore = sqliteCount(
+            chatStoreSQLiteURL,
+            sql: "SELECT rowid FROM messages WHERE id = '\(messageC.id.uuidString)'"
+        )
+
+        let updatedMessageB = ChatMessage(id: messageB.id, role: .assistant, content: "B-updated")
+        Persistence.saveMessages([updatedMessageB, messageC], for: session.id)
+
+        let rowidBAfter = sqliteCount(
+            chatStoreSQLiteURL,
+            sql: "SELECT rowid FROM messages WHERE id = '\(messageB.id.uuidString)'"
+        )
+        let rowidCAfter = sqliteCount(
+            chatStoreSQLiteURL,
+            sql: "SELECT rowid FROM messages WHERE id = '\(messageC.id.uuidString)'"
+        )
+
+        #expect(rowidBBefore > 0)
+        #expect(rowidCBefore > 0)
+        #expect(rowidBAfter == rowidBBefore)
+        #expect(rowidCAfter == rowidCBefore)
+        #expect(
+            sqliteCount(
+                chatStoreSQLiteURL,
+                sql: "SELECT COUNT(*) FROM messages WHERE session_id = '\(session.id.uuidString)'"
+            ) == 2
+        )
+
+        let loaded = Persistence.loadMessages(for: session.id)
+        #expect(loaded.map(\.id) == [messageB.id, messageC.id])
+        #expect(loaded.map(\.content) == ["B-updated", "C"])
+
+        cleanup(sessions: [session])
+    }
+
+    @Test("MemoryRawStore 保存时仅增量更新 SQLite 行")
+    func testMemoryRawStoreUsesIncrementalWrites() throws {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [])
+        }
+
+        cleanup(sessions: [])
+
+        let memoryAID = UUID()
+        let memoryBID = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_710_000_000)
+        let store = MemoryRawStore()
+
+        let memoryA = MemoryItem(
+            id: memoryAID,
+            content: "记忆-A",
+            embedding: [0.1, 0.2],
+            createdAt: createdAt
+        )
+        let memoryB = MemoryItem(
+            id: memoryBID,
+            content: "记忆-B",
+            embedding: [0.3, 0.4],
+            createdAt: createdAt.addingTimeInterval(1)
+        )
+        try store.saveMemories([memoryA, memoryB])
+
+        let rowidBBefore = sqliteCount(
+            memoryStoreSQLiteURL,
+            sql: "SELECT rowid FROM memory_items WHERE id = '\(memoryBID.uuidString)'"
+        )
+
+        let updatedMemoryA = MemoryItem(
+            id: memoryAID,
+            content: "记忆-A-已更新",
+            embedding: [0.9, 0.8],
+            createdAt: createdAt,
+            updatedAt: createdAt.addingTimeInterval(10)
+        )
+        try store.saveMemories([updatedMemoryA, memoryB])
+
+        let rowidBAfter = sqliteCount(
+            memoryStoreSQLiteURL,
+            sql: "SELECT rowid FROM memory_items WHERE id = '\(memoryBID.uuidString)'"
+        )
+
+        #expect(rowidBBefore > 0)
+        #expect(rowidBAfter == rowidBBefore)
+        #expect(sqliteCount(memoryStoreSQLiteURL, sql: "SELECT COUNT(*) FROM memory_items") == 2)
+
+        let loaded = store.loadMemories()
+        #expect(loaded.contains(where: { $0.id == memoryAID && $0.content == "记忆-A-已更新" }))
+        #expect(loaded.contains(where: { $0.id == memoryBID && $0.content == "记忆-B" }))
     }
 
     @Test("GRDB 在仅收到临时会话快照时不会误删已有会话")

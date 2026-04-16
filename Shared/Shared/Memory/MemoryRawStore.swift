@@ -106,9 +106,23 @@ struct MemoryRawStore {
     @discardableResult
     private func saveMemoriesToSQLite(_ memories: [MemoryItem]) -> Bool {
         let didSave = Persistence.withMemoryDatabaseWrite { db in
-            try RelationalMemoryItemRecord.deleteAll(db)
+            let existingRecords = try RelationalMemoryItemRecord.fetchAll(db)
+            var existingByID: [String: RelationalMemoryItemRecord] = [:]
+            existingByID.reserveCapacity(existingRecords.count)
+            for record in existingRecords {
+                existingByID[record.id] = record
+            }
+
+            let targetIDs = Set(memories.map { $0.id.uuidString })
+            for existingID in existingByID.keys where !targetIDs.contains(existingID) {
+                try db.execute(
+                    sql: "DELETE FROM memory_items WHERE id = ?",
+                    arguments: [existingID]
+                )
+            }
+
             for memory in memories {
-                var record = RelationalMemoryItemRecord(
+                let record = RelationalMemoryItemRecord(
                     id: memory.id.uuidString,
                     content: memory.content,
                     embeddingData: RelationalFloatArrayCodec.encode(memory.embedding),
@@ -116,7 +130,31 @@ struct MemoryRawStore {
                     updatedAt: memory.updatedAt?.timeIntervalSince1970,
                     isArchived: memory.isArchived ? 1 : 0
                 )
-                try record.insert(db)
+                if let existing = existingByID[record.id], existing == record {
+                    continue
+                }
+
+                try db.execute(
+                    sql: """
+                    INSERT INTO memory_items (
+                        id, content, embedding_data, created_at, updated_at, is_archived
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        content = excluded.content,
+                        embedding_data = excluded.embedding_data,
+                        created_at = excluded.created_at,
+                        updated_at = excluded.updated_at,
+                        is_archived = excluded.is_archived
+                    """,
+                    arguments: [
+                        record.id,
+                        record.content,
+                        record.embeddingData,
+                        record.createdAt,
+                        record.updatedAt,
+                        record.isArchived
+                    ]
+                )
             }
             return true
         } ?? false
@@ -169,7 +207,7 @@ struct MemoryRawStore {
         }
     }
 
-    private struct RelationalMemoryItemRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
+    private struct RelationalMemoryItemRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord, Equatable {
         static let databaseTableName = "memory_items"
 
         enum CodingKeys: String, CodingKey {
