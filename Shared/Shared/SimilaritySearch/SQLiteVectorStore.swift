@@ -112,6 +112,7 @@ private extension SQLiteVectorStore {
             
             let parentID = item.metadata["parentMemoryId"] ?? item.id
             let metadataJSON = try JSONSerialization.data(withJSONObject: item.metadata, options: [])
+            let metadataJSONString = String(data: metadataJSON, encoding: .utf8) ?? "{}"
             let embeddingData = data(from: item.embedding)
             
             sqlite3_bind_text(statement, 1, (item.id as NSString).utf8String, -1, SQLITE_TRANSIENT)
@@ -120,9 +121,7 @@ private extension SQLiteVectorStore {
             _ = embeddingData.withUnsafeBytes { buffer in
                 sqlite3_bind_blob(statement, 4, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
             }
-            _ = metadataJSON.withUnsafeBytes { buffer in
-                sqlite3_bind_blob(statement, 5, buffer.baseAddress, Int32(buffer.count), SQLITE_TRANSIENT)
-            }
+            sqlite3_bind_text(statement, 5, (metadataJSONString as NSString).utf8String, -1, SQLITE_TRANSIENT)
             
             if sqlite3_step(statement) != SQLITE_DONE {
                 throw SQLiteError.executionFailed("插入向量失败: \(sqlite3_errmsg(db).flatMap { String(cString: $0) } ?? "")")
@@ -185,12 +184,23 @@ private extension SQLiteVectorStore {
     }
     
     func dictionary(fromColumn index: Int32, statement: OpaquePointer?) -> [String: String]? {
-        guard let blobPointer = sqlite3_column_blob(statement, index) else {
-            return nil
+        let columnType = sqlite3_column_type(statement, index)
+
+        if columnType == SQLITE_TEXT, let textPointer = sqlite3_column_text(statement, index) {
+            let text = String(cString: textPointer)
+            guard let data = text.data(using: .utf8) else {
+                return nil
+            }
+            return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
         }
-        let blobLength = Int(sqlite3_column_bytes(statement, index))
-        let data = Data(bytes: blobPointer, count: blobLength)
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
+
+        if columnType == SQLITE_BLOB, let blobPointer = sqlite3_column_blob(statement, index) {
+            let blobLength = Int(sqlite3_column_bytes(statement, index))
+            let data = Data(bytes: blobPointer, count: blobLength)
+            return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
+        }
+
+        return nil
     }
 }
 
