@@ -323,6 +323,47 @@ struct FontRouteSyncTests {
         }
     }
 
+    @Test("整段回退模式会沿用旧优先级链路继续尝试后续字体")
+    func testSegmentFallbackScopeKeepsLegacyPriorityChain() async throws {
+        let defaults = UserDefaults.standard
+        let key = FontLibrary.fallbackScopeStorageKey
+        let previousValue = defaults.object(forKey: key)
+        defer {
+            if let previousValue {
+                defaults.set(previousValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        try await withIsolatedFontStore {
+            let fixture = try loadSystemFontFixture()
+            let valid = try FontLibrary.importFont(
+                data: fixture.data,
+                fileName: "segment-\(fixture.fileName)"
+            )
+
+            let invalidID = UUID(uuidString: "50000000-0000-0000-0000-000000000001")!
+            let invalid = FontAssetRecord(
+                id: invalidID,
+                fileName: "segment-invalid.ttf",
+                checksum: "segment-invalid-checksum",
+                displayName: "无效优先级字体",
+                postScriptName: "Definitely-Not-Existing-Font-PS-Name",
+                importedAt: Date(timeIntervalSince1970: 1_730_000_400),
+                isEnabled: true
+            )
+
+            var assets = FontLibrary.loadAssets()
+            assets.append(invalid)
+            #expect(FontLibrary.saveAssets(assets))
+            FontLibrary.updateChain([invalidID, valid.id], for: .body)
+
+            defaults.set(FontFallbackScope.segment.rawValue, forKey: key)
+            #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == valid.postScriptName)
+        }
+    }
+
     @Test("旧版本同步包缺少 isEnabled 字段时默认按启用处理")
     func testDecodeLegacySyncedFontFileDefaultsIsEnabled() throws {
         let assetID = UUID(uuidString: "40000000-0000-0000-0000-000000000001")!

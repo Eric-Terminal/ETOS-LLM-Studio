@@ -549,6 +549,7 @@ private struct WatchFontSettingsView: View {
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
         .onChange(of: fallbackScopeRawValue) { _, _ in
+            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
         .confirmationDialog(

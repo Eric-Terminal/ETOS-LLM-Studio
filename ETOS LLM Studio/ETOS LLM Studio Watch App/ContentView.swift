@@ -1280,17 +1280,18 @@ private enum AppFontAdapter {
     private static var adaptedFontCacheToken: String = ""
 
     static func adaptedFont(from original: Font) -> Font {
-        let rawDescriptor = String(describing: original)
+        let descriptor = FontDescriptorInfo(font: original)
+        let descriptorKey = descriptor.cacheKey
         let cacheToken = FontLibrary.adapterCacheToken()
 
-        if let cached = cachedFont(for: rawDescriptor, cacheToken: cacheToken) {
+        if let cached = cachedFont(for: descriptorKey, cacheToken: cacheToken) {
             return cached
         }
 
-        let descriptor = FontDescriptorInfo(rawDescription: rawDescriptor)
         let role = inferredRole(from: descriptor)
-        guard let postScriptName = FontLibrary.resolvedPostScriptName(for: role) else {
-            storeAdaptedFont(original, for: rawDescriptor, cacheToken: cacheToken)
+        let sample = sampleText(for: role)
+        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) else {
+            storeAdaptedFont(original, for: descriptorKey, cacheToken: cacheToken)
             return original
         }
 
@@ -1301,7 +1302,7 @@ private enum AppFontAdapter {
         if let weight = descriptor.weight {
             mapped = mapped.weight(weight)
         }
-        storeAdaptedFont(mapped, for: rawDescriptor, cacheToken: cacheToken)
+        storeAdaptedFont(mapped, for: descriptorKey, cacheToken: cacheToken)
         return mapped
     }
 
@@ -1330,6 +1331,19 @@ private enum AppFontAdapter {
             )
         }
         return .custom(postScriptName, size: 15, relativeTo: .body)
+    }
+
+    private static func sampleText(for role: FontSemanticRole) -> String {
+        switch role {
+        case .body:
+            return "The quick brown fox 你好こんにちは"
+        case .emphasis:
+            return "Emphasis 斜体预览 こんにちは"
+        case .strong:
+            return "Strong 粗体预览 こんにちは"
+        case .code:
+            return "let value = 42 // 代码"
+        }
     }
 
     private static func defaultPointSize(for textStyle: Font.TextStyle) -> CGFloat {
@@ -1408,72 +1422,103 @@ private enum AppFontAdapter {
 }
 
 private struct FontDescriptorInfo {
-    let raw: String
-    let lowercasedRaw: String
+    let explicitSize: CGFloat?
+    let textStyle: Font.TextStyle?
+    let isItalic: Bool
+    let isMonospaced: Bool
+    let weight: Font.Weight?
+    let cacheKey: String
 
-    init(rawDescription: String) {
-        self.raw = rawDescription
-        self.lowercasedRaw = rawDescription.lowercased()
+    private struct ParseState {
+        var explicitSize: CGFloat?
+        var textStyle: Font.TextStyle?
+        var isItalic = false
+        var isMonospaced = false
+        var weight: Font.Weight?
     }
 
-    var explicitSize: CGFloat? {
-        firstMatchedNumber(after: "size:")
-            ?? firstMatchedNumber(after: "size ")
+    init(font: Font) {
+        var state = ParseState()
+        Self.collect(from: font, state: &state, depth: 0)
+        explicitSize = state.explicitSize
+        textStyle = state.textStyle
+        isItalic = state.isItalic
+        isMonospaced = state.isMonospaced
+        weight = state.weight
+        cacheKey = Self.makeCacheKey(from: state)
     }
 
-    var textStyle: Font.TextStyle? {
-        if lowercasedRaw.contains("caption2") { return .caption2 }
-        if lowercasedRaw.contains("caption") { return .caption }
-        if lowercasedRaw.contains("footnote") { return .footnote }
-        if lowercasedRaw.contains("callout") { return .callout }
-        if lowercasedRaw.contains("subheadline") { return .subheadline }
-        if lowercasedRaw.contains("headline") { return .headline }
-        if lowercasedRaw.contains("title3") { return .title3 }
-        if lowercasedRaw.contains("title2") { return .title2 }
-        if lowercasedRaw.contains("largetitle") || lowercasedRaw.contains("large title") { return .largeTitle }
-        if lowercasedRaw.contains("title") { return .title }
-        if lowercasedRaw.contains("body") { return .body }
-        return nil
-    }
+    private static func collect(from value: Any, state: inout ParseState, depth: Int) {
+        guard depth <= 12 else { return }
+        guard let unwrapped = unwrapOptional(value) else { return }
 
-    var isItalic: Bool {
-        lowercasedRaw.contains("italic")
-    }
-
-    var isMonospaced: Bool {
-        lowercasedRaw.contains("monospaced") || lowercasedRaw.contains("mono")
-    }
-
-    var weight: Font.Weight? {
-        if lowercasedRaw.contains("black") { return .black }
-        if lowercasedRaw.contains("heavy") { return .heavy }
-        if lowercasedRaw.contains("semibold") { return .semibold }
-        if lowercasedRaw.contains("bold") { return .bold }
-        if lowercasedRaw.contains("medium") { return .medium }
-        if lowercasedRaw.contains("light") { return .light }
-        if lowercasedRaw.contains("thin") { return .thin }
-        if lowercasedRaw.contains("ultralight") || lowercasedRaw.contains("ultra light") { return .ultraLight }
-        return nil
-    }
-
-    private func firstMatchedNumber(after marker: String) -> CGFloat? {
-        guard let markerRange = lowercasedRaw.range(of: marker) else { return nil }
-        var cursor = markerRange.upperBound
-        var digits = ""
-        var hasStarted = false
-
-        while cursor < lowercasedRaw.endIndex {
-            let character = lowercasedRaw[cursor]
-            if character.isNumber || character == "." {
-                digits.append(character)
-                hasStarted = true
-            } else if hasStarted {
-                break
-            }
-            cursor = lowercasedRaw.index(after: cursor)
+        let typeName = String(describing: type(of: unwrapped)).lowercased()
+        if typeName.contains("italicmodifier") {
+            state.isItalic = true
+        }
+        if typeName.contains("boldmodifier"), state.weight == nil {
+            state.weight = .bold
+        }
+        if typeName.contains("monospacedmodifier") || typeName.contains("monospaceddigitmodifier") {
+            state.isMonospaced = true
         }
 
-        guard !digits.isEmpty, let value = Double(digits) else { return nil }
-        return CGFloat(value)
+        let mirror = Mirror(reflecting: unwrapped)
+        for child in mirror.children {
+            let label = child.label?.lowercased()
+            if label == "size", let number = numericValue(from: child.value) {
+                state.explicitSize = number
+            } else if label == "style" || label == "textstyle",
+                      let style = unwrapOptional(child.value) as? Font.TextStyle {
+                state.textStyle = style
+            } else if label == "weight",
+                      let parsedWeight = unwrapOptional(child.value) as? Font.Weight {
+                state.weight = parsedWeight
+            } else if label == "design",
+                      let design = unwrapOptional(child.value) as? Font.Design,
+                      design == .monospaced {
+                state.isMonospaced = true
+            }
+            collect(from: child.value, state: &state, depth: depth + 1)
+        }
+    }
+
+    private static func unwrapOptional(_ value: Any) -> Any? {
+        let mirror = Mirror(reflecting: value)
+        guard mirror.displayStyle == .optional else {
+            return value
+        }
+        return mirror.children.first?.value
+    }
+
+    private static func numericValue(from value: Any) -> CGFloat? {
+        if let number = value as? CGFloat {
+            return number
+        }
+        if let number = value as? Double {
+            return CGFloat(number)
+        }
+        if let number = value as? Float {
+            return CGFloat(number)
+        }
+        return nil
+    }
+
+    private static func makeCacheKey(from state: ParseState) -> String {
+        let styleToken = state.textStyle.map(String.init(describing:)) ?? "-"
+        let sizeToken: String
+        if let size = state.explicitSize {
+            sizeToken = String(format: "%.4f", size)
+        } else {
+            sizeToken = "-"
+        }
+        let weightToken = state.weight.map(String.init(describing:)) ?? "-"
+        return [
+            "style=\(styleToken)",
+            "size=\(sizeToken)",
+            "weight=\(weightToken)",
+            "italic=\(state.isItalic ? 1 : 0)",
+            "mono=\(state.isMonospaced ? 1 : 0)"
+        ].joined(separator: "|")
     }
 }
