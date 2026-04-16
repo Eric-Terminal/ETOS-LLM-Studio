@@ -3039,14 +3039,14 @@ public enum FontLibrary {
     public static var isCustomFontEnabled: Bool {
         ensureRuntimeCachePrepared()
         ensureRuntimeSettingsSynchronized()
-        withRuntimeSnapshot { $0.isCustomFontEnabled }
+        return withRuntimeSnapshot { $0.isCustomFontEnabled }
     }
 
     /// 字体回退范围设置（默认整段）。
     public static var fallbackScope: FontFallbackScope {
         ensureRuntimeCachePrepared()
         ensureRuntimeSettingsSynchronized()
-        withRuntimeSnapshot { $0.fallbackScope }
+        return withRuntimeSnapshot { $0.fallbackScope }
     }
 
     public static func preloadRuntimeCacheAsync(forceReload: Bool = false) {
@@ -3259,7 +3259,7 @@ public enum FontLibrary {
     public static func fallbackPostScriptNames(for role: FontSemanticRole) -> [String] {
         ensureRuntimeCachePrepared()
         ensureRuntimeSettingsSynchronized()
-        withRuntimeSnapshot { snapshot in
+        return withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return [] }
             return snapshot.fallbackPostScriptNamesByRole[role] ?? []
         }
@@ -3268,7 +3268,7 @@ public enum FontLibrary {
     public static func resolvedPostScriptName(for role: FontSemanticRole) -> String? {
         ensureRuntimeCachePrepared()
         ensureRuntimeSettingsSynchronized()
-        withRuntimeSnapshot { snapshot in
+        return withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return nil }
             return snapshot.preferredPostScriptNameByRole[role]
         }
@@ -3277,7 +3277,7 @@ public enum FontLibrary {
     public static func adapterCacheToken() -> String {
         ensureRuntimeCachePrepared()
         ensureRuntimeSettingsSynchronized()
-        withRuntimeSnapshot { snapshot in
+        return withRuntimeSnapshot { snapshot in
             let roleSignature = FontSemanticRole.allCases
                 .map { role -> String in
                     let names = snapshot.fallbackPostScriptNamesByRole[role] ?? []

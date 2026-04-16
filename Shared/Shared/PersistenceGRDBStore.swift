@@ -2539,8 +2539,20 @@ final class PersistenceGRDBStore {
         excluding reservedIDs: Set<String>
     ) throws -> String {
         var candidate = UUID().uuidString
-        while reservedIDs.contains(candidate)
-            || (try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE id = ?", arguments: [candidate]) ?? 0) > 0 {
+        while true {
+            if reservedIDs.contains(candidate) {
+                candidate = UUID().uuidString
+                continue
+            }
+
+            let exists = (try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM messages WHERE id = ?",
+                arguments: [candidate]
+            ) ?? 0) > 0
+            if !exists {
+                break
+            }
             candidate = UUID().uuidString
         }
         return candidate
