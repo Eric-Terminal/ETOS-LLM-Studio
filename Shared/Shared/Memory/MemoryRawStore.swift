@@ -13,6 +13,13 @@ import os.log
 
 struct MemoryRawStore {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "MemoryRawStore")
+    private static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+    private static let sqliteWriteQueue = DispatchQueue(
+        label: "com.etos.memory.sqlite.incremental.write.queue",
+        qos: .utility
+    )
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let rootDirectory: URL?
@@ -39,7 +46,7 @@ struct MemoryRawStore {
             }
 
             if let legacyJSONMemories, !legacyJSONMemories.isEmpty {
-                _ = saveMemoriesToSQLite(legacyJSONMemories)
+                _ = saveMemoriesToSQLite(legacyJSONMemories, asynchronously: !Self.isRunningUnitTests)
                 persistJSONMirror(legacyJSONMemories)
                 return legacyJSONMemories
             }
@@ -49,7 +56,7 @@ struct MemoryRawStore {
 
         if let legacyJSONMemories {
             if canUseGRDB {
-                _ = saveMemoriesToSQLite(legacyJSONMemories)
+                _ = saveMemoriesToSQLite(legacyJSONMemories, asynchronously: !Self.isRunningUnitTests)
             }
             return legacyJSONMemories
         }
@@ -60,7 +67,7 @@ struct MemoryRawStore {
     func saveMemories(_ memories: [MemoryItem]) throws {
         persistJSONMirror(memories)
         if canUseGRDB {
-            _ = saveMemoriesToSQLite(memories)
+            _ = saveMemoriesToSQLite(memories, asynchronously: !Self.isRunningUnitTests)
         }
     }
 
@@ -94,7 +101,7 @@ struct MemoryRawStore {
         if memories.isEmpty,
            let legacy = loadLegacyMemoriesFromBlob(),
            !legacy.isEmpty {
-            if saveMemoriesToSQLite(legacy) {
+            if saveMemoriesToSQLite(legacy, asynchronously: !Self.isRunningUnitTests) {
                 removeLegacyMemoryBlobs()
             }
             return legacy
@@ -104,7 +111,19 @@ struct MemoryRawStore {
     }
 
     @discardableResult
-    private func saveMemoriesToSQLite(_ memories: [MemoryItem]) -> Bool {
+    private func saveMemoriesToSQLite(_ memories: [MemoryItem], asynchronously: Bool) -> Bool {
+        guard asynchronously else {
+            return performIncrementalSQLiteWrite(memories)
+        }
+
+        Self.sqliteWriteQueue.async {
+            _ = performIncrementalSQLiteWrite(memories)
+        }
+        return true
+    }
+
+    @discardableResult
+    private func performIncrementalSQLiteWrite(_ memories: [MemoryItem]) -> Bool {
         let didSave = Persistence.withMemoryDatabaseWrite { db in
             let existingRecords = try RelationalMemoryItemRecord.fetchAll(db)
             var existingByID: [String: RelationalMemoryItemRecord] = [:]

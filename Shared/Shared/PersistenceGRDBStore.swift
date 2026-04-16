@@ -170,9 +170,16 @@ final class PersistenceGRDBStore {
     private static let incrementalVacuumTriggerPages = 8_192
     private static let incrementalVacuumTriggerRatio = 0.2
     private static let incrementalVacuumBatchPages = 4_096
+    private static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
     private let chatsDirectory: URL
     private let databaseURL: URL
     private let dbPool: DatabasePool
+    private let messageWriteQueue = DispatchQueue(
+        label: "com.etos.persistence.messages.write.queue",
+        qos: .utility
+    )
 
     init(chatsDirectory: URL) throws {
         self.chatsDirectory = chatsDirectory
@@ -334,16 +341,27 @@ final class PersistenceGRDBStore {
 
     func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
         let normalizedMessages = normalizeToolCallsPlacement(in: messages)
+        if Self.isRunningUnitTests {
+            saveMessagesIncrementally(normalizedMessages, for: sessionID)
+            return
+        }
+
+        messageWriteQueue.async { [weak self] in
+            self?.saveMessagesIncrementally(normalizedMessages, for: sessionID)
+        }
+    }
+
+    private func saveMessagesIncrementally(_ messages: [ChatMessage], for sessionID: UUID) {
         do {
             try dbPool.write { db in
                 try ensureSessionExists(db, sessionID: sessionID)
                 let existingRecords = try fetchPersistedMessageRecords(db, sessionID: sessionID)
                 let now = Date()
                 var targetIDs = Set<String>()
-                targetIDs.reserveCapacity(normalizedMessages.count)
+                targetIDs.reserveCapacity(messages.count)
                 var changedRowCount = 0
 
-                for (index, message) in normalizedMessages.enumerated() {
+                for (index, message) in messages.enumerated() {
                     let fallbackTimestamp = now.addingTimeInterval(Double(index) * 0.000_001)
                     let preferredID = message.id.uuidString
                     let existingCreatedAt = existingRecords[preferredID]?.createdAt

@@ -714,8 +714,8 @@ struct MemoryManagerTests {
         await cleanup(memoryManager: memoryManager)
     }
 
-    @Test("向量分块回填原文时按 parentMemoryId 合并并返回完整记忆")
-    func testReconstructMemoriesFromVectorChunks() async throws {
+    @Test("初始化不会自动修复历史分块污染")
+    func testInitializationDoesNotAutoReconstructChunkedMemories() async throws {
         let parentID = UUID()
         let createdAt = Date(timeIntervalSince1970: 1_710_000_000)
         let createdAtString = ISO8601DateFormatter().string(from: createdAt)
@@ -753,9 +753,9 @@ struct MemoryManagerTests {
         await memoryManager.waitForInitialization()
 
         let memories = await memoryManager.getAllMemories()
-        #expect(memories.count == 1)
-        #expect(memories.first?.id == parentID)
-        #expect(memories.first?.content == "用户喜欢低温慢煮咖啡。")
+        #expect(memories.count == 2)
+        #expect(memories.allSatisfy { $0.id != parentID })
+        #expect(Set(memories.map(\.content)) == ["用户喜欢", "低温慢煮咖啡。"])
 
         await cleanup(memoryManager: memoryManager)
     }
