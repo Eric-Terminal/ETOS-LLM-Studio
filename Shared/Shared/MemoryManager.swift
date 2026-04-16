@@ -176,8 +176,13 @@ public class MemoryManager {
         self.similarityIndex = testIndex
         self.initializationTask = Task {
             do {
-                let loadedItems = try self.similarityIndex.loadIndex() ?? []
-                let memories = loadedItems.map { MemoryItem(from: $0) }.sorted(by: { $0.createdAt > $1.createdAt })
+                let loadedItems = (try self.similarityIndex.loadIndex()) ?? self.similarityIndex.indexItems
+                let reconstructed = self.reconstructMemoriesFromVectorItems(
+                    existingRawMemories: [],
+                    indexItems: loadedItems
+                )
+                let memories = (reconstructed ?? loadedItems.map { MemoryItem(from: $0) })
+                    .sorted(by: { $0.createdAt > $1.createdAt })
                 self.cachedMemories = memories
                 self.internalMemoriesPublisher.send(memories)
                 logger.info("  - 测试初始化完成。从磁盘加载了 \(memories.count) 条记忆。")
@@ -221,20 +226,40 @@ public class MemoryManager {
             logger.error("  - 加载记忆索引失败: \(error.localizedDescription)")
         }
         
-        var rawMemories = rawStore.loadMemories().sorted(by: { $0.createdAt > $1.createdAt })
+        let existingRawMemories = rawStore.loadMemories()
+        let reconstructedMemories = reconstructMemoriesFromVectorItems(
+            existingRawMemories: existingRawMemories,
+            indexItems: self.similarityIndex.indexItems
+        )
+        var rawMemories = (reconstructedMemories ?? existingRawMemories)
+            .sorted(by: { $0.createdAt > $1.createdAt })
+
+        if let reconstructedMemories,
+           reconstructedMemories != existingRawMemories {
+            do {
+                try rawStore.saveMemories(reconstructedMemories)
+                logger.info("  - 已将向量分块恢复为 \(reconstructedMemories.count) 条原文记忆。")
+            } catch {
+                logger.error("  - 修复原文记忆失败: \(error.localizedDescription)")
+            }
+            rawMemories = reconstructedMemories.sorted(by: { $0.createdAt > $1.createdAt })
+        }
+
         if rawMemories.isEmpty, !self.similarityIndex.indexItems.isEmpty {
             rawMemories = self.similarityIndex.indexItems
                 .map { MemoryItem(from: $0) }
                 .sorted(by: { $0.createdAt > $1.createdAt })
-            cachedMemories = rawMemories
-            internalMemoriesPublisher.send(rawMemories)
-            persistRawMemories()
-            logger.info("  - 从旧索引迁移 \(rawMemories.count) 条记忆到 JSON。")
-        } else {
-            cachedMemories = rawMemories
-            internalMemoriesPublisher.send(rawMemories)
-            logger.info("  - 原文记忆初始化完成，当前条目: \(rawMemories.count)。")
+            do {
+                try rawStore.saveMemories(rawMemories)
+                logger.info("  - 从旧索引迁移 \(rawMemories.count) 条记忆到原文存储。")
+            } catch {
+                logger.error("  - 从旧索引补录原文记忆失败: \(error.localizedDescription)")
+            }
         }
+
+        cachedMemories = rawMemories
+        internalMemoriesPublisher.send(rawMemories)
+        logger.info("  - 原文记忆初始化完成，当前条目: \(rawMemories.count)。")
         
         await reconcilePendingEmbeddings()
     }
@@ -1158,6 +1183,134 @@ public class MemoryManager {
             }
         } catch {
             logger.error("清理旧向量存储失败：\(error.localizedDescription)")
+        }
+    }
+
+    private struct VectorChunkSegment {
+        let text: String
+        let chunkIndex: Int?
+        let appearanceOrder: Int
+    }
+
+    private struct ReconstructedMemoryBucket {
+        var createdAt: Date?
+        var segments: [VectorChunkSegment] = []
+    }
+
+    private func reconstructMemoriesFromVectorItems(
+        existingRawMemories: [MemoryItem],
+        indexItems: [IndexItem]
+    ) -> [MemoryItem]? {
+        guard !indexItems.isEmpty else { return nil }
+
+        let groupedMemories = groupMemoriesByParentID(
+            from: indexItems,
+            existingRawMemories: existingRawMemories
+        )
+        guard !groupedMemories.isEmpty else { return nil }
+
+        if existingRawMemories.isEmpty {
+            return groupedMemories
+        }
+
+        let existingIDs = Set(existingRawMemories.map { $0.id.uuidString })
+        let groupedIDs = Set(groupedMemories.map { $0.id.uuidString })
+        if existingIDs == groupedIDs {
+            return nil
+        }
+
+        let chunkIDs = Set(indexItems.map(\.id))
+        let hasDistinctParentMetadata = indexItems.contains { item in
+            guard let parentID = item.metadata["parentMemoryId"] else { return false }
+            return parentID != item.id
+        }
+
+        let rawMemoriesLookChunked =
+            hasDistinctParentMetadata &&
+            existingIDs.isSubset(of: chunkIDs) &&
+            !existingIDs.isSubset(of: groupedIDs) &&
+            existingRawMemories.count >= groupedMemories.count
+
+        guard rawMemoriesLookChunked else { return nil }
+        return groupedMemories
+    }
+
+    private func groupMemoriesByParentID(
+        from indexItems: [IndexItem],
+        existingRawMemories: [MemoryItem]
+    ) -> [MemoryItem] {
+        guard !indexItems.isEmpty else { return [] }
+
+        let existingByID = Dictionary(uniqueKeysWithValues: existingRawMemories.map { ($0.id.uuidString, $0) })
+        var grouped: [String: ReconstructedMemoryBucket] = [:]
+        grouped.reserveCapacity(indexItems.count)
+
+        for (appearanceOrder, item) in indexItems.enumerated() {
+            let parentID = item.metadata["parentMemoryId"] ?? item.id
+            let trimmedText = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedText.isEmpty else { continue }
+
+            let parsedCreatedAt = item.metadata["createdAt"].flatMap { dateFormatter.date(from: $0) }
+            let chunkIndex = item.metadata["chunkIndex"].flatMap(Int.init)
+            let existingMemory = existingByID[parentID]
+
+            var bucket = grouped[parentID] ?? ReconstructedMemoryBucket(createdAt: parsedCreatedAt ?? existingMemory?.createdAt)
+            if bucket.createdAt == nil {
+                bucket.createdAt = parsedCreatedAt ?? existingMemory?.createdAt
+            }
+            bucket.segments.append(
+                VectorChunkSegment(
+                    text: trimmedText,
+                    chunkIndex: chunkIndex,
+                    appearanceOrder: appearanceOrder
+                )
+            )
+            grouped[parentID] = bucket
+        }
+
+        var reconstructed: [MemoryItem] = []
+        reconstructed.reserveCapacity(grouped.count)
+
+        for (parentID, bucket) in grouped {
+            let orderedSegments = bucket.segments.sorted { lhs, rhs in
+                switch (lhs.chunkIndex, rhs.chunkIndex) {
+                case let (l?, r?):
+                    if l == r { return lhs.appearanceOrder < rhs.appearanceOrder }
+                    return l < r
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    return lhs.appearanceOrder < rhs.appearanceOrder
+                }
+            }
+
+            let mergedContent = orderedSegments.map(\.text).joined()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !mergedContent.isEmpty else { continue }
+
+            let existingMemory = existingByID[parentID]
+            let resolvedID = UUID(uuidString: parentID) ?? existingMemory?.id ?? UUID()
+            let createdAt = bucket.createdAt ?? existingMemory?.createdAt ?? Date()
+
+            reconstructed.append(
+                MemoryItem(
+                    id: resolvedID,
+                    content: mergedContent,
+                    embedding: existingMemory?.embedding ?? [],
+                    createdAt: createdAt,
+                    updatedAt: existingMemory?.updatedAt,
+                    isArchived: existingMemory?.isArchived ?? false
+                )
+            )
+        }
+
+        return reconstructed.sorted {
+            if $0.createdAt == $1.createdAt {
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            return $0.createdAt > $1.createdAt
         }
     }
     
