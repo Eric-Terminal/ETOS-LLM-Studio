@@ -480,7 +480,7 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var paginationBottomBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Button {
                 goToPreviousPage()
             } label: {
@@ -490,7 +490,7 @@ private struct SessionFolderBrowserView: View {
             .disabled(!canGoToPreviousPage)
             .accessibilityLabel("上一页")
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 1)
 
             ZStack {
                 Capsule()
@@ -513,7 +513,7 @@ private struct SessionFolderBrowserView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 1)
 
             Button {
                 goToNextPage()
