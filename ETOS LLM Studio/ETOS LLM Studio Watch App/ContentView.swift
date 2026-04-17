@@ -357,14 +357,10 @@ struct ContentView: View {
     }
 
     private func refreshRootBodyFont() {
-        if let postScriptName = FontLibrary.resolvePostScriptName(
-            for: .body,
+        rootBodyFont = AppFontAdapter.adaptedFont(
+            from: .body,
             sampleText: "The quick brown fox 你好こんにちは"
-        ) {
-            rootBodyFont = .custom(postScriptName, size: 15, relativeTo: .body)
-        } else {
-            rootBodyFont = .body
-        }
+        )
     }
 
     private var legacyJSONMigrationPromptSheet: some View {
