@@ -50,6 +50,10 @@ private struct SessionFolderBrowserView: View {
     @State private var isSearching: Bool = false
     @State private var latestSearchToken: Int = 0
     @State private var pendingSearchWorkItem: DispatchWorkItem?
+    @State private var sessionPageIndex: Int = 0
+
+    private let maxSessionsPerPage = 100
+    private let paginationButtonColor = Color(red: 0.33, green: 0.47, blue: 0.65)
 
     private var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: viewModel.sessionFolders.map { ($0.id, $0) })
@@ -68,6 +72,23 @@ private struct SessionFolderBrowserView: View {
         viewModel.chatSessions.filter { normalizedFolderID(of: $0) == folderID }
     }
 
+    private var totalDirectSessionCount: Int {
+        directSessions.count
+    }
+
+    private var totalSessionPages: Int {
+        guard totalDirectSessionCount > 0 else { return 1 }
+        return ((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1
+    }
+
+    private var pagedDirectSessions: [ChatSession] {
+        guard totalDirectSessionCount > 0 else { return [] }
+        let start = min(sessionPageIndex * maxSessionsPerPage, totalDirectSessionCount)
+        let end = min(start + maxSessionsPerPage, totalDirectSessionCount)
+        guard start < end else { return [] }
+        return Array(directSessions[start..<end])
+    }
+
     private var sessionOrderByID: [UUID: Int] {
         Dictionary(uniqueKeysWithValues: viewModel.chatSessions.enumerated().map { ($1.id, $0) })
     }
@@ -79,7 +100,7 @@ private struct SessionFolderBrowserView: View {
                 entry: .folder($0)
             )
         }
-        let sessions = directSessions.map {
+        let sessions = pagedDirectSessions.map {
             SessionMergedEntryWithRank(
                 rank: sessionOrderByID[$0.id] ?? .max,
                 entry: .session($0)
@@ -118,7 +139,7 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var selectedSessions: [ChatSession] {
-        directSessions.filter { selectedSessionIDs.contains($0.id) }
+        pagedDirectSessions.filter { selectedSessionIDs.contains($0.id) }
     }
 
     private var normalizedSearchQuery: String {
@@ -136,6 +157,28 @@ private struct SessionFolderBrowserView: View {
 
     private var emptyStateText: String {
         folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
+    }
+
+    private var canGoToPreviousPage: Bool {
+        sessionPageIndex > 0
+    }
+
+    private var canGoToNextPage: Bool {
+        sessionPageIndex + 1 < totalSessionPages
+    }
+
+    private var currentPageStartOrdinal: Int {
+        guard totalDirectSessionCount > 0 else { return 0 }
+        return sessionPageIndex * maxSessionsPerPage + 1
+    }
+
+    private var currentPageEndOrdinal: Int {
+        guard totalDirectSessionCount > 0 else { return 0 }
+        return min((sessionPageIndex + 1) * maxSessionsPerPage, totalDirectSessionCount)
+    }
+
+    private var paginationSummaryText: String {
+        "当前显示\(currentPageStartOrdinal)-\(currentPageEndOrdinal)个对话(总共\(totalDirectSessionCount))"
     }
 
     var body: some View {
@@ -186,13 +229,15 @@ private struct SessionFolderBrowserView: View {
         .safeAreaInset(edge: .bottom) {
             if isBatchSelecting && !isSearchActive {
                 batchActionBar
+            } else if !isSearchActive {
+                paginationBar
             }
         }
         return applySearchModifier(to: baseList)
     }
 
-    private var directSessionIDs: [UUID] {
-        directSessions.map(\.id)
+    private var pagedSessionIDs: [UUID] {
+        pagedDirectSessions.map(\.id)
     }
 
     private func applyStateHandlers<Content: View>(to content: Content) -> some View {
@@ -203,10 +248,14 @@ private struct SessionFolderBrowserView: View {
                     dismiss()
                 }
             }
-            .onChange(of: directSessionIDs) { _, visibleIDs in
+            .onChange(of: pagedSessionIDs) { _, visibleIDs in
                 selectedSessionIDs.formIntersection(Set(visibleIDs))
             }
+            .onChange(of: totalDirectSessionCount) { _, _ in
+                normalizeSessionPageIndex()
+            }
             .onAppear {
+                normalizeSessionPageIndex()
                 guard isRoot else { return }
                 scheduleSearch(for: searchText)
             }
@@ -447,6 +496,51 @@ private struct SessionFolderBrowserView: View {
         .background(.ultraThinMaterial)
     }
 
+    private var paginationBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                goToPreviousPage()
+            } label: {
+                Text("<")
+                    .etFont(.system(size: 18, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle().fill(Color(uiColor: .systemBackground))
+                    )
+            }
+            .foregroundStyle(paginationButtonColor)
+            .disabled(!canGoToPreviousPage)
+            .accessibilityLabel("上一页")
+
+            TextField("", text: .constant(paginationSummaryText))
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.center)
+                .disabled(true)
+                .allowsHitTesting(false)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(Color.clear)
+
+            Button {
+                goToNextPage()
+            } label: {
+                Text(">")
+                    .etFont(.system(size: 18, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle().fill(Color(uiColor: .systemBackground))
+                    )
+            }
+            .foregroundStyle(paginationButtonColor)
+            .disabled(!canGoToNextPage)
+            .accessibilityLabel("下一页")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
         switch entry {
         case .folder(let folder):
@@ -593,6 +687,26 @@ private struct SessionFolderBrowserView: View {
         guard !sessions.isEmpty else { return }
         viewModel.deleteSessions(sessions)
         selectedSessionIDs.removeAll()
+    }
+
+    private func normalizeSessionPageIndex() {
+        let maxIndex = max(totalSessionPages - 1, 0)
+        if sessionPageIndex > maxIndex {
+            sessionPageIndex = maxIndex
+        }
+        if sessionPageIndex < 0 {
+            sessionPageIndex = 0
+        }
+    }
+
+    private func goToPreviousPage() {
+        guard canGoToPreviousPage else { return }
+        sessionPageIndex -= 1
+    }
+
+    private func goToNextPage() {
+        guard canGoToNextPage else { return }
+        sessionPageIndex += 1
     }
 
     private func normalizedFolderID(of session: ChatSession) -> UUID? {
