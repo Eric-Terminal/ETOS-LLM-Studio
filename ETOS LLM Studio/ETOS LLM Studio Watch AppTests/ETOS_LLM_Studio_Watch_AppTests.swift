@@ -104,4 +104,44 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(appended == nil)
     }
 
+    @Test("懒加载计数会忽略工具结果消息")
+    func testLazyLoadWeightIgnoresToolMessages() {
+        let messages: [ChatMessage] = [
+            ChatMessage(role: .user, content: "用户问题"),
+            ChatMessage(
+                role: .tool,
+                content: "工具结果",
+                toolCalls: [InternalToolCall(id: "tool-1", toolName: "search", arguments: "{}", result: "ok")]
+            ),
+            ChatMessage(role: .assistant, content: "助手回答")
+        ]
+
+        let weightedCount = ChatViewModel.lazyLoadWeightedMessageCount(in: messages)
+        #expect(weightedCount == 2)
+        #expect(ChatViewModel.lazyLoadWeight(for: messages[1]) == 0)
+    }
+
+    @Test("懒加载截断会以非工具消息作为权重单位")
+    func testSuffixMessagesForLazyLoadUsesWeightedLimit() {
+        let olderAssistant = ChatMessage(role: .assistant, content: "旧工具调用")
+        let olderTool = ChatMessage(
+            role: .tool,
+            content: "旧工具结果",
+            toolCalls: [InternalToolCall(id: "tool-old", toolName: "search", arguments: "{}", result: "old")]
+        )
+        let newerAssistant = ChatMessage(role: .assistant, content: "新工具调用")
+        let newerTool = ChatMessage(
+            role: .tool,
+            content: "新工具结果",
+            toolCalls: [InternalToolCall(id: "tool-new", toolName: "search", arguments: "{}", result: "new")]
+        )
+
+        let subset = ChatViewModel.suffixMessagesForLazyLoad(
+            [olderAssistant, olderTool, newerAssistant, newerTool],
+            weightedLimit: 1
+        )
+
+        #expect(subset.map(\.id) == [newerAssistant.id, newerTool.id])
+    }
+
 }

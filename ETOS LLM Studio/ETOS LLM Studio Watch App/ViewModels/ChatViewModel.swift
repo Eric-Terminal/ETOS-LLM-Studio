@@ -1582,16 +1582,17 @@ class ChatViewModel: ObservableObject {
         }
         
         let lazyCount = lazyLoadMessageCount
-        if lazyCount > 0 && filtered.count > lazyCount {
+        let weightedCount = Self.lazyLoadWeightedMessageCount(in: filtered)
+        if lazyCount > 0 && weightedCount > lazyCount {
             let limit = lazyCount + additionalHistoryLoaded
-            if filtered.count > limit {
-                let subset = Array(filtered.suffix(limit))
+            if weightedCount > limit {
+                let subset = Self.suffixMessagesForLazyLoad(filtered, weightedLimit: limit)
                 updateDisplayedStatesIfNeeded(subset)
                 updateHistoryFullyLoadedIfNeeded(false)
             } else {
                 updateDisplayedStatesIfNeeded(filtered)
                 updateHistoryFullyLoadedIfNeeded(true)
-                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, filtered.count - lazyCount))
+                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, weightedCount - lazyCount))
             }
         } else {
             updateDisplayedStatesIfNeeded(filtered)
@@ -1602,7 +1603,7 @@ class ChatViewModel: ObservableObject {
     
     func loadEntireHistory() {
         let filtered = visibleMessages(from: allMessagesForSession)
-        additionalHistoryLoaded = max(0, filtered.count - lazyLoadMessageCount)
+        additionalHistoryLoaded = max(0, Self.lazyLoadWeightedMessageCount(in: filtered) - lazyLoadMessageCount)
         updateDisplayedStatesIfNeeded(filtered)
         updateHistoryFullyLoadedIfNeeded(true)
     }
@@ -2104,6 +2105,36 @@ class ChatViewModel: ObservableObject {
     
     private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
         source
+    }
+
+    nonisolated static func lazyLoadWeight(for message: ChatMessage) -> Int {
+        message.role == .tool ? 0 : 1
+    }
+
+    nonisolated static func lazyLoadWeightedMessageCount(in messages: [ChatMessage]) -> Int {
+        messages.reduce(0) { partialResult, message in
+            partialResult + lazyLoadWeight(for: message)
+        }
+    }
+
+    nonisolated static func suffixMessagesForLazyLoad(_ messages: [ChatMessage], weightedLimit: Int) -> [ChatMessage] {
+        guard weightedLimit > 0, !messages.isEmpty else { return [] }
+
+        var remaining = weightedLimit
+        var startIndex = messages.endIndex
+
+        while startIndex > messages.startIndex {
+            guard remaining > 0 else { break }
+            let candidateIndex = messages.index(before: startIndex)
+            let weight = lazyLoadWeight(for: messages[candidateIndex])
+            if weight > remaining {
+                break
+            }
+            remaining -= weight
+            startIndex = candidateIndex
+        }
+
+        return Array(messages[startIndex...])
     }
 
     private func updateDisplayMessagesIfNeeded(with source: [ChatMessageRenderState]? = nil) {
