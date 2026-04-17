@@ -126,6 +126,10 @@ private struct SessionFolderBrowserView: View {
         return ((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1
     }
 
+    private var shouldShowPaginationBar: Bool {
+        totalDirectSessionCount > maxSessionsPerPage
+    }
+
     private var pagedDirectSessions: [ChatSession] {
         guard totalDirectSessionCount > 0 else { return [] }
         let start = min(sessionPageIndex * maxSessionsPerPage, totalDirectSessionCount)
@@ -245,7 +249,7 @@ private struct SessionFolderBrowserView: View {
                 }
             }
 
-            if !isBatchSelecting {
+            if !isBatchSelecting && shouldShowPaginationBar {
                 ToolbarItem(placement: .bottomBar) {
                     paginationBottomBar
                 }
