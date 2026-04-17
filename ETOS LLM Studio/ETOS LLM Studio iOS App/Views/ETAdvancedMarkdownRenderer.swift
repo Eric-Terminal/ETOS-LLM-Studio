@@ -1293,6 +1293,7 @@ private extension View {
         let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
         let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
         let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
+        let usesCharacterFallback = FontLibrary.fallbackScope == .character
 
         self
             .markdownSoftBreakMode(.lineBreak)
@@ -1303,27 +1304,36 @@ private extension View {
                     prefersDarkPalette: prefersDarkPalette
                 )
             )
+            .etFont(.body, sampleText: sampleText)
             .markdownTextStyle {
-                if let bodyFontName, !bodyFontName.isEmpty {
+                if !usesCharacterFallback,
+                   let bodyFontName,
+                   !bodyFontName.isEmpty {
                     FontFamily(.custom(bodyFontName))
                 }
                 ForegroundColor(textColor)
             }
             .markdownTextStyle(\.emphasis) {
-                if let emphasisFontName, !emphasisFontName.isEmpty {
+                if !usesCharacterFallback,
+                   let emphasisFontName,
+                   !emphasisFontName.isEmpty {
                     FontFamily(.custom(emphasisFontName))
                 }
                 FontStyle(.italic)
                 ForegroundColor(textColor)
             }
             .markdownTextStyle(\.strong) {
-                if let strongFontName, !strongFontName.isEmpty {
+                if !usesCharacterFallback,
+                   let strongFontName,
+                   !strongFontName.isEmpty {
                     FontFamily(.custom(strongFontName))
                 }
                 ForegroundColor(textColor)
             }
             .markdownTextStyle(\.code) {
-                if let codeFontName, !codeFontName.isEmpty {
+                if !usesCharacterFallback,
+                   let codeFontName,
+                   !codeFontName.isEmpty {
                     FontFamily(.custom(codeFontName))
                 } else {
                     FontFamily(.system(.monospaced))
@@ -1371,7 +1381,9 @@ private extension View {
                         configuration.label
                             .relativeLineSpacing(.em(0.15))
                             .markdownTextStyle {
-                                if let codeFontName, !codeFontName.isEmpty {
+                                if !usesCharacterFallback,
+                                   let codeFontName,
+                                   !codeFontName.isEmpty {
                                     FontFamily(.custom(codeFontName))
                                 } else {
                                     FontFamily(.system(.monospaced))
