@@ -364,14 +364,14 @@ struct ContentView: View {
     private var legacyJSONMigrationPromptSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("检测到旧版 JSON 数据")
-                .font(.headline)
+                .etFont(.headline)
             Text("建议立即迁移到 SQLite，后续版本可能不再支持旧格式。迁移会在后台分批执行，尽量避免卡顿。")
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
 
             if let status = legacyJSONMigrationManager.status {
                 Text(String(format: "预计 %.1f MB，约 %d 个会话", status.estimatedLegacyMegabytes, status.estimatedSessionCount))
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -394,20 +394,20 @@ struct ContentView: View {
     private var legacyJSONMigrationProgressSheet: some View {
         VStack(spacing: 10) {
             Text("正在迁移")
-                .font(.headline)
+                .etFont(.headline)
             if let progress = legacyJSONMigrationManager.progress {
                 ProgressView(value: progress.fractionCompleted)
                 Text("会话 \(progress.processedSessions)/\(max(progress.totalSessions, progress.processedSessions))")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 Text("消息 \(progress.importedMessages)")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 ProgressView()
             }
             Text("迁移完成后会再询问是否删除旧 JSON。")
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -1288,6 +1288,76 @@ extension View {
     @ViewBuilder
     func etFont(_ font: Font, sampleText: String?) -> some View {
         self.font(AppFontAdapter.adaptedFont(from: font, sampleText: sampleText))
+    }
+}
+
+extension Text {
+    @ViewBuilder
+    func etFont(_ font: Font?) -> some View {
+        if let font {
+            self.font(AppFontAdapter.adaptedFont(from: font, sampleText: TextSampleExtractor.extract(from: self)))
+        } else {
+            self.font(nil)
+        }
+    }
+
+    @ViewBuilder
+    func etFont(_ font: Font) -> some View {
+        self.font(AppFontAdapter.adaptedFont(from: font, sampleText: TextSampleExtractor.extract(from: self)))
+    }
+}
+
+private enum TextSampleExtractor {
+    private static let maxDepth = 10
+
+    static func extract(from text: Text) -> String? {
+        let strings = collectStrings(from: text, depth: 0)
+        guard !strings.isEmpty else { return nil }
+
+        var ordered: [String] = []
+        var seen = Set<String>()
+        for item in strings {
+            let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                ordered.append(trimmed)
+            }
+        }
+
+        guard !ordered.isEmpty else { return nil }
+        return ordered.joined(separator: " ")
+    }
+
+    private static func collectStrings(from value: Any, depth: Int) -> [String] {
+        guard depth <= maxDepth else { return [] }
+
+        if let string = value as? String {
+            return [string]
+        }
+
+        let mirror = Mirror(reflecting: value)
+        if mirror.displayStyle == .optional {
+            guard let childValue = mirror.children.first?.value else { return [] }
+            return collectStrings(from: childValue, depth: depth + 1)
+        }
+
+        var results: [String] = []
+        for child in mirror.children {
+            if shouldSkip(label: child.label) {
+                continue
+            }
+            results.append(contentsOf: collectStrings(from: child.value, depth: depth + 1))
+        }
+        return results
+    }
+
+    private static func shouldSkip(label: String?) -> Bool {
+        switch label {
+        case "modifiers", "table", "bundle", "arguments", "hasFormatting":
+            return true
+        default:
+            return false
+        }
     }
 }
 

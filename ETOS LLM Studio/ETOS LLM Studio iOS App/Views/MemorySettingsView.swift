@@ -590,7 +590,7 @@ private struct ConversationMemorySettingsView: View {
                             HStack {
                                 Text(item.sessionName)
                                     .lineLimit(1)
-                                    .font(.headline)
+                                    .etFont(.headline)
                                 Spacer()
                                 Text(item.updatedAt.formatted(date: .abbreviated, time: .shortened))
                                     .etFont(.caption2)

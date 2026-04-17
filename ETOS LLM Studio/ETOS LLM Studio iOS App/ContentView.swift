@@ -267,7 +267,7 @@ struct ContentView: View {
     private var legacyJSONMigrationPromptSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("检测到旧版 JSON 聊天数据")
-                .font(.title3.bold())
+                .etFont(.title3.bold())
             Text("为避免后续兼容风险，强烈建议现在迁移到 SQLite。迁移会在后台分批进行，不会阻塞当前界面。")
                 .foregroundStyle(.secondary)
 
@@ -276,7 +276,7 @@ struct ContentView: View {
                     Text("预计会话数：\(status.estimatedSessionCount)")
                     Text(String(format: "预计数据量：%.1f MB", status.estimatedLegacyMegabytes))
                 }
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
             }
 
@@ -304,19 +304,19 @@ struct ContentView: View {
     private var legacyJSONMigrationProgressSheet: some View {
         VStack(spacing: 16) {
             Text("正在迁移聊天数据")
-                .font(.title3.bold())
+                .etFont(.title3.bold())
             if let progress = legacyJSONMigrationManager.progress {
                 ProgressView(value: progress.fractionCompleted)
                     .progressViewStyle(.linear)
                 Text("已处理会话 \(progress.processedSessions)/\(max(progress.totalSessions, progress.processedSessions))")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 Text("已导入消息 \(progress.importedMessages)")
-                    .font(.footnote)
+                    .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 if let currentSessionName = progress.currentSessionName, !currentSessionName.isEmpty {
                     Text("当前：\(currentSessionName)")
-                        .font(.footnote)
+                        .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -324,7 +324,7 @@ struct ContentView: View {
                 ProgressView()
             }
             Text("迁移完成后会再次询问是否删除旧 JSON 文件。")
-                .font(.footnote)
+                .etFont(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -370,6 +370,76 @@ extension View {
     @ViewBuilder
     func etFont(_ font: Font, sampleText: String?) -> some View {
         self.font(AppFontAdapter.adaptedFont(from: font, sampleText: sampleText))
+    }
+}
+
+extension Text {
+    @ViewBuilder
+    func etFont(_ font: Font?) -> some View {
+        if let font {
+            self.font(AppFontAdapter.adaptedFont(from: font, sampleText: TextSampleExtractor.extract(from: self)))
+        } else {
+            self.font(nil)
+        }
+    }
+
+    @ViewBuilder
+    func etFont(_ font: Font) -> some View {
+        self.font(AppFontAdapter.adaptedFont(from: font, sampleText: TextSampleExtractor.extract(from: self)))
+    }
+}
+
+private enum TextSampleExtractor {
+    private static let maxDepth = 10
+
+    static func extract(from text: Text) -> String? {
+        let strings = collectStrings(from: text, depth: 0)
+        guard !strings.isEmpty else { return nil }
+
+        var ordered: [String] = []
+        var seen = Set<String>()
+        for item in strings {
+            let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                ordered.append(trimmed)
+            }
+        }
+
+        guard !ordered.isEmpty else { return nil }
+        return ordered.joined(separator: " ")
+    }
+
+    private static func collectStrings(from value: Any, depth: Int) -> [String] {
+        guard depth <= maxDepth else { return [] }
+
+        if let string = value as? String {
+            return [string]
+        }
+
+        let mirror = Mirror(reflecting: value)
+        if mirror.displayStyle == .optional {
+            guard let childValue = mirror.children.first?.value else { return [] }
+            return collectStrings(from: childValue, depth: depth + 1)
+        }
+
+        var results: [String] = []
+        for child in mirror.children {
+            if shouldSkip(label: child.label) {
+                continue
+            }
+            results.append(contentsOf: collectStrings(from: child.value, depth: depth + 1))
+        }
+        return results
+    }
+
+    private static func shouldSkip(label: String?) -> Bool {
+        switch label {
+        case "modifiers", "table", "bundle", "arguments", "hasFormatting":
+            return true
+        default:
+            return false
+        }
     }
 }
 

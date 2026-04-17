@@ -279,7 +279,7 @@ description: "技能描述"
                     .foregroundStyle(.secondary)
 
                 TextEditor(text: $content)
-                    .font(.system(.footnote, design: .monospaced))
+                    .etFont(.system(.footnote, design: .monospaced))
                     .frame(minHeight: 280)
                     .overlay {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -499,7 +499,7 @@ private struct EditSkillFileSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 TextEditor(text: $content)
-                    .font(.system(.footnote, design: .monospaced))
+                    .etFont(.system(.footnote, design: .monospaced))
                     .frame(minHeight: 300)
                     .overlay {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -565,7 +565,7 @@ private struct CreateSkillFileSheet: View {
 
                 Section("内容") {
                     TextEditor(text: $content)
-                        .font(.system(.footnote, design: .monospaced))
+                        .etFont(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 220)
                 }
 
