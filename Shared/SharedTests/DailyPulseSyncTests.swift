@@ -196,6 +196,10 @@ struct DailyPulseSyncTests {
         }
 
         Persistence.saveDailyPulseRuns([])
+        Persistence.saveDailyPulseFeedbackHistory([])
+        Persistence.saveDailyPulsePendingCuration(nil)
+        Persistence.saveDailyPulseExternalSignals([])
+        Persistence.saveDailyPulseTasks([])
         let incomingRuns = (0..<16).map { index in
             makeRun(
                 dayKey: String(format: "2026-03-%02d", index + 1),
@@ -215,6 +219,69 @@ struct DailyPulseSyncTests {
         #expect(mergedRuns.count == DailyPulseManager.persistedRetentionLimit)
         #expect(mergedRuns.first?.dayKey == "2026-03-16")
         #expect(mergedRuns.last?.dayKey == "2026-03-03")
+    }
+
+    @Test("每日脉冲同步接收到空载荷时会清空本地数据")
+    func mergeDailyPulseEmptyPayloadClearsLocalArtifacts() async {
+        let originalRuns = Persistence.loadDailyPulseRuns()
+        let originalHistory = Persistence.loadDailyPulseFeedbackHistory()
+        let originalCuration = Persistence.loadDailyPulsePendingCuration()
+        let originalSignals = Persistence.loadDailyPulseExternalSignals()
+        let originalTasks = Persistence.loadDailyPulseTasks()
+        defer {
+            Persistence.saveDailyPulseRuns(originalRuns)
+            Persistence.saveDailyPulseFeedbackHistory(originalHistory)
+            Persistence.saveDailyPulsePendingCuration(originalCuration)
+            Persistence.saveDailyPulseExternalSignals(originalSignals)
+            Persistence.saveDailyPulseTasks(originalTasks)
+        }
+
+        let localRun = makeRun(
+            dayKey: "2026-03-25",
+            generatedAt: Date(timeIntervalSince1970: 4_000),
+            title: "待清空条目"
+        )
+        Persistence.saveDailyPulseRuns([localRun])
+        Persistence.saveDailyPulseFeedbackHistory([
+            DailyPulseFeedbackEvent(
+                dayKey: localRun.dayKey,
+                topicHint: "清空测试",
+                cardTitle: localRun.cards.first?.title ?? "待清空条目",
+                action: .liked
+            )
+        ])
+        Persistence.saveDailyPulsePendingCuration(
+            DailyPulseCurationNote(targetDayKey: "2026-03-26", text: "清空测试备注")
+        )
+        Persistence.saveDailyPulseExternalSignals([
+            DailyPulseExternalSignal(source: .announcement, title: "清空测试", preview: "should clear")
+        ])
+        Persistence.saveDailyPulseTasks([
+            DailyPulseTask(
+                sourceDayKey: localRun.dayKey,
+                sourceCardID: localRun.cards.first?.id,
+                title: "清空测试任务",
+                details: "执行清空验证"
+            )
+        ])
+
+        let package = SyncPackage(
+            options: [.dailyPulse],
+            dailyPulseRuns: [],
+            dailyPulseFeedbackHistory: [],
+            dailyPulsePendingCuration: nil,
+            dailyPulseExternalSignals: [],
+            dailyPulseTasks: []
+        )
+
+        let summary = await SyncEngine.apply(package: package)
+
+        #expect(summary.importedDailyPulseRuns >= 1)
+        #expect(Persistence.loadDailyPulseRuns().isEmpty)
+        #expect(Persistence.loadDailyPulseFeedbackHistory().isEmpty)
+        #expect(Persistence.loadDailyPulsePendingCuration() == nil)
+        #expect(Persistence.loadDailyPulseExternalSignals().isEmpty)
+        #expect(Persistence.loadDailyPulseTasks().isEmpty)
     }
 
     private func makeRun(dayKey: String, generatedAt: Date, title: String) -> DailyPulseRun {

@@ -1133,6 +1133,11 @@ public enum Persistence {
 
     // MARK: - 消息持久化
 
+    /// 阻塞等待 GRDB 消息写队列清空，确保随后读取拿到最新消息快照。
+    public static func flushPendingMessageWritesForSyncSnapshot() {
+        activeGRDBStore()?.flushPendingMessageWrites()
+    }
+
     /// 保存指定会话的聊天消息
     public static func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
         if let store = activeGRDBStore() {

@@ -240,6 +240,66 @@ struct SyncConflictStrategyTests {
         #expect(mergedProviders[0].models.count == 2)
     }
 
+    @Test("AppStorage 导出会过滤内部同步状态键")
+    func testAppStorageExportFiltersInternalSyncKeys() {
+        let suite = "com.ETOS.tests.sync.appstorage.export.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("dark", forKey: "themeMode")
+        defaults.set("device-a", forKey: "cloudSync.deviceIdentifier")
+        defaults.set(Data([0x01]), forKey: "sync.delta.version-tracker.watch.connectivity")
+        defaults.set(Data([0x02]), forKey: "sync.delta.checkpoint.cloud.sync")
+
+        let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
+        let snapshot = decodeAppStorageSnapshot(package.appStorageSnapshot)
+
+        #expect(snapshot["themeMode"] as? String == "dark")
+        #expect(snapshot["cloudSync.deviceIdentifier"] == nil)
+        #expect(snapshot["sync.delta.version-tracker.watch.connectivity"] == nil)
+        #expect(snapshot["sync.delta.checkpoint.cloud.sync"] == nil)
+    }
+
+    @Test("AppStorage 导入会忽略内部同步状态键")
+    func testAppStorageImportSkipsInternalSyncKeys() async {
+        let suite = "com.ETOS.tests.sync.appstorage.apply.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("dark", forKey: "themeMode")
+        defaults.set("local-device", forKey: "cloudSync.deviceIdentifier")
+        defaults.set(Data([0xAA]), forKey: "sync.delta.checkpoint.cloud.sync")
+
+        let incoming: [String: Any] = [
+            "themeMode": "light",
+            "cloudSync.deviceIdentifier": "remote-device",
+            "sync.delta.checkpoint.cloud.sync": Data([0xBB])
+        ]
+        let snapshotData = try? PropertyListSerialization.data(
+            fromPropertyList: incoming,
+            format: .binary,
+            options: 0
+        )
+        let package = SyncPackage(
+            options: [.appStorage],
+            appStorageSnapshot: snapshotData
+        )
+
+        _ = await SyncEngine.apply(package: package, userDefaults: defaults)
+
+        #expect(defaults.string(forKey: "themeMode") == "light")
+        #expect(defaults.string(forKey: "cloudSync.deviceIdentifier") == "local-device")
+        #expect(defaults.data(forKey: "sync.delta.checkpoint.cloud.sync") == Data([0xAA]))
+    }
+
     private func resetProviders(to providers: [Provider]) {
         for provider in ConfigLoader.loadProviders() {
             ConfigLoader.deleteProvider(provider)
@@ -263,5 +323,14 @@ struct SyncConflictStrategyTests {
         for snapshot in snapshots {
             Persistence.saveMessages(snapshot.messages, for: snapshot.session.id)
         }
+    }
+
+    private func decodeAppStorageSnapshot(_ data: Data?) -> [String: Any] {
+        guard let data else { return [:] }
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+              let dictionary = plist as? [String: Any] else {
+            return [:]
+        }
+        return dictionary
     }
 }

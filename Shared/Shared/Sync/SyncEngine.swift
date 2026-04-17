@@ -11,6 +11,14 @@ import Combine
 
 public enum SyncEngine {
     private static let legacyGlobalSystemPromptKey = "systemPrompt"
+    private static let appStorageExcludedExactKeys: Set<String> = [
+        "cloudSync.deviceIdentifier",
+        "cloudSync.appliedSnapshotChecksums"
+    ]
+    private static let appStorageExcludedPrefixes: [String] = [
+        "sync.delta.version-tracker.",
+        "sync.delta.checkpoint."
+    ]
     
     // MARK: - 打包导出
     
@@ -49,6 +57,7 @@ public enum SyncEngine {
         }
         
         if options.contains(.sessions) {
+            Persistence.flushPendingMessageWritesForSyncSnapshot()
             let allSessions = chatService.chatSessionsSubject.value.filter { session in
                 guard !session.isTemporary else { return false }
                 guard let sessionIDs else { return true }
@@ -567,23 +576,29 @@ public enum SyncEngine {
         var skipped = 0
 
         var localRuns = Persistence.loadDailyPulseRuns()
-        for run in incomingRuns.sorted(by: { $0.generatedAt < $1.generatedAt }) {
-            if let existingIndex = localRuns.firstIndex(where: { $0.dayKey == run.dayKey }) {
-                let merged = DailyPulseManager.mergeRun(local: localRuns[existingIndex], incoming: run)
-                if merged == localRuns[existingIndex] {
-                    skipped += 1
+        if incomingRuns.isEmpty {
+            if localRuns.isEmpty {
+                skipped += 1
+            } else {
+                Persistence.saveDailyPulseRuns([])
+                imported += 1
+            }
+        } else {
+            for run in incomingRuns.sorted(by: { $0.generatedAt < $1.generatedAt }) {
+                if let existingIndex = localRuns.firstIndex(where: { $0.dayKey == run.dayKey }) {
+                    let merged = DailyPulseManager.mergeRun(local: localRuns[existingIndex], incoming: run)
+                    if merged == localRuns[existingIndex] {
+                        skipped += 1
+                        continue
+                    }
+                    localRuns[existingIndex] = merged
+                    imported += 1
                     continue
                 }
-                localRuns[existingIndex] = merged
+
+                localRuns.append(run)
                 imported += 1
-                continue
             }
-
-            localRuns.append(run)
-            imported += 1
-        }
-
-        if !incomingRuns.isEmpty {
             let trimmedRuns = DailyPulseManager.trimmedRuns(
                 localRuns,
                 limit: DailyPulseManager.persistedRetentionLimit
@@ -591,7 +606,15 @@ public enum SyncEngine {
             Persistence.saveDailyPulseRuns(trimmedRuns)
         }
 
-        if !incomingHistory.isEmpty {
+        if incomingHistory.isEmpty {
+            let localHistory = Persistence.loadDailyPulseFeedbackHistory()
+            if localHistory.isEmpty {
+                skipped += 1
+            } else {
+                Persistence.saveDailyPulseFeedbackHistory([])
+                imported += 1
+            }
+        } else {
             var localHistory = Persistence.loadDailyPulseFeedbackHistory()
             let original = localHistory
             for event in incomingHistory.sorted(by: { $0.createdAt < $1.createdAt }) {
@@ -628,7 +651,15 @@ public enum SyncEngine {
             }
         }
 
-        if !incomingSignals.isEmpty {
+        if incomingSignals.isEmpty {
+            let localSignals = Persistence.loadDailyPulseExternalSignals()
+            if localSignals.isEmpty {
+                skipped += 1
+            } else {
+                Persistence.saveDailyPulseExternalSignals([])
+                imported += 1
+            }
+        } else {
             var localSignals = Persistence.loadDailyPulseExternalSignals()
             let original = localSignals
             for signal in incomingSignals.sorted(by: { $0.capturedAt < $1.capturedAt }) {
@@ -646,7 +677,15 @@ public enum SyncEngine {
             }
         }
 
-        if !incomingTasks.isEmpty {
+        if incomingTasks.isEmpty {
+            let localTasks = Persistence.loadDailyPulseTasks()
+            if localTasks.isEmpty {
+                skipped += 1
+            } else {
+                Persistence.saveDailyPulseTasks([])
+                imported += 1
+            }
+        } else {
             var localTasks = Persistence.loadDailyPulseTasks()
             let original = localTasks
             for task in incomingTasks {
@@ -759,6 +798,12 @@ public enum SyncEngine {
     private static func isCandidateAppStorageKey(_ key: String) -> Bool {
         // 排除系统与框架注入键，避免污染对端环境。
         if key.hasPrefix("Apple") || key.hasPrefix("NS") || key.hasPrefix("com.apple.") {
+            return false
+        }
+        if appStorageExcludedExactKeys.contains(key) {
+            return false
+        }
+        if appStorageExcludedPrefixes.contains(where: { key.hasPrefix($0) }) {
             return false
         }
         return true

@@ -195,13 +195,6 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
 #endif
 
-        guard session.isReachable else {
-            if !silent {
-                state = .failed("对端不在线，稍后重试。")
-            }
-            return nil
-        }
-
         return session
     }
     

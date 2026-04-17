@@ -183,7 +183,7 @@ public final class CloudSyncManager: ObservableObject {
             let remoteSnapshots = try await transport.fetchSnapshots(excludingDeviceID: currentDeviceIdentifier)
             let appliedSummary = await applyRemoteSnapshotsIfNeeded(remoteSnapshots)
 
-            if !appliedSummary.isEmpty {
+            if appliedSummary.hasAnyImportedChange {
                 if !silent {
                     state = .syncing("检测到远端变更，正在回传合并后的本机状态…")
                 }
@@ -251,12 +251,11 @@ public final class CloudSyncManager: ObservableObject {
             manifest: localSnapshot.manifest,
             delta: delta
         )
-        let encodedPackage = (try? JSONEncoder().encode(snapshot)) ?? Data()
         return CloudSyncRemoteSnapshot(
             recordName: recordName,
             deviceID: currentDeviceIdentifier,
             updatedAt: updatedAt,
-            checksum: encodedPackage.sha256Hex,
+            checksum: semanticChecksum(for: snapshot),
             snapshot: snapshot
         )
     }
@@ -266,17 +265,31 @@ public final class CloudSyncManager: ObservableObject {
         var appliedChecksums = loadAppliedChecksums()
 
         for snapshot in snapshots.sorted(by: { $0.updatedAt < $1.updatedAt }) {
-            if appliedChecksums[snapshot.recordName] == snapshot.checksum {
+            let semanticChecksum = semanticChecksum(for: snapshot.snapshot)
+            if appliedChecksums[snapshot.recordName] == semanticChecksum {
                 continue
             }
 
             let summary = await deltaApplier(snapshot.snapshot.delta)
             aggregate.accumulate(summary)
-            appliedChecksums[snapshot.recordName] = snapshot.checksum
+            appliedChecksums[snapshot.recordName] = semanticChecksum
         }
 
         saveAppliedChecksums(appliedChecksums)
         return aggregate
+    }
+
+    private func semanticChecksum(for snapshot: CloudSyncSnapshot) -> String {
+        let digestPayload = CloudSyncDigestPayload(
+            schemaVersion: snapshot.schemaVersion,
+            optionsRawValue: snapshot.optionsRawValue,
+            package: snapshot.delta.package,
+            deletions: snapshot.delta.deletions
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = (try? encoder.encode(digestPayload)) ?? Data()
+        return data.sha256Hex
     }
 
     private func loadAppliedChecksums() -> [String: String] {
@@ -547,8 +560,22 @@ private struct CloudKitCloudSyncTransport: CloudSyncTransport {
 #endif
 
 private extension SyncMergeSummary {
-    var isEmpty: Bool {
-        self == .empty
+    var hasAnyImportedChange: Bool {
+        importedProviders > 0
+            || importedSessions > 0
+            || importedBackgrounds > 0
+            || importedMemories > 0
+            || importedMCPServers > 0
+            || importedAudioFiles > 0
+            || importedImageFiles > 0
+            || importedSkills > 0
+            || importedShortcutTools > 0
+            || importedWorldbooks > 0
+            || importedFeedbackTickets > 0
+            || importedDailyPulseRuns > 0
+            || importedFontFiles > 0
+            || importedFontRouteConfigurations > 0
+            || importedAppStorageValues > 0
     }
 
     mutating func accumulate(_ other: SyncMergeSummary) {
@@ -583,4 +610,11 @@ private extension SyncMergeSummary {
         importedAppStorageValues += other.importedAppStorageValues
         skippedAppStorageValues += other.skippedAppStorageValues
     }
+}
+
+private struct CloudSyncDigestPayload: Codable {
+    let schemaVersion: Int
+    let optionsRawValue: Int
+    let package: SyncPackage
+    let deletions: [SyncDeleteRecord]
 }

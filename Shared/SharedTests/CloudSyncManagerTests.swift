@@ -198,6 +198,60 @@ struct CloudSyncManagerTests {
         }
     }
 
+    @MainActor
+    @Test("仅有跳过计数时不会触发二次回传上传")
+    func testPerformSyncDoesNotUploadMergedSnapshotWhenOnlySkipped() async {
+        let suiteName = "com.ETOS.tests.cloudSync.skippedOnly.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("无法创建测试专用 UserDefaults")
+            return
+        }
+
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(true, forKey: CloudSyncManager.enabledKey)
+
+        let now = Date(timeIntervalSince1970: 1_730_200_000)
+        let localPackage = makeLocalProviderPackage()
+        let remotePackage = SyncPackage(options: [.sessions])
+        let remoteSnapshot = makeRemoteSnapshot(
+            recordName: "snapshot.remote-device",
+            deviceID: "remote-device",
+            updatedAt: now.addingTimeInterval(-30),
+            package: remotePackage
+        )
+        let transport = MockCloudSyncTransport(remoteSnapshots: [remoteSnapshot])
+        let appliedRecorder = AppliedPackageRecorder(summary: .summary(importedSessions: 0, skippedSessions: 2))
+        let manager = CloudSyncManager(
+            transport: transport,
+            userDefaults: defaults,
+            snapshotBuilder: { _ in
+                makeSnapshot(
+                    package: localPackage,
+                    channel: "cloud.sync.tests.skippedOnly",
+                    userDefaults: defaults,
+                    generatedAt: now
+                )
+            },
+            deltaApplier: { delta in
+                await appliedRecorder.record(delta)
+                return await appliedRecorder.summary
+            },
+            now: { now }
+        )
+
+        await manager.performSync(options: [.providers])
+
+        let uploadedSnapshots = await transport.uploadedSnapshots
+        let appliedPackages = await appliedRecorder.packages
+
+        #expect(appliedPackages.count == 1)
+        #expect(uploadedSnapshots.count == 1)
+        #expect(manager.lastSummary == .summary(importedSessions: 0, skippedSessions: 2))
+    }
+
     private func makeRemoteSnapshot(
         recordName: String,
         deviceID: String,
@@ -287,12 +341,12 @@ private actor AppliedPackageRecorder {
 }
 
 private extension SyncMergeSummary {
-    static func summary(importedSessions: Int = 0) -> SyncMergeSummary {
+    static func summary(importedSessions: Int = 0, skippedSessions: Int = 0) -> SyncMergeSummary {
         SyncMergeSummary(
             importedProviders: 0,
             skippedProviders: 0,
             importedSessions: importedSessions,
-            skippedSessions: 0,
+            skippedSessions: skippedSessions,
             importedBackgrounds: 0,
             skippedBackgrounds: 0,
             importedMemories: 0,

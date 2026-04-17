@@ -23,6 +23,7 @@ public struct SyncLocalSnapshot {
 public enum SyncDeltaEngine {
     public static let schemaVersion = 2
     private static let tombstoneRetention: TimeInterval = 30 * 24 * 60 * 60
+    private static let dailyPulseBundleRecordID = "dailyPulse.bundle"
 
     public static func buildLocalSnapshot(
         options: SyncOptions,
@@ -194,11 +195,13 @@ public enum SyncDeltaEngine {
         }
 
         guard !delta.deletions.isEmpty else { return summary }
+        let resolvedMemoryManager = memoryManager ?? .shared
 
         var providerDeleted = false
         var backgroundDeleted = false
         var dailyPulseDeleted = false
         var fontDeleted = false
+        var memoryIDsToDelete = Set<UUID>()
 
         for deletion in delta.deletions {
             switch deletion.type {
@@ -224,14 +227,7 @@ public enum SyncDeltaEngine {
                 }
             case .memory:
                 guard let id = UUID(uuidString: deletion.recordID) else { continue }
-                let store = MemoryRawStore()
-                var memories = store.loadMemories()
-                let before = memories.count
-                memories.removeAll { $0.id == id }
-                if memories.count != before {
-                    try? store.saveMemories(memories)
-                    summary.importedMemories += 1
-                }
+                memoryIDsToDelete.insert(id)
             case .mcpServer:
                 guard let id = UUID(uuidString: deletion.recordID) else { continue }
                 if let server = MCPServerStore.loadServers().first(where: { $0.id == id }) {
@@ -279,6 +275,23 @@ public enum SyncDeltaEngine {
                     }
                 }
             case .dailyPulseRun:
+                if deletion.recordID == dailyPulseBundleRecordID {
+                    let hadRuns = !Persistence.loadDailyPulseRuns().isEmpty
+                    let hadHistory = !Persistence.loadDailyPulseFeedbackHistory().isEmpty
+                    let hadCuration = Persistence.loadDailyPulsePendingCuration() != nil
+                    let hadSignals = !Persistence.loadDailyPulseExternalSignals().isEmpty
+                    let hadTasks = !Persistence.loadDailyPulseTasks().isEmpty
+                    if hadRuns || hadHistory || hadCuration || hadSignals || hadTasks {
+                        Persistence.saveDailyPulseRuns([])
+                        Persistence.saveDailyPulseFeedbackHistory([])
+                        Persistence.saveDailyPulsePendingCuration(nil)
+                        Persistence.saveDailyPulseExternalSignals([])
+                        Persistence.saveDailyPulseTasks([])
+                        summary.importedDailyPulseRuns += 1
+                        dailyPulseDeleted = true
+                    }
+                    continue
+                }
                 var runs = Persistence.loadDailyPulseRuns()
                 let before = runs.count
                 runs.removeAll { $0.dayKey == deletion.recordID }
@@ -302,6 +315,15 @@ public enum SyncDeltaEngine {
             case .appStorage:
                 // AppStorage 删除为高风险操作，当前策略仅忽略删除指令。
                 continue
+            }
+        }
+
+        if !memoryIDsToDelete.isEmpty {
+            let currentMemories = await resolvedMemoryManager.getAllMemories()
+            let targets = currentMemories.filter { memoryIDsToDelete.contains($0.id) }
+            if !targets.isEmpty {
+                await resolvedMemoryManager.deleteMemories(targets)
+                summary.importedMemories += targets.count
             }
         }
 
@@ -470,7 +492,7 @@ private extension SyncDeltaEngine {
             records.append(
                 SyncRecordDescriptor(
                     type: .dailyPulseRun,
-                    recordID: "dailyPulse.bundle",
+                    recordID: dailyPulseBundleRecordID,
                     checksum: checksum,
                     updatedAt: latest
                 )
@@ -552,7 +574,7 @@ private extension SyncDeltaEngine {
         feedbackTickets = full.feedbackTickets.filter { keys.contains(SyncRecordDescriptor.key(type: .feedbackTicket, recordID: $0.id)) }
         fontFiles = full.fontFiles.filter { keys.contains(SyncRecordDescriptor.key(type: .fontFile, recordID: $0.assetID.uuidString)) }
 
-        if keys.contains(SyncRecordDescriptor.key(type: .dailyPulseRun, recordID: "dailyPulse.bundle")) {
+        if keys.contains(SyncRecordDescriptor.key(type: .dailyPulseRun, recordID: dailyPulseBundleRecordID)) {
             dailyPulseRuns = full.dailyPulseRuns
             dailyPulseFeedbackHistory = full.dailyPulseFeedbackHistory
             dailyPulsePendingCuration = full.dailyPulsePendingCuration

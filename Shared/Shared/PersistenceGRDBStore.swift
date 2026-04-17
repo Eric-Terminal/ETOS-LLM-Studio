@@ -190,6 +190,7 @@ final class PersistenceGRDBStore {
         label: "com.etos.persistence.messages.write.queue",
         qos: .utility
     )
+    private let messageWriteQueueSpecificKey = DispatchSpecificKey<UInt8>()
 
     init(chatsDirectory: URL) throws {
         self.chatsDirectory = chatsDirectory
@@ -209,9 +210,17 @@ final class PersistenceGRDBStore {
         }
 
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
+        messageWriteQueue.setSpecific(key: messageWriteQueueSpecificKey, value: 1)
 
         try migrateSchemaIfNeeded()
         scheduleDatabaseMaintenanceIfNeeded()
+    }
+
+    func flushPendingMessageWrites() {
+        if DispatchQueue.getSpecific(key: messageWriteQueueSpecificKey) != nil {
+            return
+        }
+        messageWriteQueue.sync {}
     }
 
     func saveChatSessions(_ sessions: [ChatSession]) {
