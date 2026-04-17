@@ -2,6 +2,16 @@ import Foundation
 import GRDB
 import os.log
 
+private enum DatabaseMaintenanceLaunchDeferral {
+    static let delayNanoseconds: UInt64 = {
+        #if os(watchOS)
+        return 30_000_000_000
+        #else
+        return 8_000_000_000
+        #endif
+    }()
+}
+
 /// GRDB 持久化存储实现（会话、消息、请求日志、Daily Pulse 等）。
 final class PersistenceGRDBStore {
     private enum MetaKey {
@@ -1345,6 +1355,11 @@ final class PersistenceGRDBStore {
     private func scheduleDatabaseMaintenanceIfNeeded() {
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
+            let delay = DatabaseMaintenanceLaunchDeferral.delayNanoseconds
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { return }
+            }
             self.runDatabaseMaintenanceIfNeeded()
         }
     }
@@ -3908,6 +3923,11 @@ final class PersistenceAuxiliaryGRDBStore {
     private func scheduleDatabaseMaintenanceIfNeeded() {
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
+            let delay = DatabaseMaintenanceLaunchDeferral.delayNanoseconds
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { return }
+            }
             self.runDatabaseMaintenanceIfNeeded()
         }
     }

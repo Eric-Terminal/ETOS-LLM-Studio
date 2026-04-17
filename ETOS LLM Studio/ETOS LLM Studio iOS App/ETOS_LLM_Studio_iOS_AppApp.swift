@@ -16,57 +16,98 @@ import Shared
 
 @main
 struct ETOS_LLM_Studio_iOS_AppApp: App {
-    @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var launchStateMachine = AppLaunchStateMachine()
     @StateObject private var syncManager = WatchSyncManager.shared
     @StateObject private var cloudSyncManager = CloudSyncManager.shared
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var dailyPulseManager = DailyPulseManager.shared
     @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @StateObject private var feedbackService = FeedbackService.shared
+    @State private var viewModel: ChatViewModel?
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
 
     init() {
-        Persistence.bootstrapGRDBStoreOnLaunch()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(viewModel)
-                .environmentObject(syncManager)
-                .environmentObject(cloudSyncManager)
-                .onOpenURL { url in
-                    Task {
-                        _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
-                    }
+            Group {
+                if let viewModel {
+                    ContentView()
+                        .environmentObject(viewModel)
+                        .environmentObject(syncManager)
+                        .environmentObject(cloudSyncManager)
+                        .onOpenURL { url in
+                            Task {
+                                _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
+                            }
+                        }
+                        .onAppear {
+                            // 启动时自动同步（静默模式）
+                            syncManager.performAutoSyncIfEnabled()
+                            cloudSyncManager.performAutoSyncIfEnabled()
+                            // 启动时自动重连已加入聊天路由的 MCP 服务器
+                            mcpManager.connectSelectedServersIfNeeded()
+                            dailyPulseDeliveryCoordinator.activate()
+                            DailyPulseBackgroundDeliveryScheduler.shared.activate()
+                            triggerFeedbackRefreshOnLaunchIfNeeded()
+                        }
+                        .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in
+                            DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                        }
+                        .onChange(of: dailyPulseDeliveryCoordinator.reminderHour) { _, _ in
+                            DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                        }
+                        .onChange(of: dailyPulseDeliveryCoordinator.reminderMinute) { _, _ in
+                            DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                        }
+                        .onChange(of: dailyPulseManager.todayRun?.dayKey) { _, _ in
+                            DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
+                        }
+                } else {
+                    launchPreparingView
                 }
-                .onAppear {
-                    // 启动时自动同步（静默模式）
-                    syncManager.performAutoSyncIfEnabled()
-                    cloudSyncManager.performAutoSyncIfEnabled()
-                    // 启动时自动重连已加入聊天路由的 MCP 服务器
-                    mcpManager.connectSelectedServersIfNeeded()
-                    dailyPulseDeliveryCoordinator.activate()
-                    DailyPulseBackgroundDeliveryScheduler.shared.activate()
-                    triggerFeedbackRefreshOnLaunchIfNeeded()
-                }
-                .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in
-                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
-                }
-                .onChange(of: dailyPulseDeliveryCoordinator.reminderHour) { _, _ in
-                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
-                }
-                .onChange(of: dailyPulseDeliveryCoordinator.reminderMinute) { _, _ in
-                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
-                }
-                .onChange(of: dailyPulseManager.todayRun?.dayKey) { _, _ in
-                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
-                }
+            }
+            .task {
+                launchStateMachine.startIfNeeded()
+                initializeViewModelIfNeeded()
+            }
+            .onChange(of: launchStateMachine.phase) { _, _ in
+                initializeViewModelIfNeeded()
+            }
         }
         .backgroundTask(.appRefresh(DailyPulseBackgroundDeliveryScheduler.taskIdentifier)) {
             await DailyPulseBackgroundDeliveryScheduler.shared.handleAppRefresh()
+        }
+    }
+
+    @MainActor
+    private func initializeViewModelIfNeeded() {
+        guard launchStateMachine.phase == .ready else { return }
+        guard viewModel == nil else { return }
+        viewModel = ChatViewModel()
+    }
+
+    private var launchPreparingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(launchPreparingMessage)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+    }
+
+    private var launchPreparingMessage: String {
+        switch launchStateMachine.phase {
+        case .idle, .preparingPersistence:
+            return "正在异步初始化数据库..."
+        case .warmingServices:
+            return "正在预热聊天服务..."
+        case .ready:
+            return "准备完成"
         }
     }
 

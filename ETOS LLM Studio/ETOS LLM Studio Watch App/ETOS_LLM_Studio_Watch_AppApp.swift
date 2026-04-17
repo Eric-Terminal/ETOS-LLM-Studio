@@ -16,6 +16,7 @@ import os.log
 
 @main
 struct ETOS_LLM_Studio_Watch_AppApp: App {
+    @StateObject private var launchStateMachine = AppLaunchStateMachine()
     @StateObject private var syncManager = WatchSyncManager.shared
     @StateObject private var cloudSyncManager = CloudSyncManager.shared
     @StateObject private var mcpManager = MCPManager.shared
@@ -24,7 +25,6 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
     
     init() {
-        Persistence.bootstrapGRDBStoreOnLaunch()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
         // 在 App 启动时预先触发本地网络权限
@@ -38,23 +38,54 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(syncManager)
-                .environmentObject(cloudSyncManager)
-                .onOpenURL { url in
-                    Task {
-                        _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
-                    }
+            Group {
+                if launchStateMachine.phase == .ready {
+                    ContentView()
+                        .environmentObject(syncManager)
+                        .environmentObject(cloudSyncManager)
+                        .onOpenURL { url in
+                            Task {
+                                _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
+                            }
+                        }
+                        .onAppear {
+                            // 启动时自动同步（静默模式）
+                            syncManager.performAutoSyncIfEnabled()
+                            cloudSyncManager.performAutoSyncIfEnabled()
+                            // 启动时自动重连已加入聊天路由的 MCP 服务器
+                            mcpManager.connectSelectedServersIfNeeded()
+                            dailyPulseDeliveryCoordinator.activate()
+                            triggerFeedbackRefreshOnLaunchIfNeeded()
+                        }
+                } else {
+                    launchPreparingView
                 }
-                .onAppear {
-                    // 启动时自动同步（静默模式）
-                    syncManager.performAutoSyncIfEnabled()
-                    cloudSyncManager.performAutoSyncIfEnabled()
-                    // 启动时自动重连已加入聊天路由的 MCP 服务器
-                    mcpManager.connectSelectedServersIfNeeded()
-                    dailyPulseDeliveryCoordinator.activate()
-                    triggerFeedbackRefreshOnLaunchIfNeeded()
-                }
+            }
+            .task {
+                launchStateMachine.startIfNeeded()
+            }
+        }
+    }
+
+    private var launchPreparingView: some View {
+        VStack(spacing: 8) {
+            ProgressView()
+            Text(launchPreparingMessage)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+        }
+    }
+
+    private var launchPreparingMessage: String {
+        switch launchStateMachine.phase {
+        case .idle, .preparingPersistence:
+            return "正在异步初始化数据库..."
+        case .warmingServices:
+            return "正在预热聊天服务..."
+        case .ready:
+            return "准备完成"
         }
     }
     
