@@ -51,18 +51,30 @@ struct ETAdvancedMarkdownRenderer: View {
 
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
-        if let prepared = effectivePreparedContent {
-            if shouldUseMathEngine(prepared) {
-                ETMathAwareMarkdownView(
-                    preparedContent: prepared,
-                    isOutgoing: isOutgoing,
-                    customTextColor: customTextColor
-                )
+        if enableMarkdown {
+            if let prepared = effectivePreparedContent {
+                if shouldUseMathEngine(prepared) {
+                    ETMathAwareMarkdownView(
+                        preparedContent: prepared,
+                        isOutgoing: isOutgoing,
+                        customTextColor: customTextColor
+                    )
+                } else {
+                    markdownTextView(
+                        markdownContent: prepared.markdownContent,
+                        sampleText: prepared.sourceText,
+                        textColor: textColor
+                    )
+                }
             } else {
-                baseTextView(prepared, textColor: textColor)
+                markdownTextView(
+                    markdownContent: MarkdownContent(content),
+                    sampleText: content,
+                    textColor: textColor
+                )
             }
         } else {
-            fallbackTextView(textColor: textColor)
+            plainTextView(content, textColor: textColor)
         }
     }
 
@@ -71,27 +83,25 @@ struct ETAdvancedMarkdownRenderer: View {
     }
 
     @ViewBuilder
-    private func baseTextView(_ prepared: ETPreparedMarkdownRenderPayload, textColor: Color) -> some View {
-        if enableMarkdown {
-            Markdown(prepared.markdownContent)
-                .etChatMarkdownBaseStyle(
-                    textColor: textColor,
-                    isOutgoing: isOutgoing,
-                    prefersDarkPalette: colorScheme == .dark,
-                    sampleText: prepared.sourceText,
-                    onCodeBlockHeaderTap: onCodeBlockHeaderTap
-                )
-        } else {
-            Text(prepared.sourceText)
-                .etFont(.body, sampleText: prepared.sourceText)
-                .foregroundStyle(textColor)
-        }
+    private func markdownTextView(
+        markdownContent: MarkdownContent,
+        sampleText: String,
+        textColor: Color
+    ) -> some View {
+        Markdown(markdownContent)
+            .etChatMarkdownBaseStyle(
+                textColor: textColor,
+                isOutgoing: isOutgoing,
+                prefersDarkPalette: colorScheme == .dark,
+                sampleText: sampleText,
+                onCodeBlockHeaderTap: onCodeBlockHeaderTap
+            )
     }
 
     @ViewBuilder
-    private func fallbackTextView(textColor: Color) -> some View {
-        Text(content)
-            .etFont(.body, sampleText: content)
+    private func plainTextView(_ text: String, textColor: Color) -> some View {
+        Text(text)
+            .etFont(.body, sampleText: text)
             .foregroundStyle(textColor)
     }
 }
