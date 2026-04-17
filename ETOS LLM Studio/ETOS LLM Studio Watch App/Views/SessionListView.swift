@@ -253,8 +253,13 @@ private struct SessionFolderBrowserView: View {
         .safeAreaInset(edge: .bottom) {
             if isBatchSelecting {
                 batchActionBar
-            } else {
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if !isBatchSelecting {
                 paginationBar
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 4)
             }
         }
     }
@@ -468,28 +473,38 @@ private struct SessionFolderBrowserView: View {
 
     private var paginationBar: some View {
         HStack(spacing: 6) {
-            Button("<") {
+            Button {
                 goToPreviousPage()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .etFont(.footnote.weight(.semibold))
+                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.bordered)
             .disabled(!canGoToPreviousPage)
+            .accessibilityLabel("上一页")
 
             TextField("", text: .constant(paginationSummaryText))
                 .textFieldStyle(.plain)
                 .multilineTextAlignment(.center)
                 .disabled(true)
                 .allowsHitTesting(false)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(height: 22)
                 .frame(maxWidth: .infinity)
 
-            Button(">") {
+            Button {
                 goToNextPage()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .etFont(.footnote.weight(.semibold))
+                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.bordered)
             .disabled(!canGoToNextPage)
+            .accessibilityLabel("下一页")
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
     }
 
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
