@@ -351,7 +351,10 @@ struct ContentView: View {
     }
 
     private func refreshRootBodyFont() {
-        if let postScriptName = FontLibrary.resolvedPostScriptName(for: .body) {
+        if let postScriptName = FontLibrary.resolvePostScriptName(
+            for: .body,
+            sampleText: "The quick brown fox 你好こんにちは"
+        ) {
             rootBodyFont = .custom(postScriptName, size: 15, relativeTo: .body)
         } else {
             rootBodyFont = .body
@@ -1289,7 +1292,8 @@ private enum AppFontAdapter {
 
         let descriptor = FontDescriptorInfo(rawDescription: rawDescriptor)
         let role = inferredRole(from: descriptor)
-        guard let postScriptName = FontLibrary.resolvedPostScriptName(for: role) else {
+        let sample = sampleText(for: role)
+        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) else {
             storeAdaptedFont(original, for: rawDescriptor, cacheToken: cacheToken)
             return original
         }
@@ -1330,6 +1334,19 @@ private enum AppFontAdapter {
             )
         }
         return .custom(postScriptName, size: 15, relativeTo: .body)
+    }
+
+    private static func sampleText(for role: FontSemanticRole) -> String {
+        switch role {
+        case .body:
+            return "The quick brown fox 你好こんにちは"
+        case .emphasis:
+            return "Emphasis 斜体预览 こんにちは"
+        case .strong:
+            return "Strong 粗体预览 こんにちは"
+        case .code:
+            return "let value = 42 // 代码"
+        }
     }
 
     private static func defaultPointSize(for textStyle: Font.TextStyle) -> CGFloat {
