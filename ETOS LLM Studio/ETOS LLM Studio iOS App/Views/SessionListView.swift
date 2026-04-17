@@ -492,8 +492,7 @@ private struct SessionFolderBrowserView: View {
             .disabled(selectedSessionIDs.isEmpty)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .padding(.vertical, 6)
     }
 
     private var paginationBar: some View {
