@@ -364,12 +364,21 @@ private struct FontSettingsView: View {
 
     private var fallbackScopeSection: some View {
         Section {
-            Picker("字体回退范围", selection: fallbackScopeBinding) {
-                ForEach(allFallbackScopes, id: \.rawValue) { scope in
-                    Text(scope.title).tag(scope)
+            NavigationLink {
+                FontFallbackScopeSelectionView(
+                    allScopes: allFallbackScopes,
+                    selectedScope: fallbackScopeBinding
+                )
+            } label: {
+                HStack {
+                    Text("字体回退范围")
+                    Text(fallbackScope.title)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
-            .pickerStyle(.segmented)
         } header: {
             Text("回退范围")
         } footer: {
@@ -592,6 +601,44 @@ private struct FontSettingsView: View {
         reloadData()
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         importErrorMessage = firstError
+    }
+}
+
+private struct FontFallbackScopeSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let allScopes: [FontFallbackScope]
+    @Binding var selectedScope: FontFallbackScope
+
+    var body: some View {
+        List {
+            ForEach(allScopes) { scope in
+                Button {
+                    selectedScope = scope
+                    dismiss()
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(scope.title)
+                                .foregroundStyle(.primary)
+                            Text(scope.summary)
+                                .etFont(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        if selectedScope == scope {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.tint)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .navigationTitle("字体回退范围")
     }
 }
 
