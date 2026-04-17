@@ -482,14 +482,16 @@ private struct SessionFolderBrowserView: View {
 
             Spacer(minLength: 4)
 
-            TextField("", text: .constant(paginationSummaryText))
-                .textFieldStyle(.plain)
-                .multilineTextAlignment(.center)
-                .disabled(true)
-                .allowsHitTesting(false)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity)
+            MarqueeText(
+                content: paginationSummaryText,
+                uiFont: .preferredFont(forTextStyle: .footnote),
+                speed: 28,
+                delay: 0.8,
+                spacing: 24
+            )
+            .multilineTextAlignment(.center)
+            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity)
 
             Spacer(minLength: 4)
 
