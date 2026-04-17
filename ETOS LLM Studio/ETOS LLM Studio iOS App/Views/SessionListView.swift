@@ -511,18 +511,7 @@ private struct SessionFolderBrowserView: View {
             .disabled(!canGoToPreviousPage)
             .accessibilityLabel("上一页")
 
-            TextField("", text: .constant(paginationSummaryText))
-                .textFieldStyle(.plain)
-                .multilineTextAlignment(.center)
-                .disabled(true)
-                .allowsHitTesting(false)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity)
-                .background(
-                    Capsule()
-                        .fill(Color(uiColor: .secondarySystemBackground).opacity(0.7))
-                )
+            paginationSummaryField
 
             Button {
                 goToNextPage()
@@ -540,6 +529,37 @@ private struct SessionFolderBrowserView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var paginationSummaryField: some View {
+        let field = TextField("", text: .constant(paginationSummaryText))
+            .textFieldStyle(.plain)
+            .multilineTextAlignment(.center)
+            .disabled(true)
+            .allowsHitTesting(false)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+
+        if #available(iOS 26.0, *) {
+            field
+                .glassEffect(.clear, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.24), lineWidth: 0.5)
+                )
+        } else {
+            field
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color(uiColor: .separator).opacity(0.32), lineWidth: 0.5)
+                )
+        }
     }
 
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
