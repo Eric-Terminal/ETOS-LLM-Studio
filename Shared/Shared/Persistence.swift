@@ -3007,12 +3007,6 @@ public enum FontLibrary {
     public static let customFontEnabledStorageKey = "font.useCustomFonts"
     public static let fallbackScopeStorageKey = "font.fallbackScope"
     private static let cacheLock = NSLock()
-    private static let sampledResolutionCacheLimit = 256
-
-    private enum FontResolutionCacheEntry {
-        case resolved(String)
-        case unresolved
-    }
 
     private struct RuntimeSnapshot {
         var isPrepared = false
@@ -3020,7 +3014,6 @@ public enum FontLibrary {
         var routeConfiguration = FontRouteConfiguration()
         var fallbackPostScriptNamesByRole: [FontSemanticRole: [String]] = [:]
         var preferredPostScriptNameByRole: [FontSemanticRole: String] = [:]
-        var sampledResolutionCache: [String: FontResolutionCacheEntry] = [:]
         var isCustomFontEnabled = true
         var fallbackScope: FontFallbackScope = .segment
     }
@@ -3037,16 +3030,12 @@ public enum FontLibrary {
 
     /// 全局开关：是否启用自定义字体（默认启用）。
     public static var isCustomFontEnabled: Bool {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-        return withRuntimeSnapshot { $0.isCustomFontEnabled }
+        withRuntimeSnapshot { $0.isCustomFontEnabled }
     }
 
     /// 字体回退范围设置（默认整段）。
     public static var fallbackScope: FontFallbackScope {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-        return withRuntimeSnapshot { $0.fallbackScope }
+        withRuntimeSnapshot { $0.fallbackScope }
     }
 
     public static func preloadRuntimeCacheAsync(forceReload: Bool = false) {
@@ -3085,7 +3074,6 @@ public enum FontLibrary {
             snapshot.routeConfiguration = routeConfiguration
             snapshot.fallbackPostScriptNamesByRole = roleMappings.fallback
             snapshot.preferredPostScriptNameByRole = roleMappings.preferred
-            snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
             snapshot.isCustomFontEnabled = settings.isCustomFontEnabled
             snapshot.fallbackScope = settings.fallbackScope
         }
@@ -3257,34 +3245,25 @@ public enum FontLibrary {
     }
 
     public static func fallbackPostScriptNames(for role: FontSemanticRole) -> [String] {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-        return withRuntimeSnapshot { snapshot in
+        withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return [] }
             return snapshot.fallbackPostScriptNamesByRole[role] ?? []
         }
     }
 
     public static func resolvedPostScriptName(for role: FontSemanticRole) -> String? {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-        return withRuntimeSnapshot { snapshot in
+        withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return nil }
             return snapshot.preferredPostScriptNameByRole[role]
         }
     }
 
     public static func adapterCacheToken() -> String {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-        return withRuntimeSnapshot { snapshot in
+        withRuntimeSnapshot { snapshot in
             let roleSignature = FontSemanticRole.allCases
-                .map { role -> String in
-                    let names = snapshot.fallbackPostScriptNamesByRole[role] ?? []
-                    return "\(role.rawValue)=\(names.joined(separator: ","))"
-                }
+                .map { snapshot.preferredPostScriptNameByRole[$0] ?? "-" }
                 .joined(separator: "|")
-            return "\(snapshot.isPrepared ? 1 : 0)|\(snapshot.isCustomFontEnabled ? 1 : 0)|\(snapshot.fallbackScope.rawValue)|\(roleSignature)"
+            return "\(snapshot.isPrepared ? 1 : 0)|\(snapshot.isCustomFontEnabled ? 1 : 0)|\(roleSignature)"
         }
     }
 
@@ -3293,50 +3272,8 @@ public enum FontLibrary {
         for role: FontSemanticRole,
         sampleText: String
     ) -> String? {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-
-        let context = withRuntimeSnapshot { snapshot in
-            (
-                isPrepared: snapshot.isPrepared,
-                isCustomFontEnabled: snapshot.isCustomFontEnabled,
-                fallbackScope: snapshot.fallbackScope,
-                candidates: snapshot.fallbackPostScriptNamesByRole[role] ?? []
-            )
-        }
-        guard context.isPrepared, context.isCustomFontEnabled else { return nil }
-        let candidates = context.candidates
-        guard !candidates.isEmpty else { return nil }
-
-        let normalizedSample = normalizeSampleText(sampleText)
-        let cacheKey = [
-            role.rawValue,
-            context.fallbackScope.rawValue,
-            candidates.joined(separator: ","),
-            normalizedSample
-        ].joined(separator: "|")
-
-        let cached = sampledResolution(forKey: cacheKey)
-        if cached.hit {
-            return cached.value
-        }
-
-        let resolved: String?
-        switch context.fallbackScope {
-        case .segment:
-            resolved = resolveFontForSegmentFallback(
-                candidates: candidates,
-                normalizedSample: normalizedSample
-            )
-        case .character:
-            resolved = resolveFontForCharacterFallback(
-                candidates: candidates,
-                normalizedSample: normalizedSample
-            )
-        }
-
-        storeSampledResolution(resolved, forKey: cacheKey)
-        return resolved
+        _ = sampleText
+        return resolvedPostScriptName(for: role)
     }
 
     private static func sanitizeBaseName(_ value: String) -> String {
@@ -3359,39 +3296,6 @@ public enum FontLibrary {
         return candidate
     }
 
-    private static func normalizeSampleText(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Aa测试あア한ع" }
-        let scalars = trimmed.unicodeScalars
-            .filter { !$0.properties.isWhitespace && $0.properties.generalCategory != .control }
-        let prefix = String(String.UnicodeScalarView(scalars.prefix(96)))
-        return prefix.isEmpty ? "Aa测试あア한ع" : prefix
-    }
-
-    private static func resolveFontForSegmentFallback(
-        candidates: [String],
-        normalizedSample: String
-    ) -> String? {
-        for postScriptName in candidates {
-            if fontCanRenderSample(postScriptName: postScriptName, sample: normalizedSample) {
-                return postScriptName
-            }
-        }
-        return nil
-    }
-
-    private static func resolveFontForCharacterFallback(
-        candidates: [String],
-        normalizedSample: String
-    ) -> String? {
-        for postScriptName in candidates {
-            if fontCanRenderAnyCharacter(postScriptName: postScriptName, sample: normalizedSample) {
-                return postScriptName
-            }
-        }
-        return nil
-    }
-
     private static func registerFontFileIfNeeded(fileName: String) {
 #if canImport(CoreText)
         let fileURL = Persistence.getFontDirectory().appendingPathComponent(fileName)
@@ -3407,110 +3311,9 @@ public enum FontLibrary {
 #endif
     }
 
-    private static func fontCanRenderSample(postScriptName: String, sample: String) -> Bool {
-#if canImport(CoreText)
-        guard !sample.isEmpty else { return true }
-        guard let font = createFontIfExists(postScriptName: postScriptName) else { return false }
-        let characters = sampleCharacters(sample)
-        guard !characters.isEmpty else { return true }
-
-        var mutableCharacters = characters
-        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
-        let mapped = CTFontGetGlyphsForCharacters(font, &mutableCharacters, &glyphs, mutableCharacters.count)
-        return mapped && !glyphs.contains(0)
-#else
-        _ = postScriptName
-        _ = sample
-        return true
-#endif
-    }
-
-    private static func fontCanRenderAnyCharacter(postScriptName: String, sample: String) -> Bool {
-#if canImport(CoreText)
-        guard !sample.isEmpty else { return true }
-        guard let font = createFontIfExists(postScriptName: postScriptName) else { return false }
-        let characters = sampleCharacters(sample)
-        guard !characters.isEmpty else { return true }
-
-        var mutableCharacters = characters
-        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
-        _ = CTFontGetGlyphsForCharacters(font, &mutableCharacters, &glyphs, mutableCharacters.count)
-        return glyphs.contains { $0 != 0 }
-#else
-        _ = postScriptName
-        _ = sample
-        return true
-#endif
-    }
-
-    private static func sampleCharacters(_ sample: String) -> [UniChar] {
-        let filteredScalars = sample.unicodeScalars.filter { scalar in
-            !scalar.properties.isWhitespace && scalar.properties.generalCategory != .control
-        }
-        return filteredScalars.prefix(96).map { scalar -> UniChar in
-            if scalar.value <= 0xFFFF {
-                return UniChar(scalar.value)
-            }
-            return UniChar(0xFFFD)
-        }
-    }
-
-    private static func createFontIfExists(postScriptName: String) -> CTFont? {
-#if canImport(CoreText)
-        let font = CTFontCreateWithName(postScriptName as CFString, 16, nil)
-        let resolvedPostScriptName = CTFontCopyPostScriptName(font) as String
-        guard resolvedPostScriptName.caseInsensitiveCompare(postScriptName) == .orderedSame else {
-            return nil
-        }
-        return font
-#else
-        _ = postScriptName
-        return nil
-#endif
-    }
-
     private static func ensureRuntimeCachePrepared() {
         if withRuntimeSnapshot({ !$0.isPrepared }) {
             preloadRuntimeCache(forceReload: false)
-        }
-    }
-
-    private static func ensureRuntimeSettingsSynchronized() {
-        let settings = loadFontSettingsFromUserDefaults()
-        let needReload = withRuntimeSnapshot { snapshot in
-            guard snapshot.isPrepared else { return false }
-            return snapshot.isCustomFontEnabled != settings.isCustomFontEnabled
-                || snapshot.fallbackScope != settings.fallbackScope
-        }
-        if needReload {
-            preloadRuntimeCache(forceReload: true)
-        }
-    }
-
-    private static func sampledResolution(forKey key: String) -> (hit: Bool, value: String?) {
-        withRuntimeSnapshot { snapshot in
-            guard let cached = snapshot.sampledResolutionCache[key] else {
-                return (false, nil)
-            }
-            switch cached {
-            case .resolved(let postScriptName):
-                return (true, postScriptName)
-            case .unresolved:
-                return (true, nil)
-            }
-        }
-    }
-
-    private static func storeSampledResolution(_ value: String?, forKey key: String) {
-        updateRuntimeSnapshot { snapshot in
-            if snapshot.sampledResolutionCache.count >= sampledResolutionCacheLimit {
-                snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
-            }
-            if let value {
-                snapshot.sampledResolutionCache[key] = .resolved(value)
-            } else {
-                snapshot.sampledResolutionCache[key] = .unresolved
-            }
         }
     }
 
