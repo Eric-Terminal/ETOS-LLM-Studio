@@ -59,7 +59,7 @@
     </div>
 
     <h1>プライバシーポリシー</h1>
-    <p class="last-updated">最終更新：2026年4月4日</p>
+    <p class="last-updated">最終更新：2026年4月18日</p>
 
     <section>
         <h2>1. はじめに</h2>
@@ -73,7 +73,7 @@
 
 <ul>
     <li><strong>チャットとセッション情報：</strong>チャット履歴、セッション設定、添付ファイル参照、Worldbook、記憶データ、Daily Pulse データ、フィードバック履歴、アプリ設定は端末内のアプリサンドボックスに保存されます。</li>
-    <li><strong>API Key：</strong>API Key は API 設定と一緒に、アプリサンドボックス内の <strong>JSON ファイル</strong> として端末内に保存されます。iCloud 同期を有効にした場合、関連設定は Apple の iCloud / CloudKit を通じて自分の端末間で同期されることがあります。</li>
+    <li><strong>API プロバイダ設定と API Key：</strong>モデル一覧、ヘッダー上書き、プロキシ設定などを含むプロバイダ設定と API Key は、端末内の <strong>SQLite</strong> 設定データベースに保存されます。旧バージョンで Keychain に保存されていた場合は、移行時に統合して旧保存領域をクリーンアップします。</li>
     <li><strong>ローカルリクエストログ：</strong>アプリはプロバイダ名、モデル識別子、開始時刻、終了時刻、状態、ストリーミング有無、Token 使用量などのメタデータを端末内に記録します。<strong>これらのログにチャット本文は含まれません</strong>。主にトラフィック分析、応答速度計測、Daily Pulse 集計、年間サマリーなどのローカル機能のために使われます。</li>
     <li><strong>フィードバックチケットのキャッシュ：</strong>フィードバックアシスタントを使う場合、チケット番号、トークン、状態、更新日時、公開 URL を端末内に保存し、後から進捗を確認できるようにします。</li>
 </ul>
@@ -94,7 +94,7 @@
 
 <ul>
     <li><strong>iPhone / Apple Watch 同期：</strong>リアルタイム同期は <strong>WatchConnectivity</strong> を通じて行われ、開発者が管理するサーバーは経由しません。</li>
-    <li><strong>iCloud 同期：</strong>あなたが明示的に iCloud 同期を有効にした場合、選択されたデータは Apple の iCloud / CloudKit を通じて自分の端末間で同期されます。そこには API Key を含む JSON 設定が含まれる場合があります。</li>
+    <li><strong>iCloud 同期：</strong>あなたが明示的に iCloud 同期を有効にした場合、選択されたデータは Apple の iCloud / CloudKit を通じて自分の端末間で同期されます。そこには API Key を含む可能性があるプロバイダ設定が含まれる場合があります。</li>
     <li><strong>ローカルネットワークとデバッグ：</strong>ローカルネットワーク権限は、任意機能である LAN デバッグ / リモートファイルアクセスのためだけに使われます。あなたが自分のデスクトップデバッグツールを接続した場合、関連するアプリファイルやリクエスト通信が、<strong>あなた自身が管理するローカルエンドポイント</strong>に送られることがあります。</li>
 </ul>
 

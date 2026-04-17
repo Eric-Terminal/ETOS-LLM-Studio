@@ -59,7 +59,7 @@
     </div>
 
     <h1>Privacy Policy</h1>
-    <p class="last-updated">Last updated: April 4, 2026</p>
+    <p class="last-updated">Last updated: April 18, 2026</p>
 
     <section>
         <h2>1. Introduction</h2>
@@ -73,7 +73,7 @@
 
 <ul>
     <li><strong>Chats and session data:</strong> chat history, session settings, attachment references, worldbooks, memory data, Daily Pulse data, feedback history, and app settings are stored inside the app sandbox on your device.</li>
-    <li><strong>API keys:</strong> API keys are stored locally as <strong>JSON files</strong> together with your API configuration inside the app sandbox. If you enable iCloud sync, related configuration data may sync between your own devices through Apple’s iCloud / CloudKit.</li>
+    <li><strong>API provider configuration and API keys:</strong> provider configuration (such as model lists, header overrides, and proxy settings) and API keys are stored in a local <strong>SQLite</strong> configuration database. If an older version wrote keys to Keychain, migration will merge and clean up the legacy credential storage.</li>
     <li><strong>Local request logs:</strong> the app records metadata such as provider name, model identifier, start time, finish time, status, streaming flag, and token usage. <strong>These logs do not include message bodies</strong>. They are used for local traffic analysis, response speed metrics, Daily Pulse summaries, annual recap, and other on-device statistics.</li>
     <li><strong>Feedback ticket cache:</strong> if you use the feedback assistant, the app stores ticket numbers, ticket tokens, status, update timestamps, and public URLs locally so you can track progress later.</li>
 </ul>
@@ -94,7 +94,7 @@
 
 <ul>
     <li><strong>iPhone / Apple Watch sync:</strong> live sync between your iPhone and Apple Watch uses <strong>WatchConnectivity</strong> and does not pass through developer-operated servers.</li>
-    <li><strong>iCloud sync:</strong> if you explicitly enable iCloud sync, selected data may sync between your own devices through Apple’s iCloud / CloudKit stack, including JSON configuration that contains API keys.</li>
+    <li><strong>iCloud sync:</strong> if you explicitly enable iCloud sync, selected data may sync between your own devices through Apple’s iCloud / CloudKit stack, including provider configuration data that may contain API keys.</li>
     <li><strong>Local network and debugging:</strong> local network permission is only used for optional LAN debugging / remote file access features. If you connect your own desktop debugging tool, related app files or request traffic may be sent to a <strong>local endpoint that you control</strong>.</li>
 </ul>
 

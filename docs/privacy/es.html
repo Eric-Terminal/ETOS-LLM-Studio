@@ -59,7 +59,7 @@
     </div>
 
     <h1>Política de Privacidad</h1>
-    <p class="last-updated">Última actualización: 4 de abril de 2026</p>
+    <p class="last-updated">Última actualización: 18 de abril de 2026</p>
 
     <section>
         <h2>1. Introducción</h2>
@@ -73,7 +73,7 @@
 
 <ul>
     <li><strong>Chats y datos de sesión:</strong> historial de chat, ajustes de sesión, referencias de adjuntos, worldbooks, datos de memoria, datos de Daily Pulse, historial de feedback y ajustes de la app se guardan dentro del sandbox de la aplicación.</li>
-    <li><strong>Claves API:</strong> las claves API se guardan localmente como <strong>archivos JSON</strong> junto con tu configuración API dentro del sandbox de la app. Si habilitas la sincronización con iCloud, la configuración relacionada puede sincronizarse entre tus dispositivos a través de iCloud / CloudKit de Apple.</li>
+    <li><strong>Configuración de proveedor API y claves API:</strong> la configuración de proveedor (como listas de modelos, cabeceras personalizadas y ajustes de proxy) y las claves API se guardan en una base de configuración local <strong>SQLite</strong>. Si una versión anterior guardó claves en Keychain, la migración combina y limpia ese almacenamiento heredado.</li>
     <li><strong>Registros locales de solicitudes:</strong> la app registra metadatos como proveedor, identificador del modelo, hora de inicio, hora de finalización, estado, indicador de streaming y uso de tokens. <strong>Estos registros no incluyen el contenido de los mensajes</strong>. Se usan para análisis local de tráfico, métricas de velocidad, estadísticas de Daily Pulse, resumen anual y otras funciones locales.</li>
     <li><strong>Caché de tickets de feedback:</strong> si usas el asistente de feedback, la app guarda localmente número de ticket, token del ticket, estado, hora de actualización y URL pública para que puedas seguir el progreso.</li>
 </ul>
@@ -94,7 +94,7 @@
 
 <ul>
     <li><strong>Sincronización iPhone / Apple Watch:</strong> la sincronización en tiempo real entre iPhone y Apple Watch usa <strong>WatchConnectivity</strong> y no pasa por servidores del desarrollador.</li>
-    <li><strong>Sincronización con iCloud:</strong> si habilitas iCloud de forma explícita, los datos seleccionados pueden sincronizarse entre tus dispositivos mediante iCloud / CloudKit de Apple, incluida la configuración JSON que contiene claves API.</li>
+    <li><strong>Sincronización con iCloud:</strong> si habilitas iCloud de forma explícita, los datos seleccionados pueden sincronizarse entre tus dispositivos mediante iCloud / CloudKit de Apple, incluida la configuración de proveedor que puede contener claves API.</li>
     <li><strong>Red local y depuración:</strong> el permiso de red local solo se usa para funciones opcionales de depuración LAN / acceso remoto a archivos. Si conectas tu propia herramienta de depuración de escritorio, algunos archivos de la app o tráfico de solicitudes pueden enviarse a un <strong>endpoint local bajo tu control</strong>.</li>
 </ul>
 

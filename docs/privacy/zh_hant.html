@@ -59,7 +59,7 @@
     </div>
 
     <h1>隱私政策</h1>
-    <p class="last-updated">最近更新：2026年4月4日</p>
+    <p class="last-updated">最近更新：2026年4月18日</p>
 
     <section>
         <h2>1. 前言</h2>
@@ -73,7 +73,7 @@
 
 <ul>
     <li><strong>聊天與會話資料：</strong>聊天記錄、會話設定、附件引用、世界書、記憶資料、Daily Pulse 資料、反饋歷史與 App 設定會保存在應用沙盒中。</li>
-    <li><strong>API Key：</strong>API Key 會隨 API 設定一起以 <strong>JSON 檔</strong> 形式儲存在 App 沙盒內；如果你啟用了 iCloud 同步，相關設定可能透過 Apple 的 iCloud / CloudKit 在你自己的裝置間同步。</li>
+    <li><strong>API 提供商配置與 API Key：</strong>提供商配置（例如模型清單、請求頭覆寫、代理設定等）與 API Key 會保存在本地 <strong>SQLite</strong> 配置資料庫。舊版本若曾寫入 Keychain，升級時會合併並清理舊憑據儲存。</li>
     <li><strong>本地請求日誌：</strong>App 會在本地記錄提供商名稱、模型標識、請求時間、完成時間、狀態、是否流式、Token 用量等中繼資料。<strong>這些日誌不包含聊天正文</strong>，主要用於流量分析、回應測速、Daily Pulse 統計和年度彙總等本地功能。</li>
     <li><strong>反饋工單快取：</strong>如果你使用反饋助手，App 會在本地保存工單編號、票據令牌、狀態、更新時間與公開連結，方便後續追蹤處理進度。</li>
 </ul>
@@ -94,7 +94,7 @@
 
 <ul>
     <li><strong>iPhone / Apple Watch 同步：</strong>雙端即時同步透過 <strong>WatchConnectivity</strong> 完成，不經過開發者自建伺服器。</li>
-    <li><strong>iCloud 同步：</strong>如果你主動開啟 iCloud 同步，所選資料可能會透過 Apple 的 iCloud / CloudKit 體系在你自己的裝置間同步；其中可能包含保存 API Key 的 JSON 設定。</li>
+    <li><strong>iCloud 同步：</strong>如果你主動開啟 iCloud 同步，所選資料可能會透過 Apple 的 iCloud / CloudKit 體系在你自己的裝置間同步；其中可能包含 API Key 等敏感提供商配置。</li>
     <li><strong>本地網路與調試：</strong>本地網路權限只用於可選的局域網調試 / 遠端檔案存取功能。如果你主動連接自己的桌面調試工具，相關 App 檔案或請求流量可能會發送到<strong>你自己控制的本地調試端</strong>。</li>
 </ul>
 

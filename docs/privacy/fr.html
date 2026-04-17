@@ -59,7 +59,7 @@
     </div>
 
     <h1>Politique de confidentialité</h1>
-    <p class="last-updated">Dernière mise à jour : 4 avril 2026</p>
+    <p class="last-updated">Dernière mise à jour : 18 avril 2026</p>
 
     <section>
         <h2>1. Introduction</h2>
@@ -73,7 +73,7 @@
 
 <ul>
     <li><strong>Données de chat et de session :</strong> historique des chats, paramètres de session, références de pièces jointes, worldbooks, données mémoire, données Daily Pulse, historique de feedback et paramètres de l’app sont stockés dans le sandbox de l’application.</li>
-    <li><strong>Clés API :</strong> les clés API sont stockées localement sous forme de <strong>fichiers JSON</strong> avec votre configuration API dans le sandbox de l’app. Si vous activez la synchronisation iCloud, la configuration associée peut être synchronisée entre vos appareils via iCloud / CloudKit d’Apple.</li>
+    <li><strong>Configuration fournisseur API et clés API :</strong> la configuration fournisseur (comme les listes de modèles, les en-têtes personnalisés et les réglages proxy) et les clés API sont stockées dans une base locale <strong>SQLite</strong>. Si une ancienne version a écrit des clés dans le Keychain, la migration fusionne puis nettoie ce stockage hérité.</li>
     <li><strong>Journaux locaux de requêtes :</strong> l’app enregistre des métadonnées comme le fournisseur, l’identifiant du modèle, l’heure de début, l’heure de fin, l’état, le mode streaming et l’usage de tokens. <strong>Ces journaux n’incluent pas le contenu des messages</strong>. Ils servent à l’analyse locale du trafic, aux mesures de vitesse, aux statistiques Daily Pulse, au récapitulatif annuel et à d’autres fonctions locales.</li>
     <li><strong>Cache des tickets de feedback :</strong> si vous utilisez l’assistant de feedback, l’app stocke localement les numéros de ticket, tokens de ticket, statut, date de mise à jour et URL publique pour suivre l’avancement.</li>
 </ul>
@@ -94,7 +94,7 @@
 
 <ul>
     <li><strong>Synchronisation iPhone / Apple Watch :</strong> la synchronisation en temps réel entre iPhone et Apple Watch utilise <strong>WatchConnectivity</strong> et ne passe pas par des serveurs opérés par le développeur.</li>
-    <li><strong>Synchronisation iCloud :</strong> si vous activez explicitement iCloud, les données sélectionnées peuvent se synchroniser entre vos appareils via iCloud / CloudKit d’Apple, y compris la configuration JSON contenant les clés API.</li>
+    <li><strong>Synchronisation iCloud :</strong> si vous activez explicitement iCloud, les données sélectionnées peuvent se synchroniser entre vos appareils via iCloud / CloudKit d’Apple, y compris la configuration fournisseur pouvant contenir des clés API.</li>
     <li><strong>Réseau local et débogage :</strong> l’autorisation réseau local est utilisée uniquement pour les fonctions optionnelles de débogage LAN / accès distant aux fichiers. Si vous connectez votre propre outil de débogage de bureau, certains fichiers de l’app ou le trafic de requêtes peuvent être envoyés vers un <strong>endpoint local que vous contrôlez</strong>.</li>
 </ul>
 
