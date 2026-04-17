@@ -58,7 +58,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                             triggerFeedbackRefreshOnLaunchIfNeeded()
                         }
                 } else {
-                    launchPreparingView
+                    launchMainShellView
                 }
             }
             .task {
@@ -67,14 +67,59 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
         }
     }
 
-    private var launchPreparingView: some View {
-        VStack(spacing: 8) {
-            ProgressView()
-            Text(launchPreparingMessage)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+    private var launchMainShellView: some View {
+        NavigationStack {
+            VStack(spacing: 8) {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        launchBubblePlaceholder(width: 128, isOutgoing: false)
+                        launchBubblePlaceholder(width: 104, isOutgoing: true)
+                        launchBubblePlaceholder(width: 136, isOutgoing: false)
+                    }
+                    .padding(.top, 6)
+                }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "pencil.line")
+                        .foregroundStyle(.secondary)
+                    Text("输入消息")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
                 .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.secondary.opacity(0.14))
+                )
+
+                HStack(spacing: 6) {
+                    ProgressView()
+                    Text(launchPreparingMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 4)
+            .navigationTitle("新对话")
+        }
+    }
+
+    private func launchBubblePlaceholder(width: CGFloat, isOutgoing: Bool) -> some View {
+        HStack {
+            if isOutgoing {
+                Spacer(minLength: 8)
+            }
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.secondary.opacity(0.14))
+                .frame(width: width, height: 34)
+            if !isOutgoing {
+                Spacer(minLength: 8)
+            }
         }
     }
 

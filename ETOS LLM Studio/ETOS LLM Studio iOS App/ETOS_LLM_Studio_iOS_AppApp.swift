@@ -67,7 +67,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                             DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
                         }
                 } else {
-                    launchPreparingView
+                    launchMainShellView
                 }
             }
             .task {
@@ -90,14 +90,142 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         viewModel = ChatViewModel()
     }
 
-    private var launchPreparingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(launchPreparingMessage)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+    private var launchMainShellView: some View {
+        TabView {
+            NavigationStack {
+                launchChatShellView
+            }
+            .tabItem {
+                Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
+            }
+
+            NavigationStack {
+                launchSessionShellView
+            }
+            .tabItem {
+                Label("会话", systemImage: "list.bullet")
+            }
+
+            NavigationStack {
+                launchSettingsShellView
+            }
+            .tabItem {
+                Label("设置", systemImage: "gearshape.fill")
+            }
         }
-        .padding()
+    }
+
+    private var launchChatShellView: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    launchBubblePlaceholder(width: 220, isOutgoing: false)
+                    launchBubblePlaceholder(width: 180, isOutgoing: true)
+                    launchBubblePlaceholder(width: 260, isOutgoing: false)
+                    launchBubblePlaceholder(width: 160, isOutgoing: true)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+            }
+
+            Divider()
+
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "pencil.line")
+                        .foregroundStyle(.secondary)
+                    Text("输入消息")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.secondary.opacity(0.12))
+                )
+
+                HStack(spacing: 6) {
+                    ProgressView()
+                    Text(launchPreparingMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+        .navigationTitle("新对话")
+    }
+
+    private var launchSessionShellView: some View {
+        List {
+            ForEach(0..<4, id: \.self) { _ in
+                VStack(alignment: .leading, spacing: 6) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.secondary.opacity(0.18))
+                        .frame(height: 14)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.secondary.opacity(0.12))
+                        .frame(height: 10)
+                        .frame(maxWidth: 120, alignment: .leading)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            HStack(spacing: 6) {
+                ProgressView()
+                Text(launchPreparingMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 12)
+        }
+        .navigationTitle("会话")
+    }
+
+    private var launchSettingsShellView: some View {
+        List {
+            ForEach(0..<6, id: \.self) { index in
+                HStack(spacing: 10) {
+                    Image(systemName: index.isMultiple(of: 2) ? "slider.horizontal.3" : "gear")
+                        .foregroundStyle(.secondary)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.secondary.opacity(0.16))
+                        .frame(height: 12)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            HStack(spacing: 6) {
+                ProgressView()
+                Text(launchPreparingMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 12)
+        }
+        .navigationTitle("设置")
+    }
+
+    private func launchBubblePlaceholder(width: CGFloat, isOutgoing: Bool) -> some View {
+        HStack {
+            if isOutgoing {
+                Spacer(minLength: 20)
+            }
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.secondary.opacity(0.12))
+                .frame(width: width, height: 54)
+            if !isOutgoing {
+                Spacer(minLength: 20)
+            }
+        }
     }
 
     private var launchPreparingMessage: String {
