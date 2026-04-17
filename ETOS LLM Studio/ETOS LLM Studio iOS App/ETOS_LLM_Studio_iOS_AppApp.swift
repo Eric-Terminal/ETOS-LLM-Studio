@@ -43,9 +43,6 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     }
                 }
                 .onAppear {
-                    // 启动时自动同步（静默模式）
-                    syncManager.performAutoSyncIfEnabled()
-                    cloudSyncManager.performAutoSyncIfEnabled()
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
                     dailyPulseDeliveryCoordinator.activate()
@@ -66,6 +63,12 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                 }
                 .task {
                     launchStateMachine.startIfNeeded()
+                }
+                .task(id: launchStateMachine.phase) {
+                    guard launchStateMachine.phase == .ready else { return }
+                    // 启动持久化预热完成后再触发自动同步，避免冷启动阶段覆盖未加载完的会话状态。
+                    syncManager.performAutoSyncIfEnabled()
+                    cloudSyncManager.performAutoSyncIfEnabled()
                 }
         }
         .backgroundTask(.appRefresh(DailyPulseBackgroundDeliveryScheduler.taskIdentifier)) {

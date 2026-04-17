@@ -106,8 +106,17 @@ public enum SyncDeltaEngine {
         userDefaults: UserDefaults = .standard,
         now: Date = Date()
     ) -> SyncDeltaPackage {
-        let localMap = Dictionary(uniqueKeysWithValues: localSnapshot.manifest.records.map { ($0.storageKey, $0) })
-        let remoteMap = Dictionary(uniqueKeysWithValues: remoteManifest.records.map { ($0.storageKey, $0) })
+        let enabledRecordTypes = activeRecordTypes(from: localSnapshot.package.options)
+        let localMap = Dictionary(
+            uniqueKeysWithValues: localSnapshot.manifest.records
+                .filter { enabledRecordTypes.contains($0.type) }
+                .map { ($0.storageKey, $0) }
+        )
+        let remoteMap = Dictionary(
+            uniqueKeysWithValues: remoteManifest.records
+                .filter { enabledRecordTypes.contains($0.type) }
+                .map { ($0.storageKey, $0) }
+        )
 
         var upsertKeys = Set<String>()
         for (key, local) in localMap {
@@ -127,7 +136,11 @@ public enum SyncDeltaEngine {
         }
 
         var checkpoint = SyncCheckpointStore.load(channel: channel, userDefaults: userDefaults)
-        let previousKeys = Set(checkpoint.previousLocalRecords.keys)
+        let previousKeys = Set(
+            checkpoint.previousLocalRecords.values
+                .filter { enabledRecordTypes.contains($0.type) }
+                .map(\.storageKey)
+        )
         let currentKeys = Set(localMap.keys)
         let removedKeys = previousKeys.subtracting(currentKeys)
 
@@ -140,7 +153,8 @@ public enum SyncDeltaEngine {
 
         var deletions: [SyncDeleteRecord] = []
         for (key, deletedAt) in checkpoint.tombstones {
-            guard let descriptor = descriptorFromKey(key) else { continue }
+            guard let descriptor = descriptorFromKey(key),
+                  enabledRecordTypes.contains(descriptor.type) else { continue }
             if let remoteDescriptor = remoteMap[key] {
                 if remoteDescriptor.updatedAt <= deletedAt {
                     deletions.append(
@@ -154,11 +168,24 @@ public enum SyncDeltaEngine {
             }
         }
 
-        for key in checkpoint.tombstones.keys where remoteMap[key] == nil {
+        for key in Array(checkpoint.tombstones.keys) {
+            guard let descriptor = descriptorFromKey(key),
+                  enabledRecordTypes.contains(descriptor.type) else { continue }
+            guard remoteMap[key] == nil else { continue }
             checkpoint.tombstones.removeValue(forKey: key)
         }
 
-        checkpoint.previousLocalRecords = localMap
+        var nextPreviousRecords = checkpoint.previousLocalRecords
+        let keysToReset = nextPreviousRecords.compactMap { key, descriptor in
+            enabledRecordTypes.contains(descriptor.type) ? key : nil
+        }
+        for key in keysToReset {
+            nextPreviousRecords.removeValue(forKey: key)
+        }
+        for (key, descriptor) in localMap {
+            nextPreviousRecords[key] = descriptor
+        }
+        checkpoint.previousLocalRecords = nextPreviousRecords
         SyncCheckpointStore.save(checkpoint, channel: channel, userDefaults: userDefaults)
 
         let scoped = makeScopedPackage(
@@ -678,6 +705,49 @@ private extension SyncDeltaEngine {
         }
 
         return true
+    }
+
+    static func activeRecordTypes(from options: SyncOptions) -> Set<SyncRecordType> {
+        var activeTypes = Set<SyncRecordType>()
+        for type in SyncRecordType.allCases {
+            if options.contains(syncOption(for: type)) {
+                activeTypes.insert(type)
+            }
+        }
+        return activeTypes
+    }
+
+    static func syncOption(for type: SyncRecordType) -> SyncOptions {
+        switch type {
+        case .provider:
+            return .providers
+        case .session:
+            return .sessions
+        case .background:
+            return .backgrounds
+        case .memory:
+            return .memories
+        case .mcpServer:
+            return .mcpServers
+        case .audioFile:
+            return .audioFiles
+        case .imageFile:
+            return .imageFiles
+        case .skill:
+            return .skills
+        case .shortcutTool:
+            return .shortcutTools
+        case .worldbook:
+            return .worldbooks
+        case .feedbackTicket:
+            return .feedbackTickets
+        case .dailyPulseRun:
+            return .dailyPulse
+        case .fontFile, .fontRouteConfiguration:
+            return .fontFiles
+        case .appStorage:
+            return .appStorage
+        }
     }
 }
 

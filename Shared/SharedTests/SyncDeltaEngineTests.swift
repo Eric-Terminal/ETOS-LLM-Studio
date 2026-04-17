@@ -144,4 +144,94 @@ struct SyncDeltaEngineTests {
         #expect(delta.deletions.first?.type == .provider)
         #expect(delta.deletions.first?.recordID == provider.id.uuidString)
     }
+
+    @Test("缩小同步选项时不会误触发未启用类型的删除墓碑")
+    func testBuildDeltaSkipsTombstonesForDisabledTypes() {
+        let suite = "com.ETOS.tests.sync.delta.scope.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let provider = Provider(
+            id: UUID(),
+            name: "范围测试提供商",
+            baseURL: "https://scope.example.com",
+            apiKeys: ["scope-key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "scope-model", displayName: "Scope", isActivated: true)]
+        )
+
+        let initialPackage = SyncPackage(options: [.providers], providers: [provider])
+        let initialManifest = SyncDeltaEngine.buildManifest(
+            from: initialPackage,
+            channel: "delta-scope",
+            userDefaults: defaults,
+            generatedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let initialSnapshot = SyncLocalSnapshot(package: initialPackage, manifest: initialManifest)
+        _ = SyncDeltaEngine.buildDelta(
+            localSnapshot: initialSnapshot,
+            remoteManifest: SyncManifest(options: [.providers], records: []),
+            channel: "delta-scope",
+            userDefaults: defaults,
+            now: Date(timeIntervalSince1970: 1_100)
+        )
+
+        let providerRemoteRecord = SyncRecordDescriptor(
+            type: .provider,
+            recordID: provider.id.uuidString,
+            checksum: "remote-provider",
+            updatedAt: Date(timeIntervalSince1970: 1_050)
+        )
+
+        // 用户暂时关闭 providers 选项，仅同步 sessions，不应产生 provider 删除墓碑。
+        let sessionsOnlyPackage = SyncPackage(options: [.sessions], sessions: [])
+        let sessionsOnlyManifest = SyncDeltaEngine.buildManifest(
+            from: sessionsOnlyPackage,
+            channel: "delta-scope",
+            userDefaults: defaults,
+            generatedAt: Date(timeIntervalSince1970: 2_000)
+        )
+        let sessionsOnlySnapshot = SyncLocalSnapshot(
+            package: sessionsOnlyPackage,
+            manifest: sessionsOnlyManifest
+        )
+        let scopedDelta = SyncDeltaEngine.buildDelta(
+            localSnapshot: sessionsOnlySnapshot,
+            remoteManifest: SyncManifest(options: [.providers], records: [providerRemoteRecord]),
+            channel: "delta-scope",
+            userDefaults: defaults,
+            now: Date(timeIntervalSince1970: 2_100)
+        )
+
+        #expect(scopedDelta.deletions.isEmpty)
+        #expect(!scopedDelta.options.contains(.providers))
+
+        // 重新启用 providers 后，本地为空且远端仍有记录，此时才应发送删除墓碑。
+        let deletedProvidersPackage = SyncPackage(options: [.providers], providers: [])
+        let deletedProvidersManifest = SyncDeltaEngine.buildManifest(
+            from: deletedProvidersPackage,
+            channel: "delta-scope",
+            userDefaults: defaults,
+            generatedAt: Date(timeIntervalSince1970: 3_000)
+        )
+        let deletedProvidersSnapshot = SyncLocalSnapshot(
+            package: deletedProvidersPackage,
+            manifest: deletedProvidersManifest
+        )
+        let deletionDelta = SyncDeltaEngine.buildDelta(
+            localSnapshot: deletedProvidersSnapshot,
+            remoteManifest: SyncManifest(options: [.providers], records: [providerRemoteRecord]),
+            channel: "delta-scope",
+            userDefaults: defaults,
+            now: Date(timeIntervalSince1970: 3_100)
+        )
+
+        #expect(deletionDelta.deletions.count == 1)
+        #expect(deletionDelta.deletions.first?.type == .provider)
+        #expect(deletionDelta.deletions.first?.recordID == provider.id.uuidString)
+    }
 }

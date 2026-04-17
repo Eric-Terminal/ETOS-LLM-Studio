@@ -252,19 +252,110 @@ struct CloudSyncManagerTests {
         #expect(manager.lastSummary == .summary(importedSessions: 0, skippedSessions: 2))
     }
 
+    @MainActor
+    @Test("云同步上传会使用远端清单生成删除墓碑")
+    func testPerformSyncBuildsDeletionDeltaFromRemoteManifest() async {
+        let suiteName = "com.ETOS.tests.cloudSync.deletion.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("无法创建测试专用 UserDefaults")
+            return
+        }
+
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(true, forKey: CloudSyncManager.enabledKey)
+
+        let now = Date(timeIntervalSince1970: 1_730_300_000)
+        let provider = Provider(
+            id: UUID(),
+            name: "待删除提供商",
+            baseURL: "https://delete-cloud.example.com",
+            apiKeys: ["delete-key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "delete-model", displayName: "Delete", isActivated: true)]
+        )
+        let providerRecord = SyncRecordDescriptor(
+            type: .provider,
+            recordID: provider.id.uuidString,
+            checksum: "remote-provider-checksum",
+            updatedAt: now.addingTimeInterval(-600)
+        )
+        let remoteManifest = SyncManifest(
+            options: [.providers],
+            records: [providerRecord]
+        )
+        let remoteSnapshot = makeRemoteSnapshot(
+            recordName: "snapshot.remote-device",
+            deviceID: "remote-device",
+            updatedAt: now.addingTimeInterval(-120),
+            package: SyncPackage(options: [.providers]),
+            manifest: remoteManifest
+        )
+        let transport = MockCloudSyncTransport(remoteSnapshots: [remoteSnapshot])
+        let appliedRecorder = AppliedPackageRecorder(summary: .empty)
+
+        final class LocalSnapshotState {
+            var package: SyncPackage
+
+            init(package: SyncPackage) {
+                self.package = package
+            }
+        }
+
+        let localState = LocalSnapshotState(
+            package: SyncPackage(options: [.providers], providers: [provider])
+        )
+
+        let manager = CloudSyncManager(
+            transport: transport,
+            userDefaults: defaults,
+            snapshotBuilder: { _ in
+                makeSnapshot(
+                    package: localState.package,
+                    channel: "cloud.sync.tests.deletion",
+                    userDefaults: defaults,
+                    generatedAt: now
+                )
+            },
+            deltaApplier: { delta in
+                await appliedRecorder.record(delta)
+                return await appliedRecorder.summary
+            },
+            now: { now }
+        )
+
+        // 首次同步先建立本地清单快照状态。
+        await manager.performSync(options: [.providers])
+        localState.package = SyncPackage(options: [.providers], providers: [])
+
+        // 再次同步应生成 provider 删除墓碑并上传。
+        await manager.performSync(options: [.providers])
+
+        let uploadedSnapshots = await transport.uploadedSnapshots
+        #expect(uploadedSnapshots.count == 2)
+        let lastDelta = uploadedSnapshots.last?.snapshot.delta
+        #expect(lastDelta?.deletions.count == 1)
+        #expect(lastDelta?.deletions.first?.type == .provider)
+        #expect(lastDelta?.deletions.first?.recordID == provider.id.uuidString)
+    }
+
     private func makeRemoteSnapshot(
         recordName: String,
         deviceID: String,
         updatedAt: Date,
-        package: SyncPackage
+        package: SyncPackage,
+        manifest: SyncManifest? = nil
     ) -> CloudSyncRemoteSnapshot {
         let delta = SyncDeltaPackage(options: package.options, package: package)
+        let resolvedManifest = manifest ?? SyncManifest(options: package.options, records: [])
         let snapshot = CloudSyncSnapshot(
             schemaVersion: SyncDeltaEngine.schemaVersion,
             deviceID: deviceID,
             updatedAt: updatedAt,
             options: package.options,
-            manifest: SyncManifest(options: package.options, records: []),
+            manifest: resolvedManifest,
             delta: delta
         )
         let encodedPackage = (try? JSONEncoder().encode(snapshot)) ?? Data()

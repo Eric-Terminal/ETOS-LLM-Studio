@@ -168,26 +168,33 @@ public final class CloudSyncManager: ObservableObject {
         lastSummary = .empty
 
         if !silent {
-            state = .syncing("正在上传本机 iCloud 快照…")
+            state = .syncing("正在从 iCloud 获取其他设备快照…")
         }
 
         do {
             let localOptions = normalizedCloudOptions(from: options)
-            let initialSnapshot = buildLocalSnapshot(options: localOptions)
-            try await transport.upload(snapshot: initialSnapshot)
+            let remoteSnapshots = try await transport.fetchSnapshots(excludingDeviceID: currentDeviceIdentifier)
+            let remoteManifest = mergedRemoteManifest(from: remoteSnapshots, fallbackOptions: localOptions)
 
             if !silent {
-                state = .syncing("正在从 iCloud 获取其他设备快照…")
+                state = .syncing("正在上传本机 iCloud 快照…")
             }
 
-            let remoteSnapshots = try await transport.fetchSnapshots(excludingDeviceID: currentDeviceIdentifier)
+            let initialSnapshot = await buildLocalSnapshot(
+                options: localOptions,
+                remoteManifest: remoteManifest
+            )
+            try await transport.upload(snapshot: initialSnapshot)
             let appliedSummary = await applyRemoteSnapshotsIfNeeded(remoteSnapshots)
 
             if appliedSummary.hasAnyImportedChange {
                 if !silent {
                     state = .syncing("检测到远端变更，正在回传合并后的本机状态…")
                 }
-                let mergedSnapshot = buildLocalSnapshot(options: localOptions)
+                let mergedSnapshot = await buildLocalSnapshot(
+                    options: localOptions,
+                    remoteManifest: remoteManifest
+                )
                 try await transport.upload(snapshot: mergedSnapshot)
             }
 
@@ -232,20 +239,28 @@ public final class CloudSyncManager: ObservableObject {
         userDefaults.bool(forKey: Self.enabledKey)
     }
 
-    private func buildLocalSnapshot(options: SyncOptions) -> CloudSyncRemoteSnapshot {
-        let localSnapshot = snapshotBuilder(options)
+    private func buildLocalSnapshot(
+        options: SyncOptions,
+        remoteManifest: SyncManifest
+    ) async -> CloudSyncRemoteSnapshot {
+        let buildSnapshot = snapshotBuilder
+        let deviceID = currentDeviceIdentifier
+        let localSnapshot = await runOnUtilityQueue {
+            buildSnapshot(options)
+        }
         let updatedAt = now()
-        let recordName = "snapshot.\(currentDeviceIdentifier)"
-        let emptyRemoteManifest = SyncManifest(options: options, records: [])
-        let delta = SyncDeltaEngine.buildDelta(
-            localSnapshot: localSnapshot,
-            remoteManifest: emptyRemoteManifest,
-            channel: "cloud.sync.upload",
-            sourceDeviceID: currentDeviceIdentifier
-        )
+        let recordName = "snapshot.\(deviceID)"
+        let delta = await runOnUtilityQueue {
+            SyncDeltaEngine.buildDelta(
+                localSnapshot: localSnapshot,
+                remoteManifest: remoteManifest,
+                channel: "cloud.sync.upload",
+                sourceDeviceID: deviceID
+            )
+        }
         let snapshot = CloudSyncSnapshot(
             schemaVersion: SyncDeltaEngine.schemaVersion,
-            deviceID: currentDeviceIdentifier,
+            deviceID: deviceID,
             updatedAt: updatedAt,
             options: options,
             manifest: localSnapshot.manifest,
@@ -253,11 +268,59 @@ public final class CloudSyncManager: ObservableObject {
         )
         return CloudSyncRemoteSnapshot(
             recordName: recordName,
-            deviceID: currentDeviceIdentifier,
+            deviceID: deviceID,
             updatedAt: updatedAt,
             checksum: semanticChecksum(for: snapshot),
             snapshot: snapshot
         )
+    }
+
+    private func mergedRemoteManifest(
+        from snapshots: [CloudSyncRemoteSnapshot],
+        fallbackOptions: SyncOptions
+    ) -> SyncManifest {
+        var options: SyncOptions = []
+        var recordsByKey: [String: SyncRecordDescriptor] = [:]
+
+        for snapshot in snapshots {
+            options.formUnion(snapshot.snapshot.manifest.options)
+            for record in snapshot.snapshot.manifest.records {
+                let key = "\(record.type.rawValue)|\(record.recordID)"
+                if let existing = recordsByKey[key] {
+                    if record.updatedAt > existing.updatedAt
+                        || (record.updatedAt == existing.updatedAt
+                            && record.checksum.localizedStandardCompare(existing.checksum) == .orderedDescending) {
+                        recordsByKey[key] = record
+                    }
+                    continue
+                }
+                recordsByKey[key] = record
+            }
+        }
+
+        let normalizedOptions = options.isEmpty ? fallbackOptions : options
+        let records = recordsByKey.values.sorted { lhs, rhs in
+            if lhs.type.rawValue == rhs.type.rawValue {
+                return lhs.recordID < rhs.recordID
+            }
+            return lhs.type.rawValue < rhs.type.rawValue
+        }
+        return SyncManifest(
+            schemaVersion: SyncDeltaEngine.schemaVersion,
+            generatedAt: now(),
+            options: normalizedOptions,
+            records: records
+        )
+    }
+
+    private func runOnUtilityQueue<T>(
+        _ operation: @escaping () -> T
+    ) async -> T {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: operation())
+            }
+        }
     }
 
     private func applyRemoteSnapshotsIfNeeded(_ snapshots: [CloudSyncRemoteSnapshot]) async -> SyncMergeSummary {

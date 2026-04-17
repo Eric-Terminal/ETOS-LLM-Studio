@@ -81,9 +81,15 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             options: options,
             channel: syncChannel
         )
+        let emptyManifest = SyncManifest(options: options, records: [])
+        let initialDelta = SyncDeltaEngine.buildDelta(
+            localSnapshot: snapshot,
+            remoteManifest: emptyManifest,
+            channel: syncChannel
+        )
         sendExchange(
             manifest: snapshot.manifest,
-            delta: nil,
+            delta: initialDelta,
             isResponse: false,
             expectsResponse: true
         )
