@@ -38,99 +38,26 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     
     var body: some Scene {
         WindowGroup {
-            Group {
-                if launchStateMachine.phase == .ready {
-                    ContentView()
-                        .environmentObject(syncManager)
-                        .environmentObject(cloudSyncManager)
-                        .onOpenURL { url in
-                            Task {
-                                _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
-                            }
-                        }
-                        .onAppear {
-                            // 启动时自动同步（静默模式）
-                            syncManager.performAutoSyncIfEnabled()
-                            cloudSyncManager.performAutoSyncIfEnabled()
-                            // 启动时自动重连已加入聊天路由的 MCP 服务器
-                            mcpManager.connectSelectedServersIfNeeded()
-                            dailyPulseDeliveryCoordinator.activate()
-                            triggerFeedbackRefreshOnLaunchIfNeeded()
-                        }
-                } else {
-                    launchMainShellView
-                }
-            }
-            .task {
-                launchStateMachine.startIfNeeded()
-            }
-        }
-    }
-
-    private var launchMainShellView: some View {
-        NavigationStack {
-            VStack(spacing: 8) {
-                ScrollView {
-                    VStack(spacing: 8) {
-                        launchBubblePlaceholder(width: 128, isOutgoing: false)
-                        launchBubblePlaceholder(width: 104, isOutgoing: true)
-                        launchBubblePlaceholder(width: 136, isOutgoing: false)
+            ContentView()
+                .environmentObject(syncManager)
+                .environmentObject(cloudSyncManager)
+                .onOpenURL { url in
+                    Task {
+                        _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
                     }
-                    .padding(.top, 6)
                 }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "pencil.line")
-                        .foregroundStyle(.secondary)
-                    Text("输入消息")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
+                .onAppear {
+                    // 启动时自动同步（静默模式）
+                    syncManager.performAutoSyncIfEnabled()
+                    cloudSyncManager.performAutoSyncIfEnabled()
+                    // 启动时自动重连已加入聊天路由的 MCP 服务器
+                    mcpManager.connectSelectedServersIfNeeded()
+                    dailyPulseDeliveryCoordinator.activate()
+                    triggerFeedbackRefreshOnLaunchIfNeeded()
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.secondary.opacity(0.14))
-                )
-
-                HStack(spacing: 6) {
-                    ProgressView()
-                    Text(launchPreparingMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                .task {
+                    launchStateMachine.startIfNeeded()
                 }
-            }
-            .padding(.horizontal, 4)
-            .navigationTitle("新对话")
-        }
-    }
-
-    private func launchBubblePlaceholder(width: CGFloat, isOutgoing: Bool) -> some View {
-        HStack {
-            if isOutgoing {
-                Spacer(minLength: 8)
-            }
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.secondary.opacity(0.14))
-                .frame(width: width, height: 34)
-            if !isOutgoing {
-                Spacer(minLength: 8)
-            }
-        }
-    }
-
-    private var launchPreparingMessage: String {
-        switch launchStateMachine.phase {
-        case .idle, .preparingPersistence:
-            return "正在异步初始化数据库..."
-        case .warmingServices:
-            return "正在预热聊天服务..."
-        case .ready:
-            return "准备完成"
         }
     }
     

@@ -167,6 +167,7 @@ public class ChatService {
     /// 重试时要添加新版本的assistant消息ID（如果有）
     private var retryTargetMessageID: UUID?
     private var providers: [Provider]
+    private let startupTemporarySession: ChatSession
     private let adapters: [String: APIAdapter]
     private let memoryManager: MemoryManager
     private let worldbookStore: WorldbookStore
@@ -174,6 +175,8 @@ public class ChatService {
     private let worldbookExportService: WorldbookExportService
     private let worldbookEngine: WorldbookEngine
     private let urlSession: URLSession
+    private let startupStateLoadLock = NSLock()
+    private var hasTriggeredStartupStateLoad = false
     private let audioAttachmentDataCache: NSCache<NSString, NSData> = {
         let cache = NSCache<NSString, NSData>()
         cache.countLimit = 24
@@ -439,32 +442,32 @@ public class ChatService {
         ConfigLoader.setupInitialProviderConfigs()
         ConfigLoader.setupBackgroundsDirectory()
         self.providers = ConfigLoader.loadProviders()
+        let startupTemporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+        self.startupTemporarySession = startupTemporarySession
         self.adapters = adapters ?? [
             "openai-compatible": OpenAIAdapter(),
             "gemini": GeminiAdapter(),
             "anthropic": AnthropicAdapter(),
         ]
-        
-        let sessionFolders = Persistence.loadSessionFolders()
-        let persistedSessions = Persistence.loadChatSessions()
-        var loadedSessions = persistedSessions
-        let newTemporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
-        loadedSessions.insert(newTemporarySession, at: 0)
-        let initialSession = ChatService.resolveInitialSession(
-            persistedSessions: persistedSessions,
-            loadedSessionsWithTemporary: loadedSessions,
-            newTemporarySession: newTemporarySession
-        )
-        let initialMessages = initialSession.id == newTemporarySession.id
-            ? []
-            : Persistence.loadMessages(for: initialSession.id)
-        
+
+        let launchState = Self.isRunningUnitTests
+            ? Self.loadLaunchPersistenceState(using: startupTemporarySession)
+            : nil
+
         self.providersSubject = CurrentValueSubject(self.providers)
         self.selectedModelSubject = CurrentValueSubject(nil)
-        self.chatSessionsSubject = CurrentValueSubject(loadedSessions)
-        self.sessionFoldersSubject = CurrentValueSubject(sessionFolders)
-        self.currentSessionSubject = CurrentValueSubject(initialSession)
-        self.messagesForSessionSubject = CurrentValueSubject(initialMessages)
+        self.chatSessionsSubject = CurrentValueSubject(
+            launchState?.loadedSessions ?? [startupTemporarySession]
+        )
+        self.sessionFoldersSubject = CurrentValueSubject(
+            launchState?.sessionFolders ?? []
+        )
+        self.currentSessionSubject = CurrentValueSubject(
+            launchState?.initialSession ?? startupTemporarySession
+        )
+        self.messagesForSessionSubject = CurrentValueSubject(
+            launchState?.initialMessages ?? []
+        )
         self.reconcileStoredModelOrder()
         self.currentSessionSubject
             .sink { [weak self] session in
@@ -483,8 +486,11 @@ public class ChatService {
         ConfigLoader.fetchDownloadOnceConfigsIfNeeded { [weak self] in
             self?.reloadProviders()
         }
-        
+
         logger.info("  - 初始选中模型为: \(initialModel?.model.displayName ?? "无")")
+        if !Self.isRunningUnitTests {
+            logger.info("  - 已切换为启动后异步加载持久化会话状态。")
+        }
         logger.info("  - 初始化完成。")
         AppLog.developer(
             category: "chat_service",
@@ -500,6 +506,82 @@ public class ChatService {
             action: "初始化聊天服务",
             payload: ["providerCount": "\(self.providers.count)"]
         )
+    }
+
+    private struct LaunchPersistenceState {
+        let sessionFolders: [SessionFolder]
+        let loadedSessions: [ChatSession]
+        let initialSession: ChatSession
+        let initialMessages: [ChatMessage]
+    }
+
+    private static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    private static func loadLaunchPersistenceState(using temporarySession: ChatSession) -> LaunchPersistenceState {
+        let sessionFolders = Persistence.loadSessionFolders()
+        let persistedSessions = Persistence.loadChatSessions()
+        var loadedSessions = persistedSessions
+        loadedSessions.insert(temporarySession, at: 0)
+        let initialSession = ChatService.resolveInitialSession(
+            persistedSessions: persistedSessions,
+            loadedSessionsWithTemporary: loadedSessions,
+            newTemporarySession: temporarySession
+        )
+        let initialMessages = initialSession.id == temporarySession.id
+            ? []
+            : Persistence.loadMessages(for: initialSession.id)
+
+        return LaunchPersistenceState(
+            sessionFolders: sessionFolders,
+            loadedSessions: loadedSessions,
+            initialSession: initialSession,
+            initialMessages: initialMessages
+        )
+    }
+
+    public func loadInitialPersistenceStateIfNeeded(priority: TaskPriority = .utility) {
+        startupStateLoadLock.lock()
+        let shouldStart = !hasTriggeredStartupStateLoad
+        if shouldStart {
+            hasTriggeredStartupStateLoad = true
+        }
+        startupStateLoadLock.unlock()
+
+        guard shouldStart else { return }
+
+        Task.detached(priority: priority) { [weak self] in
+            guard let self else { return }
+            let launchState = Self.loadLaunchPersistenceState(using: self.startupTemporarySession)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard self.shouldApplyLaunchPersistenceState() else {
+                    self.logger.info("启动持久化状态已加载，但检测到前台状态已变更，已跳过覆盖。")
+                    return
+                }
+                self.sessionFoldersSubject.send(launchState.sessionFolders)
+                self.chatSessionsSubject.send(launchState.loadedSessions)
+                self.currentSessionSubject.send(launchState.initialSession)
+                self.messagesForSessionSubject.send(launchState.initialMessages)
+                self.logger.info("启动持久化状态已异步加载完成。")
+            }
+        }
+    }
+
+    private func shouldApplyLaunchPersistenceState() -> Bool {
+        let sessions = chatSessionsSubject.value
+        guard sessions.count == 1,
+              sessions.first?.id == startupTemporarySession.id else {
+            return false
+        }
+        guard currentSessionSubject.value?.id == startupTemporarySession.id else {
+            return false
+        }
+        guard messagesForSessionSubject.value.isEmpty else {
+            return false
+        }
+        return true
     }
 
     private static func resolveInitialSession(
