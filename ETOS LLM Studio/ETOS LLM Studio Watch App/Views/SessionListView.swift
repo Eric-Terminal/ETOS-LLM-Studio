@@ -216,7 +216,7 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var paginationCapsuleFillColor: Color {
-        Color(white: 0.3)
+        .clear
     }
 
     private var paginationCapsuleStrokeColor: Color {
@@ -486,6 +486,7 @@ private struct SessionFolderBrowserView: View {
             } label: {
                 Image(systemName: "chevron.left")
             }
+            .frame(minWidth: 30, minHeight: 30)
             .disabled(!canGoToPreviousPage)
             .accessibilityLabel("上一页")
 
@@ -510,7 +511,7 @@ private struct SessionFolderBrowserView: View {
                 .allowsHitTesting(false)
                 .padding(.horizontal, 10)
             }
-            .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30)
+            .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
 
             Spacer(minLength: 4)
 
@@ -519,9 +520,11 @@ private struct SessionFolderBrowserView: View {
             } label: {
                 Image(systemName: "chevron.right")
             }
+            .frame(minWidth: 30, minHeight: 30)
             .disabled(!canGoToNextPage)
             .accessibilityLabel("下一页")
         }
+        .frame(minHeight: 36)
     }
 
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
