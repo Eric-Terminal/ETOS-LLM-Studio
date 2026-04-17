@@ -13,6 +13,12 @@ import SwiftUI
 import Foundation
 import MarkdownUI
 import Shared
+#if canImport(UIKit)
+import UIKit
+#endif
+#if canImport(CoreText)
+import CoreText
+#endif
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -1383,13 +1389,12 @@ private enum AppFontAdapter {
             return original
         }
 
-        var mapped = mappedFont(postScriptName: postScriptName, descriptor: descriptor)
-        if descriptor.isItalic {
-            mapped = mapped.italic()
-        }
-        if let weight = descriptor.weight {
-            mapped = mapped.weight(weight)
-        }
+        let fallbackPostScriptNames = FontLibrary.fallbackPostScriptNames(for: role)
+        let mapped = mappedFont(
+            postScriptName: postScriptName,
+            descriptor: descriptor,
+            fallbackPostScriptNames: fallbackPostScriptNames
+        )
         storeAdaptedFont(mapped, for: cacheKey, cacheToken: cacheToken)
         return mapped
     }
@@ -1423,18 +1428,124 @@ private enum AppFontAdapter {
         return .body
     }
 
-    private static func mappedFont(postScriptName: String, descriptor: FontDescriptorInfo) -> Font {
-        if let explicitSize = descriptor.explicitSize {
-            return .custom(postScriptName, size: explicitSize)
+    private static func mappedFont(
+        postScriptName: String,
+        descriptor: FontDescriptorInfo,
+        fallbackPostScriptNames: [String]
+    ) -> Font {
+        if FontLibrary.fallbackScope == .character {
+            let fallbackChain = fallbackPostScriptNames.filter {
+                !$0.isEmpty && $0.caseInsensitiveCompare(postScriptName) != .orderedSame
+            }
+            if let cascaded = mappedFontWithCascade(
+                primaryPostScriptName: postScriptName,
+                fallbackPostScriptNames: fallbackChain,
+                descriptor: descriptor
+            ) {
+                return cascaded
+            }
         }
-        if let textStyle = descriptor.textStyle {
-            return .custom(
+
+        var mapped: Font
+        if let explicitSize = descriptor.explicitSize {
+            mapped = .custom(postScriptName, size: explicitSize)
+        } else if let textStyle = descriptor.textStyle {
+            mapped = .custom(
                 postScriptName,
                 size: defaultPointSize(for: textStyle),
                 relativeTo: textStyle
             )
+        } else {
+            mapped = .custom(postScriptName, size: 15, relativeTo: .body)
         }
-        return .custom(postScriptName, size: 15, relativeTo: .body)
+
+        if descriptor.isItalic {
+            mapped = mapped.italic()
+        }
+        if let weight = descriptor.weight {
+            mapped = mapped.weight(weight)
+        }
+        return mapped
+    }
+
+    private static func resolvedPointSize(for descriptor: FontDescriptorInfo) -> CGFloat {
+        if let explicitSize = descriptor.explicitSize {
+            return explicitSize
+        }
+        if let textStyle = descriptor.textStyle {
+            return defaultPointSize(for: textStyle)
+        }
+        return 15
+    }
+
+    private static func mappedFontWithCascade(
+        primaryPostScriptName: String,
+        fallbackPostScriptNames: [String],
+        descriptor: FontDescriptorInfo
+    ) -> Font? {
+#if canImport(UIKit) && canImport(CoreText)
+        guard !fallbackPostScriptNames.isEmpty else { return nil }
+        let pointSize = resolvedPointSize(for: descriptor)
+        guard UIFont(name: primaryPostScriptName, size: pointSize) != nil else { return nil }
+
+        let cascadeDescriptors = fallbackPostScriptNames.compactMap { candidate -> CTFontDescriptor? in
+            guard UIFont(name: candidate, size: pointSize) != nil else { return nil }
+            return CTFontDescriptorCreateWithNameAndSize(candidate as CFString, pointSize)
+        }
+        guard !cascadeDescriptors.isEmpty else { return nil }
+
+        let cascadeKey = UIFontDescriptor.AttributeName(rawValue: kCTFontCascadeListAttribute as String)
+        var descriptorAttributes: [UIFontDescriptor.AttributeName: Any] = [
+            .name: primaryPostScriptName,
+            .size: pointSize,
+            cascadeKey: cascadeDescriptors
+        ]
+
+        if let weight = descriptor.weight {
+            descriptorAttributes[.traits] = [
+                UIFontDescriptor.TraitKey.weight: uiFontWeightValue(weight)
+            ]
+        }
+
+        var uiFontDescriptor = UIFontDescriptor(fontAttributes: descriptorAttributes)
+        if descriptor.isItalic,
+           let italicDescriptor = uiFontDescriptor.withSymbolicTraits(.traitItalic) {
+            uiFontDescriptor = italicDescriptor
+        }
+
+        let uiFont = UIFont(descriptor: uiFontDescriptor, size: pointSize)
+        return Font(uiFont)
+#else
+        _ = primaryPostScriptName
+        _ = fallbackPostScriptNames
+        _ = descriptor
+        return nil
+#endif
+    }
+
+    private static func uiFontWeightValue(_ weight: Font.Weight) -> CGFloat {
+        switch weight {
+        case .ultraLight:
+            return UIFont.Weight.ultraLight.rawValue
+        case .thin:
+            return UIFont.Weight.thin.rawValue
+        case .light:
+            return UIFont.Weight.light.rawValue
+        case .regular:
+            return UIFont.Weight.regular.rawValue
+        case .medium:
+            return UIFont.Weight.medium.rawValue
+        case .semibold:
+            return UIFont.Weight.semibold.rawValue
+        case .bold:
+            return UIFont.Weight.bold.rawValue
+        case .heavy:
+            return UIFont.Weight.heavy.rawValue
+        case .black:
+            return UIFont.Weight.black.rawValue
+        default:
+            return UIFont.Weight.regular.rawValue
+        }
     }
 
     private static func sampleText(for role: FontSemanticRole) -> String {
