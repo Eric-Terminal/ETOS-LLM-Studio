@@ -3384,31 +3384,17 @@ public enum FontLibrary {
         candidates: [String],
         normalizedSample: String
     ) -> String? {
-        let hasNonASCIICharacters = sampleCharacters(normalizedSample).contains { $0 > 0x7F }
-        var bestPostScriptName: String?
-        var bestNonASCIICoverageCount = -1
-        var bestCoverageCount = 0
-
-        for postScriptName in candidates {
-            let coverage = fontRenderableCoverage(
-                postScriptName: postScriptName,
-                sample: normalizedSample
-            )
-            guard coverage.total > 0 else { continue }
-
-            let currentPrimary = hasNonASCIICharacters ? coverage.nonASCII : coverage.total
-            let bestPrimary = hasNonASCIICharacters ? bestNonASCIICoverageCount : bestCoverageCount
-            let shouldReplace =
-                currentPrimary > bestPrimary
-                || (currentPrimary == bestPrimary && coverage.total > bestCoverageCount)
-
-            if shouldReplace {
-                bestNonASCIICoverageCount = coverage.nonASCII
-                bestCoverageCount = coverage.total
-                bestPostScriptName = postScriptName
+        _ = normalizedSample
+        for postScriptName in candidates where !postScriptName.isEmpty {
+#if canImport(CoreText)
+            if createFontIfExists(postScriptName: postScriptName) != nil {
+                return postScriptName
             }
+#else
+            return postScriptName
+#endif
         }
-        return bestPostScriptName
+        return nil
     }
 
     private static func registerFontFileIfNeeded(fileName: String) {
@@ -3441,34 +3427,6 @@ public enum FontLibrary {
         _ = postScriptName
         _ = sample
         return true
-#endif
-    }
-
-    private static func fontRenderableCoverage(postScriptName: String, sample: String) -> (total: Int, nonASCII: Int) {
-#if canImport(CoreText)
-        guard !sample.isEmpty else { return (0, 0) }
-        guard let font = createFontIfExists(postScriptName: postScriptName) else { return (0, 0) }
-        let characters = sampleCharacters(sample)
-        guard !characters.isEmpty else { return (0, 0) }
-
-        var mutableCharacters = characters
-        var glyphs = Array(repeating: CGGlyph(), count: mutableCharacters.count)
-        _ = CTFontGetGlyphsForCharacters(font, &mutableCharacters, &glyphs, mutableCharacters.count)
-
-        var total = 0
-        var nonASCII = 0
-        for (index, glyph) in glyphs.enumerated() where glyph != 0 {
-            total += 1
-            if characters[index] > 0x7F {
-                nonASCII += 1
-            }
-        }
-        return (total, nonASCII)
-#else
-        _ = postScriptName
-        let characters = sampleCharacters(sample)
-        let nonASCII = characters.filter { $0 > 0x7F }.count
-        return (characters.count, nonASCII)
 #endif
     }
 

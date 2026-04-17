@@ -187,6 +187,15 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         sampleText: String,
         fallback: String
     ) -> String {
+        if FontLibrary.fallbackScope == .character {
+            let familyChain = FontLibrary.fallbackPostScriptNames(for: role)
+                .filter { !$0.isEmpty }
+                .map(ShellConfiguration.cssFamilyLiteral)
+            if !familyChain.isEmpty {
+                return "\(familyChain.joined(separator: ", ")), \(fallback)"
+            }
+            return fallback
+        }
         if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sampleText),
            !postScriptName.isEmpty {
             return "\(ShellConfiguration.cssFamilyLiteral(postScriptName)), \(fallback)"
@@ -1186,6 +1195,15 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         }
 
         nonisolated fileprivate static func cssFontFamily(role: FontSemanticRole, fallback: String) -> String {
+            if FontLibrary.fallbackScope == .character {
+                let customFamilies = FontLibrary.fallbackPostScriptNames(for: role)
+                    .filter { !$0.isEmpty }
+                    .map(cssFamilyLiteral)
+                if !customFamilies.isEmpty {
+                    return (customFamilies + [fallback]).joined(separator: ", ")
+                }
+                return fallback
+            }
             if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: ""),
                !postScriptName.isEmpty {
                 return "\(cssFamilyLiteral(postScriptName)), \(fallback)"
