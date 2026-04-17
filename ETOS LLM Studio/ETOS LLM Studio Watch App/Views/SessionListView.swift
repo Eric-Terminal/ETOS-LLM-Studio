@@ -215,10 +215,6 @@ private struct SessionFolderBrowserView: View {
         "当前显示\(currentPageStartOrdinal)-\(currentPageEndOrdinal)个对话(总共\(totalDirectSessionCount))"
     }
 
-    private var paginationCapsuleFillColor: Color {
-        .clear
-    }
-
     private var paginationCapsuleStrokeColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
@@ -492,26 +488,7 @@ private struct SessionFolderBrowserView: View {
 
             Spacer(minLength: 1)
 
-            ZStack {
-                Capsule()
-                    .fill(paginationCapsuleFillColor)
-                    .overlay(
-                        Capsule()
-                            .stroke(paginationCapsuleStrokeColor, lineWidth: 0.6)
-                    )
-
-                MarqueeText(
-                    content: paginationSummaryText,
-                    uiFont: .preferredFont(forTextStyle: .footnote),
-                    speed: 28,
-                    delay: 0.8,
-                    spacing: 24
-                )
-                .multilineTextAlignment(.center)
-                .allowsHitTesting(false)
-                .padding(.horizontal, 10)
-            }
-            .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
+            paginationSummaryCapsule
 
             Spacer(minLength: 1)
 
@@ -525,6 +502,40 @@ private struct SessionFolderBrowserView: View {
             .accessibilityLabel("下一页")
         }
         .frame(minHeight: 36)
+    }
+
+    @ViewBuilder
+    private var paginationSummaryCapsule: some View {
+        let summaryContent = MarqueeText(
+            content: paginationSummaryText,
+            uiFont: .preferredFont(forTextStyle: .footnote),
+            speed: 28,
+            delay: 0.8,
+            spacing: 24
+        )
+        .multilineTextAlignment(.center)
+        .allowsHitTesting(false)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
+
+        if #available(watchOS 26.0, *) {
+            summaryContent
+                .glassEffect(.clear, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(paginationCapsuleStrokeColor, lineWidth: 0.6)
+                )
+        } else {
+            summaryContent
+                .background(
+                    Capsule()
+                        .fill(Color.clear)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(paginationCapsuleStrokeColor, lineWidth: 0.6)
+                )
+        }
     }
 
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
