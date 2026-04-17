@@ -58,6 +58,7 @@ struct SessionListView: View {
 
 private struct SessionFolderBrowserView: View {
     let folderID: UUID?
+    @Environment(\.colorScheme) private var colorScheme
 
     @Binding var sessions: [ChatSession]
     @Binding var folders: [SessionFolder]
@@ -97,7 +98,7 @@ private struct SessionFolderBrowserView: View {
     @State private var showSessionSearch = false
     @State private var sessionPageIndex: Int = 0
 
-    private let maxSessionsPerPage = 100
+    private let maxSessionsPerPage = 50
 
     private var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
@@ -212,6 +213,14 @@ private struct SessionFolderBrowserView: View {
 
     private var paginationSummaryText: String {
         "当前显示\(currentPageStartOrdinal)-\(currentPageEndOrdinal)个对话(总共\(totalDirectSessionCount))"
+    }
+
+    private var paginationCapsuleFillColor: Color {
+        Color(white: 0.3)
+    }
+
+    private var paginationCapsuleStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
 
     var body: some View {
@@ -482,16 +491,26 @@ private struct SessionFolderBrowserView: View {
 
             Spacer(minLength: 4)
 
-            MarqueeText(
-                content: paginationSummaryText,
-                uiFont: .preferredFont(forTextStyle: .footnote),
-                speed: 28,
-                delay: 0.8,
-                spacing: 24
-            )
-            .multilineTextAlignment(.center)
-            .allowsHitTesting(false)
-            .frame(maxWidth: .infinity)
+            ZStack {
+                Capsule()
+                    .fill(paginationCapsuleFillColor)
+                    .overlay(
+                        Capsule()
+                            .stroke(paginationCapsuleStrokeColor, lineWidth: 0.6)
+                    )
+
+                MarqueeText(
+                    content: paginationSummaryText,
+                    uiFont: .preferredFont(forTextStyle: .footnote),
+                    speed: 28,
+                    delay: 0.8,
+                    spacing: 24
+                )
+                .multilineTextAlignment(.center)
+                .allowsHitTesting(false)
+                .padding(.horizontal, 10)
+            }
+            .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30)
 
             Spacer(minLength: 4)
 
