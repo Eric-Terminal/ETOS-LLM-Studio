@@ -519,7 +519,10 @@ private struct SessionFolderBrowserView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
-                .background(Color.clear)
+                .background(
+                    Capsule()
+                        .fill(Color(uiColor: .secondarySystemBackground).opacity(0.7))
+                )
 
             Button {
                 goToNextPage()
@@ -536,8 +539,7 @@ private struct SessionFolderBrowserView: View {
             .accessibilityLabel("下一页")
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .padding(.vertical, 6)
     }
 
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
