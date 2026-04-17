@@ -1144,7 +1144,7 @@ struct ChatBubble: View {
 
             if isReasoningExpanded {
                 Text(reasoning)
-                    .etFont(.footnote)
+                    .etFont(.footnote, sampleText: reasoning)
                     .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
             }
         }

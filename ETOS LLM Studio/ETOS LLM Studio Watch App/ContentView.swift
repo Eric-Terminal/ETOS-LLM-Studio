@@ -1275,6 +1275,20 @@ extension View {
     func etFont(_ font: Font) -> some View {
         self.font(AppFontAdapter.adaptedFont(from: font))
     }
+
+    @ViewBuilder
+    func etFont(_ font: Font?, sampleText: String?) -> some View {
+        if let font {
+            self.font(AppFontAdapter.adaptedFont(from: font, sampleText: sampleText))
+        } else {
+            self.font(nil)
+        }
+    }
+
+    @ViewBuilder
+    func etFont(_ font: Font, sampleText: String?) -> some View {
+        self.font(AppFontAdapter.adaptedFont(from: font, sampleText: sampleText))
+    }
 }
 
 private enum AppFontAdapter {
@@ -1282,19 +1296,20 @@ private enum AppFontAdapter {
     private static var adaptedFontCache: [String: Font] = [:]
     private static var adaptedFontCacheToken: String = ""
 
-    static func adaptedFont(from original: Font) -> Font {
+    static func adaptedFont(from original: Font, sampleText: String? = nil) -> Font {
         let rawDescriptor = String(describing: original)
+        let descriptor = FontDescriptorInfo(rawDescription: rawDescriptor)
+        let role = inferredRole(from: descriptor)
+        let resolvedSample = resolvedSampleText(for: role, override: sampleText)
+        let cacheKey = "\(rawDescriptor)|\(role.rawValue)|\(resolvedSample)"
         let cacheToken = FontLibrary.adapterCacheToken()
 
-        if let cached = cachedFont(for: rawDescriptor, cacheToken: cacheToken) {
+        if let cached = cachedFont(for: cacheKey, cacheToken: cacheToken) {
             return cached
         }
 
-        let descriptor = FontDescriptorInfo(rawDescription: rawDescriptor)
-        let role = inferredRole(from: descriptor)
-        let sample = sampleText(for: role)
-        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) else {
-            storeAdaptedFont(original, for: rawDescriptor, cacheToken: cacheToken)
+        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: resolvedSample) else {
+            storeAdaptedFont(original, for: cacheKey, cacheToken: cacheToken)
             return original
         }
 
@@ -1305,8 +1320,24 @@ private enum AppFontAdapter {
         if let weight = descriptor.weight {
             mapped = mapped.weight(weight)
         }
-        storeAdaptedFont(mapped, for: rawDescriptor, cacheToken: cacheToken)
+        storeAdaptedFont(mapped, for: cacheKey, cacheToken: cacheToken)
         return mapped
+    }
+
+    private static func resolvedSampleText(for role: FontSemanticRole, override sampleText: String?) -> String {
+        if let sampleText {
+            let trimmed = sampleText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let scalars = trimmed.unicodeScalars.filter {
+                    !$0.properties.isWhitespace && $0.properties.generalCategory != .control
+                }
+                let prefix = String(String.UnicodeScalarView(scalars.prefix(96)))
+                if !prefix.isEmpty {
+                    return prefix
+                }
+            }
+        }
+        return self.sampleText(for: role)
     }
 
     private static func inferredRole(from descriptor: FontDescriptorInfo) -> FontSemanticRole {

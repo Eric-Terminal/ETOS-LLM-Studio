@@ -1639,7 +1639,7 @@ struct ReasoningDisclosureView: View, Equatable {
             // 内容区域：只在展开时渲染
             if isExpanded {
                 Text(reasoning)
-                    .etFont(.subheadline)
+                    .etFont(.subheadline, sampleText: reasoning)
                     .foregroundStyle(
                         resolvedSecondaryTextColor(
                             default: usesNoBubbleStyle
