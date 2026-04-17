@@ -239,6 +239,12 @@ private struct SessionFolderBrowserView: View {
                     Image(systemName: "ellipsis")
                 }
             }
+
+            if !isBatchSelecting {
+                ToolbarItem(placement: .bottomBar) {
+                    paginationBottomBar
+                }
+            }
         }
         .navigationDestination(isPresented: $showSessionSearch) {
             WatchSessionSearchView(
@@ -253,13 +259,6 @@ private struct SessionFolderBrowserView: View {
         .safeAreaInset(edge: .bottom) {
             if isBatchSelecting {
                 batchActionBar
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if !isBatchSelecting {
-                paginationBar
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 4)
             }
         }
     }
@@ -471,17 +470,17 @@ private struct SessionFolderBrowserView: View {
         .background(.ultraThinMaterial)
     }
 
-    private var paginationBar: some View {
+    private var paginationBottomBar: some View {
         HStack(spacing: 6) {
             Button {
                 goToPreviousPage()
             } label: {
                 Image(systemName: "chevron.left")
-                    .etFont(.footnote.weight(.semibold))
-                    .frame(width: 24, height: 24)
             }
             .disabled(!canGoToPreviousPage)
             .accessibilityLabel("上一页")
+
+            Spacer(minLength: 4)
 
             TextField("", text: .constant(paginationSummaryText))
                 .textFieldStyle(.plain)
@@ -490,21 +489,18 @@ private struct SessionFolderBrowserView: View {
                 .allowsHitTesting(false)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .frame(height: 22)
                 .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 4)
 
             Button {
                 goToNextPage()
             } label: {
                 Image(systemName: "chevron.right")
-                    .etFont(.footnote.weight(.semibold))
-                    .frame(width: 24, height: 24)
             }
             .disabled(!canGoToNextPage)
             .accessibilityLabel("下一页")
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 2)
     }
 
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
