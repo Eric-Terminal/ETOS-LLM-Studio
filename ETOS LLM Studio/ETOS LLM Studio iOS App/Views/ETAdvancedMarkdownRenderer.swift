@@ -68,6 +68,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 )
         } else {
             Text(prepared.sourceText)
+                .etFont(.body, sampleText: prepared.sourceText)
                 .foregroundStyle(textColor)
         }
     }
@@ -75,7 +76,8 @@ struct ETAdvancedMarkdownRenderer: View {
     @ViewBuilder
     private func fallbackTextView(textColor: Color) -> some View {
         Text(content)
-                .foregroundStyle(textColor)
+            .etFont(.body, sampleText: content)
+            .foregroundStyle(textColor)
     }
 }
 
@@ -137,7 +139,30 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         let stableWidth = max(1, floor(availableWidth))
-        let payload = Payload(content: content, availableWidth: stableWidth)
+        let payload = Payload(
+            content: content,
+            availableWidth: stableWidth,
+            bodyFontFamily: Self.resolvedCSSFontFamily(
+                role: .body,
+                sampleText: content,
+                fallback: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+            ),
+            emphasisFontFamily: Self.resolvedCSSFontFamily(
+                role: .emphasis,
+                sampleText: content,
+                fallback: "var(--font-body)"
+            ),
+            strongFontFamily: Self.resolvedCSSFontFamily(
+                role: .strong,
+                sampleText: content,
+                fallback: "var(--font-body)"
+            ),
+            codeFontFamily: Self.resolvedCSSFontFamily(
+                role: .code,
+                sampleText: content,
+                fallback: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace"
+            )
+        )
         let shellConfiguration = ShellConfiguration(
             enableMarkdown: enableMarkdown,
             isOutgoing: isOutgoing,
@@ -155,6 +180,18 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         webView.navigationDelegate = nil
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
+    }
+
+    private static func resolvedCSSFontFamily(
+        role: FontSemanticRole,
+        sampleText: String,
+        fallback: String
+    ) -> String {
+        if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sampleText),
+           !postScriptName.isEmpty {
+            return "\(ShellConfiguration.cssFamilyLiteral(postScriptName)), \(fallback)"
+        }
+        return fallback
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
@@ -580,7 +617,11 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     const __enableMarkdown = \(enableMarkdown ? "true" : "false");
     const __state = {
       raw: "",
-      availableWidth: 1
+      availableWidth: 1,
+      bodyFontFamily: "",
+      emphasisFontFamily: "",
+      strongFontFamily: "",
+      codeFontFamily: ""
     };
     const __codeCollapseState = Object.create(null);
 
@@ -663,7 +704,12 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     }
 
     function __ensureMermaidConfigured() {
-      if (!window.mermaid || window.__etMermaidConfigured) {
+      if (!window.mermaid) {
+        return;
+      }
+
+      const fontFamily = __state.bodyFontFamily || "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif";
+      if (window.__etMermaidConfigured && window.__etMermaidConfiguredFontFamily === fontFamily) {
         return;
       }
 
@@ -673,9 +719,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
           startOnLoad: false,
           securityLevel: "strict",
           theme: prefersDark ? "dark" : "default",
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+          fontFamily
         });
         window.__etMermaidConfigured = true;
+        window.__etMermaidConfiguredFontFamily = fontFamily;
       } catch (_) {}
     }
 
@@ -874,6 +921,30 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       document.documentElement.style.setProperty("--max-width", `${stableWidth}px`);
     }
 
+    function __normalizeFontFamily(value) {
+      if (typeof value !== "string") {
+        return "";
+      }
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : "";
+    }
+
+    function __setFontFamilies() {
+      const rootStyle = document.documentElement.style;
+      if (__state.bodyFontFamily) {
+        rootStyle.setProperty("--font-body", __state.bodyFontFamily);
+      }
+      if (__state.emphasisFontFamily) {
+        rootStyle.setProperty("--font-emphasis", __state.emphasisFontFamily);
+      }
+      if (__state.strongFontFamily) {
+        rootStyle.setProperty("--font-strong", __state.strongFontFamily);
+      }
+      if (__state.codeFontFamily) {
+        rootStyle.setProperty("--font-code", __state.codeFontFamily);
+      }
+    }
+
     function __notifyHeightNow() {
       const content = document.getElementById("content");
       const rectHeight = content ? content.getBoundingClientRect().height : 0;
@@ -1048,7 +1119,28 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         __state.availableWidth = numericWidth;
       }
 
+      const bodyFontFamily = __normalizeFontFamily(payload.bodyFontFamily);
+      if (bodyFontFamily) {
+        __state.bodyFontFamily = bodyFontFamily;
+      }
+
+      const emphasisFontFamily = __normalizeFontFamily(payload.emphasisFontFamily);
+      if (emphasisFontFamily) {
+        __state.emphasisFontFamily = emphasisFontFamily;
+      }
+
+      const strongFontFamily = __normalizeFontFamily(payload.strongFontFamily);
+      if (strongFontFamily) {
+        __state.strongFontFamily = strongFontFamily;
+      }
+
+      const codeFontFamily = __normalizeFontFamily(payload.codeFontFamily);
+      if (codeFontFamily) {
+        __state.codeFontFamily = codeFontFamily;
+      }
+
       __setContentWidth(__state.availableWidth);
+      __setFontFamilies();
       __scheduleBootstrap(0);
     }
 
@@ -1062,6 +1154,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     window.addEventListener("load", () => {
       __setContentWidth(__state.availableWidth);
+      __setFontFamilies();
       __scheduleBootstrap(0);
     });
     window.addEventListener("resize", () => __notifyHeightNow());
@@ -1092,15 +1185,15 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 """
         }
 
-        nonisolated private static func cssFontFamily(role: FontSemanticRole, fallback: String) -> String {
-            let customFamilies = FontLibrary.fallbackPostScriptNames(for: role).map(cssFamilyLiteral)
-            if customFamilies.isEmpty {
-                return fallback
+        nonisolated fileprivate static func cssFontFamily(role: FontSemanticRole, fallback: String) -> String {
+            if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: ""),
+               !postScriptName.isEmpty {
+                return "\(cssFamilyLiteral(postScriptName)), \(fallback)"
             }
-            return (customFamilies + [fallback]).joined(separator: ", ")
+            return fallback
         }
 
-        nonisolated private static func cssFamilyLiteral(_ value: String) -> String {
+        nonisolated fileprivate static func cssFamilyLiteral(_ value: String) -> String {
             let escaped = value
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "'", with: "\\'")
@@ -1122,14 +1215,26 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     struct Payload: Equatable {
         let content: String
         let availableWidth: CGFloat
+        let bodyFontFamily: String
+        let emphasisFontFamily: String
+        let strongFontFamily: String
+        let codeFontFamily: String
 
         var javaScriptInvocation: String {
             let widthString = String(format: "%.0f", availableWidth)
             let contentJSON = Self.jsonStringLiteral(content)
+            let bodyFontFamilyJSON = Self.jsonStringLiteral(bodyFontFamily)
+            let emphasisFontFamilyJSON = Self.jsonStringLiteral(emphasisFontFamily)
+            let strongFontFamilyJSON = Self.jsonStringLiteral(strongFontFamily)
+            let codeFontFamilyJSON = Self.jsonStringLiteral(codeFontFamily)
             return """
 window.__etApplyPayload && window.__etApplyPayload({
   content: \(contentJSON),
-  availableWidth: \(widthString)
+  availableWidth: \(widthString),
+  bodyFontFamily: \(bodyFontFamilyJSON),
+  emphasisFontFamily: \(emphasisFontFamilyJSON),
+  strongFontFamily: \(strongFontFamilyJSON),
+  codeFontFamily: \(codeFontFamilyJSON)
 });
 window.__etNotifyHeight && window.__etNotifyHeight();
 """

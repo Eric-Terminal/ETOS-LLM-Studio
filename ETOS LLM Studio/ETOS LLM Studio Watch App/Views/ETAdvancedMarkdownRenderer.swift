@@ -83,6 +83,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 )
         } else {
             Text(prepared.sourceText)
+                .etFont(.body, sampleText: prepared.sourceText)
                 .foregroundStyle(textColor)
         }
     }
@@ -90,6 +91,7 @@ struct ETAdvancedMarkdownRenderer: View {
     @ViewBuilder
     private func fallbackTextView(textColor: Color) -> some View {
         Text(content)
+            .etFont(.body, sampleText: content)
             .foregroundStyle(textColor)
     }
 }
@@ -141,6 +143,7 @@ private struct ETMathAwareMarkdownView: View {
                     switch token {
                     case .text(let text):
                         Text(verbatim: text)
+                            .etFont(.body, sampleText: text)
                             .foregroundStyle(textColor)
                             .fixedSize(horizontal: true, vertical: true)
                     case .math(let latex):
@@ -157,6 +160,7 @@ private struct ETMathAwareMarkdownView: View {
         } else {
             let text = parts.compactMap(\.textValue).joined()
             Text(verbatim: text)
+                .etFont(.body, sampleText: text)
                 .foregroundStyle(textColor)
         }
     }
