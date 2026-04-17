@@ -63,7 +63,8 @@ struct ETAdvancedMarkdownRenderer: View {
                 .etChatMarkdownBaseStyle(
                     textColor: textColor,
                     isOutgoing: isOutgoing,
-                    prefersDarkPalette: colorScheme == .dark
+                    prefersDarkPalette: colorScheme == .dark,
+                    sampleText: prepared.sourceText
                 )
         } else {
             Text(prepared.sourceText)
@@ -1150,7 +1151,8 @@ private extension View {
     func etChatMarkdownBaseStyle(
         textColor: Color,
         isOutgoing: Bool,
-        prefersDarkPalette: Bool
+        prefersDarkPalette: Bool,
+        sampleText: String
     ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
@@ -1164,10 +1166,10 @@ private extension View {
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
-        let bodyFontName = FontLibrary.resolvedPostScriptName(for: .body)
-        let emphasisFontName = FontLibrary.resolvedPostScriptName(for: .emphasis)
-        let strongFontName = FontLibrary.resolvedPostScriptName(for: .strong)
-        let codeFontName = FontLibrary.resolvedPostScriptName(for: .code)
+        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
+        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
+        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
+        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
 
         self
             .markdownSoftBreakMode(.lineBreak)

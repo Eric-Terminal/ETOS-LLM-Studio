@@ -78,6 +78,7 @@ struct ETAdvancedMarkdownRenderer: View {
                     textColor: textColor,
                     isOutgoing: isOutgoing,
                     prefersDarkPalette: colorScheme == .dark,
+                    sampleText: prepared.sourceText,
                     onCodeBlockHeaderTap: onCodeBlockHeaderTap
                 )
         } else {
@@ -167,6 +168,7 @@ private extension View {
         textColor: Color,
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
+        sampleText: String,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) -> some View {
         let codeBlockBackground = isOutgoing
@@ -181,10 +183,10 @@ private extension View {
         let codeHeaderTextColor = isOutgoing
             ? Color.white.opacity(0.9)
             : Color.secondary
-        let bodyFontName = FontLibrary.resolvedPostScriptName(for: .body)
-        let emphasisFontName = FontLibrary.resolvedPostScriptName(for: .emphasis)
-        let strongFontName = FontLibrary.resolvedPostScriptName(for: .strong)
-        let codeFontName = FontLibrary.resolvedPostScriptName(for: .code)
+        let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
+        let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
+        let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
+        let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
 
         self
             .markdownSoftBreakMode(.lineBreak)
