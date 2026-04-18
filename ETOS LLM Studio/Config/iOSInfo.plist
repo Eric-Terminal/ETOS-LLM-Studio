@@ -41,5 +41,7 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>ETCommitHash</key>
+	<string>LocalBuild</string>
 </dict>
 </plist>

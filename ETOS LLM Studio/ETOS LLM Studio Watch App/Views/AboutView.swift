@@ -23,7 +23,14 @@ struct AboutView: View {
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "N/A"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "N/A"
-        return "\(version) (Build \(build))"
+        return "\(version) (Build \(build)) · \(appCommitHash)"
+    }
+
+    private var appCommitHash: String {
+        let rawValue = Bundle.main.object(forInfoDictionaryKey: "ETCommitHash") as? String
+        let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized, !normalized.isEmpty else { return "Unknown" }
+        return normalized
     }
     
     var body: some View {
