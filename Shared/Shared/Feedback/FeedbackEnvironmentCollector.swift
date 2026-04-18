@@ -17,6 +17,7 @@ public enum FeedbackEnvironmentCollector {
             platform: platformName,
             appVersion: appVersion,
             appBuild: appBuild,
+            gitCommitHash: gitCommitHash,
             osVersion: osVersion,
             deviceModel: deviceModelIdentifier(),
             localeIdentifier: Locale.current.identifier,
@@ -58,6 +59,13 @@ public enum FeedbackEnvironmentCollector {
 
     private static var appBuild: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "N/A"
+    }
+
+    private static var gitCommitHash: String {
+        let rawValue = Bundle.main.object(forInfoDictionaryKey: "ETCommitHash") as? String
+        let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized, !normalized.isEmpty else { return "Unknown" }
+        return normalized
     }
 
     private static func deviceModelIdentifier() -> String {

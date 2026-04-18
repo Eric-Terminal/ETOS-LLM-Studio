@@ -138,6 +138,30 @@ struct FeedbackDraftTests {
     }
 }
 
+@Suite("FeedbackEnvironmentSnapshot Tests")
+struct FeedbackEnvironmentSnapshotTests {
+    @Test("环境快照可编码并保留 Git 提交哈希")
+    func environmentSnapshotRoundTrip() throws {
+        let snapshot = FeedbackEnvironmentSnapshot(
+            platform: "iOS",
+            appVersion: "1.2.3",
+            appBuild: "456",
+            gitCommitHash: "abcdef1234567890",
+            osVersion: "iOS 26.0",
+            deviceModel: "iPhone17,1",
+            localeIdentifier: "zh_Hans_CN",
+            timezoneIdentifier: "Asia/Shanghai"
+        )
+
+        let data = try JSONEncoder().encode(snapshot)
+        let decoded = try JSONDecoder().decode(FeedbackEnvironmentSnapshot.self, from: data)
+
+        #expect(decoded.gitCommitHash == "abcdef1234567890")
+        #expect(decoded.appBuild == "456")
+        #expect(decoded.platform == "iOS")
+    }
+}
+
 @Suite("FeedbackTicket Tests")
 struct FeedbackTicketTests {
     @Test("审核字段可正常编码与解码")

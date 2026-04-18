@@ -66,6 +66,7 @@ public struct FeedbackEnvironmentSnapshot: Codable, Hashable, Sendable {
     public let platform: String
     public let appVersion: String
     public let appBuild: String
+    public let gitCommitHash: String
     public let osVersion: String
     public let deviceModel: String
     public let localeIdentifier: String
@@ -75,6 +76,7 @@ public struct FeedbackEnvironmentSnapshot: Codable, Hashable, Sendable {
         platform: String,
         appVersion: String,
         appBuild: String,
+        gitCommitHash: String,
         osVersion: String,
         deviceModel: String,
         localeIdentifier: String,
@@ -83,6 +85,7 @@ public struct FeedbackEnvironmentSnapshot: Codable, Hashable, Sendable {
         self.platform = platform
         self.appVersion = appVersion
         self.appBuild = appBuild
+        self.gitCommitHash = gitCommitHash
         self.osVersion = osVersion
         self.deviceModel = deviceModel
         self.localeIdentifier = localeIdentifier
