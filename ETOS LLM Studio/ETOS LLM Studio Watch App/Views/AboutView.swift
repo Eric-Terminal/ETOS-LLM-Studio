@@ -32,6 +32,10 @@ struct AboutView: View {
         guard let normalized, !normalized.isEmpty else { return "Unknown" }
         return normalized
     }
+
+    private var appCommitHashShort: String {
+        String(appCommitHash.prefix(7))
+    }
     
     var body: some View {
         ScrollView {
@@ -71,7 +75,7 @@ struct AboutView: View {
                     .onTapGesture {
                         handleVersionTap()
                     }
-                    InfoRow(title: "Git 提交", value: appCommitHash, valueTruncationMode: .middle)
+                    InfoRow(title: "Git 提交", value: appCommitHashShort)
                     InfoRow(title: "开发者", value: "Eric-Terminal")
                     InfoRow(title: "平台支持", value: "iOS / watchOS")
                 }
@@ -187,13 +191,6 @@ private final class WatchWebAuthLauncher: NSObject {
 private struct InfoRow: View {
     let title: String
     let value: String
-    let valueTruncationMode: Text.TruncationMode
-
-    init(title: String, value: String, valueTruncationMode: Text.TruncationMode = .tail) {
-        self.title = title
-        self.value = value
-        self.valueTruncationMode = valueTruncationMode
-    }
     
     var body: some View {
         HStack {
@@ -203,8 +200,6 @@ private struct InfoRow: View {
             Spacer()
             Text(value)
                 .etFont(.caption)
-                .lineLimit(1)
-                .truncationMode(valueTruncationMode)
         }
     }
 }

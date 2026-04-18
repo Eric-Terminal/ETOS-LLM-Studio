@@ -31,6 +31,10 @@ struct AboutView: View {
         guard let normalized, !normalized.isEmpty else { return "Unknown" }
         return normalized
     }
+
+    private var appCommitHashShort: String {
+        String(appCommitHash.prefix(7))
+    }
     
     private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
     private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
@@ -73,10 +77,8 @@ struct AboutView: View {
                     handleVersionTap()
                 }
                 LabeledContent("Git 提交") {
-                    Text(appCommitHash)
+                    Text(appCommitHashShort)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
                 }
                 LabeledContent("开发者", value: "Eric-Terminal")
                 LabeledContent("平台支持", value: "iOS / watchOS")
