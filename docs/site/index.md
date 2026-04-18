@@ -13,8 +13,8 @@ hero:
       text: 快速开始
       link: /guide/getting-started
     - theme: alt
-      text: 功能总览
-      link: /modules/chat-and-models
+      text: 设计原理
+      link: /design/
     - theme: alt
       text: GitHub
       link: https://github.com/Eric-Terminal/ETOS-LLM-Studio
@@ -43,6 +43,8 @@ features:
 ## 界面预览
 
 很多功能并不会自己跳到脸上，这份文档站的目的就是把它们所在的位置、推荐使用顺序和一些默认不会解释的入口补齐。
+
+如果你想知道的不只是“在哪里点”，而是“为什么这样设计、上下文怎么拼、Daily Pulse 到底看了哪些信号”，请直接读 [设计文档](/design/)。
 
 <div class="etos-gallery">
   <figure>

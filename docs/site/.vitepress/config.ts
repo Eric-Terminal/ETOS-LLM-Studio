@@ -48,6 +48,7 @@ export default defineConfig({
     siteTitle: "ETOS LLM Studio Docs",
     nav: [
       { text: "快速开始", link: "/guide/getting-started" },
+      { text: "设计文档", link: "/design/" },
       { text: "功能模块", link: "/modules/chat-and-models" },
       { text: "隐藏技巧", link: "/tips/hidden-gems" },
       { text: "常见问题", link: "/faq/" },
@@ -62,6 +63,16 @@ export default defineConfig({
           { text: "第一次配置提供商", link: "/guide/first-provider" },
           { text: "第一次发起聊天", link: "/guide/first-chat" },
           { text: "界面导览", link: "/guide/interface-tour" }
+        ]
+      },
+      {
+        text: "设计文档",
+        items: [
+          { text: "产品设计总览", link: "/design/" },
+          { text: "提示词与上下文拼装", link: "/design/prompt-assembly" },
+          { text: "Daily Pulse 设计原理", link: "/design/daily-pulse" },
+          { text: "记忆、会话摘要与用户画像", link: "/design/memory-and-profile" },
+          { text: "世界书与工具治理", link: "/design/worldbook-and-tools" }
         ]
       },
       {
