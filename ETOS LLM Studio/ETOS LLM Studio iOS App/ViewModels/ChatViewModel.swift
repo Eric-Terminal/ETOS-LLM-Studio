@@ -69,6 +69,7 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedSpeechModel: RunnableModel?
     @Published private(set) var latestAssistantMessageID: UUID?
     @Published private(set) var toolCallResultIDs: Set<String> = []
+    @Published private(set) var runningSessionIDs: Set<UUID> = []
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     private var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     
@@ -230,7 +231,7 @@ final class ChatViewModel: ObservableObject {
     }()
     private var backgroundBlurTask: Task<Void, Never>?
     private var isApplicationActive: Bool = true
-    private var pendingBackgroundReplyNotificationContext: PendingBackgroundReplyNotificationContext?
+    private var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
     private var lastNotifiedAssistantMarker: AssistantReplyMarker?
     private var lastAutoPlayedAssistantMessageID: UUID?
     private var lastMemoryEmbeddingErrorSignature: String = ""
@@ -437,6 +438,7 @@ final class ChatViewModel: ObservableObject {
                 guard let self else { return }
                 currentSession = session
                 imageGenerationFeedback = .idle
+                refreshCurrentSessionSendingState()
             }
             .store(in: &cancellables)
         
@@ -473,31 +475,39 @@ final class ChatViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
-        chatService.requestStatusSubject
+        chatService.runningSessionIDsSubject
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] status in
+            .sink { [weak self] runningSessionIDs in
                 guard let self else { return }
-                switch status {
-                case .started:
-                    isSendingMessage = true
-                    beginBackgroundTaskIfNeeded()
-                    prepareBackgroundReplyNotificationContext()
-                    updateAutoReasoningPreviewState(with: allMessagesForSession)
-                case .finished, .error, .cancelled:
-                    isSendingMessage = false
+                self.runningSessionIDs = runningSessionIDs
+                refreshCurrentSessionSendingState()
+                if runningSessionIDs.isEmpty {
                     endBackgroundTaskIfNeeded()
-                    updateAutoReasoningPreviewState(with: allMessagesForSession)
-                    if case .finished = status {
-                        notifyIfAssistantReplyFinishedInBackground()
+                } else {
+                    beginBackgroundTaskIfNeeded()
+                }
+                updateAutoReasoningPreviewState(with: allMessagesForSession)
+            }
+            .store(in: &cancellables)
+
+        chatService.sessionRequestStatusSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self else { return }
+                switch event.status {
+                case .started:
+                    prepareBackgroundReplyNotificationContext(for: event.sessionID)
+                case .finished:
+                    if event.sessionID == currentSession?.id {
+                        notifyIfAssistantReplyFinishedInBackground(for: event.sessionID)
                         autoPlayLatestAssistantMessageIfNeeded()
                     } else {
-                        pendingBackgroundReplyNotificationContext = nil
+                        notifyIfAssistantReplyFinishedFromOffscreenSession(event.sessionID)
                     }
+                case .error, .cancelled:
+                    pendingReplyNotificationContextBySessionID.removeValue(forKey: event.sessionID)
                 @unknown default:
-                    isSendingMessage = false
-                    endBackgroundTaskIfNeeded()
-                    pendingBackgroundReplyNotificationContext = nil
-                    updateAutoReasoningPreviewState(with: allMessagesForSession)
+                    pendingReplyNotificationContextBySessionID.removeValue(forKey: event.sessionID)
                 }
             }
             .store(in: &cancellables)
@@ -1285,6 +1295,16 @@ final class ChatViewModel: ObservableObject {
     func setCurrentSession(_ session: ChatSession) {
         chatService.setCurrentSession(session)
     }
+
+    @discardableResult
+    func setCurrentSessionIfExists(sessionID: UUID) -> Bool {
+        if let session = chatSessions.first(where: { $0.id == sessionID })
+            ?? chatService.chatSessionsSubject.value.first(where: { $0.id == sessionID }) {
+            chatService.setCurrentSession(session)
+            return true
+        }
+        return false
+    }
     
     func updateSession(_ session: ChatSession) {
         chatService.updateSession(session)
@@ -1907,24 +1927,37 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func prepareBackgroundReplyNotificationContext() {
-        let baseline = latestAssistantReplyMarker(from: allMessagesForSession)
-        pendingBackgroundReplyNotificationContext = PendingBackgroundReplyNotificationContext(
+    private func refreshCurrentSessionSendingState() {
+        guard let currentSessionID = currentSession?.id else {
+            isSendingMessage = false
+            return
+        }
+        isSendingMessage = runningSessionIDs.contains(currentSessionID)
+    }
+
+    private func prepareBackgroundReplyNotificationContext(for sessionID: UUID) {
+        let messages = sessionID == currentSession?.id
+            ? allMessagesForSession
+            : Persistence.loadMessages(for: sessionID)
+        let baseline = latestAssistantReplyMarker(from: messages)
+        pendingReplyNotificationContextBySessionID[sessionID] = PendingBackgroundReplyNotificationContext(
             baselineMarker: baseline,
-            sessionName: currentSession?.name
+            sessionName: notificationSessionName(for: sessionID)
         )
     }
 
-    private func notifyIfAssistantReplyFinishedInBackground() {
+    private func notifyIfAssistantReplyFinishedInBackground(for sessionID: UUID) {
         enforceBackgroundReplyNotificationEnabled()
         guard isApplicationInBackground else {
-            pendingBackgroundReplyNotificationContext = nil
+            pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID)
             return
         }
-        guard let context = pendingBackgroundReplyNotificationContext else { return }
-        pendingBackgroundReplyNotificationContext = nil
+        guard let context = pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID) else { return }
 
-        guard let latestMarker = latestAssistantReplyMarker(from: allMessagesForSession) else { return }
+        let messages = sessionID == currentSession?.id
+            ? allMessagesForSession
+            : Persistence.loadMessages(for: sessionID)
+        guard let latestMarker = latestAssistantReplyMarker(from: messages) else { return }
         guard latestMarker != context.baselineMarker else { return }
         guard latestMarker != lastNotifiedAssistantMarker else { return }
         lastNotifiedAssistantMarker = latestMarker
@@ -1934,12 +1967,43 @@ final class ChatViewModel: ObservableObject {
         Task {
             guard await requestBackgroundReplyNotificationAuthorizationIfNeeded() else { return }
             await postBackgroundReplyLocalNotification(
+                sessionID: sessionID,
                 sessionName: context.sessionName,
                 snippet: snippet,
                 messageID: latestMarker.id
             )
         }
 #endif
+    }
+
+    private func notifyIfAssistantReplyFinishedFromOffscreenSession(_ sessionID: UUID) {
+        enforceBackgroundReplyNotificationEnabled()
+        guard let context = pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID) else { return }
+        let messages = Persistence.loadMessages(for: sessionID)
+        guard let latestMarker = latestAssistantReplyMarker(from: messages) else { return }
+        guard latestMarker != context.baselineMarker else { return }
+        guard latestMarker != lastNotifiedAssistantMarker else { return }
+        lastNotifiedAssistantMarker = latestMarker
+
+        let snippet = notificationSnippet(for: latestMarker)
+#if canImport(UserNotifications)
+        Task {
+            guard await requestBackgroundReplyNotificationAuthorizationIfNeeded() else { return }
+            await postBackgroundReplyLocalNotification(
+                sessionID: sessionID,
+                sessionName: context.sessionName,
+                snippet: snippet,
+                messageID: latestMarker.id
+            )
+        }
+#endif
+    }
+
+    private func notificationSessionName(for sessionID: UUID) -> String? {
+        if let current = currentSession, current.id == sessionID {
+            return current.name
+        }
+        return chatSessions.first(where: { $0.id == sessionID })?.name
     }
 
     private func autoPlayLatestAssistantMessageIfNeeded() {
@@ -2081,7 +2145,7 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func postBackgroundReplyLocalNotification(sessionName: String?, snippet: String, messageID: UUID) async {
+    private func postBackgroundReplyLocalNotification(sessionID: UUID, sessionName: String?, snippet: String, messageID: UUID) async {
         let content = UNMutableNotificationContent()
         content.title = NSLocalizedString("AI 回复已完成", comment: "Background reply notification title")
         if let sessionName, !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2098,6 +2162,10 @@ final class ChatViewModel: ObservableObject {
         }
         content.sound = .default
         content.threadIdentifier = "chat.reply.finished"
+        content.userInfo = [
+            "route": AppLocalNotificationRoute.chatSession.rawValue,
+            "session_id": sessionID.uuidString
+        ]
         if #available(iOS 15.0, *) {
             content.interruptionLevel = .timeSensitive
             content.relevanceScore = 1.0

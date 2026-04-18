@@ -620,6 +620,7 @@ private struct SessionFolderBrowserView: View {
             SessionRow(
                 session: session,
                 isCurrent: session.id == viewModel.currentSession?.id,
+                isRunning: viewModel.runningSessionIDs.contains(session.id),
                 isEditing: editingSessionID == session.id,
                 draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
                 currentFolderID: normalizedFolderID(of: session),
@@ -1000,6 +1001,7 @@ private struct BatchSelectableSessionRow: View {
 private struct SessionRow: View {
     let session: ChatSession
     let isCurrent: Bool
+    let isRunning: Bool
     let isEditing: Bool
     @Binding var draftName: String
     let currentFolderID: UUID?
@@ -1069,6 +1071,12 @@ private struct SessionRow: View {
                     }
 
                     Spacer()
+
+                    if isRunning {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                    }
 
                     if isCurrent {
                         Image(systemName: "checkmark")

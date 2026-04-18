@@ -1299,6 +1299,7 @@ struct ChatView: View {
         return SessionPickerRow(
             session: session,
             isCurrent: isCurrent,
+            isRunning: viewModel.runningSessionIDs.contains(session.id),
             isEditing: isEditing,
             draftName: isEditing ? $sessionDraftName : .constant(session.name),
             searchSummary: searchSummary,
@@ -3956,6 +3957,7 @@ private struct SessionPickerInfoSheet: View {
 private struct SessionPickerRow: View {
     let session: ChatSession
     let isCurrent: Bool
+    let isRunning: Bool
     let isEditing: Bool
     @Binding var draftName: String
     let searchSummary: String?
@@ -4014,6 +4016,12 @@ private struct SessionPickerRow: View {
                     }
 
                     Spacer()
+
+                    if isRunning {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                    }
 
                     if isCurrent {
                         Image(systemName: "checkmark")
