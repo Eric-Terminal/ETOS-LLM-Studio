@@ -23,7 +23,7 @@ struct AboutView: View {
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "N/A"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "N/A"
-        return "\(version) (Build \(build)) · \(appCommitHash)"
+        return "\(version) (Build \(build))"
     }
 
     private var appCommitHash: String {
@@ -71,6 +71,7 @@ struct AboutView: View {
                     .onTapGesture {
                         handleVersionTap()
                     }
+                    InfoRow(title: "Git 提交", value: appCommitHash, valueTruncationMode: .middle)
                     InfoRow(title: "开发者", value: "Eric-Terminal")
                     InfoRow(title: "平台支持", value: "iOS / watchOS")
                 }
@@ -186,6 +187,13 @@ private final class WatchWebAuthLauncher: NSObject {
 private struct InfoRow: View {
     let title: String
     let value: String
+    let valueTruncationMode: Text.TruncationMode
+
+    init(title: String, value: String, valueTruncationMode: Text.TruncationMode = .tail) {
+        self.title = title
+        self.value = value
+        self.valueTruncationMode = valueTruncationMode
+    }
     
     var body: some View {
         HStack {
@@ -195,6 +203,8 @@ private struct InfoRow: View {
             Spacer()
             Text(value)
                 .etFont(.caption)
+                .lineLimit(1)
+                .truncationMode(valueTruncationMode)
         }
     }
 }

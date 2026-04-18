@@ -22,7 +22,7 @@ struct AboutView: View {
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "N/A"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "N/A"
-        return "\(version) (Build \(build)) · \(appCommitHash)"
+        return "\(version) (Build \(build))"
     }
 
     private var appCommitHash: String {
@@ -71,6 +71,12 @@ struct AboutView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     handleVersionTap()
+                }
+                LabeledContent("Git 提交") {
+                    Text(appCommitHash)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 LabeledContent("开发者", value: "Eric-Terminal")
                 LabeledContent("平台支持", value: "iOS / watchOS")
