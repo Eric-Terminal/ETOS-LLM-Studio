@@ -23,7 +23,9 @@ const teekConfig = defineTeekConfig({
     copyright: {
       show: false
     },
-    customHtml: "<span>Copyright 2024-2026 Eric Terminal</span>"
+    topMessage:
+      "文档基于 <a href=\"https://vitepress.dev/\" target=\"_blank\" rel=\"noreferrer\">VitePress</a> 与 <a href=\"https://github.com/Kele-Bingtang/vitepress-theme-teek\" target=\"_blank\" rel=\"noreferrer\">vitepress-theme-teek</a> 构建",
+    customHtml: "<span class=\"etos-footer-copy\">Copyright 2025-2026 Eric Terminal</span>"
   }
 });
 

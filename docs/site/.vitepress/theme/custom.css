@@ -119,12 +119,28 @@
   padding-top: 28px;
 }
 
+.tk-footer-info p {
+  width: 100%;
+  margin: 0 0 8px;
+  text-align: center;
+  color: var(--vp-c-text-2);
+  font-size: 0.95rem;
+}
+
 .tk-footer-info__list {
   gap: 0;
+  justify-content: center;
+  text-align: center;
 }
 
 .tk-footer-info__list__item {
   font-size: 0.95rem;
+}
+
+.etos-footer-copy {
+  display: block;
+  width: 100%;
+  text-align: center;
 }
 
 @media (max-width: 720px) {
