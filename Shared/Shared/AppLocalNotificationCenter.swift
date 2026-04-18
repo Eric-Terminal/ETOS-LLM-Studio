@@ -22,11 +22,14 @@ public extension Notification.Name {
     static let requestContinueDailyPulseChat = Notification.Name("com.ETOS.dailyPulse.requestContinueChat")
     /// 请求当前设备直接打开反馈页面（可附带工单号）。
     static let requestOpenFeedback = Notification.Name("com.ETOS.feedback.requestOpen")
+    /// 请求当前设备直接打开指定聊天会话。
+    static let requestOpenChatSession = Notification.Name("com.ETOS.chat.requestOpenSession")
 }
 
 public enum AppLocalNotificationRoute: String, Sendable {
     case dailyPulse
     case feedback
+    case chatSession
 }
 
 public struct AppLocalNotificationDailyPulseContinuation: Sendable, Equatable {
@@ -45,6 +48,7 @@ private let appLocalNotificationDayKeyUserInfoKey = "dayKey"
 private let appLocalNotificationRunIDUserInfoKey = "runID"
 private let appLocalNotificationCardIDUserInfoKey = "cardID"
 private let appLocalNotificationIssueNumberUserInfoKey = "issue_number"
+private let appLocalNotificationSessionIDUserInfoKey = "session_id"
 private let appLocalNotificationDailyPulseReminderCategoryIdentifier = "dailyPulse.reminder"
 private let appLocalNotificationDailyPulseReadyCategoryIdentifier = "dailyPulse.ready"
 private let appLocalNotificationDailyPulseOpenActionIdentifier = "dailyPulse.action.open"
@@ -59,6 +63,7 @@ private struct AppLocalNotificationPayload: Sendable {
     let runID: UUID?
     let cardID: UUID?
     let issueNumber: Int?
+    let sessionID: UUID?
 
     init(userInfo: [AnyHashable: Any]) {
         if let routeRawValue = userInfo[appLocalNotificationRouteUserInfoKey] as? String {
@@ -70,6 +75,7 @@ private struct AppLocalNotificationPayload: Sendable {
         runID = (userInfo[appLocalNotificationRunIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
         cardID = (userInfo[appLocalNotificationCardIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
         issueNumber = AppLocalNotificationPayload.parseIssueNumber(from: userInfo)
+        sessionID = (userInfo[appLocalNotificationSessionIDUserInfoKey] as? String).flatMap(UUID.init(uuidString:))
     }
 
     private static func parseIssueNumber(from userInfo: [AnyHashable: Any]) -> Int? {
@@ -94,6 +100,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     @Published public private(set) var pendingRoute: AppLocalNotificationRoute?
     @Published public private(set) var pendingDailyPulseContinuation: AppLocalNotificationDailyPulseContinuation?
     @Published public private(set) var pendingFeedbackIssueNumber: Int?
+    @Published public private(set) var pendingChatSessionID: UUID?
 
     private var didConfigure = false
 
@@ -195,6 +202,11 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         return route == AppLocalNotificationRoute.feedback.rawValue
     }
 
+    public nonisolated static func notificationTargetsChatSession(userInfo: [AnyHashable: Any]) -> Bool {
+        guard let route = userInfo[appLocalNotificationRouteUserInfoKey] as? String else { return false }
+        return route == AppLocalNotificationRoute.chatSession.rawValue
+    }
+
     public nonisolated static func dailyPulseCategoryIdentifier(kind: String) -> String {
         kind == "ready"
             ? appLocalNotificationDailyPulseReadyCategoryIdentifier
@@ -217,6 +229,12 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         let issueNumber = pendingFeedbackIssueNumber
         pendingFeedbackIssueNumber = nil
         return issueNumber
+    }
+
+    public func consumePendingChatSessionID() -> UUID? {
+        let sessionID = pendingChatSessionID
+        pendingChatSessionID = nil
+        return sessionID
     }
 
     private func registerNotificationCategories() {
@@ -279,6 +297,12 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         pendingRoute = .feedback
         pendingFeedbackIssueNumber = payload.issueNumber
         NotificationCenter.default.post(name: .requestOpenFeedback, object: nil)
+    }
+
+    private func openChatSessionFromNotification(payload: AppLocalNotificationPayload) {
+        pendingRoute = .chatSession
+        pendingChatSessionID = payload.sessionID
+        NotificationCenter.default.post(name: .requestOpenChatSession, object: nil)
     }
 
     private func continueDailyPulseFromNotification(payload: AppLocalNotificationPayload) {
@@ -366,6 +390,10 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
             Task { @MainActor [payload] in
                 AppLocalNotificationCenter.shared.openFeedbackFromNotification(payload: payload)
             }
+        } else if payload.route == .chatSession {
+            Task { @MainActor [payload] in
+                AppLocalNotificationCenter.shared.openChatSessionFromNotification(payload: payload)
+            }
         }
         completionHandler()
     }
@@ -374,6 +402,7 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
 public extension Notification.Name {
     static let requestOpenDailyPulse = Notification.Name("com.ETOS.dailyPulse.requestOpen")
     static let requestOpenFeedback = Notification.Name("com.ETOS.feedback.requestOpen")
+    static let requestOpenChatSession = Notification.Name("com.ETOS.chat.requestOpenSession")
 }
 
 @MainActor

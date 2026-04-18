@@ -106,12 +106,31 @@ public class ChatService {
 
     public let requestStatusSubject = PassthroughSubject<RequestStatus, Never>()
     public let imageGenerationStatusSubject = PassthroughSubject<ImageGenerationStatus, Never>()
+    public let runningSessionIDsSubject = CurrentValueSubject<Set<UUID>, Never>([])
+    public let sessionRequestStatusSubject = PassthroughSubject<SessionRequestStatusEvent, Never>()
     
     public enum RequestStatus {
         case started
         case finished
         case error
         case cancelled
+    }
+
+    public enum SessionRequestStatus: Sendable {
+        case started
+        case finished
+        case error
+        case cancelled
+    }
+
+    public struct SessionRequestStatusEvent: Sendable {
+        public let sessionID: UUID
+        public let status: SessionRequestStatus
+
+        public init(sessionID: UUID, status: SessionRequestStatus) {
+            self.sessionID = sessionID
+            self.status = status
+        }
     }
 
     public enum ImageGenerationStatus {
@@ -152,16 +171,8 @@ public class ChatService {
     // MARK: - 私有状态
     
     private var cancellables = Set<AnyCancellable>()
-    /// 当前正在执行的网络请求任务，用于支持手动取消和重试。
-    private var currentRequestTask: Task<Void, Error>?
-    /// 与当前请求绑定的标识符，保证并发情况下的状态清理正确。
-    private var currentRequestToken: UUID?
-    /// 当前请求对应的会话 ID，主要用于撤销占位消息。
-    private var currentRequestSessionID: UUID?
-    /// 当前请求生成的加载占位消息 ID，方便在取消时移除。
-    private var currentLoadingMessageID: UUID?
-    /// 当前生图请求上下文，用于向 UI 广播更细粒度的生图状态。
-    private var currentImageGenerationContext: ImageGenerationContext?
+    /// 每个会话独立维护请求上下文，支持跨会话并发。
+    private var requestContextBySessionID: [UUID: RequestExecutionContext] = [:]
     /// 记录每个会话上一次注入周期性时间路标的时间，保证路标按周期出现且不会过于频繁。
     private var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]
     /// 重试时要添加新版本的assistant消息ID（如果有）
@@ -202,6 +213,13 @@ public class ChatService {
         let prompt: String
     }
 
+    private struct RequestExecutionContext {
+        var token: UUID
+        var task: Task<Void, Error>?
+        var loadingMessageID: UUID?
+        var imageGenerationContext: ImageGenerationContext?
+    }
+
     private struct RequestLogContext {
         let requestID: UUID
         let sessionID: UUID?
@@ -210,6 +228,80 @@ public class ChatService {
         let modelID: String
         let isStreaming: Bool
         let requestedAt: Date
+    }
+
+    private func messagesSnapshot(for sessionID: UUID) -> [ChatMessage] {
+        if currentSessionSubject.value?.id == sessionID {
+            return messagesForSessionSubject.value
+        }
+        return Persistence.loadMessages(for: sessionID)
+    }
+
+    private func publishMessagesIfCurrentSession(
+        _ messages: [ChatMessage],
+        for sessionID: UUID,
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) {
+        guard currentSessionSubject.value?.id == sessionID else { return }
+        publishMessages(messages, keepingSpeedSamplesFor: preferredMessageID)
+    }
+
+    private func persistAndPublishMessages(
+        _ messages: [ChatMessage],
+        for sessionID: UUID,
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) {
+        publishMessagesIfCurrentSession(messages, for: sessionID, keepingSpeedSamplesFor: preferredMessageID)
+        persistMessages(messages, for: sessionID)
+    }
+
+    private func setRequestContext(_ context: RequestExecutionContext, for sessionID: UUID) {
+        requestContextBySessionID[sessionID] = context
+        setSessionRunning(sessionID, isRunning: true)
+    }
+
+    private func updateRequestTask(_ task: Task<Void, Error>, for sessionID: UUID, token: UUID) {
+        guard var context = requestContextBySessionID[sessionID], context.token == token else { return }
+        context.task = task
+        requestContextBySessionID[sessionID] = context
+    }
+
+    private func updateRequestLoadingMessageID(_ loadingMessageID: UUID, for sessionID: UUID) {
+        guard var context = requestContextBySessionID[sessionID] else { return }
+        context.loadingMessageID = loadingMessageID
+        requestContextBySessionID[sessionID] = context
+    }
+
+    private func clearRequestContextIfNeeded(for sessionID: UUID, token: UUID) {
+        guard let context = requestContextBySessionID[sessionID], context.token == token else { return }
+        requestContextBySessionID.removeValue(forKey: sessionID)
+        setSessionRunning(sessionID, isRunning: false)
+    }
+
+    private func setSessionRunning(_ sessionID: UUID, isRunning: Bool) {
+        var running = runningSessionIDsSubject.value
+        let changed: Bool
+        if isRunning {
+            changed = running.insert(sessionID).inserted
+        } else {
+            changed = running.remove(sessionID) != nil
+        }
+        guard changed else { return }
+        runningSessionIDsSubject.send(running)
+    }
+
+    private func emitSessionRequestStatus(_ status: SessionRequestStatus, sessionID: UUID) {
+        sessionRequestStatusSubject.send(SessionRequestStatusEvent(sessionID: sessionID, status: status))
+        switch status {
+        case .started:
+            requestStatusSubject.send(.started)
+        case .finished:
+            requestStatusSubject.send(.finished)
+        case .error:
+            requestStatusSubject.send(.error)
+        case .cancelled:
+            requestStatusSubject.send(.cancelled)
+        }
     }
 
     private func cachedAttachmentData(
@@ -825,50 +917,59 @@ public class ChatService {
         }
     }
 
-    /// 取消当前正在进行的请求，并进行必要的状态恢复。
-    public func cancelOngoingRequest() async {
-        guard let task = currentRequestTask else { return }
-        let token = currentRequestToken
-        var cancelledImageContext: ImageGenerationContext?
+    /// 取消指定会话正在进行的请求，并进行必要的状态恢复。
+    public func cancelRequest(for sessionID: UUID) async {
+        guard let context = requestContextBySessionID[sessionID], let task = context.task else { return }
+        let token = context.token
         task.cancel()
-        
+
         do {
             try await task.value
         } catch is CancellationError {
-            logger.info("用户已手动取消当前请求。")
+            logger.info("用户已手动取消会话请求: \(sessionID.uuidString)")
         } catch {
             // URLError.cancelled 不会匹配 CancellationError，需要单独检测
             if isCancellationError(error) {
-                logger.info("用户已手动取消当前请求 (URLError)。")
+                logger.info("用户已手动取消会话请求 (URLError): \(sessionID.uuidString)")
             } else {
-                logger.error("取消请求时出现意外错误: \(error.localizedDescription)")
+                logger.error("取消会话请求时出现意外错误: \(error.localizedDescription)")
             }
         }
-        
-        if currentRequestToken == token {
-            if let sessionID = currentRequestSessionID, let loadingID = currentLoadingMessageID {
-                if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID) {
-                    removeMessage(withID: loadingID, in: sessionID)
-                }
-            }
-            cancelledImageContext = currentImageGenerationContext
-            currentRequestTask = nil
-            currentRequestToken = nil
-            currentRequestSessionID = nil
-            currentLoadingMessageID = nil
-            currentImageGenerationContext = nil
+
+        guard let activeContext = requestContextBySessionID[sessionID], activeContext.token == token else {
+            return
         }
-        
-        requestStatusSubject.send(.cancelled)
-        if let context = cancelledImageContext {
+
+        if let loadingID = activeContext.loadingMessageID,
+           shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
+            removeMessage(withID: loadingID, in: sessionID)
+        }
+
+        let cancelledImageContext = activeContext.imageGenerationContext
+        requestContextBySessionID.removeValue(forKey: sessionID)
+        setSessionRunning(sessionID, isRunning: false)
+        emitSessionRequestStatus(.cancelled, sessionID: sessionID)
+
+        if let imageContext = cancelledImageContext {
             imageGenerationStatusSubject.send(
                 .cancelled(
-                    sessionID: context.sessionID,
-                    loadingMessageID: context.loadingMessageID,
-                    prompt: context.prompt,
+                    sessionID: imageContext.sessionID,
+                    loadingMessageID: imageContext.loadingMessageID,
+                    prompt: imageContext.prompt,
                     finishedAt: Date()
                 )
             )
+        }
+    }
+
+    /// 兼容旧调用：取消当前会话请求。
+    public func cancelOngoingRequest() async {
+        if let currentSessionID = currentSessionSubject.value?.id {
+            await cancelRequest(for: currentSessionID)
+            return
+        }
+        for sessionID in Array(requestContextBySessionID.keys) {
+            await cancelRequest(for: sessionID)
         }
     }
     
@@ -1529,16 +1630,23 @@ public class ChatService {
     
     // MARK: - 公开方法 (消息处理)
     
-    public func addErrorMessage(_ content: String, httpStatusCode: Int? = nil) {
-        guard let currentSession = currentSessionSubject.value else { return }
-        var messages = messagesForSessionSubject.value
+    public func addErrorMessage(_ content: String, sessionID: UUID? = nil, httpStatusCode: Int? = nil) {
+        let resolvedSessionID: UUID
+        if let sessionID {
+            resolvedSessionID = sessionID
+        } else if let currentSessionID = currentSessionSubject.value?.id {
+            resolvedSessionID = currentSessionID
+        } else {
+            return
+        }
+        var messages = messagesSnapshot(for: resolvedSessionID)
         
         // 格式化错误内容，使其更简洁易读
         let (formattedContent, fullContent) = formatErrorContent(content, httpStatusCode: httpStatusCode)
         
         let loadingIndex: Int? = {
             // 优先使用当前请求记录的 loading 消息，避免误命中历史中的空 assistant（例如工具调用占位消息）。
-            if let loadingMessageID = currentLoadingMessageID,
+            if let loadingMessageID = requestContextBySessionID[resolvedSessionID]?.loadingMessageID,
                let index = messages.firstIndex(where: { $0.id == loadingMessageID && $0.role == .assistant }) {
                 return index
             }
@@ -1595,8 +1703,7 @@ public class ChatService {
             logger.error("错误消息已添加: \(content)")
         }
         
-        publishMessages(messages)
-        persistMessages(messages, for: currentSession.id)
+        persistAndPublishMessages(messages, for: resolvedSessionID)
     }
     
     /// 获取 HTTP 状态码的描述信息
@@ -2017,7 +2124,10 @@ public class ChatService {
         
         // 兜底：如果没有生成任何用户消息，直接报错返回
         guard !userMessages.isEmpty else {
-            addErrorMessage(NSLocalizedString("错误: 待发送消息为空。", comment: "Empty message error"))
+            addErrorMessage(
+                NSLocalizedString("错误: 待发送消息为空。", comment: "Empty message error"),
+                sessionID: currentSession.id
+            )
             requestStatusSubject.send(.error)
             return
         }
@@ -2031,10 +2141,10 @@ public class ChatService {
         let loadingMessage = ChatMessage(role: .assistant, content: "") // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
         
-        var messages = messagesForSessionSubject.value
+        var messages = messagesSnapshot(for: currentSession.id)
         messages.append(contentsOf: userMessages)
         messages.append(loadingMessage)
-        publishMessages(messages)
+        persistAndPublishMessages(messages, for: currentSession.id)
         
         // 注意：当音频作为附件直接发送给模型时，不再需要后台转文字
         // 因为每次发送消息都会重新加载音频文件并以 base64 发送
@@ -2069,14 +2179,18 @@ public class ChatService {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         }
         
-        persistMessages(messages, for: currentSession.id)
-        requestStatusSubject.send(.started)
-        
-        // 记录当前请求的上下文，便于取消和状态恢复
-        currentRequestSessionID = currentSession.id
-        currentLoadingMessageID = loadingMessage.id
+        emitSessionRequestStatus(.started, sessionID: currentSession.id)
+
         let requestToken = UUID()
-        currentRequestToken = requestToken
+        setRequestContext(
+            RequestExecutionContext(
+                token: requestToken,
+                task: nil,
+                loadingMessageID: loadingMessage.id,
+                imageGenerationContext: nil
+            ),
+            for: currentSession.id
+        )
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
@@ -2110,15 +2224,10 @@ public class ChatService {
                 currentFileAttachments: fileAttachments
             )
         }
-        currentRequestTask = requestTask
+        updateRequestTask(requestTask, for: currentSession.id, token: requestToken)
         
         defer {
-            if currentRequestToken == requestToken {
-                currentRequestTask = nil
-                currentRequestToken = nil
-                currentRequestSessionID = nil
-                currentLoadingMessageID = nil
-            }
+            clearRequestContextIfNeeded(for: currentSession.id, token: requestToken)
         }
         
         do {
@@ -2160,7 +2269,7 @@ public class ChatService {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else {
             let reason = NSLocalizedString("错误: 生图提示词不能为空。", comment: "Image generation prompt empty")
-            addErrorMessage(reason)
+            addErrorMessage(reason, sessionID: currentSession.id)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(
                 .failed(
@@ -2176,7 +2285,7 @@ public class ChatService {
 
         guard let runnableModel = runnableModel ?? selectedModelSubject.value else {
             let reason = NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error")
-            addErrorMessage(reason)
+            addErrorMessage(reason, sessionID: currentSession.id)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(
                 .failed(
@@ -2199,7 +2308,7 @@ public class ChatService {
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
                 runnableModel.provider.apiFormat
             )
-            addErrorMessage(reason)
+            addErrorMessage(reason, sessionID: currentSession.id)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(
                 .failed(
@@ -2215,7 +2324,7 @@ public class ChatService {
 
         guard runnableModel.model.supportsImageGeneration || likelyImageGenerationModelName(runnableModel.model.modelName) else {
             let reason = NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: "Model has no image generation capability")
-            addErrorMessage(reason)
+            addErrorMessage(reason, sessionID: currentSession.id)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(
                 .failed(
@@ -2257,10 +2366,10 @@ public class ChatService {
         )
         let loadingMessage = ChatMessage(role: .assistant, content: "")
 
-        var messages = messagesForSessionSubject.value
+        var messages = messagesSnapshot(for: currentSession.id)
         messages.append(userMessage)
         messages.append(loadingMessage)
-        publishMessages(messages)
+        persistAndPublishMessages(messages, for: currentSession.id)
         logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
 
         if currentSession.isTemporary {
@@ -2278,8 +2387,7 @@ public class ChatService {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
         }
 
-        persistMessages(messages, for: currentSession.id)
-        requestStatusSubject.send(.started)
+        emitSessionRequestStatus(.started, sessionID: currentSession.id)
         imageGenerationStatusSubject.send(
             .started(
                 sessionID: currentSession.id,
@@ -2291,15 +2399,20 @@ public class ChatService {
         )
         logger.info("生图请求即将发送: session=\(currentSession.id.uuidString)")
 
-        currentRequestSessionID = currentSession.id
-        currentLoadingMessageID = loadingMessage.id
-        currentImageGenerationContext = ImageGenerationContext(
-            sessionID: currentSession.id,
-            loadingMessageID: loadingMessage.id,
-            prompt: trimmedPrompt
-        )
         let requestToken = UUID()
-        currentRequestToken = requestToken
+        setRequestContext(
+            RequestExecutionContext(
+                token: requestToken,
+                task: nil,
+                loadingMessageID: loadingMessage.id,
+                imageGenerationContext: ImageGenerationContext(
+                    sessionID: currentSession.id,
+                    loadingMessageID: loadingMessage.id,
+                    prompt: trimmedPrompt
+                )
+            ),
+            for: currentSession.id
+        )
 
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
@@ -2319,16 +2432,10 @@ public class ChatService {
                 currentSessionID: currentSession.id
             )
         }
-        currentRequestTask = requestTask
+        updateRequestTask(requestTask, for: currentSession.id, token: requestToken)
 
         defer {
-            if currentRequestToken == requestToken {
-                currentRequestTask = nil
-                currentRequestToken = nil
-                currentRequestSessionID = nil
-                currentLoadingMessageID = nil
-                currentImageGenerationContext = nil
-            }
+            clearRequestContextIfNeeded(for: currentSession.id, token: requestToken)
         }
 
         do {
@@ -2748,7 +2855,7 @@ public class ChatService {
 
     @MainActor
     private func attachToolResult(_ result: String, to toolCallID: String, toolName: String, loadingMessageID: UUID, sessionID: UUID) {
-        var messages = messagesForSessionSubject.value
+        var messages = messagesSnapshot(for: sessionID)
         guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
         var message = messages[messageIndex]
         guard var toolCalls = message.toolCalls else { return }
@@ -2764,13 +2871,12 @@ public class ChatService {
         toolCalls[resolvedIndex].result = result
         message.toolCalls = toolCalls
         messages[messageIndex] = message
-        publishMessages(messages)
-        persistMessages(messages, for: sessionID)
+        persistAndPublishMessages(messages, for: sessionID)
     }
 
     private func ensureToolCallsVisible(_ toolCalls: [InternalToolCall], in loadingMessageID: UUID, sessionID: UUID) {
         guard !toolCalls.isEmpty else { return }
-        var messages = messagesForSessionSubject.value
+        var messages = messagesSnapshot(for: sessionID)
         guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
         var message = messages[messageIndex]
         var existingCalls = message.toolCalls ?? []
@@ -2800,8 +2906,7 @@ public class ChatService {
         guard didChange else { return }
         message.toolCalls = existingCalls
         messages[messageIndex] = message
-        publishMessages(messages)
-        persistMessages(messages, for: sessionID)
+        persistAndPublishMessages(messages, for: sessionID)
     }
 
     // MARK: - 核心请求执行逻辑 (已重构)
@@ -2870,8 +2975,11 @@ public class ChatService {
         }
         
         guard let runnableModel = selectedModelSubject.value else {
-            addErrorMessage(NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"))
-            requestStatusSubject.send(.error)
+            addErrorMessage(
+                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             return
         }
         
@@ -2879,8 +2987,8 @@ public class ChatService {
             addErrorMessage(String(
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
                 runnableModel.provider.apiFormat
-            ))
-            requestStatusSubject.send(.error)
+            ), sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             return
         }
 
@@ -2899,8 +3007,8 @@ public class ChatService {
             for: runnableModel.provider,
             action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
         ) {
-            addErrorMessage(configurationError)
-            requestStatusSubject.send(.error)
+            addErrorMessage(configurationError, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .failed,
@@ -3035,8 +3143,8 @@ public class ChatService {
                 for: runnableModel.provider,
                 action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
             ) ?? NSLocalizedString("错误: 无法构建 API 请求。", comment: "Failed to build API request error")
-            addErrorMessage(reason)
-            requestStatusSubject.send(.error)
+            addErrorMessage(reason, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .failed,
@@ -3221,8 +3329,8 @@ public class ChatService {
             }
         }
         
-        // 【重要】必须先取消旧请求，再设置新状态变量
-        // 否则 cancelOngoingRequest 会清理掉我们刚设置的 currentLoadingMessageID 等变量
+        // 【重要】必须先取消旧请求，再创建新的会话级请求上下文
+        // 否则取消流程会把刚创建的请求上下文提前清理
         await cancelOngoingRequest()
         
         var persistedMessages = leadingMessages
@@ -3251,18 +3359,15 @@ public class ChatService {
             retryTargetMessageID = existingAssistant.id
             // loadingMessageID 使用原消息的 ID
             actualLoadingMessageID = existingAssistant.id
-            currentLoadingMessageID = actualLoadingMessageID
         } else {
             retryTargetMessageID = nil
             persistedMessages.append(loadingMessage)
             actualLoadingMessageID = loadingMessage.id
-            currentLoadingMessageID = actualLoadingMessageID
         }
         persistedMessages.append(contentsOf: trailingMessages)
         
         // 更新 UI 显示新的 loading message
-        publishMessages(persistedMessages)
-        persistMessages(persistedMessages, for: currentSession.id)
+        persistAndPublishMessages(persistedMessages, for: currentSession.id)
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -3340,12 +3445,18 @@ public class ChatService {
         currentAudioAttachment: AudioAttachment?,
         currentFileAttachments: [FileAttachment]
     ) async {
-        requestStatusSubject.send(.started)
-        
-        currentRequestSessionID = currentSession.id
-        currentLoadingMessageID = loadingMessageID
+        emitSessionRequestStatus(.started, sessionID: currentSession.id)
+
         let requestToken = UUID()
-        currentRequestToken = requestToken
+        setRequestContext(
+            RequestExecutionContext(
+                token: requestToken,
+                task: nil,
+                loadingMessageID: loadingMessageID,
+                imageGenerationContext: nil
+            ),
+            for: currentSession.id
+        )
         
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
@@ -3380,16 +3491,10 @@ public class ChatService {
                 currentFileAttachments: currentFileAttachments
             )
         }
-        
-        currentRequestTask = requestTask
+        updateRequestTask(requestTask, for: currentSession.id, token: requestToken)
         
         defer {
-            if currentRequestToken == requestToken {
-                currentRequestTask = nil
-                currentRequestToken = nil
-                currentRequestSessionID = nil
-                currentLoadingMessageID = nil
-            }
+            clearRequestContextIfNeeded(for: currentSession.id, token: requestToken)
         }
         
         do {
@@ -3516,8 +3621,8 @@ public class ChatService {
             for: runnableModel.provider,
             action: NSLocalizedString("发送生图请求", comment: "Send image generation request action")
         ) {
-            addErrorMessage(configurationError)
-            requestStatusSubject.send(.error)
+            addErrorMessage(configurationError, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             imageGenerationStatusSubject.send(
                 .failed(
                     sessionID: currentSessionID,
@@ -3537,8 +3642,8 @@ public class ChatService {
         ) else {
             logger.error("生图请求构建失败: session=\(currentSessionID.uuidString)")
             let reason = NSLocalizedString("错误: 无法构建生图请求。", comment: "Failed to build image generation request")
-            addErrorMessage(reason)
-            requestStatusSubject.send(.error)
+            addErrorMessage(reason, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             imageGenerationStatusSubject.send(
                 .failed(
                     sessionID: currentSessionID,
@@ -3590,8 +3695,8 @@ public class ChatService {
             guard !generatedImageFileNames.isEmpty else {
                 logger.error("生图响应中没有可保存图片: session=\(currentSessionID.uuidString)")
                 let reason = NSLocalizedString("生图响应中没有可保存的图片。", comment: "No generated image could be saved")
-                addErrorMessage(reason)
-                requestStatusSubject.send(.error)
+                addErrorMessage(reason, sessionID: currentSessionID)
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
                 imageGenerationStatusSubject.send(
                     .failed(
                         sessionID: currentSessionID,
@@ -3607,7 +3712,7 @@ public class ChatService {
             let revisedPrompt = revisedPrompts.first(where: { !$0.isEmpty })
             let content = revisedPrompt ?? NSLocalizedString("[图片]", comment: "Image message placeholder")
 
-            var messages = messagesForSessionSubject.value
+            var messages = messagesSnapshot(for: currentSessionID)
             if let loadingIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                 messages[loadingIndex] = ChatMessage(
                     id: messages[loadingIndex].id,
@@ -3615,8 +3720,7 @@ public class ChatService {
                     content: content,
                     imageFileNames: generatedImageFileNames
                 )
-                publishMessages(messages)
-                persistMessages(messages, for: currentSessionID)
+                persistAndPublishMessages(messages, for: currentSessionID)
                 logger.info(
                     "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
                 )
@@ -3624,7 +3728,7 @@ public class ChatService {
                 logger.warning("未找到生图占位消息，无法替换: loadingMessageID=\(loadingMessageID.uuidString)")
             }
 
-            requestStatusSubject.send(.finished)
+            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             imageGenerationStatusSubject.send(
                 .succeeded(
                     sessionID: currentSessionID,
@@ -3640,8 +3744,8 @@ public class ChatService {
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let snippet = responseBodySnippet(from: bodyData)
             logger.error("生图请求失败(HTTP \(code)): \(snippet)")
-            addErrorMessage(snippet, httpStatusCode: code)
-            requestStatusSubject.send(.error)
+            addErrorMessage(snippet, sessionID: currentSessionID, httpStatusCode: code)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             imageGenerationStatusSubject.send(
                 .failed(
                     sessionID: currentSessionID,
@@ -3660,8 +3764,8 @@ public class ChatService {
                     format: NSLocalizedString("生图请求失败: %@", comment: "Image generation request failed with reason"),
                     error.localizedDescription
                 )
-                addErrorMessage(reason)
-                requestStatusSubject.send(.error)
+                addErrorMessage(reason, sessionID: currentSessionID)
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
                 imageGenerationStatusSubject.send(
                     .failed(
                         sessionID: currentSessionID,
@@ -4240,8 +4344,8 @@ public class ChatService {
                 addErrorMessage(String(
                     format: NSLocalizedString("解析响应失败，请查看原始响应:\n%@", comment: "Response parse failed with raw response"),
                     rawResponse
-                ))
-                requestStatusSubject.send(.error)
+                ), sessionID: currentSessionID)
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
                 persistRequestLog(
                     context: requestLogContext,
                     status: .failed,
@@ -4269,8 +4373,8 @@ public class ChatService {
             } else {
                 bodyString = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
-            addErrorMessage(bodyString, httpStatusCode: code)
-            requestStatusSubject.send(.error)
+            addErrorMessage(bodyString, sessionID: currentSessionID, httpStatusCode: code)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .failed,
@@ -4291,8 +4395,8 @@ public class ChatService {
                 addErrorMessage(String(
                     format: NSLocalizedString("网络错误: %@", comment: "Network error with description"),
                     error.localizedDescription
-                ))
-                requestStatusSubject.send(.error)
+                ), sessionID: currentSessionID)
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
                 persistRequestLog(
                     context: requestLogContext,
                     status: .failed,
@@ -4349,7 +4453,7 @@ public class ChatService {
             // --- 无工具调用，标准流程 ---
             updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID)
-            requestStatusSubject.send(.finished)
+            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             // 标题已在用户发送消息时异步生成，无需等待AI响应
             return
         }
@@ -4365,7 +4469,7 @@ public class ChatService {
         let toolDefs = availableTools ?? []
         if toolDefs.isEmpty {
             logger.info("当前未提供任何工具定义，忽略 AI 返回的 \(toolCalls.count) 个工具调用。")
-            requestStatusSubject.send(.finished)
+            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             // 标题已在用户发送消息时异步生成，无需等待AI响应
             return
         }
@@ -4398,11 +4502,10 @@ public class ChatService {
         }
 
         if shouldAwaitUserSupplement {
-            var updatedMessages = self.messagesForSessionSubject.value
+            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
             updatedMessages.append(contentsOf: blockingResultMessages)
-            self.publishMessages(updatedMessages)
-            persistMessages(updatedMessages, for: currentSessionID)
-            requestStatusSubject.send(.finished)
+            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
+            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
         }
 
@@ -4418,10 +4521,9 @@ public class ChatService {
                             await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                         }
                         // 非阻塞工具也写入消息列表，便于 UI 直接展示结果
-                        var messages = self.messagesForSessionSubject.value
+                        var messages = self.messagesSnapshot(for: currentSessionID)
                         messages.append(outcome.message)
-                        self.publishMessages(messages)
-                        persistMessages(messages, for: currentSessionID)
+                        self.persistAndPublishMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
                 }
@@ -4443,26 +4545,24 @@ public class ChatService {
         }
 
         if shouldAwaitUserSupplement {
-            var updatedMessages = self.messagesForSessionSubject.value
+            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
             updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
-            self.publishMessages(updatedMessages)
-            persistMessages(updatedMessages, for: currentSessionID)
-            requestStatusSubject.send(.finished)
+            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
+            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
         }
 
         let shouldTriggerFollowUp = !blockingResultMessages.isEmpty || !nonBlockingResultsForFollowUp.isEmpty
 
         if shouldTriggerFollowUp {
-            var updatedMessages = self.messagesForSessionSubject.value
+            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
             updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
 
             // 新增一个独立的 loading assistant 气泡，用于最终回复
             let followUpLoadingMessage = ChatMessage(role: .assistant, content: "")
             updatedMessages.append(followUpLoadingMessage)
-            self.publishMessages(updatedMessages)
-            persistMessages(updatedMessages, for: currentSessionID)
-            currentLoadingMessageID = followUpLoadingMessage.id
+            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
+            updateRequestLoadingMessageID(followUpLoadingMessage.id, for: currentSessionID)
 
             logger.info("正在将工具结果发回 AI 以生成最终回复...")
             await executeMessageRequest(
@@ -4481,7 +4581,7 @@ public class ChatService {
         } else {
             // 5. 如果只有非阻塞式工具并且 AI 已经给出正文，则在这里结束请求
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID)
-            requestStatusSubject.send(.finished)
+            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             // 标题已在用户发送消息时异步生成，无需等待AI响应
         }
     }
@@ -4521,11 +4621,10 @@ public class ChatService {
             var accumulatedOutputText = ""
             var firstTokenAt: Date?
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
+            var messages = messagesSnapshot(for: currentSessionID)
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
-                
-                var messages = messagesForSessionSubject.value
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                     if let usage = part.tokenUsage {
                         let mergedUsage = mergeTokenUsage(existing: latestTokenUsage, incoming: usage)
@@ -4640,12 +4739,11 @@ public class ChatService {
                             speedSamples: speedSamples.isEmpty ? nil : speedSamples
                         )
                     }
-                    publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
+                    publishMessagesIfCurrentSession(messages, for: currentSessionID, keepingSpeedSamplesFor: loadingMessageID)
                 }
             }
             
             var finalAssistantMessage: ChatMessage?
-            var messages = messagesForSessionSubject.value
             if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                 let (finalContent, extractedReasoning) = parseThoughtTags(from: messages[index].content)
                 messages[index].content = finalContent
@@ -4709,8 +4807,7 @@ public class ChatService {
                     )
                 }
                 finalAssistantMessage = messages[index]
-                publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
-                persistMessages(messages, for: currentSessionID)
+                persistAndPublishMessages(messages, for: currentSessionID, keepingSpeedSamplesFor: loadingMessageID)
             }
             
             if let finalAssistantMessage = finalAssistantMessage {
@@ -4745,7 +4842,7 @@ public class ChatService {
                     tokenUsage: nil,
                     finishedAt: Date()
                 )
-                requestStatusSubject.send(.finished)
+                emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             }
 
         } catch is CancellationError {
@@ -4768,8 +4865,8 @@ public class ChatService {
             } else {
                 bodySnippet = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
-            addErrorMessage(bodySnippet, httpStatusCode: code)
-            requestStatusSubject.send(.error)
+            addErrorMessage(bodySnippet, sessionID: currentSessionID, httpStatusCode: code)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .failed,
@@ -4790,8 +4887,8 @@ public class ChatService {
                 addErrorMessage(String(
                     format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
                     error.localizedDescription
-                ))
-                requestStatusSubject.send(.error)
+                ), sessionID: currentSessionID)
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
                 persistRequestLog(
                     context: requestLogContext,
                     status: .failed,
@@ -4804,17 +4901,16 @@ public class ChatService {
     
     /// 在取消请求时，只有占位消息无内容时才移除，避免丢失已接收的部分回复。
     private func removeMessage(withID messageID: UUID, in sessionID: UUID) {
-        var messages = messagesForSessionSubject.value
+        var messages = messagesSnapshot(for: sessionID)
         if let index = messages.firstIndex(where: { $0.id == messageID }) {
             messages.remove(at: index)
-            publishMessages(messages)
-            persistMessages(messages, for: sessionID)
+            persistAndPublishMessages(messages, for: sessionID)
             logger.info("已移除占位消息 \(messageID.uuidString)。")
         }
     }
 
-    private func shouldRemoveLoadingMessageOnCancel(loadingMessageID: UUID) -> Bool {
-        guard let message = messagesForSessionSubject.value.first(where: { $0.id == loadingMessageID }) else {
+    private func shouldRemoveLoadingMessageOnCancel(loadingMessageID: UUID, in sessionID: UUID) -> Bool {
+        guard let message = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else {
             return false
         }
         let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -4828,7 +4924,7 @@ public class ChatService {
     
     /// 将最终确定的消息更新到消息列表中
     private func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) {
-        var messages = messagesForSessionSubject.value
+        var messages = messagesSnapshot(for: sessionID)
         
         // 检查是否是重试场景，需要添加新版本
         if let targetID = retryTargetMessageID,
@@ -4872,8 +4968,7 @@ public class ChatService {
             // 清除重试标记
             retryTargetMessageID = nil
             
-            publishMessages(messages, keepingSpeedSamplesFor: loadingMessageID)
-            persistMessages(messages, for: sessionID)
+            persistAndPublishMessages(messages, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
             
             logger.info("已将新内容追加到消息历史: \(targetID)")
         } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
@@ -4900,8 +4995,7 @@ public class ChatService {
                 fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
                 responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
             )
-            publishMessages(messages)
-            persistMessages(messages, for: sessionID)
+            persistAndPublishMessages(messages, for: sessionID)
         }
     }
 
@@ -5570,7 +5664,7 @@ public class ChatService {
             return
         }
         guard !session.isWorldbookContextIsolationActive else { return }
-        let messagesSnapshot = messagesForSessionSubject.value
+        let messagesSnapshot = messagesSnapshot(for: sessionID)
         Task { [weak self] in
             await self?.performConversationMemoryUpdateIfNeeded(
                 for: sessionID,

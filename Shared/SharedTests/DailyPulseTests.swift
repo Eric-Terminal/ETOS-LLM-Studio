@@ -930,6 +930,17 @@ struct DailyPulseTests {
         #expect(AppLocalNotificationCenter.notificationTargetsFeedback(userInfo: userInfo))
         #expect(!AppLocalNotificationCenter.notificationTargetsFeedback(userInfo: ["route": "dailyPulse"]))
     }
+
+    @Test("聊天会话通知路由能识别目标 userInfo")
+    func chatSessionNotificationRouteDetection() {
+        let userInfo: [AnyHashable: Any] = [
+            "route": "chatSession",
+            "session_id": UUID().uuidString
+        ]
+
+        #expect(AppLocalNotificationCenter.notificationTargetsChatSession(userInfo: userInfo))
+        #expect(!AppLocalNotificationCenter.notificationTargetsChatSession(userInfo: ["route": "feedback"]))
+    }
 #endif
 
     private func makeRunnableModel(
