@@ -704,21 +704,7 @@ private struct WatchImageGenerationGalleryView: View {
         }
         .navigationTitle(NSLocalizedString("生成相册", comment: "Generated image gallery title"))
         .sheet(item: $previewPayload) { payload in
-            ScrollView {
-                VStack(spacing: 8) {
-                    Image(uiImage: payload.image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity)
-                    if !payload.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(payload.prompt)
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding()
-            }
+            WatchGeneratedImagePreviewSheet(payload: payload)
         }
         .confirmationDialog(
             NSLocalizedString("确认删除这张图片？", comment: "Delete generated image confirmation"),
@@ -874,5 +860,90 @@ private struct WatchImageGenerationGalleryView: View {
             mimeType = "image/jpeg"
         }
         return ImageAttachment(data: data, mimeType: mimeType, fileName: fileName)
+    }
+}
+
+private struct WatchGeneratedImagePreviewSheet: View {
+    let payload: WatchImagePreviewPayload
+
+    @State private var zoomScale = 1.0
+    @State private var settledOffset: CGSize = .zero
+    @GestureState private var dragTranslation: CGSize = .zero
+
+    private let maxZoomScale = 6.0
+    private let contentInset: CGFloat = 12
+
+    var body: some View {
+        GeometryReader { proxy in
+            let containerSize = proxy.size
+            let effectiveOffset = ETWatchMarkdownImageZoomMath.clampedOffset(
+                proposed: CGSize(
+                    width: settledOffset.width + dragTranslation.width,
+                    height: settledOffset.height + dragTranslation.height
+                ),
+                containerSize: containerSize,
+                scale: CGFloat(zoomScale)
+            )
+
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                Image(uiImage: payload.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(
+                        width: max(containerSize.width - contentInset * 2, 1),
+                        height: max(containerSize.height - contentInset * 2, 1)
+                    )
+                    .scaleEffect(CGFloat(zoomScale))
+                    .offset(effectiveOffset)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .updating($dragTranslation) { value, state, _ in
+                                guard zoomScale > 1.01 else {
+                                    state = .zero
+                                    return
+                                }
+                                state = value.translation
+                            }
+                            .onEnded { value in
+                                guard zoomScale > 1.01 else {
+                                    settledOffset = .zero
+                                    return
+                                }
+                                settledOffset = ETWatchMarkdownImageZoomMath.clampedOffset(
+                                    proposed: CGSize(
+                                        width: settledOffset.width + value.translation.width,
+                                        height: settledOffset.height + value.translation.height
+                                    ),
+                                    containerSize: containerSize,
+                                    scale: CGFloat(zoomScale)
+                                )
+                            }
+                    )
+            }
+            .frame(width: containerSize.width, height: containerSize.height)
+            .focusable(true)
+            .digitalCrownRotation(
+                $zoomScale,
+                from: 1.0,
+                through: maxZoomScale,
+                by: 0.05,
+                sensitivity: .medium,
+                isContinuous: false,
+                isHapticFeedbackEnabled: true
+            )
+            .onChange(of: zoomScale) { _, newValue in
+                if newValue <= 1.01 {
+                    settledOffset = .zero
+                } else {
+                    settledOffset = ETWatchMarkdownImageZoomMath.clampedOffset(
+                        proposed: settledOffset,
+                        containerSize: containerSize,
+                        scale: CGFloat(newValue)
+                    )
+                }
+            }
+        }
     }
 }
