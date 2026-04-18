@@ -144,4 +144,27 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(subset.map(\.id) == [newerAssistant.id, newerTool.id])
     }
 
+    @Test("Markdown 图片在原始倍率下不会保留拖拽偏移")
+    func testMarkdownImageClampResetsOffsetAtBaseScale() {
+        let offset = ETWatchMarkdownImageZoomMath.clampedOffset(
+            proposed: CGSize(width: 42, height: -18),
+            containerSize: CGSize(width: 120, height: 96),
+            scale: 1
+        )
+
+        #expect(offset == .zero)
+    }
+
+    @Test("Markdown 图片放大后的拖拽偏移会限制在可视边界内")
+    func testMarkdownImageClampRestrictsOverscroll() {
+        let offset = ETWatchMarkdownImageZoomMath.clampedOffset(
+            proposed: CGSize(width: 180, height: -120),
+            containerSize: CGSize(width: 120, height: 80),
+            scale: 2
+        )
+
+        #expect(abs(offset.width - 60) < 0.001)
+        #expect(abs(offset.height + 40) < 0.001)
+    }
+
 }
