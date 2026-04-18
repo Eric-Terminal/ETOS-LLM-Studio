@@ -73,6 +73,17 @@ struct SettingsView: View {
                 } label: {
                     Label("开启新对话", systemImage: "plus.message")
                 }
+
+                NavigationLink {
+                    OnboardingHubView(
+                        openChat: {
+                            NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
+                        }
+                    )
+                    .environmentObject(viewModel)
+                } label: {
+                    Label("新手教程", systemImage: "graduationcap")
+                }
             }
             
             Section("对话行为") {

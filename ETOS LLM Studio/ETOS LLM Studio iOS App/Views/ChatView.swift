@@ -70,6 +70,7 @@ struct ChatView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject private var ttsManager = TTSManager.shared
+    @ObservedObject private var progressStore = OnboardingProgressStore.shared
     @State private var showScrollToBottom = false
     @State private var suppressAutoScrollOnce = false
     @State private var navigationDestination: ChatNavigationDestination?
@@ -97,6 +98,7 @@ struct ChatView: View {
     @State private var imageDownloadAlertMessage: String?
     @State private var exportSharePayload: ChatExportSharePayload?
     @State private var exportErrorMessage: String?
+    @State private var isShowingOnboardingHub = false
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatScrollViewportHeight: CGFloat = 0
@@ -336,6 +338,27 @@ struct ChatView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(30)
                 }
+
+                if !progressStore.isHintDismissed(.chatMessages) && !progressStore.isGuideCompleted(.firstChat) {
+                    VStack {
+                        IOSOnboardingHintCard(
+                            title: "新手提示",
+                            message: "iOS 端很多消息动作都藏在长按里，比如编辑、重试、导出和朗读。",
+                            actionTitle: "查看新手教程",
+                            onAction: {
+                                isShowingOnboardingHub = true
+                            },
+                            onDismiss: {
+                                progressStore.dismissHint(.chatMessages)
+                            }
+                        )
+                        .padding(.top, 12)
+                        .padding(.horizontal, 12)
+                        Spacer()
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(29)
+                }
             }
             .background(
                 GeometryReader { proxy in
@@ -345,6 +368,9 @@ struct ChatView: View {
             )
             .onPreferenceChange(SafeAreaBottomKey.self) { newValue in
                 bottomSafeAreaInset = newValue
+            }
+            .onAppear {
+                progressStore.markVisited(.chat)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
                 guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
@@ -387,6 +413,15 @@ struct ChatView: View {
             }
             .sheet(item: $exportSharePayload) { payload in
                 ActivityShareSheet(activityItems: [payload.fileURL])
+            }
+            .sheet(isPresented: $isShowingOnboardingHub) {
+                NavigationStack {
+                    OnboardingHubView(openChat: {
+                        isShowingOnboardingHub = false
+                        NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
+                    })
+                    .environmentObject(viewModel)
+                }
             }
             .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
                 Button("仅复制消息历史") {

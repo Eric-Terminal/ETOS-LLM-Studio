@@ -44,15 +44,36 @@ struct ProviderListView: View {
             }
         }
         .navigationTitle("提供商与模型管理")
+        .onAppear {
+            OnboardingProgressStore.shared.markVisited(.providerManagement)
+        }
     }
 }
 
 private struct WatchProviderManagementContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var progressStore = OnboardingProgressStore.shared
     @State private var isAddingProvider = false
+    @State private var isShowingOnboardingHub = false
 
     var body: some View {
         List {
+            if !progressStore.isHintDismissed(.providerList) && !progressStore.isGuideCompleted(.firstProvider) {
+                Section {
+                    WatchOnboardingHintCard(
+                        title: "新手提示",
+                        message: "手表端提供商列表左滑可编辑，右滑可删除。先把两个方向都试一下。",
+                        actionTitle: "查看新手教程",
+                        onAction: {
+                            isShowingOnboardingHub = true
+                        },
+                        onDismiss: {
+                            progressStore.dismissHint(.providerList)
+                        }
+                    )
+                }
+            }
+
             ForEach(viewModel.providers) { provider in
                 NavigationLink(destination: ProviderDetailView(provider: provider)) {
                     MarqueeTitleSubtitleLabel(
@@ -93,6 +114,11 @@ private struct WatchProviderManagementContentView: View {
                     isNew: true
                 )
                 .environmentObject(viewModel)
+            }
+        }
+        .sheet(isPresented: $isShowingOnboardingHub) {
+            NavigationStack {
+                OnboardingHubView(viewModel: viewModel)
             }
         }
     }

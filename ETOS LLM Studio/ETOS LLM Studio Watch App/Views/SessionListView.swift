@@ -61,6 +61,7 @@ struct SessionListView: View {
 private struct SessionFolderBrowserView: View {
     let folderID: UUID?
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var progressStore = OnboardingProgressStore.shared
 
     @Binding var sessions: [ChatSession]
     @Binding var folders: [SessionFolder]
@@ -232,6 +233,18 @@ private struct SessionFolderBrowserView: View {
 
     private var listScaffold: some View {
         List {
+            if isRoot && !progressStore.isHintDismissed(.sessionList) && !progressStore.isGuideCompleted(.sessionManagement) {
+                Section {
+                    WatchOnboardingHintCard(
+                        title: "新手提示",
+                        message: "手表端会话管理先左滑看“更多”，右滑通常就是删除。",
+                        onDismiss: {
+                            progressStore.dismissHint(.sessionList)
+                        }
+                    )
+                }
+            }
+
             if mergedEntries.isEmpty {
                 Text(emptyStateText)
                     .etFont(.footnote)
@@ -295,6 +308,9 @@ private struct SessionFolderBrowserView: View {
             }
             .onAppear {
                 normalizeSessionPageIndex()
+                if isRoot {
+                    progressStore.markVisited(.sessionManagement)
+                }
             }
     }
 

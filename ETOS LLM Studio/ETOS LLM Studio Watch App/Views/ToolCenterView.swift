@@ -11,6 +11,7 @@ import Shared
 
 struct ToolCenterView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var progressStore = OnboardingProgressStore.shared
 
     @StateObject private var appToolManager = AppToolManager.shared
     @StateObject private var mcpManager = MCPManager.shared
@@ -24,6 +25,7 @@ struct ToolCenterView: View {
 
     @State private var showEnabledOnly: Bool = false
     @State private var isShowingIntroDetails = false
+    @State private var isShowingOnboardingHub = false
 
     private var currentSessionIsolationActive: Bool {
         viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
@@ -139,6 +141,20 @@ struct ToolCenterView: View {
     var body: some View {
         List {
             Section {
+                if !progressStore.isHintDismissed(.toolCenter) && !progressStore.isGuideCompleted(.toolCenterBasics) {
+                    WatchOnboardingHintCard(
+                        title: "新手提示",
+                        message: "工具中心先看“当前会话实际可用”，不要只看总开关。",
+                        actionTitle: "查看新手教程",
+                        onAction: {
+                            isShowingOnboardingHub = true
+                        },
+                        onDismiss: {
+                            progressStore.dismissHint(.toolCenter)
+                        }
+                    )
+                }
+
                 settingsIntroCard(
                     title: "工具中心",
                     summary: "统一查看聊天可用工具，并集中调整启用状态。",
@@ -447,7 +463,13 @@ struct ToolCenterView: View {
         }
         .navigationTitle(NSLocalizedString("工具中心", comment: "Tool center title"))
         .onAppear {
+            progressStore.markVisited(.toolCenter)
             skillManager.reloadFromDisk()
+        }
+        .sheet(isPresented: $isShowingOnboardingHub) {
+            NavigationStack {
+                OnboardingHubView(viewModel: viewModel)
+            }
         }
     }
 

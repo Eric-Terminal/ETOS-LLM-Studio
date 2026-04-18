@@ -91,6 +91,17 @@ struct SettingsView: View {
                     } label: {
                         Label("开启新对话", systemImage: "plus.message")
                     }
+
+                    NavigationLink {
+                        OnboardingHubView(
+                            viewModel: viewModel,
+                            openChat: {
+                                dismiss()
+                            }
+                        )
+                    } label: {
+                        Label("新手教程", systemImage: "graduationcap")
+                    }
                 } header: {
                     Text("当前模型")
                 }

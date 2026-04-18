@@ -11,6 +11,7 @@ import Shared
 
 struct ToolCenterView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var progressStore = OnboardingProgressStore.shared
 
     @StateObject private var appToolManager = AppToolManager.shared
     @StateObject private var mcpManager = MCPManager.shared
@@ -25,6 +26,7 @@ struct ToolCenterView: View {
     @State private var searchText: String = ""
     @State private var showEnabledOnly: Bool = false
     @State private var isShowingIntroDetails = false
+    @State private var isShowingOnboardingHub = false
 
     private var currentSessionIsolationActive: Bool {
         viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
@@ -230,6 +232,20 @@ struct ToolCenterView: View {
     var body: some View {
         List {
             Section {
+                if !progressStore.isHintDismissed(.toolCenter) && !progressStore.isGuideCompleted(.toolCenterBasics) {
+                    IOSOnboardingHintCard(
+                        title: "新手提示",
+                        message: "工具中心最容易看错的是“配置已启用”和“当前会话可用”。遇到工具不生效时，先看后者。",
+                        actionTitle: "查看新手教程",
+                        onAction: {
+                            isShowingOnboardingHub = true
+                        },
+                        onDismiss: {
+                            progressStore.dismissHint(.toolCenter)
+                        }
+                    )
+                }
+
                 settingsIntroCard(
                     title: "工具中心",
                     summary: "集中管理内置记忆、拓展工具、MCP、Agent Skills 与快捷指令的聊天暴露状态。",
@@ -287,7 +303,19 @@ struct ToolCenterView: View {
             prompt: Text(NSLocalizedString("搜索工具", comment: "Search tools prompt"))
         )
         .onAppear {
+            progressStore.markVisited(.toolCenter)
             skillManager.reloadFromDisk()
+        }
+        .sheet(isPresented: $isShowingOnboardingHub) {
+            NavigationStack {
+                OnboardingHubView(
+                    openChat: {
+                        isShowingOnboardingHub = false
+                        NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
+                    }
+                )
+                .environmentObject(viewModel)
+            }
         }
     }
 
