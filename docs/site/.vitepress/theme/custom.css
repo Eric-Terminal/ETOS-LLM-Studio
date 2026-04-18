@@ -32,15 +32,34 @@
 }
 
 .VPHome .VPHero .image {
-  padding: 12px;
+  overflow: hidden;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 28px;
-  background: var(--vp-c-bg-elv);
+  border-radius: 24px;
+  background: transparent;
   box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
 }
 
 .VPHome .VPHero .image img {
-  border-radius: 22px;
+  display: block;
+  width: 100%;
+  border-radius: inherit;
+}
+
+.VPHome .VPHero .image .image-container {
+  width: 100%;
+  height: auto;
+  transform: none;
+}
+
+.VPHome .VPHero .image .image-src {
+  position: relative;
+  top: auto;
+  left: auto;
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  height: auto;
+  transform: none;
 }
 
 .VPHome .VPFeature {
@@ -96,13 +115,24 @@
   font-size: 0.95rem;
 }
 
+.tk-footer-info {
+  padding-top: 28px;
+}
+
+.tk-footer-info__list {
+  gap: 0;
+}
+
+.tk-footer-info__list__item {
+  font-size: 0.95rem;
+}
+
 @media (max-width: 720px) {
   .etos-gallery {
     grid-template-columns: 1fr;
   }
 
   .VPHome .VPHero .image {
-    padding: 10px;
     border-radius: 22px;
   }
 }

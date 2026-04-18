@@ -6,8 +6,8 @@ hero:
   text: 原生双端的 AI 工作台
   tagline: 支持多模型、多工具、本地记忆、世界书、Daily Pulse、MCP、快捷指令与双端同步。
   image:
-    src: /icon.png
-    alt: ETOS LLM Studio 图标
+    src: /images/hero/etos-hero.jpg
+    alt: ETOS LLM Studio 宣传图
   actions:
     - theme: brand
       text: 快速开始

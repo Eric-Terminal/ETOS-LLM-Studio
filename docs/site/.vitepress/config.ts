@@ -18,12 +18,12 @@ const teekConfig = defineTeekConfig({
   },
   footerInfo: {
     theme: {
-      name: "Theme By Teek"
+      show: false
     },
     copyright: {
-      createYear: 2024,
-      suffix: "Eric Terminal"
-    }
+      show: false
+    },
+    customHtml: "<span>Copyright 2024-2026 Eric Terminal</span>"
   }
 });
 
@@ -43,7 +43,6 @@ export default defineConfig({
     ["link", { rel: "icon", href: "/icon.png" }]
   ],
   themeConfig: {
-    logo: "/icon.png",
     siteTitle: "ETOS LLM Studio Docs",
     nav: [
       { text: "快速开始", link: "/guide/getting-started" },
