@@ -876,12 +876,17 @@ private struct WatchGeneratedImagePreviewSheet: View {
     var body: some View {
         GeometryReader { proxy in
             let containerSize = proxy.size
+            let contentSize = CGSize(
+                width: max(containerSize.width - contentInset * 2, 1),
+                height: max(containerSize.height - contentInset * 2, 1)
+            )
             let effectiveOffset = ETWatchMarkdownImageZoomMath.clampedOffset(
                 proposed: CGSize(
                     width: settledOffset.width + dragTranslation.width,
                     height: settledOffset.height + dragTranslation.height
                 ),
                 containerSize: containerSize,
+                contentSize: contentSize,
                 scale: CGFloat(zoomScale)
             )
 
@@ -891,10 +896,7 @@ private struct WatchGeneratedImagePreviewSheet: View {
                 Image(uiImage: payload.image)
                     .resizable()
                     .scaledToFit()
-                    .frame(
-                        width: max(containerSize.width - contentInset * 2, 1),
-                        height: max(containerSize.height - contentInset * 2, 1)
-                    )
+                    .frame(width: contentSize.width, height: contentSize.height)
                     .scaleEffect(CGFloat(zoomScale))
                     .offset(effectiveOffset)
                     .gesture(
@@ -917,6 +919,7 @@ private struct WatchGeneratedImagePreviewSheet: View {
                                         height: settledOffset.height + value.translation.height
                                     ),
                                     containerSize: containerSize,
+                                    contentSize: contentSize,
                                     scale: CGFloat(zoomScale)
                                 )
                             }
@@ -940,6 +943,7 @@ private struct WatchGeneratedImagePreviewSheet: View {
                     settledOffset = ETWatchMarkdownImageZoomMath.clampedOffset(
                         proposed: settledOffset,
                         containerSize: containerSize,
+                        contentSize: contentSize,
                         scale: CGFloat(newValue)
                     )
                 }

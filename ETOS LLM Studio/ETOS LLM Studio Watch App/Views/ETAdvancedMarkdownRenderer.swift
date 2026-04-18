@@ -102,7 +102,6 @@ struct ETAdvancedMarkdownRenderer: View {
                 sampleText: sampleText,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
-            .frame(maxWidth: .infinity, alignment: .leading)
             .sheet(item: $imagePreviewItem) { item in
                 ETWatchMarkdownImagePreviewSheet(item: item)
             }
@@ -463,6 +462,10 @@ private struct ETWatchMarkdownImagePreviewSheet: View {
                     settledOffset = ETWatchMarkdownImageZoomMath.clampedOffset(
                         proposed: settledOffset,
                         containerSize: proxy.size,
+                        contentSize: CGSize(
+                            width: max(proxy.size.width - contentInset * 2, 1),
+                            height: max(proxy.size.height - contentInset * 2, 1)
+                        ),
                         scale: CGFloat(newValue)
                     )
                 }
@@ -494,22 +497,24 @@ private struct ETWatchMarkdownImagePreviewSheet: View {
     }
 
     private func previewImage(_ image: Image, containerSize: CGSize) -> some View {
+        let contentSize = CGSize(
+            width: max(containerSize.width - contentInset * 2, 1),
+            height: max(containerSize.height - contentInset * 2, 1)
+        )
         let effectiveOffset = ETWatchMarkdownImageZoomMath.clampedOffset(
             proposed: CGSize(
                 width: settledOffset.width + dragTranslation.width,
                 height: settledOffset.height + dragTranslation.height
             ),
             containerSize: containerSize,
+            contentSize: contentSize,
             scale: CGFloat(zoomScale)
         )
 
         return image
             .resizable()
             .scaledToFit()
-            .frame(
-                width: max(containerSize.width - contentInset * 2, 1),
-                height: max(containerSize.height - contentInset * 2, 1)
-            )
+            .frame(width: contentSize.width, height: contentSize.height)
             .scaleEffect(CGFloat(zoomScale))
             .offset(effectiveOffset)
             .gesture(
@@ -532,6 +537,7 @@ private struct ETWatchMarkdownImagePreviewSheet: View {
                                 height: settledOffset.height + value.translation.height
                             ),
                             containerSize: containerSize,
+                            contentSize: contentSize,
                             scale: CGFloat(zoomScale)
                         )
                     }
@@ -543,16 +549,19 @@ enum ETWatchMarkdownImageZoomMath {
     static func clampedOffset(
         proposed: CGSize,
         containerSize: CGSize,
+        contentSize: CGSize,
         scale: CGFloat
     ) -> CGSize {
         guard scale > 1,
               containerSize.width > 0,
-              containerSize.height > 0 else {
+              containerSize.height > 0,
+              contentSize.width > 0,
+              contentSize.height > 0 else {
             return .zero
         }
 
-        let maxX = max((containerSize.width * (scale - 1)) / 2, 0)
-        let maxY = max((containerSize.height * (scale - 1)) / 2, 0)
+        let maxX = max((contentSize.width * scale - containerSize.width) / 2, 0)
+        let maxY = max((contentSize.height * scale - containerSize.height) / 2, 0)
 
         return CGSize(
             width: min(max(proposed.width, -maxX), maxX),

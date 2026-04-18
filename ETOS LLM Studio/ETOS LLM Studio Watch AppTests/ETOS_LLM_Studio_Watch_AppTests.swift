@@ -149,6 +149,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         let offset = ETWatchMarkdownImageZoomMath.clampedOffset(
             proposed: CGSize(width: 42, height: -18),
             containerSize: CGSize(width: 120, height: 96),
+            contentSize: CGSize(width: 96, height: 72),
             scale: 1
         )
 
@@ -160,11 +161,12 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         let offset = ETWatchMarkdownImageZoomMath.clampedOffset(
             proposed: CGSize(width: 180, height: -120),
             containerSize: CGSize(width: 120, height: 80),
+            contentSize: CGSize(width: 96, height: 56),
             scale: 2
         )
 
-        #expect(abs(offset.width - 60) < 0.001)
-        #expect(abs(offset.height + 40) < 0.001)
+        #expect(abs(offset.width - 36) < 0.001)
+        #expect(abs(offset.height + 16) < 0.001)
     }
 
 }
