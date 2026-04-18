@@ -19,7 +19,6 @@ public struct MemorySettingsView: View {
     @State private var reembedAlert: MemoryReembedAlert?
     @AppStorage("memoryTopK") var memoryTopK: Int = 3
     @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
 
     private var embeddingModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -183,25 +182,6 @@ public struct MemorySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                Toggle("启用异步跨对话记忆", isOn: $enableConversationMemoryAsync)
-
-                if enableConversationMemoryAsync {
-                    NavigationLink {
-                        ConversationMemorySettingsView()
-                            .environmentObject(viewModel)
-                    } label: {
-                        Label("跨对话记忆与画像", systemImage: "person.text.rectangle")
-                    }
-                }
-            } header: {
-                Text("跨对话记忆")
-            } footer: {
-                Text("会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            
             Section(
                 header: Text("数据维护"),
                 footer: Text("将清空旧向量数据库，并按当前记忆重算所有嵌入。")
@@ -457,7 +437,7 @@ public struct AddMemorySheet: View {
     }
 }
 
-private struct ConversationMemorySettingsView: View {
+struct ConversationMemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @State private var showClearConversationSummariesConfirmation = false
     @State private var showClearConversationProfileConfirmation = false

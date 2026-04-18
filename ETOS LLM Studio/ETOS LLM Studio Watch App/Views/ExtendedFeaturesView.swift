@@ -278,6 +278,7 @@ private struct LongTermMemoryFeatureView: View {
     
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
     @State private var isShowingIntroDetails = false
     
     var body: some View {
@@ -313,6 +314,25 @@ private struct LongTermMemoryFeatureView: View {
                     Toggle("是否记录新的记忆", isOn: $enableMemoryWrite)
                 } footer: {
                     Text("关闭后仅读取记忆，不保存新内容。")
+                        .etFont(.footnote)
+                        .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Toggle("启用异步跨对话记忆", isOn: $enableConversationMemoryAsync)
+
+                    if enableConversationMemoryAsync {
+                        NavigationLink {
+                            ConversationMemorySettingsView()
+                                .environmentObject(viewModel)
+                        } label: {
+                            Label("跨对话记忆与画像", systemImage: "person.text.rectangle")
+                        }
+                    }
+                } header: {
+                    Text("跨对话记忆")
+                } footer: {
+                    Text("会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。")
                         .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }

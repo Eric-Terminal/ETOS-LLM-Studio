@@ -19,7 +19,6 @@ struct MemorySettingsView: View {
     @State private var editingMemory: MemoryItem?
     @AppStorage("memoryTopK") private var memoryTopK: Int = 3
     @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
     
     private var embeddingModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -142,25 +141,6 @@ struct MemorySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                Toggle("启用异步跨对话记忆", isOn: $enableConversationMemoryAsync)
-
-                if enableConversationMemoryAsync {
-                    NavigationLink {
-                        ConversationMemorySettingsView()
-                            .environmentObject(viewModel)
-                    } label: {
-                        Label("跨对话记忆与画像", systemImage: "person.text.rectangle")
-                    }
-                }
-            } header: {
-                Text("跨对话记忆")
-            } footer: {
-                Text("会话摘要会写入会话 JSON；用户画像会保存到 Memory 目录下，并限制为每天最多更新一次。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            
             Section {
                 Button(role: .destructive) {
                     showReembedConfirmation = true
@@ -485,7 +465,7 @@ struct AddMemorySheet: View {
     }
 }
 
-private struct ConversationMemorySettingsView: View {
+struct ConversationMemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @State private var showClearConversationSummariesConfirmation = false
     @State private var showClearConversationProfileConfirmation = false
