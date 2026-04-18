@@ -100,6 +100,7 @@ struct SettingsView: View {
                         sessions: $viewModel.chatSessions,
                         folders: $viewModel.sessionFolders,
                         currentSession: $viewModel.currentSession,
+                        runningSessionIDs: viewModel.runningSessionIDs,
                         deleteSessionAction: { session in
                             viewModel.deleteSessions([session])
                         },

@@ -21,6 +21,7 @@ struct SessionListView: View {
     @Binding var sessions: [ChatSession]
     @Binding var folders: [SessionFolder]
     @Binding var currentSession: ChatSession?
+    let runningSessionIDs: Set<UUID>
 
     // MARK: - 操作
 
@@ -41,6 +42,7 @@ struct SessionListView: View {
             sessions: $sessions,
             folders: $folders,
             currentSession: $currentSession,
+            runningSessionIDs: runningSessionIDs,
             deleteSessionAction: deleteSessionAction,
             branchAction: branchAction,
             deleteLastMessageAction: deleteLastMessageAction,
@@ -63,6 +65,7 @@ private struct SessionFolderBrowserView: View {
     @Binding var sessions: [ChatSession]
     @Binding var folders: [SessionFolder]
     @Binding var currentSession: ChatSession?
+    let runningSessionIDs: Set<UUID>
 
     let deleteSessionAction: (ChatSession) -> Void
     let branchAction: (ChatSession, Bool) -> ChatSession?
@@ -562,6 +565,7 @@ private struct SessionFolderBrowserView: View {
                     sessions: $sessions,
                     folders: $folders,
                     currentSession: $currentSession,
+                    runningSessionIDs: runningSessionIDs,
                     deleteSessionAction: deleteSessionAction,
                     branchAction: branchAction,
                     deleteLastMessageAction: deleteLastMessageAction,
@@ -593,6 +597,7 @@ private struct SessionFolderBrowserView: View {
         } else {
             SessionRowView(
                 session: session,
+                isRunning: runningSessionIDs.contains(session.id),
                 currentSession: $currentSession,
                 folders: $folders,
                 sessionToEdit: $sessionToEdit,
@@ -1096,6 +1101,7 @@ private struct WatchSessionSearchView: View {
 private struct SessionRowView: View {
 
     let session: ChatSession
+    let isRunning: Bool
     @Binding var currentSession: ChatSession?
     @Binding var folders: [SessionFolder]
     @Binding var sessionToEdit: ChatSession?
@@ -1116,8 +1122,15 @@ private struct SessionRowView: View {
                     .foregroundColor(.primary)
                     .allowsHitTesting(false)
 
+                Spacer()
+
+                if isRunning {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 7, height: 7)
+                }
+
                 if currentSession?.id == session.id {
-                    Spacer()
                     Image(systemName: "checkmark")
                 }
             }

@@ -125,6 +125,9 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenFeedback)) { _ in
                 openFeedbackFromNotification()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
+                openChatSessionFromNotification()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
                 Task { @MainActor in
                     applyDailyPulseContinuationIfNeeded()
@@ -865,6 +868,10 @@ struct ContentView: View {
                         openDailyPulse()
                     case .feedback:
                         openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
+                    case .chatSession:
+                        if let sessionID = notificationCenter.consumePendingChatSessionID() {
+                            openChatSession(sessionID: sessionID)
+                        }
                     }
                 }
             }
@@ -889,6 +896,18 @@ struct ContentView: View {
     private func openFeedbackFromNotification() {
         _ = notificationCenter.consumePendingRoute()
         openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
+    }
+
+    private func openChatSessionFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        guard let sessionID = notificationCenter.consumePendingChatSessionID() else { return }
+        openChatSession(sessionID: sessionID)
+    }
+
+    private func openChatSession(sessionID: UUID) {
+        guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
+        isSettingsPresented = false
+        settingsDestination = nil
     }
 
     private func openFeedback(issueNumber: Int?) {
