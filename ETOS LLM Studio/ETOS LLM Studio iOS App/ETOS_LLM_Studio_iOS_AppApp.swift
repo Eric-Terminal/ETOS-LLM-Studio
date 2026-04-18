@@ -80,7 +80,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         guard !hasTriggeredFeedbackRefreshOnLaunch else { return }
         hasTriggeredFeedbackRefreshOnLaunch = true
         Task(priority: .utility) {
-            await feedbackService.refreshAllTickets()
+            await feedbackService.refreshTicketsOnLaunch()
         }
     }
 }

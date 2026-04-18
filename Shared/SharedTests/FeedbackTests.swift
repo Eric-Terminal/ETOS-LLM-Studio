@@ -162,6 +162,34 @@ struct FeedbackEnvironmentSnapshotTests {
     }
 }
 
+@Suite("FeedbackLaunchRefresh Tests")
+struct FeedbackLaunchRefreshTests {
+    @Test("启动自动刷新会跳过已关闭工单")
+    func launchRefreshSkipsClosedTickets() {
+        let triageTicket = FeedbackTicket(
+            issueNumber: 1,
+            ticketToken: "token-1",
+            category: .bug,
+            title: "处理中工单",
+            createdAt: Date(timeIntervalSince1970: 1_730_000_000),
+            lastKnownStatus: .triage
+        )
+        let closedTicket = FeedbackTicket(
+            issueNumber: 2,
+            ticketToken: "token-2",
+            category: .bug,
+            title: "已关闭工单",
+            createdAt: Date(timeIntervalSince1970: 1_730_000_100),
+            lastKnownStatus: .closed
+        )
+
+        let filtered = FeedbackService.ticketsForLaunchRefresh([triageTicket, closedTicket])
+
+        #expect(filtered.count == 1)
+        #expect(filtered.first?.issueNumber == 1)
+    }
+}
+
 @Suite("FeedbackTicket Tests")
 struct FeedbackTicketTests {
     @Test("审核字段可正常编码与解码")

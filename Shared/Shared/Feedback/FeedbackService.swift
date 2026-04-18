@@ -395,7 +395,20 @@ public final class FeedbackService: ObservableObject {
     }
 
     public func refreshAllTickets() async {
-        let current = FeedbackStore.loadTickets()
+        await refreshTickets(FeedbackStore.loadTickets())
+    }
+
+    public func refreshTicketsOnLaunch() async {
+        await refreshTickets(Self.ticketsForLaunchRefresh(FeedbackStore.loadTickets()))
+    }
+
+    // MARK: - 私有请求
+
+    nonisolated static func ticketsForLaunchRefresh(_ tickets: [FeedbackTicket]) -> [FeedbackTicket] {
+        tickets.filter { $0.lastKnownStatus != .closed }
+    }
+
+    private func refreshTickets(_ current: [FeedbackTicket]) async {
         for ticket in current {
             do {
                 _ = try await fetchStatus(ticket: ticket)
@@ -405,8 +418,6 @@ public final class FeedbackService: ObservableObject {
         }
         tickets = FeedbackStore.loadTickets()
     }
-
-    // MARK: - 私有请求
 
     private func requestChallenge() async throws -> ChallengeResponse {
         var request = try buildRequest(path: config.challengePath, method: "POST")
