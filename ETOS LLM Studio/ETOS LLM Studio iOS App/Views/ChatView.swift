@@ -119,6 +119,7 @@ struct ChatView: View {
     private let modelPickerHeightRatio: CGFloat = 0.4
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
+    private let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
     private let modelPickerMorphID = "modelPickerMorph"
     private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
@@ -171,61 +172,64 @@ struct ChatView: View {
                 // Z-Index 1: 消息列表
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 0, pinnedViews: []) {
-                            // 顶部留白（为导航栏留出空间）
-                            Color.clear.frame(height: 8)
-                            
-                            // 历史加载提示
-                            historyBanner
-                            
-                            // 消息列表
-                            ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
-                                let message = state.message
-                                let previousMessage = index > 0 ? displayedMessages[index - 1].message : nil
-                                let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
-                                let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
-                                let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
-                                let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
-                                ChatBubble(
-                                    messageState: state,
-                                    preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
-                                    isReasoningExpanded: Binding(
-                                        get: { viewModel.reasoningExpandedState[message.id, default: false] },
-                                        set: { viewModel.reasoningExpandedState[message.id] = $0 }
-                                    ),
-                                    isToolCallsExpanded: Binding(
-                                        get: { viewModel.toolCallsExpandedState[message.id, default: false] },
-                                        set: { viewModel.toolCallsExpandedState[message.id] = $0 }
-                                    ),
-                                    enableMarkdown: viewModel.enableMarkdown,
-                                    enableBackground: viewModel.enableBackground,
-                                    enableLiquidGlass: isLiquidGlassEnabled,
-                                    enableNoBubbleUI: viewModel.enableNoBubbleUI,
-                                    enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
-                                    enableExperimentalToolResultDisplay: true,
-                                    enableMathRendering: viewModel.enableAdvancedRenderer,
-                                    showsStreamingIndicators: showsStreamingIndicators,
-                                    mergeWithPrevious: mergeWithPrevious,
-                                    mergeWithNext: mergeWithNext,
-                                    hasAutoOpenedPendingToolCall: { toolCallID in
-                                        viewModel.hasAutoOpenedPendingToolCall(toolCallID)
-                                    },
-                                    markPendingToolCallAutoOpened: { toolCallID in
-                                        viewModel.markPendingToolCallAutoOpened(toolCallID)
-                                    },
-                                    onSwitchToPreviousVersion: {
-                                        viewModel.switchToPreviousVersion(of: message)
-                                    },
-                                    onSwitchToNextVersion: {
-                                        viewModel.switchToNextVersion(of: message)
+                        VStack(spacing: 0) {
+                            LazyVStack(spacing: 0, pinnedViews: []) {
+                                // 顶部留白（为导航栏留出空间）
+                                Color.clear.frame(height: 8)
+
+                                // 历史加载提示
+                                historyBanner
+
+                                // 消息列表
+                                ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
+                                    let message = state.message
+                                    let previousMessage = index > 0 ? displayedMessages[index - 1].message : nil
+                                    let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
+                                    let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
+                                    let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                                    let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
+                                    ChatBubble(
+                                        messageState: state,
+                                        preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
+                                        isReasoningExpanded: Binding(
+                                            get: { viewModel.reasoningExpandedState[message.id, default: false] },
+                                            set: { viewModel.reasoningExpandedState[message.id] = $0 }
+                                        ),
+                                        isToolCallsExpanded: Binding(
+                                            get: { viewModel.toolCallsExpandedState[message.id, default: false] },
+                                            set: { viewModel.toolCallsExpandedState[message.id] = $0 }
+                                        ),
+                                        enableMarkdown: viewModel.enableMarkdown,
+                                        enableBackground: viewModel.enableBackground,
+                                        enableLiquidGlass: isLiquidGlassEnabled,
+                                        enableNoBubbleUI: viewModel.enableNoBubbleUI,
+                                        enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
+                                        enableExperimentalToolResultDisplay: true,
+                                        enableMathRendering: viewModel.enableAdvancedRenderer,
+                                        showsStreamingIndicators: showsStreamingIndicators,
+                                        mergeWithPrevious: mergeWithPrevious,
+                                        mergeWithNext: mergeWithNext,
+                                        hasAutoOpenedPendingToolCall: { toolCallID in
+                                            viewModel.hasAutoOpenedPendingToolCall(toolCallID)
+                                        },
+                                        markPendingToolCallAutoOpened: { toolCallID in
+                                            viewModel.markPendingToolCallAutoOpened(toolCallID)
+                                        },
+                                        onSwitchToPreviousVersion: {
+                                            viewModel.switchToPreviousVersion(of: message)
+                                        },
+                                        onSwitchToNextVersion: {
+                                            viewModel.switchToNextVersion(of: message)
+                                        }
+                                    )
+                                    .id(state.id)
+                                    .contextMenu {
+                                        contextMenu(for: message)
                                     }
-                                )
-                                .id(state.id)
-                                .contextMenu {
-                                    contextMenu(for: message)
                                 }
                             }
 
+                            // 底部锚点单独放在懒栈之外，避免被虚拟化后丢失回底按钮的可见性判断。
                             Color.clear
                                 .frame(height: 8)
                                 .id(scrollBottomAnchorID)
@@ -287,7 +291,7 @@ struct ChatView: View {
                         if showScrollToBottom {
                             telegramScrollToBottomButton {
                                 viewModel.resetLazyLoadState()
-                                scrollToBottom(proxy: proxy)
+                                scrollToBottom(proxy: proxy, animation: scrollToBottomButtonAnimation)
                             }
                             .padding(.trailing, 16)
                             .padding(.bottom, 80)
@@ -1902,12 +1906,16 @@ private extension ChatView {
         }
     }
 
-    func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
+    func scrollToBottom(
+        proxy: ScrollViewProxy,
+        animated: Bool = true,
+        animation: Animation = .easeOut(duration: 0.25)
+    ) {
         let action = {
             proxy.scrollTo(scrollBottomAnchorID, anchor: .bottom)
         }
         if animated {
-            withAnimation(.easeOut(duration: 0.25)) {
+            withAnimation(animation) {
                 action()
             }
         } else {
