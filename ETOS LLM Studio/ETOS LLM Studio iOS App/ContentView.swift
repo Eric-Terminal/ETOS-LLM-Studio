@@ -356,14 +356,16 @@ struct ContentView: View {
                 Text("已导入消息 \(progress.importedMessages)")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
-                if let currentSessionName = progress.currentSessionName, !currentSessionName.isEmpty {
-                    Text("当前：\(currentSessionName)")
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                let currentSessionName = progress.currentSessionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                Text("当前：\(currentSessionName.isEmpty ? "正在整理会话…" : currentSessionName)")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             } else {
                 ProgressView()
+                Text("当前：正在准备迁移…")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
             Text("迁移完成后会再次询问是否删除旧 JSON 文件。")
                 .etFont(.footnote)

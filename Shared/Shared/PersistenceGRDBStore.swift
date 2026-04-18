@@ -1499,7 +1499,7 @@ final class PersistenceGRDBStore {
                 importedMessages: importedMessages,
                 estimatedTotalBytes: plan.estimatedBytes,
                 processedBytes: min(processedBytes, plan.estimatedBytes),
-                currentSessionName: nil
+                currentSessionName: sessionPlan.fallbackSession.name
             )
             progressHandler?(afterSessionProgress)
 
