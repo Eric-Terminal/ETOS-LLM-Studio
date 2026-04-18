@@ -1,0 +1,108 @@
+:root {
+  --vp-c-brand-1: #52525b;
+  --vp-c-brand-2: #3f3f46;
+  --vp-c-brand-3: #27272a;
+  --vp-c-brand-soft: rgba(82, 82, 91, 0.12);
+  --vp-button-brand-bg: #27272a;
+  --vp-button-brand-hover-bg: #3f3f46;
+  --vp-button-brand-active-bg: #18181b;
+  --vp-button-brand-border: #27272a;
+  --vp-button-brand-hover-border: #3f3f46;
+  --vp-button-brand-active-border: #18181b;
+  --vp-button-brand-text: #fafafa;
+  --vp-home-hero-name-color: #18181b;
+  --vp-home-hero-name-background: none;
+  --vp-home-hero-image-background-image: none;
+  --vp-home-hero-image-filter: none;
+}
+
+.dark {
+  --vp-c-brand-1: #d4d4d8;
+  --vp-c-brand-2: #a1a1aa;
+  --vp-c-brand-3: #71717a;
+  --vp-c-brand-soft: rgba(212, 212, 216, 0.14);
+  --vp-button-brand-bg: #f4f4f5;
+  --vp-button-brand-hover-bg: #e4e4e7;
+  --vp-button-brand-active-bg: #d4d4d8;
+  --vp-button-brand-border: #f4f4f5;
+  --vp-button-brand-hover-border: #e4e4e7;
+  --vp-button-brand-active-border: #d4d4d8;
+  --vp-button-brand-text: #18181b;
+  --vp-home-hero-name-color: #fafafa;
+}
+
+.VPHome .VPHero .image {
+  padding: 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 28px;
+  background: var(--vp-c-bg-elv);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+}
+
+.VPHome .VPHero .image img {
+  border-radius: 22px;
+}
+
+.VPHome .VPFeature {
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+}
+
+.vp-doc a {
+  text-underline-offset: 3px;
+}
+
+.tk-icon {
+  display: inline-flex;
+  width: var(--icon-size, 1em);
+  height: var(--icon-size, 1em);
+  align-items: center;
+  justify-content: center;
+}
+
+.tk-icon svg {
+  width: var(--icon-size, 1em);
+  height: var(--icon-size, 1em);
+}
+
+.etos-gallery {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 24px 0 0;
+}
+
+.etos-gallery figure {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 20px;
+  background: var(--vp-c-bg-soft);
+}
+
+.etos-gallery img {
+  width: 100%;
+  border-radius: 14px;
+}
+
+.etos-gallery figcaption {
+  margin-top: 12px;
+  color: var(--vp-c-text-2);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 720px) {
+  .etos-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .VPHome .VPHero .image {
+    padding: 10px;
+    border-radius: 22px;
+  }
+}

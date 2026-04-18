@@ -64,6 +64,7 @@ playground.xcworkspace
 # Logs
 *.log
 logs/
+node_modules/
 
 # Runtime data
 pids
@@ -97,3 +98,7 @@ CLAUDE.md
 # 临时任务清单（仅本地使用，不纳入版本库）
 TODO.md
 TODO-*.md
+
+# VitePress 本地构建产物
+docs/site/.vitepress/cache/
+docs/site/.vitepress/dist/

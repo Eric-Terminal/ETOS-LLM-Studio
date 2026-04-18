@@ -1,0 +1,20 @@
+{
+  "name": "etos-llm-studio-docs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ETOS LLM Studio 文档站",
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "docs:dev": "vitepress dev .",
+    "docs:build": "vitepress build .",
+    "docs:preview": "vitepress preview ."
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4",
+    "vitepress-theme-teek": "1.5.6"
+  }
+}
