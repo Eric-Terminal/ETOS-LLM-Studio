@@ -38,6 +38,22 @@ struct ContentView: View {
     }
     
     var body: some View {
+        contentWithMigrationOverlays
+            // 启动时检查公告
+            .task {
+                await handleLaunchTasks()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                switch newPhase {
+                case .active:
+                    scheduleDailyPulsePreparation(after: 1_500_000_000)
+                default:
+                    cancelDailyPulsePreparation()
+                }
+            }
+    }
+
+    private var baseContent: some View {
         TabView(selection: $selection) {
             NavigationStack {
                 ChatView()
@@ -115,61 +131,50 @@ struct ContentView: View {
                 )
             }
         }
-        .sheet(isPresented: $legacyJSONMigrationManager.isMigrationPromptPresented) {
-            NavigationStack {
-                legacyJSONMigrationPromptSheet
+    }
+
+    private var contentWithMigrationOverlays: some View {
+        baseContent
+            .sheet(isPresented: $legacyJSONMigrationManager.isMigrationPromptPresented) {
+                NavigationStack {
+                    legacyJSONMigrationPromptSheet
+                }
+                .interactiveDismissDisabled(true)
             }
-            .interactiveDismissDisabled(true)
-        }
-        .sheet(isPresented: Binding(
-            get: { legacyJSONMigrationManager.isMigrating },
-            set: { _ in }
-        )) {
-            NavigationStack {
-                legacyJSONMigrationProgressSheet
+            .sheet(isPresented: migrationInProgressPresented) {
+                NavigationStack {
+                    legacyJSONMigrationProgressSheet
+                }
+                .interactiveDismissDisabled(true)
             }
-            .interactiveDismissDisabled(true)
-        }
-        .alert(
-            "是否清理旧版 JSON 文件？",
-            isPresented: $legacyJSONMigrationManager.isCleanupPromptPresented
-        ) {
-            Button("保留 JSON（稍后再说）", role: .cancel) {
-                legacyJSONMigrationManager.keepLegacyJSONForNow()
+            .alert(
+                "是否清理旧版 JSON 文件？",
+                isPresented: $legacyJSONMigrationManager.isCleanupPromptPresented
+            ) {
+                Button("保留 JSON（稍后再说）", role: .cancel) {
+                    legacyJSONMigrationManager.keepLegacyJSONForNow()
+                }
+                Button("删除 JSON") {
+                    legacyJSONMigrationManager.cleanupLegacyJSONArtifacts()
+                }
+            } message: {
+                Text("SQLite 迁移已完成。建议删除旧 JSON 文件释放空间，后续版本可能不再支持旧格式。")
             }
-            Button("删除 JSON") {
-                legacyJSONMigrationManager.cleanupLegacyJSONArtifacts()
+            .alert("迁移失败", isPresented: $isLegacyMigrationErrorPresented) {
+                Button("好的", role: .cancel) {
+                    legacyMigrationErrorMessage = nil
+                }
+            } message: {
+                Text(legacyMigrationErrorMessage ?? "")
             }
-        } message: {
-            Text("SQLite 迁移已完成。建议删除旧 JSON 文件释放空间，后续版本可能不再支持旧格式。")
-        }
-        .alert("迁移失败", isPresented: $isLegacyMigrationErrorPresented) {
-            Button("好的", role: .cancel) {
-                legacyMigrationErrorMessage = nil
+            .onReceive(legacyJSONMigrationManager.$errorMessage) { message in
+                guard let message, !message.isEmpty else { return }
+                legacyMigrationErrorMessage = message
+                isLegacyMigrationErrorPresented = true
             }
-        } message: {
-            Text(legacyMigrationErrorMessage ?? "")
-        }
-        .onReceive(legacyJSONMigrationManager.$errorMessage) { message in
-            guard let message, !message.isEmpty else { return }
-            legacyMigrationErrorMessage = message
-            isLegacyMigrationErrorPresented = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
-            viewModel.reloadPersistedDataAfterLegacyJSONMigration()
-        }
-        // 启动时检查公告
-        .task {
-            await handleLaunchTasks()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .active:
-                scheduleDailyPulsePreparation(after: 1_500_000_000)
-            default:
-                cancelDailyPulsePreparation()
+            .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
+                viewModel.reloadPersistedDataAfterLegacyJSONMigration()
             }
-        }
     }
 
     private func openDailyPulse() {
@@ -190,6 +195,13 @@ struct ContentView: View {
                     launchRecoveryNoticeMessage = nil
                 }
             }
+        )
+    }
+
+    private var migrationInProgressPresented: Binding<Bool> {
+        Binding(
+            get: { legacyJSONMigrationManager.isMigrating },
+            set: { _ in }
         )
     }
 
