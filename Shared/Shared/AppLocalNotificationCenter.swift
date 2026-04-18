@@ -325,6 +325,13 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         actionIdentifier: String
     ) {
         let payload = AppLocalNotificationPayload(userInfo: userInfo)
+        handleNotificationResponsePayload(payload, actionIdentifier: actionIdentifier)
+    }
+
+    private func handleNotificationResponsePayload(
+        _ payload: AppLocalNotificationPayload,
+        actionIdentifier: String
+    ) {
         if payload.route == .dailyPulse {
             handleDailyPulseAction(
                 actionIdentifier: actionIdentifier,
@@ -394,11 +401,11 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let userInfo = response.notification.request.content.userInfo
+        let payload = AppLocalNotificationPayload(userInfo: response.notification.request.content.userInfo)
         let actionIdentifier = response.actionIdentifier
-        Task { @MainActor [userInfo, actionIdentifier] in
-            AppLocalNotificationCenter.shared.handleNotificationResponseUserInfo(
-                userInfo,
+        Task { @MainActor [payload, actionIdentifier] in
+            AppLocalNotificationCenter.shared.handleNotificationResponsePayload(
+                payload,
                 actionIdentifier: actionIdentifier
             )
         }

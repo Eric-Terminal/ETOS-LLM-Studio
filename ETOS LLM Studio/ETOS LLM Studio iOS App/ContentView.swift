@@ -99,10 +99,7 @@ struct ContentView: View {
         } message: {
             Text(viewModel.dimensionMismatchMessage)
         }
-        .alert("数据库已自动恢复", isPresented: Binding(
-            get: { launchRecoveryNoticeMessage != nil },
-            set: { if !$0 { launchRecoveryNoticeMessage = nil } }
-        )) {
+        .alert("数据库已自动恢复", isPresented: launchRecoveryNoticePresented) {
             Button("好的", role: .cancel) {}
         } message: {
             Text(launchRecoveryNoticeMessage ?? "")
@@ -183,6 +180,17 @@ struct ContentView: View {
         DispatchQueue.main.async {
             settingsDestination = .dailyPulse
         }
+    }
+
+    private var launchRecoveryNoticePresented: Binding<Bool> {
+        Binding(
+            get: { launchRecoveryNoticeMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    launchRecoveryNoticeMessage = nil
+                }
+            }
+        )
     }
 
     private func openFeedbackFromNotification() {
