@@ -320,6 +320,23 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         NotificationCenter.default.post(name: .requestContinueDailyPulseChat, object: nil)
     }
 
+    func handleNotificationResponseUserInfo(
+        _ userInfo: [AnyHashable: Any],
+        actionIdentifier: String
+    ) {
+        let payload = AppLocalNotificationPayload(userInfo: userInfo)
+        if payload.route == .dailyPulse {
+            handleDailyPulseAction(
+                actionIdentifier: actionIdentifier,
+                payload: payload
+            )
+        } else if payload.route == .feedback {
+            openFeedbackFromNotification(payload: payload)
+        } else if payload.route == .chatSession {
+            openChatSessionFromNotification(payload: payload)
+        }
+    }
+
     private func handleDailyPulseAction(
         actionIdentifier: String,
         payload: AppLocalNotificationPayload
@@ -377,23 +394,13 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let payload = AppLocalNotificationPayload(userInfo: response.notification.request.content.userInfo)
+        let userInfo = response.notification.request.content.userInfo
         let actionIdentifier = response.actionIdentifier
-        if payload.route == .dailyPulse {
-            Task { @MainActor [payload, actionIdentifier] in
-                AppLocalNotificationCenter.shared.handleDailyPulseAction(
-                    actionIdentifier: actionIdentifier,
-                    payload: payload
-                )
-            }
-        } else if payload.route == .feedback {
-            Task { @MainActor [payload] in
-                AppLocalNotificationCenter.shared.openFeedbackFromNotification(payload: payload)
-            }
-        } else if payload.route == .chatSession {
-            Task { @MainActor [payload] in
-                AppLocalNotificationCenter.shared.openChatSessionFromNotification(payload: payload)
-            }
+        Task { @MainActor [userInfo, actionIdentifier] in
+            AppLocalNotificationCenter.shared.handleNotificationResponseUserInfo(
+                userInfo,
+                actionIdentifier: actionIdentifier
+            )
         }
         completionHandler()
     }

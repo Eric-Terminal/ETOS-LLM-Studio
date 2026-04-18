@@ -216,6 +216,112 @@ struct ChatServiceConcurrentSessionTests {
     }
 
     @MainActor
+    @Test("cancelRequest(for:) 仅取消目标会话，不影响其他会话请求")
+    func testCancelRequestOnlyAffectsTargetSession() async throws {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            replaceProviders(with: originalProviders)
+        }
+
+        let provider = Provider(
+            name: "Concurrent Session Test Provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "test-model", displayName: "Test Model", isActivated: true)
+            ]
+        )
+        replaceProviders(with: [provider])
+
+        ControlledSessionURLProtocol.reset()
+        ControlledSessionURLProtocol.register(marker: "A", responseBody: "会话A完成")
+        ControlledSessionURLProtocol.register(marker: "B", responseBody: "会话B完成")
+
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ControlledSessionURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+
+        let service = ChatService(
+            adapters: ["openai-compatible": ConcurrentSessionMockAdapter()],
+            memoryManager: MemoryManager(),
+            urlSession: session
+        )
+        service.setSelectedModel(service.activatedRunnableModels.first)
+
+        let sessionA = service.createSavedSession(name: "取消会话A")
+        let sessionB = service.createSavedSession(name: "取消会话B")
+        defer {
+            service.deleteSessions([sessionA, sessionB])
+            ControlledSessionURLProtocol.reset()
+        }
+
+        service.setCurrentSession(sessionA)
+        let taskA = Task {
+            await service.sendAndProcessMessage(
+                content: "A",
+                aiTemperature: 0,
+                aiTopP: 1,
+                systemPrompt: "",
+                maxChatHistory: 5,
+                enableStreaming: false,
+                enhancedPrompt: nil,
+                enableMemory: false,
+                enableMemoryWrite: false,
+                includeSystemTime: false
+            )
+        }
+
+        try await waitUntil("会话 A 请求启动") {
+            ControlledSessionURLProtocol.hasStarted(marker: "A")
+        }
+
+        service.setCurrentSession(sessionB)
+        let taskB = Task {
+            await service.sendAndProcessMessage(
+                content: "B",
+                aiTemperature: 0,
+                aiTopP: 1,
+                systemPrompt: "",
+                maxChatHistory: 5,
+                enableStreaming: false,
+                enhancedPrompt: nil,
+                enableMemory: false,
+                enableMemoryWrite: false,
+                includeSystemTime: false
+            )
+        }
+
+        try await waitUntil("会话 B 请求启动") {
+            ControlledSessionURLProtocol.hasStarted(marker: "B")
+        }
+
+        await service.cancelRequest(for: sessionA.id)
+        let runningAfterCancelA = service.runningSessionIDsSubject.value
+        #expect(!runningAfterCancelA.contains(sessionA.id))
+        #expect(runningAfterCancelA.contains(sessionB.id))
+
+        ControlledSessionURLProtocol.release(marker: "B")
+        await taskB.value
+        await taskA.value
+
+        #expect(service.runningSessionIDsSubject.value.isEmpty)
+
+        let sessionAMessages = Persistence.loadMessages(for: sessionA.id)
+        let sessionBMessages = Persistence.loadMessages(for: sessionB.id)
+
+        let assistantRepliesA = sessionAMessages
+            .filter { $0.role == .assistant }
+            .map(\.content)
+        let assistantRepliesB = sessionBMessages
+            .filter { $0.role == .assistant }
+            .map(\.content)
+
+        #expect(!assistantRepliesA.contains("会话A完成"))
+        #expect(assistantRepliesB.contains("会话B完成"))
+    }
+
+    @MainActor
     private func replaceProviders(with providers: [Provider]) {
         for provider in ConfigLoader.loadProviders() {
             ConfigLoader.deleteProvider(provider)
@@ -285,11 +391,18 @@ private final class ControlledSessionURLProtocol: URLProtocol {
 
     private static let lock = NSLock()
     private static var registeredResponses: [String: RegisteredResponse] = [:]
+    private var activeMarker: String?
+    private let stateLock = NSLock()
+    private var isStopped = false
 
     static func reset() {
         lock.lock()
+        let responses = Array(registeredResponses.values)
         registeredResponses.removeAll()
         lock.unlock()
+        for response in responses {
+            response.gate.signal()
+        }
     }
 
     static func register(marker: String, responseBody: String) {
@@ -331,6 +444,7 @@ private final class ControlledSessionURLProtocol: URLProtocol {
             failWithError(message: "缺少 marker 参数")
             return
         }
+        activeMarker = marker
 
         var gate: DispatchSemaphore?
         var responseBody = Data()
@@ -351,6 +465,10 @@ private final class ControlledSessionURLProtocol: URLProtocol {
 
         DispatchQueue.global().async {
             gate.wait()
+            self.stateLock.lock()
+            let stopped = self.isStopped
+            self.stateLock.unlock()
+            if stopped { return }
 
             let response = HTTPURLResponse(
                 url: requestURL,
@@ -364,7 +482,14 @@ private final class ControlledSessionURLProtocol: URLProtocol {
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        stateLock.lock()
+        isStopped = true
+        stateLock.unlock()
+        if let marker = activeMarker {
+            Self.release(marker: marker)
+        }
+    }
 
     private func failWithError(message: String) {
         let error = NSError(

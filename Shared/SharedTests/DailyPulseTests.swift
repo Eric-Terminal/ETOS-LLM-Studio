@@ -941,6 +941,28 @@ struct DailyPulseTests {
         #expect(AppLocalNotificationCenter.notificationTargetsChatSession(userInfo: userInfo))
         #expect(!AppLocalNotificationCenter.notificationTargetsChatSession(userInfo: ["route": "feedback"]))
     }
+
+    @MainActor
+    @Test("聊天会话通知点击后会写入待处理会话路由数据")
+    func chatSessionNotificationTapStoresPendingRoute() {
+        let center = AppLocalNotificationCenter.shared
+        _ = center.consumePendingRoute()
+        _ = center.consumePendingChatSessionID()
+
+        let expectedSessionID = UUID()
+        let userInfo: [AnyHashable: Any] = [
+            "route": "chatSession",
+            "session_id": expectedSessionID.uuidString
+        ]
+
+        center.handleNotificationResponseUserInfo(
+            userInfo,
+            actionIdentifier: "unit-test"
+        )
+
+        #expect(center.consumePendingRoute() == .chatSession)
+        #expect(center.consumePendingChatSessionID() == expectedSessionID)
+    }
 #endif
 
     private func makeRunnableModel(
