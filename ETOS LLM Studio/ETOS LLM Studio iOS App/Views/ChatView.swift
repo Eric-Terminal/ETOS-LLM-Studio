@@ -99,6 +99,7 @@ struct ChatView: View {
     @State private var exportErrorMessage: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
+    @State private var chatInputBarHeight: CGFloat = 0
     @State private var chatScrollViewportHeight: CGFloat = 0
     @State private var chatBottomAnchorMaxY: CGFloat = .greatestFiniteMagnitude
     @State private var pendingJumpRequest: MessageJumpRequest?
@@ -125,6 +126,9 @@ struct ChatView: View {
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
     private let transcriptExportService = ChatTranscriptExportService()
+    private var scrollToBottomButtonBottomPadding: CGFloat {
+        max(chatInputBarHeight + 16, 92)
+    }
     private var tabBarCompensation: CGFloat {
         guard keyboardHeight == 0 else { return 0 }
         let measuredTabBarHeight = UITabBarController().tabBar.frame.height
@@ -286,6 +290,25 @@ struct ChatView: View {
                         chatBottomAnchorMaxY = newMaxY
                         updateScrollToBottomVisibility()
                     }
+                    // Telegram 风格：顶部导航栏
+                    .safeAreaInset(edge: .top) {
+                        telegramNavBar
+                    }
+                    // Telegram 风格：底部输入栏
+                    .safeAreaInset(edge: .bottom) {
+                        telegramInputBar
+                            .background(
+                                GeometryReader { proxy in
+                                    Color.clear.preference(
+                                        key: ChatInputBarHeightPreferenceKey.self,
+                                        value: proxy.size.height
+                                    )
+                                }
+                            )
+                    }
+                    .onPreferenceChange(ChatInputBarHeightPreferenceKey.self) { newHeight in
+                        chatInputBarHeight = newHeight
+                    }
                     .overlay(alignment: .bottomTrailing) {
                         // Telegram 风格的滚动到底部按钮
                         if showScrollToBottom {
@@ -294,17 +317,9 @@ struct ChatView: View {
                                 scrollToBottom(proxy: proxy, animation: scrollToBottomButtonAnimation)
                             }
                             .padding(.trailing, 16)
-                            .padding(.bottom, 80)
+                            .padding(.bottom, scrollToBottomButtonBottomPadding)
                             .transition(.scale.combined(with: .opacity))
                         }
-                    }
-                    // Telegram 风格：顶部导航栏
-                    .safeAreaInset(edge: .top) {
-                        telegramNavBar
-                    }
-                    // Telegram 风格：底部输入栏
-                    .safeAreaInset(edge: .bottom) {
-                        telegramInputBar
                     }
                     .overlay(alignment: .top) {
                         navBarFadeBlurOverlay
@@ -1863,6 +1878,14 @@ private struct ChatScrollViewportHeightPreferenceKey: PreferenceKey {
 
 private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = .greatestFiniteMagnitude
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ChatInputBarHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
