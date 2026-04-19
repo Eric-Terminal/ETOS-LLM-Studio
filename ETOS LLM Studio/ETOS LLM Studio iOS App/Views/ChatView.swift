@@ -2011,12 +2011,18 @@ private extension ChatView {
         pendingHistoryResetWorkItem?.cancel()
 
         let shouldAnimate = shouldAnimateScrollToBottomButton
+        let shouldResetHistoryWindow = viewModel.lazyLoadMessageCount > 0
         showScrollToBottom = false
         scrollToBottom(
             proxy: proxy,
             animated: shouldAnimate,
             animation: scrollToBottomButtonAnimation
         )
+
+        guard shouldResetHistoryWindow else {
+            pendingHistoryResetWorkItem = nil
+            return
+        }
 
         let workItem = DispatchWorkItem {
             var transaction = Transaction()
