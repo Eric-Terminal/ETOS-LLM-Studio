@@ -1513,3 +1513,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "预设适合快速上手；若需手动输入，可在下方高级参数中覆盖。" = "Les préréglages sont bons pour un démarrage rapide ; pour la saisie manuelle, remplacez les paramètres avancés ci-dessous.";
 "默认会按“直连 -> 桥接”执行；若工具运行模式设为桥接，则按“桥接 -> 直连”。" = "Par défaut, exécute Direct -> Bridge ; si le mode d'exécution de l'outil est défini sur Bridge, exécute Bridge -> Direct.";
 "默认倍速" = "Vitesse par défaut";
+"上一页" = "Page précédente";
+"下一页" = "Page suivante";
+"当前显示 %1$d-%2$d 个对话（总共 %3$d）" = "Affichage des conversations %1$d-%2$d sur %3$d";

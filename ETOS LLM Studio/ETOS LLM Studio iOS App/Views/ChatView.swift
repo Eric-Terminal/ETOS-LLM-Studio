@@ -94,6 +94,7 @@ struct ChatView: View {
     @State private var sessionPickerLatestSearchToken: Int = 0
     @State private var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
     @State private var showSessionPickerSearchInput: Bool = false
+    @State private var sessionPickerPageIndex: Int = 0
     @State private var imageDownloadAlertMessage: String?
     @State private var exportSharePayload: ChatExportSharePayload?
     @State private var exportErrorMessage: String?
@@ -127,6 +128,7 @@ struct ChatView: View {
     private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
     private let sessionPickerCornerRadius: CGFloat = 26
+    private let sessionPickerMaxSessionsPerPage = 100
     private let transcriptExportService = ChatTranscriptExportService()
     private var scrollToBottomButtonBottomPadding: CGFloat {
         max(chatInputBarHeight + 16, 92)
@@ -178,6 +180,48 @@ struct ChatView: View {
     }
     private var scrollToBottomButtonShadowColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.3) : TelegramColors.scrollButtonShadow
+    }
+    private var totalSessionPickerCount: Int {
+        viewModel.chatSessions.count
+    }
+    private var totalSessionPickerPages: Int {
+        guard totalSessionPickerCount > 0 else { return 1 }
+        return ((totalSessionPickerCount - 1) / sessionPickerMaxSessionsPerPage) + 1
+    }
+    private var shouldShowSessionPickerPagination: Bool {
+        totalSessionPickerCount > sessionPickerMaxSessionsPerPage
+    }
+    private var canGoToPreviousSessionPickerPage: Bool {
+        sessionPickerPageIndex > 0
+    }
+    private var canGoToNextSessionPickerPage: Bool {
+        sessionPickerPageIndex + 1 < totalSessionPickerPages
+    }
+    private var currentSessionPickerPageStartOrdinal: Int {
+        guard totalSessionPickerCount > 0 else { return 0 }
+        return sessionPickerPageIndex * sessionPickerMaxSessionsPerPage + 1
+    }
+    private var currentSessionPickerPageEndOrdinal: Int {
+        guard totalSessionPickerCount > 0 else { return 0 }
+        return min((sessionPickerPageIndex + 1) * sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
+    }
+    private var sessionPickerPaginationSummaryText: String {
+        String(
+            format: NSLocalizedString(
+                "当前显示 %1$d-%2$d 个对话（总共 %3$d）",
+                comment: "Session picker pagination summary"
+            ),
+            currentSessionPickerPageStartOrdinal,
+            currentSessionPickerPageEndOrdinal,
+            totalSessionPickerCount
+        )
+    }
+    private var pagedSessionPickerSessions: [ChatSession] {
+        guard totalSessionPickerCount > 0 else { return [] }
+        let start = min(sessionPickerPageIndex * sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
+        let end = min(start + sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
+        guard start < end else { return [] }
+        return Array(viewModel.chatSessions[start..<end])
     }
     var body: some View {
         let displayedMessages = viewModel.displayMessages
@@ -1055,7 +1099,7 @@ struct ChatView: View {
         let queryActive = !normalizedQuery.isEmpty
         let displayedSessions = queryActive
             ? viewModel.chatSessions.filter { sessionPickerSearchHits[$0.id] != nil }
-            : viewModel.chatSessions
+            : pagedSessionPickerSessions
 
         return GeometryReader { proxy in
             let panelHeight = proxy.size.height * sessionPickerHeightRatio
@@ -1109,12 +1153,14 @@ struct ChatView: View {
             }
         }
         .onAppear {
+            normalizeSessionPickerPageIndex()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: sessionPickerSearchText) { _, newValue in
             scheduleSessionPickerSearch(for: newValue)
         }
         .onChange(of: viewModel.chatSessions) { _, _ in
+            normalizeSessionPickerPageIndex()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
@@ -1258,14 +1304,84 @@ struct ChatView: View {
     }
 
     private func sessionPickerFooter(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
-        Text(
-            queryActive
-            ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话")
-            : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
-        )
-            .etFont(.system(size: 12, weight: .medium))
-            .foregroundColor(TelegramColors.navBarSubtitle)
-            .padding(.bottom, 14)
+        Group {
+            if !queryActive && shouldShowSessionPickerPagination {
+                HStack(spacing: 12) {
+                    Button {
+                        goToPreviousSessionPickerPage()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .etFont(.system(size: 14, weight: .semibold))
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+                            )
+                    }
+                    .foregroundColor(TelegramColors.sendButtonColor)
+                    .disabled(!canGoToPreviousSessionPickerPage)
+                    .accessibilityLabel(NSLocalizedString("上一页", comment: "Session picker previous page"))
+
+                    Text(sessionPickerPaginationSummaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .multilineTextAlignment(.center)
+                        .etFont(.system(size: 12, weight: .medium))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
+                        )
+
+                    Button {
+                        goToNextSessionPickerPage()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .etFont(.system(size: 14, weight: .semibold))
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+                            )
+                    }
+                    .foregroundColor(TelegramColors.sendButtonColor)
+                    .disabled(!canGoToNextSessionPickerPage)
+                    .accessibilityLabel(NSLocalizedString("下一页", comment: "Session picker next page"))
+                }
+            } else {
+                Text(
+                    queryActive
+                    ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话")
+                    : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
+                )
+                .etFont(.system(size: 12, weight: .medium))
+                .foregroundColor(TelegramColors.navBarSubtitle)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
+    }
+
+    private func normalizeSessionPickerPageIndex() {
+        let maxIndex = max(totalSessionPickerPages - 1, 0)
+        if sessionPickerPageIndex > maxIndex {
+            sessionPickerPageIndex = maxIndex
+        } else if sessionPickerPageIndex < 0 {
+            sessionPickerPageIndex = 0
+        }
+    }
+
+    private func goToPreviousSessionPickerPage() {
+        guard canGoToPreviousSessionPickerPage else { return }
+        sessionPickerPageIndex -= 1
+    }
+
+    private func goToNextSessionPickerPage() {
+        guard canGoToNextSessionPickerPage else { return }
+        sessionPickerPageIndex += 1
     }
 
     private func scheduleSessionPickerSearch(for query: String) {

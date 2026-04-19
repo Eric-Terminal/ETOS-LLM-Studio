@@ -1513,3 +1513,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "预设适合快速上手；若需手动输入，可在下方高级参数中覆盖。" = "Los ajustes preestablecidos son buenos para un inicio rápido; para entrada manual, anule los parámetros avanzados a continuación.";
 "默认会按“直连 -> 桥接”执行；若工具运行模式设为桥接，则按“桥接 -> 直连”。" = "El valor predeterminado ejecuta Directo -> Puente; si el modo de ejecución de la herramienta está configurado en Puente, ejecuta Puente -> Directo.";
 "默认倍速" = "Velocidad predeterminada";
+"上一页" = "Página anterior";
+"下一页" = "Página siguiente";
+"当前显示 %1$d-%2$d 个对话（总共 %3$d）" = "Mostrando conversaciones %1$d-%2$d de %3$d";
