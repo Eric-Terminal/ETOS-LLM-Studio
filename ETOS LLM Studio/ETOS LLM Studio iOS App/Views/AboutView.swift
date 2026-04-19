@@ -36,8 +36,16 @@ struct AboutView: View {
         String(appCommitHash.prefix(7))
     }
     
-    private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
+    private let documentationURL = URL(string: "https://docs.els.ericterminal.com/")!
     private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
+
+    private var documentationHost: String {
+        documentationURL.host() ?? documentationURL.absoluteString
+    }
+
+    private var privacyHost: String {
+        privacyURL.host() ?? privacyURL.absoluteString
+    }
     
     var body: some View {
         List {
@@ -96,28 +104,16 @@ struct AboutView: View {
             // MARK: - Links
             Section(header: Text("链接")) {
                 Button {
-                    openURL(githubURL)
+                    openURL(documentationURL)
                 } label: {
-                    HStack {
-                        Label("GitHub 项目主页", systemImage: "link")
-                        Spacer()
-                        Image(systemName: "arrow.up.right.square")
-                            .etFont(.footnote)
+                    LabeledContent(NSLocalizedString("文档", comment: "Documentation")) {
+                        Text(documentationHost)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
-
-                Button {
-                    openURL(URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues")!)
-                } label: {
-                    HStack {
-                        Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")
-                        Spacer()
-                        Image(systemName: "arrow.up.right.square")
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .buttonStyle(.plain)
             }
             
             // MARK: - Legal
@@ -126,14 +122,14 @@ struct AboutView: View {
                 Button {
                     openURL(privacyURL)
                 } label: {
-                    HStack {
-                        Label("隐私政策", systemImage: "shield")
-                        Spacer()
-                        Image(systemName: "arrow.up.right.square")
-                            .etFont(.footnote)
+                    LabeledContent("隐私政策") {
+                        Text(privacyHost)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
+                .buttonStyle(.plain)
             }
             
             // MARK: - Footer

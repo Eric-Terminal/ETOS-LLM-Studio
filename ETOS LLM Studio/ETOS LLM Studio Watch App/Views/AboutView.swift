@@ -14,6 +14,7 @@ import WatchKit
 import AuthenticationServices
 
 struct AboutView: View {
+    private let documentationURL = URL(string: "https://docs.els.ericterminal.com/")!
     private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
     @State private var webAuthLauncher = WatchWebAuthLauncher()
     @State private var versionTapCount = 0
@@ -35,6 +36,14 @@ struct AboutView: View {
 
     private var appCommitHashShort: String {
         String(appCommitHash.prefix(7))
+    }
+
+    private var documentationHost: String {
+        documentationURL.host() ?? documentationURL.absoluteString
+    }
+
+    private var privacyHost: String {
+        privacyURL.host() ?? privacyURL.absoluteString
     }
     
     var body: some View {
@@ -98,16 +107,18 @@ struct AboutView: View {
                 Divider()
                 
                 // MARK: - Links
-                NavigationLink {
-                    ProjectLinksView()
+                Button {
+                    webAuthLauncher.open(url: documentationURL)
                 } label: {
                     HStack {
-                        Text("项目链接")
+                        Text(NSLocalizedString("文档", comment: "Documentation"))
                             .etFont(.caption)
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .etFont(.caption2)
+                        Text(documentationHost)
+                            .etFont(.system(size: 9))
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
                 .buttonStyle(.plain)
@@ -125,9 +136,11 @@ struct AboutView: View {
                             Text("隐私政策")
                                 .etFont(.caption)
                             Spacer()
-                            Image(systemName: "safari")
-                                .etFont(.caption2)
+                            Text(privacyHost)
+                                .etFont(.system(size: 9))
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
                     }
                     .buttonStyle(.plain)
@@ -235,60 +248,6 @@ private struct FeatureRow: View {
 // MARK: - Privacy Policy View
 
 // Privacy policy is hosted externally.
-
-// MARK: - Project Links View
-
-private struct ProjectLinksView: View {
-    
-    private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
-    private let issuesURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues")!
-    @State private var webAuthLauncher = WatchWebAuthLauncher()
-    
-    var body: some View {
-        List {
-            // 项目主页链接
-            Button {
-                webAuthLauncher.open(url: githubURL)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Label("项目主页", systemImage: "house")
-                        Spacer()
-                        Image(systemName: "safari")
-                            .etFont(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(githubURL.absoluteString)
-                        .etFont(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            
-            // 问题反馈链接
-            Button {
-                webAuthLauncher.open(url: issuesURL)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Label(NSLocalizedString("GitHub Issues（网页）", comment: "GitHub issues web entry"), systemImage: "exclamationmark.bubble")
-                        Spacer()
-                        Image(systemName: "safari")
-                            .etFont(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(issuesURL.absoluteString)
-                        .etFont(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            
-        }
-        .listStyle(.plain)
-        .navigationTitle("项目链接")
-    }
-}
 
 struct AboutView_Previews: PreviewProvider {
     static var previews: some View {
