@@ -91,6 +91,7 @@ class ChatViewModel: ObservableObject {
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
     @Published private(set) var latestAssistantMessageID: UUID?
+    @Published private(set) var streamingScrollAnchorVersion: Int = 0
     @Published private(set) var toolCallResultIDs: Set<String> = []
     @Published private(set) var runningSessionIDs: Set<UUID> = []
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
@@ -2252,11 +2253,17 @@ class ChatViewModel: ObservableObject {
         var updatedToolCallResultIDs = toolCallResultIDs
         var updatedLatestAssistantID = latestAssistantMessageID
         var needsDisplayRefilter = false
+        var shouldBumpStreamingScrollAnchor = false
 
         for (oldMessage, newMessage) in zip(previousMessages, incomingMessages) where oldMessage != newMessage {
             if visibleIDs.contains(newMessage.id) {
                 messageStateByID[newMessage.id]?.update(with: newMessage)
                 scheduleMarkdownPreparationIfNeeded(for: newMessage)
+                if oldMessage.content != newMessage.content
+                    || oldMessage.reasoningContent != newMessage.reasoningContent
+                    || oldMessage.toolCalls != newMessage.toolCalls {
+                    shouldBumpStreamingScrollAnchor = true
+                }
             }
 
             let oldResultIDs = toolCallResultIDs(for: oldMessage)
@@ -2283,6 +2290,9 @@ class ChatViewModel: ObservableObject {
         }
         if latestAssistantMessageID != updatedLatestAssistantID {
             latestAssistantMessageID = updatedLatestAssistantID
+        }
+        if shouldBumpStreamingScrollAnchor {
+            streamingScrollAnchorVersion &+= 1
         }
         if needsDisplayRefilter {
             updateDisplayMessagesIfNeeded()

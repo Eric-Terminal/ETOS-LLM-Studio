@@ -38,7 +38,11 @@ struct ContentView: View {
     @State private var settingsDestination: WatchSettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var shouldForceScrollToBottom = false
+    @State private var shouldKeepBottomPinned = true
     @State private var suppressAutoScrollOnce = false
+    @State private var pendingBottomSnapTask: Task<Void, Never>?
+    @State private var needsImmediateBottomSnap = true
+    @State private var bottomAnchorVisibilityWorkItem: DispatchWorkItem?
     @State private var pendingJumpRequest: MessageJumpRequest?
     @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
@@ -166,6 +170,12 @@ struct ContentView: View {
             _ = isEnabled
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
+        }
+        .onDisappear {
+            pendingBottomSnapTask?.cancel()
+            pendingBottomSnapTask = nil
+            bottomAnchorVisibilityWorkItem?.cancel()
+            bottomAnchorVisibilityWorkItem = nil
         }
         .sheet(isPresented: $legacyJSONMigrationManager.isMigrationPromptPresented) {
             NavigationStack {
@@ -315,8 +325,24 @@ struct ContentView: View {
                     .id(bottomAnchorID)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
-                    .onAppear { isAtBottom = true; showScrollToBottomButton = false }
-                    .onDisappear { isAtBottom = false; showScrollToBottomButton = true }
+                    .onAppear {
+                        bottomAnchorVisibilityWorkItem?.cancel()
+                        bottomAnchorVisibilityWorkItem = nil
+                        isAtBottom = true
+                        shouldKeepBottomPinned = true
+                        showScrollToBottomButton = false
+                    }
+                    .onDisappear {
+                        bottomAnchorVisibilityWorkItem?.cancel()
+                        let workItem = DispatchWorkItem {
+                            isAtBottom = false
+                            shouldKeepBottomPinned = false
+                            showScrollToBottomButton = true
+                            bottomAnchorVisibilityWorkItem = nil
+                        }
+                        bottomAnchorVisibilityWorkItem = workItem
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
+                    }
             } else {
                 Color.clear
                     .frame(height: 1)
@@ -338,13 +364,21 @@ struct ContentView: View {
             }
         }
         .onChange(of: viewModel.messages.count) {
+            if needsImmediateBottomSnap {
+                scheduleImmediateBottomSnap(proxy: proxy)
+                return
+            }
             if suppressAutoScrollOnce {
                 suppressAutoScrollOnce = false
                 return
             }
-            let shouldScroll = isAtBottom || shouldForceScrollToBottom
+            let shouldScroll = isAtBottom || shouldForceScrollToBottom || (viewModel.isSendingMessage && shouldKeepBottomPinned)
             shouldForceScrollToBottom = false
             guard shouldScroll else { return }
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+        .onChange(of: viewModel.streamingScrollAnchorVersion) { _, _ in
+            guard viewModel.isSendingMessage, shouldKeepBottomPinned else { return }
             scrollToBottom(proxy: proxy, animated: false)
         }
         .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
@@ -356,6 +390,21 @@ struct ContentView: View {
             withAnimation {
                 proxy.scrollTo(request.messageID, anchor: .center)
             }
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            shouldKeepBottomPinned = true
+            needsImmediateBottomSnap = true
+            showScrollToBottomButton = false
+            scheduleImmediateBottomSnap(proxy: proxy)
+        }
+        .onChange(of: viewModel.displayMessages.map(\.id)) { _, ids in
+            guard needsImmediateBottomSnap, !ids.isEmpty else { return }
+            scheduleImmediateBottomSnap(proxy: proxy)
+        }
+        .onAppear {
+            shouldKeepBottomPinned = true
+            needsImmediateBottomSnap = true
+            scheduleImmediateBottomSnap(proxy: proxy)
         }
     }
 
@@ -548,6 +597,7 @@ struct ContentView: View {
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         let scrollAction = {
             // 点击回底按钮时，重置懒加载状态到初始数量
+            shouldKeepBottomPinned = true
             viewModel.resetLazyLoadState()
             scrollToBottom(proxy: proxy, animated: true)
         }
@@ -623,6 +673,7 @@ struct ContentView: View {
 
     private func sendMessage() {
         shouldForceScrollToBottom = true
+        shouldKeepBottomPinned = true
         viewModel.sendMessage()
     }
 
@@ -636,6 +687,20 @@ struct ContentView: View {
 
     private var inputFillColor: Color {
         viewModel.enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
+    }
+
+    private func scheduleImmediateBottomSnap(proxy: ScrollViewProxy) {
+        pendingBottomSnapTask?.cancel()
+        pendingBottomSnapTask = Task { @MainActor in
+            for _ in 0..<4 {
+                guard !Task.isCancelled else { return }
+                scrollToBottom(proxy: proxy, animated: false)
+                await Task.yield()
+            }
+            guard !Task.isCancelled else { return }
+            needsImmediateBottomSnap = false
+            pendingBottomSnapTask = nil
+        }
     }
 
     private var inputStrokeColor: Color {
