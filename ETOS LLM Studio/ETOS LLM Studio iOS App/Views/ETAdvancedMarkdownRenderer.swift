@@ -1530,7 +1530,7 @@ private enum ETIOSMathImageRenderer {
             return cachedData as Data
         }
 
-        let renderedData = await withCheckedContinuation { continuation in
+        let renderedData: Data? = await withCheckedContinuation { (continuation: CheckedContinuation<Data?, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
                 let image = MTMathImage(
                     latex: request.latex,
