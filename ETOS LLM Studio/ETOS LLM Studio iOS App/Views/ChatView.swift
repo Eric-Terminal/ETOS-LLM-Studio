@@ -120,7 +120,7 @@ struct ChatView: View {
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     private let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
-    private let longDistanceScrollAnimationThresholdScreens: CGFloat = 2.5
+    private let longDistanceScrollAnimationThresholdScreens: CGFloat = 12
     private let modelPickerMorphID = "modelPickerMorph"
     private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
@@ -164,6 +164,18 @@ struct ChatView: View {
     }
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
+    }
+    private var scrollToBottomButtonFillColor: Color {
+        colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
+    }
+    private var scrollToBottomButtonIconColor: Color {
+        colorScheme == .dark ? .white : TelegramColors.sendButtonColor
+    }
+    private var scrollToBottomButtonBorderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+    }
+    private var scrollToBottomButtonShadowColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.3) : TelegramColors.scrollButtonShadow
     }
     var body: some View {
         let displayedMessages = viewModel.displayMessages
@@ -1472,13 +1484,17 @@ struct ChatView: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(TelegramColors.sendButtonColor)
+                    .fill(scrollToBottomButtonFillColor)
                     .frame(width: 40, height: 40)
-                    .shadow(color: TelegramColors.scrollButtonShadow, radius: 6, x: 0, y: 2)
+                    .overlay(
+                        Circle()
+                            .stroke(scrollToBottomButtonBorderColor, lineWidth: 0.8)
+                    )
+                    .shadow(color: scrollToBottomButtonShadowColor, radius: 6, x: 0, y: 2)
                 
                 Image(systemName: "chevron.down")
                     .etFont(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(scrollToBottomButtonIconColor)
             }
         }
         .accessibilityLabel("滚动到底部")
