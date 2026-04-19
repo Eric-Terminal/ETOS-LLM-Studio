@@ -95,6 +95,7 @@ struct ChatView: View {
     @State private var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
     @State private var showSessionPickerSearchInput: Bool = false
     @State private var sessionPickerPageIndex: Int = 0
+    @State private var sessionPickerSearchResultPageIndex: Int = 0
     @State private var imageDownloadAlertMessage: String?
     @State private var exportSharePayload: ChatExportSharePayload?
     @State private var exportErrorMessage: String?
@@ -191,11 +192,33 @@ struct ChatView: View {
     private var shouldShowSessionPickerPagination: Bool {
         totalSessionPickerCount > sessionPickerMaxSessionsPerPage
     }
+    private var sessionPickerSearchResults: [SessionHistorySearchResult] {
+        SessionHistorySearchSupport.flattenedResults(
+            sessions: viewModel.chatSessions,
+            hits: sessionPickerSearchHits
+        )
+    }
+    private var totalSessionPickerSearchResultCount: Int {
+        sessionPickerSearchResults.count
+    }
+    private var totalSessionPickerSearchResultPages: Int {
+        guard totalSessionPickerSearchResultCount > 0 else { return 1 }
+        return ((totalSessionPickerSearchResultCount - 1) / sessionPickerMaxSessionsPerPage) + 1
+    }
+    private var shouldShowSessionPickerSearchPagination: Bool {
+        totalSessionPickerSearchResultCount > sessionPickerMaxSessionsPerPage
+    }
     private var canGoToPreviousSessionPickerPage: Bool {
         sessionPickerPageIndex > 0
     }
     private var canGoToNextSessionPickerPage: Bool {
         sessionPickerPageIndex + 1 < totalSessionPickerPages
+    }
+    private var canGoToPreviousSessionPickerSearchResultPage: Bool {
+        sessionPickerSearchResultPageIndex > 0
+    }
+    private var canGoToNextSessionPickerSearchResultPage: Bool {
+        sessionPickerSearchResultPageIndex + 1 < totalSessionPickerSearchResultPages
     }
     private var currentSessionPickerPageStartOrdinal: Int {
         guard totalSessionPickerCount > 0 else { return 0 }
@@ -204,6 +227,17 @@ struct ChatView: View {
     private var currentSessionPickerPageEndOrdinal: Int {
         guard totalSessionPickerCount > 0 else { return 0 }
         return min((sessionPickerPageIndex + 1) * sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
+    }
+    private var currentSessionPickerSearchResultPageStartOrdinal: Int {
+        guard totalSessionPickerSearchResultCount > 0 else { return 0 }
+        return sessionPickerSearchResultPageIndex * sessionPickerMaxSessionsPerPage + 1
+    }
+    private var currentSessionPickerSearchResultPageEndOrdinal: Int {
+        guard totalSessionPickerSearchResultCount > 0 else { return 0 }
+        return min(
+            (sessionPickerSearchResultPageIndex + 1) * sessionPickerMaxSessionsPerPage,
+            totalSessionPickerSearchResultCount
+        )
     }
     private var sessionPickerPaginationSummaryText: String {
         String(
@@ -216,12 +250,25 @@ struct ChatView: View {
             totalSessionPickerCount
         )
     }
+    private var sessionPickerSearchPaginationSummaryText: String {
+        "当前显示 \(currentSessionPickerSearchResultPageStartOrdinal)-\(currentSessionPickerSearchResultPageEndOrdinal) 条结果（总共 \(totalSessionPickerSearchResultCount)）"
+    }
     private var pagedSessionPickerSessions: [ChatSession] {
         guard totalSessionPickerCount > 0 else { return [] }
         let start = min(sessionPickerPageIndex * sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
         let end = min(start + sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
         guard start < end else { return [] }
         return Array(viewModel.chatSessions[start..<end])
+    }
+    private var pagedSessionPickerSearchResults: [SessionHistorySearchResult] {
+        guard totalSessionPickerSearchResultCount > 0 else { return [] }
+        let start = min(
+            sessionPickerSearchResultPageIndex * sessionPickerMaxSessionsPerPage,
+            totalSessionPickerSearchResultCount
+        )
+        let end = min(start + sessionPickerMaxSessionsPerPage, totalSessionPickerSearchResultCount)
+        guard start < end else { return [] }
+        return Array(sessionPickerSearchResults[start..<end])
     }
     var body: some View {
         let displayedMessages = viewModel.displayMessages
@@ -335,20 +382,27 @@ struct ChatView: View {
                             proxy.scrollTo(request.messageID, anchor: .center)
                         }
                     }
+                    .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
+                        resolvePendingSearchJumpIfNeeded()
+                    }
                     .onChange(of: viewModel.currentSession?.id) { _, _ in
                         pendingHistoryResetWorkItem?.cancel()
                         pendingHistoryResetWorkItem = nil
                         showScrollToBottom = false
                         needsImmediateBottomSnap = true
                         scheduleImmediateBottomSnap(proxy: proxy)
+                        resolvePendingSearchJumpIfNeeded()
                     }
                     .onChange(of: viewModel.displayMessages.map(\.id)) { _, ids in
-                        guard needsImmediateBottomSnap, !ids.isEmpty else { return }
-                        scheduleImmediateBottomSnap(proxy: proxy)
+                        if needsImmediateBottomSnap, !ids.isEmpty {
+                            scheduleImmediateBottomSnap(proxy: proxy)
+                        }
+                        resolvePendingSearchJumpIfNeeded()
                     }
                     .onAppear {
                         needsImmediateBottomSnap = true
                         scheduleImmediateBottomSnap(proxy: proxy)
+                        resolvePendingSearchJumpIfNeeded()
                     }
                     // Telegram 风格：顶部导航栏
                     .safeAreaInset(edge: .top) {
@@ -889,6 +943,7 @@ struct ChatView: View {
         isSessionPickerSearching = false
         showSessionPickerSearchInput = false
         sessionPickerSearchFocused = false
+        sessionPickerSearchResultPageIndex = 0
     }
 
     private var modelPickerOverlay: some View {
@@ -1097,9 +1152,7 @@ struct ChatView: View {
     private var sessionPickerOverlay: some View {
         let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(sessionPickerSearchText)
         let queryActive = !normalizedQuery.isEmpty
-        let displayedSessions = queryActive
-            ? viewModel.chatSessions.filter { sessionPickerSearchHits[$0.id] != nil }
-            : pagedSessionPickerSessions
+        let displayedSessionCount = queryActive ? totalSessionPickerSearchResultCount : totalSessionPickerCount
 
         return GeometryReader { proxy in
             let panelHeight = proxy.size.height * sessionPickerHeightRatio
@@ -1114,25 +1167,23 @@ struct ChatView: View {
                 VStack(spacing: 12) {
                     sessionPickerHeader(
                         queryActive: queryActive,
-                        displayedCount: displayedSessions.count,
+                        displayedCount: displayedSessionCount,
                         isSearching: isSessionPickerSearching
                     )
 
                     if queryActive && isSessionPickerSearching {
                         sessionPickerSearchingState
-                    } else if displayedSessions.isEmpty {
+                    } else if queryActive && totalSessionPickerSearchResultCount == 0 {
+                        sessionPickerEmptyState(queryActive: queryActive)
+                    } else if !queryActive && pagedSessionPickerSessions.isEmpty {
                         sessionPickerEmptyState(queryActive: queryActive)
                     } else {
-                        sessionPickerList(
-                            displayedSessions: displayedSessions,
-                            searchHits: sessionPickerSearchHits,
-                            queryActive: queryActive
-                        )
+                        sessionPickerList(queryActive: queryActive)
                     }
 
                     sessionPickerFooter(
                         queryActive: queryActive,
-                        displayedCount: displayedSessions.count,
+                        displayedCount: displayedSessionCount,
                         isSearching: isSessionPickerSearching
                     )
                 }
@@ -1154,13 +1205,16 @@ struct ChatView: View {
         }
         .onAppear {
             normalizeSessionPickerPageIndex()
+            normalizeSessionPickerSearchResultPageIndex()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: sessionPickerSearchText) { _, newValue in
+            sessionPickerSearchResultPageIndex = 0
             scheduleSessionPickerSearch(for: newValue)
         }
         .onChange(of: viewModel.chatSessions) { _, _ in
             normalizeSessionPickerPageIndex()
+            normalizeSessionPickerSearchResultPageIndex()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
@@ -1182,7 +1236,11 @@ struct ChatView: View {
                     .etFont(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
                 if queryActive {
-                    Text(isSearching ? "正在搜索历史会话…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count)")
+                    Text(
+                        isSearching
+                        ? "正在搜索历史会话…"
+                        : "匹配 \(displayedCount) 条结果 / \(sessionPickerSearchHits.count) 个会话"
+                    )
                         .etFont(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
                 } else {
@@ -1271,7 +1329,7 @@ struct ChatView: View {
 
     private func sessionPickerEmptyState(queryActive: Bool) -> some View {
         VStack(spacing: 8) {
-            Text(queryActive ? "未找到匹配会话" : "暂无会话")
+            Text(queryActive ? "未找到匹配的搜索结果" : "暂无会话")
                 .etFont(.system(size: 14, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarText)
             Text(queryActive ? "换个关键词试试看" : "创建一个新对话开始吧")
@@ -1283,18 +1341,17 @@ struct ChatView: View {
         .padding(.bottom, 16)
     }
 
-    private func sessionPickerList(
-        displayedSessions: [ChatSession],
-        searchHits: [UUID: SessionHistorySearchHit],
-        queryActive: Bool
-    ) -> some View {
+    private func sessionPickerList(queryActive: Bool) -> some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                ForEach(displayedSessions) { session in
-                    sessionPickerRow(
-                        session,
-                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: queryActive)
-                    )
+                if queryActive {
+                    ForEach(pagedSessionPickerSearchResults) { result in
+                        sessionPickerSearchResultRow(result)
+                    }
+                } else {
+                    ForEach(pagedSessionPickerSessions) { session in
+                        sessionPickerRow(session)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -1305,10 +1362,10 @@ struct ChatView: View {
 
     private func sessionPickerFooter(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
         Group {
-            if !queryActive && shouldShowSessionPickerPagination {
+            if shouldShowSessionPickerPaginationBar(queryActive: queryActive) {
                 HStack(spacing: 12) {
                     Button {
-                        goToPreviousSessionPickerPage()
+                        goToPreviousActiveSessionPickerPage(queryActive: queryActive)
                     } label: {
                         Image(systemName: "chevron.left")
                             .etFont(.system(size: 14, weight: .semibold))
@@ -1319,10 +1376,10 @@ struct ChatView: View {
                             )
                     }
                     .foregroundColor(TelegramColors.sendButtonColor)
-                    .disabled(!canGoToPreviousSessionPickerPage)
+                    .disabled(!canGoToPreviousActiveSessionPickerPage(queryActive: queryActive))
                     .accessibilityLabel(NSLocalizedString("上一页", comment: "Session picker previous page"))
 
-                    Text(sessionPickerPaginationSummaryText)
+                    Text(activeSessionPickerPaginationSummaryText(queryActive: queryActive))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                         .multilineTextAlignment(.center)
@@ -1337,7 +1394,7 @@ struct ChatView: View {
                         )
 
                     Button {
-                        goToNextSessionPickerPage()
+                        goToNextActiveSessionPickerPage(queryActive: queryActive)
                     } label: {
                         Image(systemName: "chevron.right")
                             .etFont(.system(size: 14, weight: .semibold))
@@ -1348,13 +1405,13 @@ struct ChatView: View {
                             )
                     }
                     .foregroundColor(TelegramColors.sendButtonColor)
-                    .disabled(!canGoToNextSessionPickerPage)
+                    .disabled(!canGoToNextActiveSessionPickerPage(queryActive: queryActive))
                     .accessibilityLabel(NSLocalizedString("下一页", comment: "Session picker next page"))
                 }
             } else {
                 Text(
                     queryActive
-                    ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) / \(viewModel.chatSessions.count) 个会话")
+                    ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) 条结果 / \(sessionPickerSearchHits.count) 个会话")
                     : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
                 )
                 .etFont(.system(size: 12, weight: .medium))
@@ -1374,12 +1431,47 @@ struct ChatView: View {
         }
     }
 
-    private func goToPreviousSessionPickerPage() {
+    private func normalizeSessionPickerSearchResultPageIndex() {
+        let maxIndex = max(totalSessionPickerSearchResultPages - 1, 0)
+        if sessionPickerSearchResultPageIndex > maxIndex {
+            sessionPickerSearchResultPageIndex = maxIndex
+        } else if sessionPickerSearchResultPageIndex < 0 {
+            sessionPickerSearchResultPageIndex = 0
+        }
+    }
+
+    private func shouldShowSessionPickerPaginationBar(queryActive: Bool) -> Bool {
+        queryActive ? shouldShowSessionPickerSearchPagination : shouldShowSessionPickerPagination
+    }
+
+    private func canGoToPreviousActiveSessionPickerPage(queryActive: Bool) -> Bool {
+        queryActive ? canGoToPreviousSessionPickerSearchResultPage : canGoToPreviousSessionPickerPage
+    }
+
+    private func canGoToNextActiveSessionPickerPage(queryActive: Bool) -> Bool {
+        queryActive ? canGoToNextSessionPickerSearchResultPage : canGoToNextSessionPickerPage
+    }
+
+    private func activeSessionPickerPaginationSummaryText(queryActive: Bool) -> String {
+        queryActive ? sessionPickerSearchPaginationSummaryText : sessionPickerPaginationSummaryText
+    }
+
+    private func goToPreviousActiveSessionPickerPage(queryActive: Bool) {
+        if queryActive {
+            guard canGoToPreviousSessionPickerSearchResultPage else { return }
+            sessionPickerSearchResultPageIndex -= 1
+            return
+        }
         guard canGoToPreviousSessionPickerPage else { return }
         sessionPickerPageIndex -= 1
     }
 
-    private func goToNextSessionPickerPage() {
+    private func goToNextActiveSessionPickerPage(queryActive: Bool) {
+        if queryActive {
+            guard canGoToNextSessionPickerSearchResultPage else { return }
+            sessionPickerSearchResultPageIndex += 1
+            return
+        }
         guard canGoToNextSessionPickerPage else { return }
         sessionPickerPageIndex += 1
     }
@@ -1392,6 +1484,7 @@ struct ChatView: View {
         guard !normalized.isEmpty else {
             sessionPickerSearchHits = [:]
             isSessionPickerSearching = false
+            sessionPickerSearchResultPageIndex = 0
             return
         }
 
@@ -1416,6 +1509,7 @@ struct ChatView: View {
             DispatchQueue.main.async {
                 guard searchToken == sessionPickerLatestSearchToken else { return }
                 sessionPickerSearchHits = hits
+                normalizeSessionPickerSearchResultPageIndex()
                 isSessionPickerSearching = false
                 sessionPickerPendingSearchWorkItem = nil
             }
@@ -1444,7 +1538,7 @@ struct ChatView: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
-    private func sessionPickerRow(_ session: ChatSession, searchSummary: String?) -> some View {
+    private func sessionPickerRow(_ session: ChatSession) -> some View {
         let isCurrent = session.id == viewModel.currentSession?.id
         let isEditing = editingSessionID == session.id
         let baseFill = colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05)
@@ -1458,7 +1552,7 @@ struct ChatView: View {
             isRunning: viewModel.runningSessionIDs.contains(session.id),
             isEditing: isEditing,
             draftName: isEditing ? $sessionDraftName : .constant(session.name),
-            searchSummary: searchSummary,
+            searchSummary: nil,
             onCommit: { newName in
                 viewModel.updateSessionName(session, newName: newName)
                 editingSessionID = nil
@@ -1508,23 +1602,39 @@ struct ChatView: View {
         )
     }
 
-    private func searchSummary(
-        for session: ChatSession,
-        in hits: [UUID: SessionHistorySearchHit],
-        queryActive: Bool
-    ) -> String? {
-        guard queryActive, let hit = hits[session.id] else { return nil }
-        let detailLines = hit.matches.map { match in
-            let preview = compactSearchPreview(match.preview)
-            if let messageOrdinal = match.messageOrdinal {
-                return "• \(sourceLabel(for: match.source)) 第\(messageOrdinal)条：\(preview)"
+    private func sessionPickerSearchResultRow(_ result: SessionHistorySearchResult) -> some View {
+        let isCurrent = result.sessionID == viewModel.currentSession?.id
+        let baseFill = colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05)
+        let selectedFill = colorScheme == .dark ? Color.black.opacity(0.36) : Color.black.opacity(0.08)
+        let borderOpacitySelected: Double = colorScheme == .dark ? 0.16 : 0.3
+        let borderOpacityUnselected: Double = colorScheme == .dark ? 0.1 : 0.15
+
+        return Button {
+            if let session = viewModel.chatSessions.first(where: { $0.id == result.sessionID }) {
+                selectSessionFromPicker(session, messageOrdinal: result.messageOrdinal)
             }
-            return "• \(sourceLabel(for: match.source))：\(preview)"
+        } label: {
+            MarqueeTitleSubtitleSelectionRow(
+                title: searchResultTitle(for: result),
+                subtitle: result.match.preview,
+                isSelected: isCurrent,
+                titleUIFont: .systemFont(ofSize: 15, weight: .semibold),
+                subtitleUIFont: .systemFont(ofSize: 12)
+            )
+            .foregroundColor(TelegramColors.navBarText)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        if detailLines.count <= 1 {
-            return detailLines.first
-        }
-        return "共命中 \(hit.matchCount) 处\n" + detailLines.joined(separator: "\n")
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isCurrent ? selectedFill : baseFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(isCurrent ? borderOpacitySelected : borderOpacityUnselected), lineWidth: isCurrent ? 0.8 : 0.5)
+        )
     }
 
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
@@ -1548,14 +1658,21 @@ struct ChatView: View {
         }
     }
 
-    private func compactSearchPreview(_ text: String, maxLength: Int = 48) -> String {
-        guard text.count > maxLength else { return text }
-        return String(text.prefix(maxLength)) + "…"
+    private func searchResultTitle(for result: SessionHistorySearchResult) -> String {
+        if let messageOrdinal = result.messageOrdinal {
+            return "“\(result.sessionName)” 第\(messageOrdinal)条"
+        }
+        return "“\(result.sessionName)” \(sourceLabel(for: result.match.source))"
     }
 
-    private func selectSessionFromPicker(_ session: ChatSession) {
+    private func selectSessionFromPicker(_ session: ChatSession, messageOrdinal: Int? = nil) {
         if session.isTemporary {
             editingSessionID = nil
+            if let messageOrdinal {
+                viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)
+            } else {
+                viewModel.clearPendingMessageJumpTarget()
+            }
             viewModel.setCurrentSession(session)
             dismissSessionPickerPanel()
             return
@@ -1566,6 +1683,11 @@ struct ChatView: View {
             showGhostSessionAlert = true
         } else {
             editingSessionID = nil
+            if let messageOrdinal {
+                viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)
+            } else {
+                viewModel.clearPendingMessageJumpTarget()
+            }
             viewModel.setCurrentSession(session)
             dismissSessionPickerPanel()
         }
@@ -2111,6 +2233,16 @@ private struct ScrollDistanceToBottomObserver: UIViewRepresentable {
 // MARK: - Helpers
 
 private extension ChatView {
+    func resolvePendingSearchJumpIfNeeded() {
+        guard let target = viewModel.pendingSearchJumpTarget,
+              viewModel.currentSession?.id == target.sessionID,
+              !viewModel.allMessagesForSession.isEmpty else {
+            return
+        }
+        guard jumpToMessage(displayIndex: target.messageOrdinal) else { return }
+        viewModel.clearPendingMessageJumpTarget()
+    }
+
     func jumpToMessage(displayIndex: Int) -> Bool {
         let targetZeroBasedIndex = displayIndex - 1
         guard targetZeroBasedIndex >= 0, targetZeroBasedIndex < viewModel.allMessagesForSession.count else {

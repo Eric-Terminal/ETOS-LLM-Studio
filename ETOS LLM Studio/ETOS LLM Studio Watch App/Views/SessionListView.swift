@@ -29,7 +29,7 @@ struct SessionListView: View {
     let branchAction: (ChatSession, Bool) -> ChatSession?
     let deleteLastMessageAction: (ChatSession) -> Void
     let sendSessionToCompanionAction: (ChatSession) -> Void
-    let onSessionSelected: (ChatSession) -> Void
+    let onSessionSelected: (ChatSession, Int?) -> Void
     let updateSessionAction: (ChatSession) -> Void
     let createFolderAction: (String, UUID?) -> SessionFolder?
     let renameFolderAction: (SessionFolder, String) -> Void
@@ -71,7 +71,7 @@ private struct SessionFolderBrowserView: View {
     let branchAction: (ChatSession, Bool) -> ChatSession?
     let deleteLastMessageAction: (ChatSession) -> Void
     let sendSessionToCompanionAction: (ChatSession) -> Void
-    let onSessionSelected: (ChatSession) -> Void
+    let onSessionSelected: (ChatSession, Int?) -> Void
     let updateSessionAction: (ChatSession) -> Void
     let createFolderAction: (String, UUID?) -> SessionFolder?
     let renameFolderAction: (SessionFolder, String) -> Void
@@ -263,8 +263,8 @@ private struct SessionFolderBrowserView: View {
                 sessions: sessions,
                 folders: folders,
                 currentSessionID: currentSession?.id,
-                onSelect: { session in
-                    onSessionSelected(session)
+                onSelect: { session, messageOrdinal in
+                    onSessionSelected(session, messageOrdinal)
                 }
             )
         }
@@ -365,7 +365,7 @@ private struct SessionFolderBrowserView: View {
                 Button("仅分支提示词") {
                     if let session = sessionToBranch {
                         if let newSession = branchAction(session, false) {
-                            onSessionSelected(newSession)
+                            onSessionSelected(newSession, nil)
                         }
                         sessionToBranch = nil
                     }
@@ -373,7 +373,7 @@ private struct SessionFolderBrowserView: View {
                 Button("分支提示词和对话记录") {
                     if let session = sessionToBranch {
                         if let newSession = branchAction(session, true) {
-                            onSessionSelected(newSession)
+                            onSessionSelected(newSession, nil)
                         }
                         sessionToBranch = nil
                     }
@@ -483,66 +483,14 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var paginationBottomBar: some View {
-        HStack(spacing: 4) {
-            Button {
-                goToPreviousPage()
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .frame(minWidth: 30, minHeight: 30)
-            .disabled(!canGoToPreviousPage)
-            .accessibilityLabel("上一页")
-
-            Spacer(minLength: 1)
-
-            paginationSummaryCapsule
-
-            Spacer(minLength: 1)
-
-            Button {
-                goToNextPage()
-            } label: {
-                Image(systemName: "chevron.right")
-            }
-            .frame(minWidth: 30, minHeight: 30)
-            .disabled(!canGoToNextPage)
-            .accessibilityLabel("下一页")
-        }
-        .frame(minHeight: 36)
-    }
-
-    @ViewBuilder
-    private var paginationSummaryCapsule: some View {
-        let summaryContent = MarqueeText(
-            content: paginationSummaryText,
-            uiFont: .preferredFont(forTextStyle: .footnote),
-            speed: 28,
-            delay: 0.8,
-            spacing: 24
+        WatchPaginationBar(
+            summaryText: paginationSummaryText,
+            canGoToPrevious: canGoToPreviousPage,
+            canGoToNext: canGoToNextPage,
+            onPrevious: goToPreviousPage,
+            onNext: goToNextPage,
+            strokeColor: paginationCapsuleStrokeColor
         )
-        .multilineTextAlignment(.center)
-        .allowsHitTesting(false)
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
-
-        if #available(watchOS 26.0, *) {
-            summaryContent
-                .glassEffect(.clear, in: Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(paginationCapsuleStrokeColor, lineWidth: 0.6)
-                )
-        } else {
-            summaryContent
-                .background(
-                    Capsule()
-                        .fill(Color.clear)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(paginationCapsuleStrokeColor, lineWidth: 0.6)
-                )
-        }
     }
 
     private func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
@@ -843,31 +791,145 @@ private struct BatchMoveDestinationPickerView: View {
     }
 }
 
+private struct WatchPaginationBar: View {
+    let summaryText: String
+    let canGoToPrevious: Bool
+    let canGoToNext: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let strokeColor: Color
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: onPrevious) {
+                Image(systemName: "chevron.left")
+            }
+            .frame(minWidth: 30, minHeight: 30)
+            .disabled(!canGoToPrevious)
+            .accessibilityLabel("上一页")
+
+            Spacer(minLength: 1)
+
+            summaryCapsule
+
+            Spacer(minLength: 1)
+
+            Button(action: onNext) {
+                Image(systemName: "chevron.right")
+            }
+            .frame(minWidth: 30, minHeight: 30)
+            .disabled(!canGoToNext)
+            .accessibilityLabel("下一页")
+        }
+        .frame(minHeight: 36)
+    }
+
+    @ViewBuilder
+    private var summaryCapsule: some View {
+        let summaryContent = MarqueeText(
+            content: summaryText,
+            uiFont: .preferredFont(forTextStyle: .footnote),
+            speed: 28,
+            delay: 0.8,
+            spacing: 24
+        )
+        .multilineTextAlignment(.center)
+        .allowsHitTesting(false)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
+
+        if #available(watchOS 26.0, *) {
+            summaryContent
+                .glassEffect(.clear, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(strokeColor, lineWidth: 0.6)
+                )
+        } else {
+            summaryContent
+                .background(
+                    Capsule()
+                        .fill(Color.clear)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(strokeColor, lineWidth: 0.6)
+                )
+        }
+    }
+}
+
 private struct WatchSessionSearchView: View {
     let sessions: [ChatSession]
     let folders: [SessionFolder]
     let currentSessionID: UUID?
-    let onSelect: (ChatSession) -> Void
+    let onSelect: (ChatSession, Int?) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var searchText: String = ""
     @State private var committedSearchText: String = ""
     @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
     @State private var isSearching: Bool = false
     @State private var latestSearchToken: Int = 0
     @State private var pendingSearchWorkItem: DispatchWorkItem?
+    @State private var resultPageIndex: Int = 0
 
-    private var folderByID: [UUID: SessionFolder] {
-        Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
-    }
+    private let maxResultsPerPage = 50
 
     private var normalizedQuery: String {
         SessionHistorySearchSupport.normalizedQuery(committedSearchText)
     }
 
-    private var displayedSessions: [ChatSession] {
+    private var searchResults: [SessionHistorySearchResult] {
         guard !normalizedQuery.isEmpty else { return [] }
-        return sessions.filter { searchHits[$0.id] != nil }
+        return SessionHistorySearchSupport.flattenedResults(
+            sessions: sessions,
+            hits: searchHits
+        )
+    }
+
+    private var totalResultPages: Int {
+        guard !searchResults.isEmpty else { return 1 }
+        return ((searchResults.count - 1) / maxResultsPerPage) + 1
+    }
+
+    private var shouldShowResultPagination: Bool {
+        searchResults.count > maxResultsPerPage
+    }
+
+    private var canGoToPreviousResultPage: Bool {
+        resultPageIndex > 0
+    }
+
+    private var canGoToNextResultPage: Bool {
+        resultPageIndex + 1 < totalResultPages
+    }
+
+    private var currentResultPageStartOrdinal: Int {
+        guard !searchResults.isEmpty else { return 0 }
+        return resultPageIndex * maxResultsPerPage + 1
+    }
+
+    private var currentResultPageEndOrdinal: Int {
+        guard !searchResults.isEmpty else { return 0 }
+        return min((resultPageIndex + 1) * maxResultsPerPage, searchResults.count)
+    }
+
+    private var paginationSummaryText: String {
+        "当前显示\(currentResultPageStartOrdinal)-\(currentResultPageEndOrdinal)条结果(总共\(searchResults.count))"
+    }
+
+    private var paginationStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
+    }
+
+    private var pagedSearchResults: [SessionHistorySearchResult] {
+        guard !searchResults.isEmpty else { return [] }
+        let start = min(resultPageIndex * maxResultsPerPage, searchResults.count)
+        let end = min(start + maxResultsPerPage, searchResults.count)
+        guard start < end else { return [] }
+        return Array(searchResults[start..<end])
     }
 
     var body: some View {
@@ -904,7 +966,7 @@ private struct WatchSessionSearchView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("匹配 \(displayedSessions.count) / \(sessions.count) 个会话")
+                    Text("匹配 \(searchResults.count) 条结果 / \(searchHits.count) 个会话")
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -913,18 +975,32 @@ private struct WatchSessionSearchView: View {
             Section {
                 if normalizedQuery.isEmpty {
                     EmptyView()
-                } else if displayedSessions.isEmpty {
-                    Text("未找到匹配的历史会话。")
+                } else if searchResults.isEmpty {
+                    Text("未找到匹配的搜索结果。")
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(displayedSessions) { session in
-                        resultRow(session)
+                    ForEach(pagedSearchResults) { result in
+                        resultRow(result)
                     }
                 }
             }
         }
         .navigationTitle("搜索会话")
+        .safeAreaInset(edge: .bottom) {
+            if !isSearching && shouldShowResultPagination {
+                WatchPaginationBar(
+                    summaryText: paginationSummaryText,
+                    canGoToPrevious: canGoToPreviousResultPage,
+                    canGoToNext: canGoToNextResultPage,
+                    onPrevious: goToPreviousResultPage,
+                    onNext: goToNextResultPage,
+                    strokeColor: paginationStrokeColor
+                )
+                .padding(.horizontal, 4)
+                .padding(.bottom, 2)
+            }
+        }
         .onChange(of: sessions) { _, _ in
             guard !normalizedQuery.isEmpty else { return }
             scheduleSearch(for: committedSearchText)
@@ -936,85 +1012,30 @@ private struct WatchSessionSearchView: View {
     }
 
     @ViewBuilder
-    private func resultRow(_ session: ChatSession) -> some View {
+    private func resultRow(_ result: SessionHistorySearchResult) -> some View {
         Button {
-            onSelect(session)
+            guard let session = sessions.first(where: { $0.id == result.sessionID }) else { return }
+            onSelect(session, result.messageOrdinal)
             dismiss()
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(session.name)
-                        .etFont(.footnote)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    if session.id == currentSessionID {
-                        Image(systemName: "checkmark")
-                            .etFont(.caption.bold())
-                    }
-                }
-
-                Text(folderLocationSummary(for: session))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                if let summary = searchSummary(for: session), !summary.isEmpty {
-                    Text(summary)
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                } else if let topic = session.topicPrompt, !topic.isEmpty {
-                    Text(topic)
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
+            MarqueeTitleSubtitleSelectionRow(
+                title: searchResultTitle(for: result),
+                subtitle: result.match.preview,
+                isSelected: result.sessionID == currentSessionID,
+                titleUIFont: .preferredFont(forTextStyle: .footnote),
+                subtitleUIFont: .preferredFont(forTextStyle: .caption2)
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    private func normalizedFolderID(of session: ChatSession) -> UUID? {
-        guard let folderID = session.folderID else { return nil }
-        return folderByID[folderID] == nil ? nil : folderID
-    }
-
-    private func folderPath(for folder: SessionFolder) -> String {
-        var parts: [String] = [folder.name]
-        var cursor = folder.parentID
-        var visited = Set<UUID>()
-
-        while let current = cursor {
-            guard visited.insert(current).inserted else { break }
-            guard let parent = folderByID[current] else { break }
-            parts.append(parent.name)
-            cursor = parent.parentID
+    private func searchResultTitle(for result: SessionHistorySearchResult) -> String {
+        if let messageOrdinal = result.messageOrdinal {
+            return "“\(result.sessionName)” 第\(messageOrdinal)条"
         }
-
-        return parts.reversed().joined(separator: " /")
-    }
-
-    private func folderLocationSummary(for session: ChatSession) -> String {
-        guard let folderID = normalizedFolderID(of: session),
-              let folder = folderByID[folderID] else {
-            return "位置：未分类"
-        }
-        return "位置：\(folderPath(for: folder))"
-    }
-
-    private func searchSummary(for session: ChatSession) -> String? {
-        guard let hit = searchHits[session.id] else { return nil }
-        let detailLines = hit.matches.map { match in
-            if let messageOrdinal = match.messageOrdinal {
-                return "\(sourceLabel(for: match.source)) 第\(messageOrdinal)条：\(compactPreview(match.preview))"
-            }
-            return "\(sourceLabel(for: match.source))：\(compactPreview(match.preview))"
-        }
-        if detailLines.count <= 1 {
-            return detailLines.first
-        }
-        return "命中 \(hit.matchCount) 处；" + detailLines.joined(separator: "；")
+        return "“\(result.sessionName)” \(sourceLabel(for: result.match.source))"
     }
 
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
@@ -1038,20 +1059,37 @@ private struct WatchSessionSearchView: View {
         }
     }
 
-    private func compactPreview(_ text: String, maxLength: Int = 36) -> String {
-        guard text.count > maxLength else { return text }
-        return String(text.prefix(maxLength)) + "…"
+    private func normalizeResultPageIndex() {
+        let maxIndex = max(totalResultPages - 1, 0)
+        if resultPageIndex > maxIndex {
+            resultPageIndex = maxIndex
+        }
+        if resultPageIndex < 0 {
+            resultPageIndex = 0
+        }
+    }
+
+    private func goToPreviousResultPage() {
+        guard canGoToPreviousResultPage else { return }
+        resultPageIndex -= 1
+    }
+
+    private func goToNextResultPage() {
+        guard canGoToNextResultPage else { return }
+        resultPageIndex += 1
     }
 
     private func submitSearch() {
         let committed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         committedSearchText = committed
+        resultPageIndex = 0
         scheduleSearch(for: committed)
     }
 
     private func clearSearch() {
         searchText = ""
         committedSearchText = ""
+        resultPageIndex = 0
         pendingSearchWorkItem?.cancel()
         pendingSearchWorkItem = nil
         searchHits = [:]
@@ -1066,6 +1104,7 @@ private struct WatchSessionSearchView: View {
         guard !normalized.isEmpty else {
             searchHits = [:]
             isSearching = false
+            resultPageIndex = 0
             return
         }
 
@@ -1086,6 +1125,7 @@ private struct WatchSessionSearchView: View {
             DispatchQueue.main.async {
                 guard searchToken == latestSearchToken else { return }
                 searchHits = hits
+                normalizeResultPageIndex()
                 isSearching = false
                 pendingSearchWorkItem = nil
             }
@@ -1110,13 +1150,13 @@ private struct SessionRowView: View {
     @Binding var sessionToDelete: ChatSession?
     @Binding var showDeleteSessionConfirm: Bool
 
-    let onSessionSelected: (ChatSession) -> Void
+    let onSessionSelected: (ChatSession, Int?) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
     let sendSessionToCompanionAction: (ChatSession) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
 
     var body: some View {
-        Button(action: { onSessionSelected(session) }) {
+        Button(action: { onSessionSelected(session, nil) }) {
             HStack {
                 MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
                     .foregroundColor(.primary)

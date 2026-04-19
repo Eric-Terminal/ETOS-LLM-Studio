@@ -114,7 +114,15 @@ struct SettingsView: View {
                         sendSessionToCompanionAction: { session in
                             WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
                         },
-                        onSessionSelected: { selectedSession in
+                        onSessionSelected: { selectedSession, messageOrdinal in
+                            if let messageOrdinal {
+                                viewModel.requestMessageJump(
+                                    sessionID: selectedSession.id,
+                                    messageOrdinal: messageOrdinal
+                                )
+                            } else {
+                                viewModel.clearPendingMessageJumpTarget()
+                            }
                             ChatService.shared.setCurrentSession(selectedSession)
                             dismiss()
                         },

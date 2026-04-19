@@ -1164,6 +1164,27 @@ public struct SessionHistorySearchMatch: Hashable, Sendable {
     }
 }
 
+/// 历史会话检索结果项（按单条命中拆分）
+public struct SessionHistorySearchResult: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let sessionID: UUID
+    public let sessionName: String
+    public let match: SessionHistorySearchMatch
+    public let matchIndexInSession: Int
+
+    public var messageOrdinal: Int? {
+        match.messageOrdinal
+    }
+
+    public init(sessionID: UUID, sessionName: String, match: SessionHistorySearchMatch, matchIndexInSession: Int) {
+        self.id = "\(sessionID.uuidString)-\(matchIndexInSession)"
+        self.sessionID = sessionID
+        self.sessionName = sessionName
+        self.match = match
+        self.matchIndexInSession = matchIndexInSession
+    }
+}
+
 /// 历史会话检索命中结果
 public struct SessionHistorySearchHit: Hashable, Sendable {
     public let sessionID: UUID
@@ -1235,6 +1256,24 @@ public enum SessionHistorySearchSupport {
             hits[session.id] = SessionHistorySearchHit(sessionID: session.id, matches: matches)
         }
         return hits
+    }
+
+    /// 将会话级命中结果拍平成逐条命中，保留原始会话顺序与每个会话内的命中顺序。
+    public static func flattenedResults(
+        sessions: [ChatSession],
+        hits: [UUID: SessionHistorySearchHit]
+    ) -> [SessionHistorySearchResult] {
+        sessions.flatMap { session in
+            guard let hit = hits[session.id] else { return [] }
+            return hit.matches.enumerated().map { matchIndex, match in
+                SessionHistorySearchResult(
+                    sessionID: session.id,
+                    sessionName: session.name,
+                    match: match,
+                    matchIndexInSession: matchIndex
+                )
+            }
+        }
     }
 
     private static func allMatches(
@@ -1340,13 +1379,14 @@ public enum SessionHistorySearchSupport {
             .lowercased()
     }
 
-    private static func previewText(_ text: String, maxLength: Int = 90) -> String {
+    private static func previewText(_ text: String, prefixLength: Int = 20, suffixLength: Int = 20) -> String {
         let collapsed = text
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        guard collapsed.count > maxLength else { return collapsed }
-        return String(collapsed.prefix(maxLength)) + "…"
+        let compactLimit = prefixLength + suffixLength
+        guard collapsed.count > compactLimit else { return collapsed }
+        return String(collapsed.prefix(prefixLength)) + "…" + String(collapsed.suffix(suffixLength))
     }
 }
 

@@ -51,6 +51,7 @@ private struct SessionFolderBrowserView: View {
     @State private var latestSearchToken: Int = 0
     @State private var pendingSearchWorkItem: DispatchWorkItem?
     @State private var sessionPageIndex: Int = 0
+    @State private var searchResultPageIndex: Int = 0
 
     private let maxSessionsPerPage = 100
     private let paginationButtonColor = Color(red: 0.33, green: 0.47, blue: 0.65)
@@ -159,6 +160,35 @@ private struct SessionFolderBrowserView: View {
         return viewModel.chatSessions.filter { searchHits[$0.id] != nil }
     }
 
+    private var searchResultItems: [SessionHistorySearchResult] {
+        guard isSearchActive else { return [] }
+        return SessionHistorySearchSupport.flattenedResults(
+            sessions: viewModel.chatSessions,
+            hits: searchHits
+        )
+    }
+
+    private var totalSearchResultCount: Int {
+        searchResultItems.count
+    }
+
+    private var totalSearchResultPages: Int {
+        guard totalSearchResultCount > 0 else { return 1 }
+        return ((totalSearchResultCount - 1) / maxSessionsPerPage) + 1
+    }
+
+    private var shouldShowSearchPaginationBar: Bool {
+        totalSearchResultCount > maxSessionsPerPage
+    }
+
+    private var pagedSearchResultItems: [SessionHistorySearchResult] {
+        guard totalSearchResultCount > 0 else { return [] }
+        let start = min(searchResultPageIndex * maxSessionsPerPage, totalSearchResultCount)
+        let end = min(start + maxSessionsPerPage, totalSearchResultCount)
+        guard start < end else { return [] }
+        return Array(searchResultItems[start..<end])
+    }
+
     private var emptyStateText: String {
         folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
     }
@@ -171,6 +201,14 @@ private struct SessionFolderBrowserView: View {
         sessionPageIndex + 1 < totalSessionPages
     }
 
+    private var canGoToPreviousSearchResultPage: Bool {
+        searchResultPageIndex > 0
+    }
+
+    private var canGoToNextSearchResultPage: Bool {
+        searchResultPageIndex + 1 < totalSearchResultPages
+    }
+
     private var currentPageStartOrdinal: Int {
         guard totalDirectSessionCount > 0 else { return 0 }
         return sessionPageIndex * maxSessionsPerPage + 1
@@ -181,8 +219,38 @@ private struct SessionFolderBrowserView: View {
         return min((sessionPageIndex + 1) * maxSessionsPerPage, totalDirectSessionCount)
     }
 
+    private var currentSearchResultPageStartOrdinal: Int {
+        guard totalSearchResultCount > 0 else { return 0 }
+        return searchResultPageIndex * maxSessionsPerPage + 1
+    }
+
+    private var currentSearchResultPageEndOrdinal: Int {
+        guard totalSearchResultCount > 0 else { return 0 }
+        return min((searchResultPageIndex + 1) * maxSessionsPerPage, totalSearchResultCount)
+    }
+
     private var paginationSummaryText: String {
         "当前显示\(currentPageStartOrdinal)-\(currentPageEndOrdinal)个对话(总共\(totalDirectSessionCount))"
+    }
+
+    private var searchPaginationSummaryText: String {
+        "当前显示\(currentSearchResultPageStartOrdinal)-\(currentSearchResultPageEndOrdinal)条结果(总共\(totalSearchResultCount))"
+    }
+
+    private var shouldShowActivePaginationBar: Bool {
+        isSearchActive ? shouldShowSearchPaginationBar : shouldShowPaginationBar
+    }
+
+    private var activePaginationSummaryText: String {
+        isSearchActive ? searchPaginationSummaryText : paginationSummaryText
+    }
+
+    private var canGoToPreviousActivePage: Bool {
+        isSearchActive ? canGoToPreviousSearchResultPage : canGoToPreviousPage
+    }
+
+    private var canGoToNextActivePage: Bool {
+        isSearchActive ? canGoToNextSearchResultPage : canGoToNextPage
     }
 
     var body: some View {
@@ -233,7 +301,7 @@ private struct SessionFolderBrowserView: View {
         .safeAreaInset(edge: .bottom) {
             if isBatchSelecting && !isSearchActive {
                 batchActionBar
-            } else if !isSearchActive && shouldShowPaginationBar {
+            } else if shouldShowActivePaginationBar {
                 paginationBar
             }
         }
@@ -258,8 +326,12 @@ private struct SessionFolderBrowserView: View {
             .onChange(of: totalDirectSessionCount) { _, _ in
                 normalizeSessionPageIndex()
             }
+            .onChange(of: totalSearchResultCount) { _, _ in
+                normalizeSearchResultPageIndex()
+            }
             .onAppear {
                 normalizeSessionPageIndex()
+                normalizeSearchResultPageIndex()
                 guard isRoot else { return }
                 scheduleSearch(for: searchText)
             }
@@ -269,6 +341,7 @@ private struct SessionFolderBrowserView: View {
                     isBatchSelecting = false
                     selectedSessionIDs.removeAll()
                 }
+                searchResultPageIndex = 0
                 scheduleSearch(for: newValue)
             }
             .onChange(of: viewModel.chatSessions) { _, _ in
@@ -442,23 +515,18 @@ private struct SessionFolderBrowserView: View {
                         .foregroundStyle(.secondary)
                 }
             } else if searchResultSessions.isEmpty {
-                Text("未找到匹配会话。")
+                Text("未找到匹配的搜索结果。")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(searchResultSessions) { session in
-                    sessionRow(
-                        session,
-                        forceRegularMode: true,
-                        searchSummary: searchSummary(for: session, in: searchHits, queryActive: true),
-                        locationSummary: folderLocationSummary(for: session)
-                    )
+                ForEach(pagedSearchResultItems) { result in
+                    searchResultRow(result)
                 }
             }
         } header: {
             Text("搜索结果")
         } footer: {
             if !isSearching {
-                Text("匹配 \(searchResultSessions.count) / \(viewModel.chatSessions.count) 个会话")
+                Text("匹配 \(searchResultItems.count) 条结果 / \(searchResultSessions.count) 个会话")
             }
         }
     }
@@ -502,7 +570,7 @@ private struct SessionFolderBrowserView: View {
     private var paginationBar: some View {
         HStack(spacing: 12) {
             Button {
-                goToPreviousPage()
+                goToPreviousActivePage()
             } label: {
                 Text("<")
                     .etFont(.system(size: 18, weight: .semibold))
@@ -512,13 +580,13 @@ private struct SessionFolderBrowserView: View {
                     )
             }
             .foregroundStyle(paginationButtonColor)
-            .disabled(!canGoToPreviousPage)
+            .disabled(!canGoToPreviousActivePage)
             .accessibilityLabel("上一页")
 
             paginationSummaryField
 
             Button {
-                goToNextPage()
+                goToNextActivePage()
             } label: {
                 Text(">")
                     .etFont(.system(size: 18, weight: .semibold))
@@ -528,7 +596,7 @@ private struct SessionFolderBrowserView: View {
                     )
             }
             .foregroundStyle(paginationButtonColor)
-            .disabled(!canGoToNextPage)
+            .disabled(!canGoToNextActivePage)
             .accessibilityLabel("下一页")
         }
         .padding(.horizontal, 12)
@@ -537,7 +605,7 @@ private struct SessionFolderBrowserView: View {
 
     @ViewBuilder
     private var paginationSummaryField: some View {
-        let field = TextField("", text: .constant(paginationSummaryText))
+        let field = TextField("", text: .constant(activePaginationSummaryText))
             .textFieldStyle(.plain)
             .multilineTextAlignment(.center)
             .disabled(true)
@@ -671,6 +739,26 @@ private struct SessionFolderBrowserView: View {
     }
 
     @ViewBuilder
+    private func searchResultRow(_ result: SessionHistorySearchResult) -> some View {
+        if let session = viewModel.chatSessions.first(where: { $0.id == result.sessionID }) {
+            Button {
+                selectSession(session, messageOrdinal: result.messageOrdinal)
+            } label: {
+                MarqueeTitleSubtitleSelectionRow(
+                    title: searchResultTitle(for: result),
+                    subtitle: result.match.preview,
+                    isSelected: session.id == viewModel.currentSession?.id
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(.primary)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+        }
+    }
+
+    @ViewBuilder
     private func folderLabel(for folder: SessionFolder) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "folder")
@@ -733,6 +821,34 @@ private struct SessionFolderBrowserView: View {
     private func goToNextPage() {
         guard canGoToNextPage else { return }
         sessionPageIndex += 1
+    }
+
+    private func normalizeSearchResultPageIndex() {
+        let maxIndex = max(totalSearchResultPages - 1, 0)
+        if searchResultPageIndex > maxIndex {
+            searchResultPageIndex = maxIndex
+        }
+        if searchResultPageIndex < 0 {
+            searchResultPageIndex = 0
+        }
+    }
+
+    private func goToPreviousActivePage() {
+        if isSearchActive {
+            guard canGoToPreviousSearchResultPage else { return }
+            searchResultPageIndex -= 1
+            return
+        }
+        goToPreviousPage()
+    }
+
+    private func goToNextActivePage() {
+        if isSearchActive {
+            guard canGoToNextSearchResultPage else { return }
+            searchResultPageIndex += 1
+            return
+        }
+        goToNextPage()
     }
 
     private func normalizedFolderID(of session: ChatSession) -> UUID? {
@@ -817,25 +933,6 @@ private struct SessionFolderBrowserView: View {
         return "位置：\(folderDisplayPath(folder))"
     }
 
-    private func searchSummary(
-        for session: ChatSession,
-        in hits: [UUID: SessionHistorySearchHit],
-        queryActive: Bool
-    ) -> String? {
-        guard queryActive, let hit = hits[session.id] else { return nil }
-        let detailLines = hit.matches.map { match in
-            let preview = compactSearchPreview(match.preview)
-            if let messageOrdinal = match.messageOrdinal {
-                return "• \(sourceLabel(for: match.source)) 第\(messageOrdinal)条：\(preview)"
-            }
-            return "• \(sourceLabel(for: match.source))：\(preview)"
-        }
-        if detailLines.count <= 1 {
-            return detailLines.first
-        }
-        return "共命中 \(hit.matchCount) 处\n" + detailLines.joined(separator: "\n")
-    }
-
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
         switch source {
         case .sessionName:
@@ -857,9 +954,11 @@ private struct SessionFolderBrowserView: View {
         }
     }
 
-    private func compactSearchPreview(_ text: String, maxLength: Int = 48) -> String {
-        guard text.count > maxLength else { return text }
-        return String(text.prefix(maxLength)) + "…"
+    private func searchResultTitle(for result: SessionHistorySearchResult) -> String {
+        if let messageOrdinal = result.messageOrdinal {
+            return "“\(result.sessionName)” 第\(messageOrdinal)条"
+        }
+        return "“\(result.sessionName)” \(sourceLabel(for: result.match.source))"
     }
 
     private func scheduleSearch(for query: String) {
@@ -870,6 +969,7 @@ private struct SessionFolderBrowserView: View {
         guard !normalized.isEmpty else {
             searchHits = [:]
             isSearching = false
+            searchResultPageIndex = 0
             return
         }
 
@@ -916,8 +1016,13 @@ private struct SessionFolderBrowserView: View {
     }
 
     /// 选择会话时检测是否为 Ghost Session
-    private func selectSession(_ session: ChatSession) {
+    private func selectSession(_ session: ChatSession, messageOrdinal: Int? = nil) {
         if session.isTemporary {
+            if let messageOrdinal {
+                viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)
+            } else {
+                viewModel.clearPendingMessageJumpTarget()
+            }
             viewModel.setCurrentSession(session)
             dismiss()
             NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
@@ -928,6 +1033,11 @@ private struct SessionFolderBrowserView: View {
             ghostSession = session
             showGhostSessionAlert = true
         } else {
+            if let messageOrdinal {
+                viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)
+            } else {
+                viewModel.clearPendingMessageJumpTarget()
+            }
             viewModel.setCurrentSession(session)
             dismiss()
             NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)

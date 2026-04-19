@@ -94,6 +94,7 @@ class ChatViewModel: ObservableObject {
     @Published private(set) var streamingScrollAnchorVersion: Int = 0
     @Published private(set) var toolCallResultIDs: Set<String> = []
     @Published private(set) var runningSessionIDs: Set<UUID> = []
+    @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     @Published var mathRenderOverrides: Set<UUID> = []
     
@@ -1465,6 +1466,14 @@ class ChatViewModel: ObservableObject {
             return true
         }
         return false
+    }
+
+    func requestMessageJump(sessionID: UUID, messageOrdinal: Int) {
+        pendingSearchJumpTarget = SessionMessageJumpTarget(sessionID: sessionID, messageOrdinal: messageOrdinal)
+    }
+
+    func clearPendingMessageJumpTarget() {
+        pendingSearchJumpTarget = nil
     }
     
     // MARK: 记忆管理

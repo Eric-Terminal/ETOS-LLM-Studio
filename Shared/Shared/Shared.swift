@@ -32,6 +32,16 @@ public struct ToolPermissionRequest: Identifiable, Equatable {
     }
 }
 
+public struct SessionMessageJumpTarget: Equatable, Sendable {
+    public let sessionID: UUID
+    public let messageOrdinal: Int
+
+    public init(sessionID: UUID, messageOrdinal: Int) {
+        self.sessionID = sessionID
+        self.messageOrdinal = messageOrdinal
+    }
+}
+
 @MainActor
 public final class ToolPermissionCenter: ObservableObject {
     public static let shared = ToolPermissionCenter()

@@ -70,6 +70,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var latestAssistantMessageID: UUID?
     @Published private(set) var toolCallResultIDs: Set<String> = []
     @Published private(set) var runningSessionIDs: Set<UUID> = []
+    @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     private var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     
@@ -1294,6 +1295,14 @@ final class ChatViewModel: ObservableObject {
 
     func setCurrentSession(_ session: ChatSession) {
         chatService.setCurrentSession(session)
+    }
+
+    func requestMessageJump(sessionID: UUID, messageOrdinal: Int) {
+        pendingSearchJumpTarget = SessionMessageJumpTarget(sessionID: sessionID, messageOrdinal: messageOrdinal)
+    }
+
+    func clearPendingMessageJumpTarget() {
+        pendingSearchJumpTarget = nil
     }
 
     @discardableResult

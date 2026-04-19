@@ -5448,4 +5448,49 @@ fileprivate struct SessionHistorySearchSupportTests {
         #expect(ordinals == [2, 3, 4])
         #expect(hits[session.id]?.matchCount == 3)
     }
+
+    @Test("命中结果会按单条消息拆分并保持顺序")
+    func testFlattenedResultsBreaksOutEachMatch() {
+        let session = ChatSession(id: UUID(), name: "排期讨论")
+        let messages = [
+            ChatMessage(role: .user, content: "今天先整理需求池"),
+            ChatMessage(role: .assistant, content: "收到，我先给你一个排期草案。"),
+            ChatMessage(role: .user, content: "排期里要加上联调时间"),
+            ChatMessage(role: .assistant, content: "好的，排期会补充风险说明。")
+        ]
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "排期",
+            messageLoader: { _ in messages }
+        )
+        let results = SessionHistorySearchSupport.flattenedResults(
+            sessions: [session],
+            hits: hits
+        )
+
+        #expect(results.map(\.sessionID) == [session.id, session.id, session.id])
+        #expect(results.compactMap(\.messageOrdinal) == [2, 3, 4])
+        #expect(results.map(\.matchIndexInSession) == [0, 1, 2])
+    }
+
+    @Test("长命中预览会保留前后二十字")
+    func testSearchHitPreviewUsesHeadAndTail() {
+        let session = ChatSession(id: UUID(), name: "长文本预览")
+        let message = ChatMessage(
+            role: .assistant,
+            content: "12345678901234567890中间用于截断abcdefghijABCDEFGHIJ"
+        )
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "截断",
+            messageLoader: { _ in [message] }
+        )
+
+        #expect(
+            hits[session.id]?.matches.first?.preview
+            == "12345678901234567890…abcdefghijABCDEFGHIJ"
+        )
+    }
 }

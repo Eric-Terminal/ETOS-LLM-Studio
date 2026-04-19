@@ -430,20 +430,27 @@ struct ContentView: View {
                 proxy.scrollTo(request.messageID, anchor: .center)
             }
         }
+        .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
+            resolvePendingSearchJumpIfNeeded()
+        }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
             showScrollToBottomButton = false
             scheduleImmediateBottomSnap(proxy: proxy)
+            resolvePendingSearchJumpIfNeeded()
         }
         .onChange(of: viewModel.displayMessages.map(\.id)) { _, ids in
-            guard needsImmediateBottomSnap, !ids.isEmpty else { return }
-            scheduleImmediateBottomSnap(proxy: proxy)
+            if needsImmediateBottomSnap, !ids.isEmpty {
+                scheduleImmediateBottomSnap(proxy: proxy)
+            }
+            resolvePendingSearchJumpIfNeeded()
         }
         .onAppear {
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
             scheduleImmediateBottomSnap(proxy: proxy)
+            resolvePendingSearchJumpIfNeeded()
         }
     }
 
@@ -472,7 +479,15 @@ struct ContentView: View {
             sendSessionToCompanionAction: { session in
                 WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
             },
-            onSessionSelected: { selectedSession in
+            onSessionSelected: { selectedSession, messageOrdinal in
+                if let messageOrdinal {
+                    viewModel.requestMessageJump(
+                        sessionID: selectedSession.id,
+                        messageOrdinal: messageOrdinal
+                    )
+                } else {
+                    viewModel.clearPendingMessageJumpTarget()
+                }
                 ChatService.shared.setCurrentSession(selectedSession)
                 isSessionListPresented = false
             },
@@ -748,6 +763,16 @@ struct ContentView: View {
             pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
         }
         return true
+    }
+
+    private func resolvePendingSearchJumpIfNeeded() {
+        guard let target = viewModel.pendingSearchJumpTarget,
+              viewModel.currentSession?.id == target.sessionID,
+              !viewModel.allMessagesForSession.isEmpty else {
+            return
+        }
+        guard jumpToMessage(displayIndex: target.messageOrdinal) else { return }
+        viewModel.clearPendingMessageJumpTarget()
     }
 
     private func sendMessage() {
