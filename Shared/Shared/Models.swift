@@ -1263,7 +1263,7 @@ public enum SessionHistorySearchSupport {
         sessions: [ChatSession],
         hits: [UUID: SessionHistorySearchHit]
     ) -> [SessionHistorySearchResult] {
-        sessions.flatMap { session in
+        sessions.flatMap { session -> [SessionHistorySearchResult] in
             guard let hit = hits[session.id] else { return [] }
             return hit.matches.enumerated().map { matchIndex, match in
                 SessionHistorySearchResult(
