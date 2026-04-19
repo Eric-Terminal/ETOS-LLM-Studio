@@ -1530,20 +1530,24 @@ private enum ETIOSMathImageRenderer {
             return cachedData as Data
         }
 
-        let renderedTask = Task.detached(priority: .userInitiated) { () -> Data? in
-            let image = MTMathImage(
-                latex: request.latex,
-                fontSize: request.renderKind.fontSize,
-                textColor: textColor.uiColor,
-                labelMode: request.renderKind.labelMode,
-                textAlignment: .left
-            )
-            image.contentInsets = UIEdgeInsets(top: 1, left: 0, bottom: 1, right: 0)
-            let result = image.asImage()
-            guard result.0 == nil, let renderedImage = result.1 else { return nil }
-            return renderedImage.pngData()
+        let renderedData = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let image = MTMathImage(
+                    latex: request.latex,
+                    fontSize: request.renderKind.fontSize,
+                    textColor: textColor.uiColor,
+                    labelMode: request.renderKind.labelMode,
+                    textAlignment: .left
+                )
+                image.contentInsets = UIEdgeInsets(top: 1, left: 0, bottom: 1, right: 0)
+                let result = image.asImage()
+                guard result.0 == nil, let renderedImage = result.1 else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: renderedImage.pngData())
+            }
         }
-        let renderedData = await renderedTask.value
 
         if let renderedData {
             cache.setObject(renderedData as NSData, forKey: cacheKey)
