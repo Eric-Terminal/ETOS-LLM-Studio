@@ -1410,7 +1410,7 @@ private struct ETIOSMarkdownImageProvider: ImageProvider {
                 textColor: textColor
             )
         } else {
-            DefaultImageProvider().makeImage(url: url)
+            DefaultImageProvider.default.makeImage(url: url)
         }
     }
 }
@@ -1420,7 +1420,7 @@ private struct ETIOSMarkdownInlineImageProvider: InlineImageProvider {
 
     func image(with url: URL, label: String) async throws -> Image {
         guard let request = ETNativeMathMarkdownCodec.request(from: url) else {
-            return try await DefaultInlineImageProvider().image(with: url, label: label)
+            return try await DefaultInlineImageProvider.default.image(with: url, label: label)
         }
 
         guard let data = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor),
@@ -1530,7 +1530,7 @@ private enum ETIOSMathImageRenderer {
             return cachedData as Data
         }
 
-        let renderedData = await Task.detached(priority: .userInitiated) {
+        let renderedTask = Task.detached(priority: .userInitiated) { () -> Data? in
             let image = MTMathImage(
                 latex: request.latex,
                 fontSize: request.renderKind.fontSize,
@@ -1542,7 +1542,8 @@ private enum ETIOSMathImageRenderer {
             let result = image.asImage()
             guard result.0 == nil, let renderedImage = result.1 else { return nil }
             return renderedImage.pngData()
-        }.value
+        }
+        let renderedData = await renderedTask.value
 
         if let renderedData {
             cache.setObject(renderedData as NSData, forKey: cacheKey)
