@@ -100,6 +100,8 @@ struct ChatView: View {
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatInputBarHeight: CGFloat = 0
+    @State private var scrollDistanceToBottom: CGFloat = 0
+    @State private var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State private var pendingJumpRequest: MessageJumpRequest?
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
@@ -118,6 +120,7 @@ struct ChatView: View {
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     private let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
+    private let longDistanceScrollAnimationThresholdScreens: CGFloat = 2.5
     private let modelPickerMorphID = "modelPickerMorph"
     private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
@@ -293,8 +296,7 @@ struct ChatView: View {
                         // Telegram 风格的滚动到底部按钮
                         if showScrollToBottom {
                             telegramScrollToBottomButton {
-                                viewModel.resetLazyLoadState()
-                                scrollToBottom(proxy: proxy, animation: scrollToBottomButtonAnimation)
+                                handleScrollToBottomButtonTap(proxy: proxy)
                             }
                             .padding(.trailing, 16)
                             .padding(.bottom, scrollToBottomButtonBottomPadding)
@@ -347,6 +349,10 @@ struct ChatView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 keyboardHeight = 0
+            }
+            .onDisappear {
+                pendingHistoryResetWorkItem?.cancel()
+                pendingHistoryResetWorkItem = nil
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
@@ -2001,7 +2007,34 @@ private extension ChatView {
         }
     }
 
+    func handleScrollToBottomButtonTap(proxy: ScrollViewProxy) {
+        pendingHistoryResetWorkItem?.cancel()
+
+        let shouldAnimate = shouldAnimateScrollToBottomButton
+        showScrollToBottom = false
+        scrollToBottom(
+            proxy: proxy,
+            animated: shouldAnimate,
+            animation: scrollToBottomButtonAnimation
+        )
+
+        let workItem = DispatchWorkItem {
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                viewModel.resetLazyLoadState()
+            }
+            scrollToBottom(proxy: proxy, animated: false)
+            pendingHistoryResetWorkItem = nil
+        }
+        pendingHistoryResetWorkItem = workItem
+
+        let delay = shouldAnimate ? 0.56 : 0.08
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat) {
+        scrollDistanceToBottom = distanceToBottom
         guard !viewModel.displayMessages.isEmpty else {
             if showScrollToBottom {
                 withAnimation(.easeInOut(duration: 0.18)) {
@@ -2016,6 +2049,11 @@ private extension ChatView {
                 showScrollToBottom = shouldShow
             }
         }
+    }
+
+    private var shouldAnimateScrollToBottomButton: Bool {
+        let screenHeight = max(UIScreen.main.bounds.height, 1)
+        return scrollDistanceToBottom <= screenHeight * longDistanceScrollAnimationThresholdScreens
     }
 
 }
