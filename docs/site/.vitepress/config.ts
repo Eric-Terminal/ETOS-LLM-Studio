@@ -6,6 +6,16 @@ const teekConfig = defineTeekConfig({
   vpHome: true,
   pageStyle: "default",
   themeSize: "wide",
+  breadcrumb: {
+    enabled: false
+  },
+  articleAnalyze: {
+    showCreateDate: false,
+    showUpdateDate: false
+  },
+  articleUpdate: {
+    enabled: false
+  },
   themeEnhance: {
     enabled: false
   },
