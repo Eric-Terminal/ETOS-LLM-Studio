@@ -115,6 +115,7 @@ struct ETAdvancedMarkdownRenderer: View {
     }
 }
 
+// TODO: 后续评估让 watchOS 直接消费 iPhone 侧预渲染的高质量公式/图表资源，避免手表端继续背实时渲染依赖。
 private struct ETMathAwareMarkdownView: View {
     let preparedContent: ETPreparedMarkdownRenderPayload
     let isOutgoing: Bool

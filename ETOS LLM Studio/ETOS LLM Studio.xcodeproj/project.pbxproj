@@ -10,6 +10,7 @@
 		073D1C562E8F55EB00E6D9E1 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; };
 		073D1C572E8F55EB00E6D9E1 /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA70E2E8D0834004516A0 /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 077CD2612E962D8D00AD6556 /* MarkdownUI */; };
+		09A06C4C2F75031D0089D1E1 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = 09A06C4B2F75031D0089D1E1 /* SwiftMath */; };
 		0796796F2F1278F5006562BC /* ETOS LLM Studio Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 0796794F2F1278F2006562BC /* ETOS LLM Studio Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		079679BE2F1279C8006562BC /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 079679BD2F1279C8006562BC /* MarkdownUI */; };
 		079679C02F1279CC006562BC /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 079679BF2F1279CC006562BC /* Shared.framework */; };
@@ -132,6 +133,7 @@
 				07B5C2A22F6D3B2100A11AA1 /* AppIntents.framework in Frameworks */,
 				073D1C562E8F55EB00E6D9E1 /* Shared.framework in Frameworks */,
 				077CD2622E962D8D00AD6556 /* MarkdownUI in Frameworks */,
+				09A06C4C2F75031D0089D1E1 /* SwiftMath in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -219,6 +221,7 @@
 			name = "ETOS LLM Studio App";
 			packageProductDependencies = (
 				077CD2612E962D8D00AD6556 /* MarkdownUI */,
+				09A06C4B2F75031D0089D1E1 /* SwiftMath */,
 			);
 			productName = "ETOS LLM Studio iOS App";
 			productReference = 073CA6DB2E8CFD65004516A0 /* ETOS LLM Studio App.app */;
@@ -339,6 +342,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				09A06C4A2F75031D0089D1E1 /* XCRemoteSwiftPackageReference "SwiftMath" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 073CA6DC2E8CFD65004516A0 /* Products */;
@@ -895,6 +899,14 @@
 				minimumVersion = 2.4.1;
 			};
 		};
+		09A06C4A2F75031D0089D1E1 /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mgriebling/SwiftMath";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.7.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -902,6 +914,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		09A06C4B2F75031D0089D1E1 /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09A06C4A2F75031D0089D1E1 /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
 		};
 		079679BD2F1279C8006562BC /* MarkdownUI */ = {
 			isa = XCSwiftPackageProductDependency;

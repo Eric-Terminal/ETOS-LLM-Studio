@@ -2441,6 +2441,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let sourceText: String
     let normalizedText: String
     let markdownContent: MarkdownContent
+    let nativeMathMarkdownContent: MarkdownContent?
     let mathSegments: [ETMathContentSegment]
     let containsMathContent: Bool
     let containsMermaidContent: Bool
@@ -2456,14 +2457,31 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
                 return true
             }
         }
+        let containsMermaid = containsMermaidFence(in: normalizedText)
         return ETPreparedMarkdownRenderPayload(
             sourceText: sourceText,
             normalizedText: normalizedText,
             markdownContent: MarkdownContent(normalizedText),
+            nativeMathMarkdownContent: buildNativeMathMarkdownContent(
+                mathSegments: mathSegments,
+                containsMath: containsMath,
+                containsMermaid: containsMermaid
+            ),
             mathSegments: mathSegments,
             containsMathContent: containsMath,
-            containsMermaidContent: containsMermaidFence(in: normalizedText)
+            containsMermaidContent: containsMermaid
         )
+    }
+
+    nonisolated private static func buildNativeMathMarkdownContent(
+        mathSegments: [ETMathContentSegment],
+        containsMath: Bool,
+        containsMermaid: Bool
+    ) -> MarkdownContent? {
+        guard containsMath, !containsMermaid, ETNativeMathMarkdownCodec.isAvailable else {
+            return nil
+        }
+        return MarkdownContent(ETNativeMathMarkdownCodec.transformedMarkdown(from: mathSegments))
     }
 
     nonisolated private static func normalizedMarkdownForStreaming(_ text: String) -> String {

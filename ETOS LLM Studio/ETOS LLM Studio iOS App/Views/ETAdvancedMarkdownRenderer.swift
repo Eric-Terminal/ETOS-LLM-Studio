@@ -12,6 +12,108 @@ import MarkdownUI
 import Shared
 import WebKit
 import UIKit
+#if canImport(SwiftMath)
+import SwiftMath
+#endif
+
+enum ETNativeMathMarkdownCodec {
+    enum RenderKind: String, Hashable, Sendable {
+        case inline
+        case block
+    }
+
+    struct Request: Hashable, Sendable {
+        let latex: String
+        let renderKind: RenderKind
+    }
+
+    private static let scheme = "etmath"
+
+    static var isAvailable: Bool {
+#if canImport(SwiftMath)
+        true
+#else
+        false
+#endif
+    }
+
+    static func transformedMarkdown(from segments: [ETMathContentSegment]) -> String {
+        var result = ""
+        result.reserveCapacity(segments.reduce(into: 0) { partialResult, segment in
+            switch segment {
+            case .text(let text):
+                partialResult += text.count
+            case .inlineMath(let latex), .blockMath(let latex):
+                partialResult += latex.count + 48
+            @unknown default:
+                break
+            }
+        })
+
+        for segment in segments {
+            switch segment {
+            case .text(let text):
+                result.append(text)
+            case .inlineMath(let latex):
+                result.append(imageMarkdown(for: .init(latex: latex, renderKind: .inline)))
+            case .blockMath(let latex):
+                result.append(imageMarkdown(for: .init(latex: latex, renderKind: .block)))
+            @unknown default:
+                break
+            }
+        }
+
+        return result
+    }
+
+    static func request(from url: URL?) -> Request? {
+        guard let url, url.scheme == scheme else { return nil }
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        guard let renderKindValue = components.queryItems?.first(where: { $0.name == "mode" })?.value,
+              let renderKind = RenderKind(rawValue: renderKindValue),
+              let encodedLatex = components.queryItems?.first(where: { $0.name == "latex" })?.value,
+              let latex = decodeBase64URL(encodedLatex) else {
+            return nil
+        }
+        return Request(latex: latex, renderKind: renderKind)
+    }
+
+    private static func imageMarkdown(for request: Request) -> String {
+        guard let url = url(for: request) else { return request.latex }
+        return "![数学公式](\(url.absoluteString))"
+    }
+
+    private static func url(for request: Request) -> URL? {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = "render"
+        components.queryItems = [
+            URLQueryItem(name: "mode", value: request.renderKind.rawValue),
+            URLQueryItem(name: "latex", value: encodeBase64URL(request.latex))
+        ]
+        return components.url
+    }
+
+    private static func encodeBase64URL(_ value: String) -> String {
+        Data(value.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    private static func decodeBase64URL(_ value: String) -> String? {
+        var base64 = value
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = base64.count % 4
+        if remainder != 0 {
+            base64.append(String(repeating: "=", count: 4 - remainder))
+        }
+        guard let data = Data(base64Encoded: base64) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+}
 
 struct ETAdvancedMarkdownRenderer: View {
     let content: String
@@ -43,8 +145,9 @@ struct ETAdvancedMarkdownRenderer: View {
                         prefersDarkPalette: colorScheme == .dark
                     )
                 } else {
+                    let markdownContent = resolvedMarkdownContent(for: prepared)
                     markdownTextView(
-                        markdownContent: prepared.markdownContent,
+                        markdownContent: markdownContent,
                         sampleText: prepared.sourceText,
                         textColor: textColor
                     )
@@ -63,9 +166,19 @@ struct ETAdvancedMarkdownRenderer: View {
 
     private func shouldUseWebRenderer(_ prepared: ETPreparedMarkdownRenderPayload) -> Bool {
         guard enableAdvancedRenderer else { return false }
-        let hasMath = enableMathRendering && prepared.containsMathContent
         let hasMermaid = enableMarkdown && prepared.containsMermaidContent
-        return hasMath || hasMermaid
+        return hasMermaid
+    }
+
+    private func resolvedMarkdownContent(for prepared: ETPreparedMarkdownRenderPayload) -> MarkdownContent {
+        guard enableAdvancedRenderer,
+              enableMathRendering,
+              prepared.containsMathContent,
+              !prepared.containsMermaidContent,
+              let nativeMathMarkdownContent = prepared.nativeMathMarkdownContent else {
+            return prepared.markdownContent
+        }
+        return nativeMathMarkdownContent
     }
 
     @ViewBuilder
@@ -74,7 +187,14 @@ struct ETAdvancedMarkdownRenderer: View {
         sampleText: String,
         textColor: Color
     ) -> some View {
+        let mathTextColor = ETIOSMathColorComponents(textColor)
         Markdown(markdownContent)
+            .markdownImageProvider(
+                ETIOSMarkdownImageProvider(textColor: mathTextColor)
+            )
+            .markdownInlineImageProvider(
+                ETIOSMarkdownInlineImageProvider(textColor: mathTextColor)
+            )
             .etChatMarkdownBaseStyle(
                 textColor: textColor,
                 isOutgoing: isOutgoing,
@@ -1278,6 +1398,209 @@ window.__etNotifyHeight && window.__etNotifyHeight();
         }
     }
 }
+
+private struct ETIOSMarkdownImageProvider: ImageProvider {
+    let textColor: ETIOSMathColorComponents
+
+    @ViewBuilder
+    func makeImage(url: URL?) -> some View {
+        if let request = ETNativeMathMarkdownCodec.request(from: url) {
+            ETIOSMathBlockImageView(
+                request: request,
+                textColor: textColor
+            )
+        } else {
+            DefaultImageProvider().makeImage(url: url)
+        }
+    }
+}
+
+private struct ETIOSMarkdownInlineImageProvider: InlineImageProvider {
+    let textColor: ETIOSMathColorComponents
+
+    func image(with url: URL, label: String) async throws -> Image {
+        guard let request = ETNativeMathMarkdownCodec.request(from: url) else {
+            return try await DefaultInlineImageProvider().image(with: url, label: label)
+        }
+
+        guard let data = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor),
+              let image = UIImage(data: data, scale: UIScreen.main.scale) else {
+            return Image(systemName: "function")
+        }
+
+        return Image(uiImage: image)
+    }
+}
+
+private struct ETIOSMathBlockImageView: View {
+    let request: ETNativeMathMarkdownCodec.Request
+    let textColor: ETIOSMathColorComponents
+
+    @State private var renderedImageData: Data?
+    @State private var didAttemptRender = false
+
+    var body: some View {
+        Group {
+            if let renderedImage {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Image(uiImage: renderedImage)
+                        .interpolation(.high)
+                        .antialiased(true)
+                }
+            } else if didAttemptRender {
+                Text(verbatim: request.latex)
+                    .font(.system(size: request.renderKind.fallbackFontSize, design: .serif))
+                    .foregroundStyle(textColor.swiftUIColor.opacity(0.9))
+                    .textSelection(.enabled)
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(textColor.swiftUIColor.opacity(0.08))
+                    .frame(height: request.renderKind.placeholderHeight)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel(request.latex)
+        .task(id: taskKey) {
+            didAttemptRender = false
+            renderedImageData = nil
+            renderedImageData = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor)
+            didAttemptRender = true
+        }
+    }
+
+    private var renderedImage: UIImage? {
+        guard let renderedImageData else { return nil }
+        return UIImage(data: renderedImageData, scale: UIScreen.main.scale)
+    }
+
+    private var taskKey: String {
+        "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)"
+    }
+}
+
+private struct ETIOSMathColorComponents: Hashable, Sendable {
+    let red: CGFloat
+    let green: CGFloat
+    let blue: CGFloat
+    let alpha: CGFloat
+
+    init(_ color: Color) {
+        let resolvedColor = UIColor(color)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        if resolvedColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            self.red = red
+            self.green = green
+            self.blue = blue
+            self.alpha = alpha
+        } else {
+            self.red = 0
+            self.green = 0
+            self.blue = 0
+            self.alpha = 1
+        }
+    }
+
+    var uiColor: UIColor {
+        UIColor(red: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    var swiftUIColor: Color {
+        Color(uiColor: uiColor)
+    }
+
+    var cacheKey: String {
+        "\(red)|\(green)|\(blue)|\(alpha)"
+    }
+}
+
+private enum ETIOSMathImageRenderer {
+#if canImport(SwiftMath)
+    private static let cache = NSCache<NSString, NSData>()
+
+    static func imageData(
+        for request: ETNativeMathMarkdownCodec.Request,
+        textColor: ETIOSMathColorComponents
+    ) async -> Data? {
+        let cacheKey = "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)" as NSString
+        if let cachedData = cache.object(forKey: cacheKey) {
+            return cachedData as Data
+        }
+
+        let renderedData = await Task.detached(priority: .userInitiated) {
+            let image = MTMathImage(
+                latex: request.latex,
+                fontSize: request.renderKind.fontSize,
+                textColor: textColor.uiColor,
+                labelMode: request.renderKind.labelMode,
+                textAlignment: .left
+            )
+            image.contentInsets = UIEdgeInsets(top: 1, left: 0, bottom: 1, right: 0)
+            let result = image.asImage()
+            guard result.0 == nil, let renderedImage = result.1 else { return nil }
+            return renderedImage.pngData()
+        }.value
+
+        if let renderedData {
+            cache.setObject(renderedData as NSData, forKey: cacheKey)
+        }
+
+        return renderedData
+    }
+#else
+    static func imageData(
+        for request: ETNativeMathMarkdownCodec.Request,
+        textColor: ETIOSMathColorComponents
+    ) async -> Data? {
+        nil
+    }
+#endif
+}
+
+private extension ETNativeMathMarkdownCodec.RenderKind {
+    var placeholderHeight: CGFloat {
+        switch self {
+        case .inline:
+            return 18
+        case .block:
+            return 28
+        }
+    }
+
+    var fallbackFontSize: CGFloat {
+        switch self {
+        case .inline:
+            return 17
+        case .block:
+            return 20
+        }
+    }
+}
+
+#if canImport(SwiftMath)
+private extension ETNativeMathMarkdownCodec.RenderKind {
+    var fontSize: CGFloat {
+        switch self {
+        case .inline:
+            return 17
+        case .block:
+            return 20
+        }
+    }
+
+    var labelMode: MTMathUILabelMode {
+        switch self {
+        case .inline:
+            return .text
+        case .block:
+            return .display
+        }
+    }
+}
+#endif
 
 private extension View {
     @ViewBuilder
