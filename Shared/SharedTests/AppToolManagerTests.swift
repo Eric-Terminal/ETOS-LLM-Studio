@@ -669,6 +669,77 @@ struct AppToolManagerTests {
         #expect((deletePayload["affectedRows"] as? NSNumber)?.intValue == 1)
     }
 
+    @MainActor
+    @Test("SQLite 工具导出给 Gemini 时数组参数 schema 会包含 items")
+    func testSQLiteToolSchemaIncludesItemsForGemini() throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: true,
+            enabledKinds: [.querySQLite, .mutateSQLite]
+        )
+
+        let adapter = GeminiAdapter()
+        let model = RunnableModel(
+            provider: Provider(
+                id: UUID(),
+                name: "Gemini Test Provider",
+                baseURL: "https://generativelanguage.googleapis.com/v1beta",
+                apiKeys: ["test-key"],
+                apiFormat: "gemini"
+            ),
+            model: Model(modelName: "gemini-2.5-pro")
+        )
+        let messages = [ChatMessage(role: .user, content: "测试一下")]
+
+        guard let request = adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: messages,
+            tools: manager.chatToolsForLLM(),
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]],
+        let firstToolGroup = toolsPayload.first,
+        let declarations = firstToolGroup["function_declarations"] as? [[String: Any]] else {
+            Issue.record("Gemini 请求体中未找到 SQLite 工具声明。")
+            return
+        }
+
+        let parametersSchemasByToolName = declarations.reduce(into: [String: [String: Any]]()) { result, declaration in
+            guard let name = declaration["name"] as? String,
+                  let parameters = declaration["parameters"] as? [String: Any],
+                  let properties = parameters["properties"] as? [String: Any],
+                  let parameterSchema = properties["parameters"] as? [String: Any] else { return }
+            result[name] = parameterSchema
+        }
+
+        guard let queryParameterSchema = parametersSchemasByToolName[AppToolKind.querySQLite.toolName],
+              let mutateParameterSchema = parametersSchemasByToolName[AppToolKind.mutateSQLite.toolName] else {
+            Issue.record("Gemini 请求体中未找到 SQLite tools.parameters schema。")
+            return
+        }
+
+        #expect(queryParameterSchema["type"] as? String == "array")
+        #expect(queryParameterSchema["items"] as? [String: Any] != nil)
+        #expect(mutateParameterSchema["type"] as? String == "array")
+        #expect(mutateParameterSchema["items"] as? [String: Any] != nil)
+    }
+
     @Test("当前会话文件路径命中时应触发会话刷新判断")
     func testShouldRefreshCurrentSessionMessagesWhenCurrentSessionFileMutated() {
         let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!

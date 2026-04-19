@@ -959,7 +959,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                     ]),
                     "parameters": .dictionary([
                         "type": .string("array"),
-                        "description": .string(NSLocalizedString("按顺序绑定到 SQL 占位符 ? 的参数数组，支持 string/int/double/bool/null。", comment: "Query SQLite parameters description"))
+                        "description": .string(NSLocalizedString("按顺序绑定到 SQL 占位符 ? 的参数数组，支持 string/int/double/bool/null。", comment: "Query SQLite parameters description")),
+                        "items": .dictionary([:])
                     ]),
                     "max_rows": .dictionary([
                         "type": .string("integer"),
@@ -983,7 +984,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                     ]),
                     "parameters": .dictionary([
                         "type": .string("array"),
-                        "description": .string(NSLocalizedString("按顺序绑定到 SQL 占位符 ? 的参数数组，支持 string/int/double/bool/null。", comment: "Mutate SQLite parameters description"))
+                        "description": .string(NSLocalizedString("按顺序绑定到 SQL 占位符 ? 的参数数组，支持 string/int/double/bool/null。", comment: "Mutate SQLite parameters description")),
+                        "items": .dictionary([:])
                     ]),
                     "allow_without_where": .dictionary([
                         "type": .string("boolean"),
