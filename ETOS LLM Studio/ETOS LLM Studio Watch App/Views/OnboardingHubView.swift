@@ -36,11 +36,23 @@ struct OnboardingHubView: View {
     var body: some View {
         List {
             Section {
-                Text("手表端先学会左滑和右滑，再去记具体功能入口。")
-                    .etFont(.headline)
-                Text("看不到按钮时，先试左滑看更多，再试右滑看看是不是删除。")
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+                HStack(alignment: .center, spacing: 10) {
+                    Image("AppIconDisplay")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 42, height: 42)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ETOS 新手教程")
+                            .etFont(.headline)
+                            .foregroundStyle(.white)
+                        Text("先练左滑、右滑和长按，再学具体入口。")
+                            .etFont(.caption2)
+                            .foregroundStyle(WatchOnboardingPalette.secondaryText)
+                    }
+                }
+                .watchOnboardingCard(horizontal: 12, vertical: 12)
             }
 
             Section("快速开始") {
@@ -102,6 +114,8 @@ struct OnboardingHubView: View {
             }
         }
         .navigationTitle("新手教程")
+        .scrollContentBackground(.hidden)
+        .background(WatchOnboardingPalette.background.ignoresSafeArea())
         .task(id: snapshotRefreshKey) {
             await refreshSnapshot()
         }
@@ -146,17 +160,27 @@ struct OnboardingHubView: View {
         NavigationLink {
             destination()
         } label: {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                WatchOnboardingIconBadge(
+                    systemName: guideSymbol(for: guideID),
+                    tint: guideColor(for: guideID)
+                )
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
+                        .foregroundStyle(.white)
                     Text(summary)
                         .etFont(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WatchOnboardingPalette.secondaryText)
                 }
                 Spacer()
                 WatchOnboardingCompletionBadge(isCompleted: guideCompleted(guideID))
+                Image(systemName: "chevron.right")
+                    .etFont(.caption2.weight(.semibold))
+                    .foregroundStyle(WatchOnboardingPalette.secondaryText)
             }
+            .watchOnboardingCard(horizontal: 12, vertical: 12)
         }
+        .buttonStyle(.plain)
     }
 
     private func guideCompleted(_ guideID: OnboardingGuideID) -> Bool {
@@ -186,6 +210,36 @@ struct OnboardingHubView: View {
             progressStore.markGuideCompleted(guideID)
         }
     }
+
+    private func guideSymbol(for guideID: OnboardingGuideID) -> String {
+        switch guideID {
+        case .interactionPrimer:
+            return "hand.draw.fill"
+        case .firstProvider:
+            return "shippingbox.fill"
+        case .firstChat:
+            return "bubble.left.and.bubble.right.fill"
+        case .sessionManagement:
+            return "text.bubble.fill"
+        case .toolCenterBasics:
+            return "slider.horizontal.3"
+        }
+    }
+
+    private func guideColor(for guideID: OnboardingGuideID) -> Color {
+        switch guideID {
+        case .interactionPrimer:
+            return .purple
+        case .firstProvider:
+            return .blue
+        case .firstChat:
+            return .mint
+        case .sessionManagement:
+            return .orange
+        case .toolCenterBasics:
+            return .yellow
+        }
+    }
 }
 
 struct WatchOnboardingHintCard: View {
@@ -211,21 +265,36 @@ struct WatchOnboardingHintCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: "sparkles")
-                .etFont(.headline)
+            HStack(spacing: 8) {
+                Image("AppIconDisplay")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .etFont(.headline)
+                        .foregroundStyle(.white)
+                    Text("先试一遍，再回真实页面。")
+                        .etFont(.caption2)
+                        .foregroundStyle(WatchOnboardingPalette.secondaryText)
+                }
+            }
             Text(message)
                 .etFont(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WatchOnboardingPalette.secondaryText)
             if let actionTitle, let onAction {
                 Button(actionTitle) {
                     onAction()
                 }
+                .tint(.white)
             }
             Button("知道了") {
                 onDismiss()
             }
+            .tint(.accentColor)
         }
-        .padding(.vertical, 4)
+        .watchOnboardingCard(horizontal: 12, vertical: 12)
     }
 }
 
@@ -233,8 +302,15 @@ private struct WatchOnboardingCompletionBadge: View {
     let isCompleted: Bool
 
     var body: some View {
-        Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(isCompleted ? .green : .secondary)
+        Text(isCompleted ? "完成" : "待做")
+            .etFont(.caption2.weight(.semibold))
+            .foregroundStyle(isCompleted ? .white : WatchOnboardingPalette.secondaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(isCompleted ? Color.green.opacity(0.88) : WatchOnboardingPalette.switchOff)
+            )
     }
 }
 
@@ -245,14 +321,117 @@ private struct WatchGuideHeaderView: View {
 
     var body: some View {
         Section {
-            Text(title)
-                .etFont(.headline)
-            Text(summary)
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            Label(isCompleted ? "已完成" : "未完成", systemImage: isCompleted ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isCompleted ? .green : .secondary)
+            HStack(alignment: .center, spacing: 10) {
+                Image("AppIconDisplay")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .etFont(.headline)
+                        .foregroundStyle(.white)
+                    Text(summary)
+                        .etFont(.caption2)
+                        .foregroundStyle(WatchOnboardingPalette.secondaryText)
+                    WatchOnboardingCompletionBadge(isCompleted: isCompleted)
+                }
+            }
+            .watchOnboardingCard(horizontal: 12, vertical: 12)
         }
+    }
+}
+
+private struct WatchOnboardingIconBadge: View {
+    let systemName: String
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(tint.opacity(0.24))
+            Image(systemName: systemName)
+                .etFont(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 26, height: 26)
+    }
+}
+
+private struct WatchOnboardingStatusRow: View {
+    let title: String
+    let completed: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image("AppIconDisplay")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 20, height: 20)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            Text(title)
+                .etFont(.caption)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            WatchOnboardingSwitchIndicator(isOn: completed)
+        }
+        .watchOnboardingCard(horizontal: 10, vertical: 10)
+    }
+}
+
+private struct WatchOnboardingSwitchIndicator: View {
+    let isOn: Bool
+
+    var body: some View {
+        ZStack(alignment: isOn ? .trailing : .leading) {
+            Capsule()
+                .fill(isOn ? Color.green.opacity(0.88) : WatchOnboardingPalette.switchOff)
+                .frame(width: 36, height: 22)
+
+            Circle()
+                .fill(.white)
+                .frame(width: 16, height: 16)
+                .padding(3)
+        }
+    }
+}
+
+private enum WatchOnboardingPalette {
+    static let background = Color(red: 0.04, green: 0.04, blue: 0.06)
+    static let card = Color(red: 0.11, green: 0.11, blue: 0.14)
+    static let border = Color.white.opacity(0.08)
+    static let secondaryText = Color.white.opacity(0.68)
+    static let switchOff = Color.white.opacity(0.18)
+}
+
+private struct WatchOnboardingCardModifier: ViewModifier {
+    let horizontal: CGFloat
+    let vertical: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, horizontal)
+            .padding(.vertical, vertical)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(WatchOnboardingPalette.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(WatchOnboardingPalette.border, lineWidth: 1)
+            )
+            .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+            .listRowBackground(Color.clear)
+    }
+}
+
+private extension View {
+    func watchOnboardingCard(horizontal: CGFloat = 12, vertical: CGFloat = 12) -> some View {
+        modifier(WatchOnboardingCardModifier(horizontal: horizontal, vertical: vertical))
     }
 }
 
@@ -276,9 +455,10 @@ private struct WatchInteractionPrimerGuideView: View {
 
             Section("先记住") {
                 Text("左滑看更多，右滑常常是删除。")
+                    .foregroundStyle(.white)
                 Text("消息和会话列表都要先试这两个方向。")
                     .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WatchOnboardingPalette.secondaryText)
             }
 
             Section("试一试：左滑看更多") {
@@ -326,6 +506,8 @@ private struct WatchInteractionPrimerGuideView: View {
                 )
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(WatchOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("交互约定")
         .onAppear {
             progressStore.markGuideSeen(.interactionPrimer)
@@ -367,6 +549,8 @@ private struct WatchFirstProviderGuideView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(WatchOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("第一个提供商")
         .onAppear {
             progressStore.markGuideSeen(.firstProvider)
@@ -378,8 +562,7 @@ private struct WatchFirstProviderGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        Label(title, systemImage: completed ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(completed ? .green : .secondary)
+        WatchOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -413,6 +596,8 @@ private struct WatchFirstChatGuideView: View {
                 .disabled(openChat == nil)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(WatchOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("第一次聊天")
         .onAppear {
             progressStore.markGuideSeen(.firstChat)
@@ -424,8 +609,7 @@ private struct WatchFirstChatGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        Label(title, systemImage: completed ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(completed ? .green : .secondary)
+        WatchOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -491,10 +675,12 @@ private struct WatchSessionManagementGuideView: View {
                 Section {
                     Text("你已经进过真实会话管理页，接下来重点把左滑和右滑练熟。")
                         .etFont(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WatchOnboardingPalette.secondaryText)
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(WatchOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("会话管理")
         .onAppear {
             progressStore.markGuideSeen(.sessionManagement)
@@ -512,8 +698,7 @@ private struct WatchSessionManagementGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        Label(title, systemImage: completed ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(completed ? .green : .secondary)
+        WatchOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -546,6 +731,8 @@ private struct WatchToolCenterBasicsGuideView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(WatchOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("工具中心入门")
         .onAppear {
             progressStore.markGuideSeen(.toolCenterBasics)
@@ -557,8 +744,7 @@ private struct WatchToolCenterBasicsGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        Label(title, systemImage: completed ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(completed ? .green : .secondary)
+        WatchOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -569,15 +755,18 @@ private struct WatchSwipeMorePracticeRow<Destination: View>: View {
     let destination: Destination
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
+            WatchOnboardingIconBadge(systemName: "hand.draw.fill", tint: .purple)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
+                    .foregroundStyle(.white)
                 Text(subtitle)
                     .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WatchOnboardingPalette.secondaryText)
             }
             Spacer()
         }
+        .watchOnboardingCard(horizontal: 10, vertical: 10)
         .contentShape(Rectangle())
         .swipeActions(edge: .leading) {
             NavigationLink {
@@ -596,15 +785,18 @@ private struct WatchDeletePracticeRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
+            WatchOnboardingIconBadge(systemName: "trash.fill", tint: .red)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
+                    .foregroundStyle(.white)
                 Text(subtitle)
                     .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WatchOnboardingPalette.secondaryText)
             }
             Spacer()
         }
+        .watchOnboardingCard(horizontal: 10, vertical: 10)
         .contentShape(Rectangle())
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {

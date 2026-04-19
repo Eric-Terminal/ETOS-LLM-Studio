@@ -36,14 +36,24 @@ struct OnboardingHubView: View {
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("先学会隐藏交互，再学完整上手路径。")
-                        .etFont(.headline)
-                    Text("如果一个页面上看不到按钮，默认先试点一下、长按一下，再试左滑和右滑。")
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
+                HStack(alignment: .center, spacing: 14) {
+                    Image("AppIconDisplay")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 58, height: 58)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("ETOS 新手教程")
+                            .etFont(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                        Text("先学会隐藏交互，再学完整上手路径。看不到按钮时，先试点一下、长按一下，再试左滑和右滑。")
+                            .etFont(.footnote)
+                            .foregroundStyle(IOSOnboardingPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                .padding(.vertical, 4)
+                .iosOnboardingCard()
             }
 
             Section("快速开始") {
@@ -127,6 +137,8 @@ struct OnboardingHubView: View {
             }
         }
         .navigationTitle("新手教程")
+        .scrollContentBackground(.hidden)
+        .background(IOSOnboardingPalette.background.ignoresSafeArea())
         .task(id: snapshotRefreshKey) {
             await refreshSnapshot()
         }
@@ -174,22 +186,33 @@ struct OnboardingHubView: View {
         NavigationLink {
             destination()
         } label: {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 12) {
+                IOSOnboardingIconBadge(
+                    systemName: guideSymbol(for: guideID),
+                    tint: guideColor(for: guideID)
+                )
+
+                VStack(alignment: .leading, spacing: 5) {
                     Text(title)
                         .etFont(.body.weight(.semibold))
+                        .foregroundStyle(.white)
                     Text(summary)
                         .etFont(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(IOSOnboardingPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 12)
 
                 IOSOnboardingCompletionBadge(isCompleted: guideCompleted(guideID))
+
+                Image(systemName: "chevron.right")
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(IOSOnboardingPalette.secondaryText)
             }
-            .padding(.vertical, 4)
+            .iosOnboardingCard()
         }
+        .buttonStyle(.plain)
     }
 
     private func guideCompleted(_ guideID: OnboardingGuideID) -> Bool {
@@ -221,6 +244,36 @@ struct OnboardingHubView: View {
             progressStore.markGuideCompleted(guideID)
         }
     }
+
+    private func guideSymbol(for guideID: OnboardingGuideID) -> String {
+        switch guideID {
+        case .interactionPrimer:
+            return "hand.draw.fill"
+        case .firstProvider:
+            return "shippingbox.fill"
+        case .firstChat:
+            return "bubble.left.and.bubble.right.fill"
+        case .sessionManagement:
+            return "text.bubble.fill"
+        case .toolCenterBasics:
+            return "slider.horizontal.3"
+        }
+    }
+
+    private func guideColor(for guideID: OnboardingGuideID) -> Color {
+        switch guideID {
+        case .interactionPrimer:
+            return .purple
+        case .firstProvider:
+            return .blue
+        case .firstChat:
+            return .mint
+        case .sessionManagement:
+            return .orange
+        case .toolCenterBasics:
+            return .yellow
+        }
+    }
 }
 
 struct IOSOnboardingHintCard: View {
@@ -247,19 +300,32 @@ struct IOSOnboardingHintCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
-                Label(title, systemImage: "sparkles")
-                    .etFont(.headline)
+                HStack(spacing: 10) {
+                    Image("AppIconDisplay")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .etFont(.headline)
+                            .foregroundStyle(.white)
+                        Text("别急着找按钮，先按教程试一遍。")
+                            .etFont(.caption)
+                            .foregroundStyle(IOSOnboardingPalette.secondaryText)
+                    }
+                }
                 Spacer()
                 Button("关闭") {
                     onDismiss()
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(IOSOnboardingPalette.secondaryText)
             }
 
             Text(message)
                 .etFont(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(IOSOnboardingPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 10) {
@@ -268,25 +334,17 @@ struct IOSOnboardingHintCard: View {
                         onAction()
                     }
                     .buttonStyle(.bordered)
+                    .tint(.white)
                 }
 
                 Button("知道了") {
                     onDismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.accentColor.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.accentColor.opacity(0.16), lineWidth: 1)
-        )
-        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-        .listRowBackground(Color.clear)
+        .iosOnboardingCard()
     }
 }
 
@@ -296,12 +354,12 @@ private struct IOSOnboardingCompletionBadge: View {
     var body: some View {
         Text(isCompleted ? "已完成" : "未完成")
             .etFont(.caption.weight(.semibold))
-            .foregroundStyle(isCompleted ? .green : .secondary)
+            .foregroundStyle(isCompleted ? .white : IOSOnboardingPalette.secondaryText)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(isCompleted ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
+                    .fill(isCompleted ? Color.green.opacity(0.9) : IOSOnboardingPalette.switchOff)
             )
     }
 }
@@ -313,16 +371,121 @@ private struct IOSGuideHeaderView: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .etFont(.title3.weight(.semibold))
-                Text(summary)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-                IOSOnboardingCompletionBadge(isCompleted: isCompleted)
+            HStack(alignment: .center, spacing: 14) {
+                Image("AppIconDisplay")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .etFont(.title3.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Text(summary)
+                        .etFont(.footnote)
+                        .foregroundStyle(IOSOnboardingPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    IOSOnboardingCompletionBadge(isCompleted: isCompleted)
+                }
             }
-            .padding(.vertical, 4)
+            .iosOnboardingCard()
         }
+    }
+}
+
+private struct IOSOnboardingIconBadge: View {
+    let systemName: String
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(tint.opacity(0.24))
+            Image(systemName: systemName)
+                .etFont(.body.weight(.semibold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 34, height: 34)
+    }
+}
+
+private struct IOSOnboardingStatusRow: View {
+    let title: String
+    let completed: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image("AppIconDisplay")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 26, height: 26)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Text(title)
+                .etFont(.body)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 12)
+
+            IOSOnboardingSwitchIndicator(isOn: completed)
+        }
+        .iosOnboardingCard(horizontal: 12, vertical: 12)
+    }
+}
+
+private struct IOSOnboardingSwitchIndicator: View {
+    let isOn: Bool
+
+    var body: some View {
+        ZStack(alignment: isOn ? .trailing : .leading) {
+            Capsule()
+                .fill(isOn ? Color.green.opacity(0.9) : IOSOnboardingPalette.switchOff)
+                .frame(width: 48, height: 30)
+
+            Circle()
+                .fill(.white)
+                .frame(width: 24, height: 24)
+                .padding(3)
+        }
+        .animation(.easeInOut(duration: 0.2), value: isOn)
+    }
+}
+
+private enum IOSOnboardingPalette {
+    static let background = Color(red: 0.04, green: 0.04, blue: 0.06)
+    static let card = Color(red: 0.11, green: 0.11, blue: 0.14)
+    static let border = Color.white.opacity(0.08)
+    static let secondaryText = Color.white.opacity(0.68)
+    static let switchOff = Color.white.opacity(0.18)
+}
+
+private struct IOSOnboardingCardModifier: ViewModifier {
+    let horizontal: CGFloat
+    let vertical: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, horizontal)
+            .padding(.vertical, vertical)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(IOSOnboardingPalette.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(IOSOnboardingPalette.border, lineWidth: 1)
+            )
+            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+    }
+}
+
+private extension View {
+    func iosOnboardingCard(horizontal: CGFloat = 16, vertical: CGFloat = 14) -> some View {
+        modifier(IOSOnboardingCardModifier(horizontal: horizontal, vertical: vertical))
     }
 }
 
@@ -352,17 +515,17 @@ private struct IOSInteractionPrimerGuideView: View {
             }
 
             Section("试一试：长按这条示例项") {
-                HStack {
-                    Image(systemName: "hand.point.up.left.fill")
-                        .foregroundStyle(.accent)
+                HStack(spacing: 12) {
+                    IOSOnboardingIconBadge(systemName: "hand.point.up.left.fill", tint: .purple)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("样例：长按我")
+                            .foregroundStyle(.white)
                         Text(didUseLongPress ? "已完成长按练习" : "长按后任选一个动作")
                             .etFont(.caption)
-                            .foregroundStyle(didUseLongPress ? .green : .secondary)
+                            .foregroundStyle(didUseLongPress ? .green : IOSOnboardingPalette.secondaryText)
                     }
+                    Spacer()
                 }
-                .padding(.vertical, 4)
                 .contentShape(Rectangle())
                 .contextMenu {
                     Button("我知道长按会弹出菜单了") {
@@ -372,6 +535,7 @@ private struct IOSInteractionPrimerGuideView: View {
                         didUseLongPress = true
                     }
                 }
+                .iosOnboardingCard(horizontal: 14, vertical: 14)
             }
 
             Section {
@@ -398,6 +562,8 @@ private struct IOSInteractionPrimerGuideView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(IOSOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("交互约定")
         .onAppear {
             progressStore.markGuideSeen(.interactionPrimer)
@@ -459,6 +625,8 @@ private struct IOSFirstProviderGuideView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(IOSOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("第一个提供商")
         .onAppear {
             progressStore.markGuideSeen(.firstProvider)
@@ -470,11 +638,7 @@ private struct IOSFirstProviderGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: completed ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(completed ? .green : .secondary)
-            Text(title)
-        }
+        IOSOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -512,17 +676,17 @@ private struct IOSFirstChatGuideView: View {
             }
 
             Section {
-                HStack {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .foregroundStyle(.accent)
+                HStack(spacing: 12) {
+                    IOSOnboardingIconBadge(systemName: "bubble.left.and.bubble.right.fill", tint: .mint)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("样例：长按消息")
+                            .foregroundStyle(.white)
                         Text(practicedMessageLongPress ? "已完成消息长按练习" : "长按后任选一个动作")
                             .etFont(.caption)
-                            .foregroundStyle(practicedMessageLongPress ? .green : .secondary)
+                            .foregroundStyle(practicedMessageLongPress ? .green : IOSOnboardingPalette.secondaryText)
                     }
+                    Spacer()
                 }
-                .padding(.vertical, 4)
                 .contentShape(Rectangle())
                 .contextMenu {
                     Button("编辑") {
@@ -535,6 +699,7 @@ private struct IOSFirstChatGuideView: View {
                         practicedMessageLongPress = true
                     }
                 }
+                .iosOnboardingCard(horizontal: 14, vertical: 14)
             } header: {
                 Text("别漏掉这个隐藏动作")
             } footer: {
@@ -550,6 +715,8 @@ private struct IOSFirstChatGuideView: View {
                 .disabled(openChat == nil)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(IOSOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("第一次聊天")
         .onAppear {
             progressStore.markGuideSeen(.firstChat)
@@ -561,11 +728,7 @@ private struct IOSFirstChatGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: completed ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(completed ? .green : .secondary)
-            Text(title)
-        }
+        IOSOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -602,16 +765,16 @@ private struct IOSSessionManagementGuideView: View {
 
             Section {
                 HStack(spacing: 12) {
-                    Image(systemName: "text.bubble")
-                        .foregroundStyle(.accent)
+                    IOSOnboardingIconBadge(systemName: "text.bubble.fill", tint: .orange)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("样例：项目整理")
+                            .foregroundStyle(.white)
                         Text(sessionPracticeSubtitle)
                             .etFont(.caption)
-                            .foregroundStyle(isCompleted ? .green : .secondary)
+                            .foregroundStyle(isCompleted ? .green : IOSOnboardingPalette.secondaryText)
                     }
+                    Spacer()
                 }
-                .padding(.vertical, 4)
                 .contentShape(Rectangle())
                 .contextMenu {
                     Button("重命名") {
@@ -641,6 +804,7 @@ private struct IOSSessionManagementGuideView: View {
                         Label("删除会话", systemImage: "trash")
                     }
                 }
+                .iosOnboardingCard(horizontal: 14, vertical: 14)
             } header: {
                 Text("试一试：长按这条示例会话")
             } footer: {
@@ -661,6 +825,8 @@ private struct IOSSessionManagementGuideView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(IOSOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("会话管理")
         .onAppear {
             progressStore.markGuideSeen(.sessionManagement)
@@ -686,11 +852,7 @@ private struct IOSSessionManagementGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: completed ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(completed ? .green : .secondary)
-            Text(title)
-        }
+        IOSOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -730,6 +892,8 @@ private struct IOSToolCenterBasicsGuideView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(IOSOnboardingPalette.background.ignoresSafeArea())
         .navigationTitle("工具中心入门")
         .onAppear {
             progressStore.markGuideSeen(.toolCenterBasics)
@@ -741,11 +905,7 @@ private struct IOSToolCenterBasicsGuideView: View {
 
     @ViewBuilder
     private func checklistRow(_ title: String, completed: Bool) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: completed ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(completed ? .green : .secondary)
-            Text(title)
-        }
+        IOSOnboardingStatusRow(title: title, completed: completed)
     }
 }
 
@@ -757,16 +917,17 @@ private struct IOSSwipePracticeRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "rectangle.and.hand.point.up.left")
-                .foregroundStyle(.accent)
+            IOSOnboardingIconBadge(systemName: "rectangle.and.hand.point.up.left.fill", tint: .blue)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
+                    .foregroundStyle(.white)
                 Text(subtitle)
                     .etFont(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(IOSOnboardingPalette.secondaryText)
             }
+            Spacer()
         }
-        .padding(.vertical, 4)
+        .iosOnboardingCard(horizontal: 14, vertical: 14)
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button("左滑动作") {
                 onLeadingAction()
