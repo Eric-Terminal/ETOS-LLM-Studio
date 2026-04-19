@@ -36,8 +36,13 @@ struct AboutView: View {
         String(appCommitHash.prefix(7))
     }
     
+    private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
     private let documentationURL = URL(string: "https://docs.els.ericterminal.com/")!
     private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
+
+    private var githubDisplayString: String {
+        githubURL.absoluteString.replacingOccurrences(of: "https://", with: "")
+    }
 
     private var documentationHost: String {
         documentationURL.host() ?? documentationURL.absoluteString
@@ -103,6 +108,18 @@ struct AboutView: View {
             
             // MARK: - Links
             Section(header: Text("链接")) {
+                Button {
+                    openURL(githubURL)
+                } label: {
+                    LabeledContent(NSLocalizedString("GitHub 项目主页", comment: "GitHub project homepage")) {
+                        Text(githubDisplayString)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                .buttonStyle(.plain)
+
                 Button {
                     openURL(documentationURL)
                 } label: {

@@ -14,6 +14,7 @@ import WatchKit
 import AuthenticationServices
 
 struct AboutView: View {
+    private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
     private let documentationURL = URL(string: "https://docs.els.ericterminal.com/")!
     private let privacyURL = URL(string: "https://privacy.els.ericterminal.com/")!
     @State private var webAuthLauncher = WatchWebAuthLauncher()
@@ -36,6 +37,10 @@ struct AboutView: View {
 
     private var appCommitHashShort: String {
         String(appCommitHash.prefix(7))
+    }
+
+    private var githubDisplayString: String {
+        githubURL.absoluteString.replacingOccurrences(of: "https://", with: "")
     }
 
     private var documentationHost: String {
@@ -107,6 +112,22 @@ struct AboutView: View {
                 Divider()
                 
                 // MARK: - Links
+                Button {
+                    webAuthLauncher.open(url: githubURL)
+                } label: {
+                    HStack {
+                        Text(NSLocalizedString("GitHub 项目主页", comment: "GitHub project homepage"))
+                            .etFont(.caption)
+                        Spacer()
+                        Text(githubDisplayString)
+                            .etFont(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                .buttonStyle(.plain)
+
                 Button {
                     webAuthLauncher.open(url: documentationURL)
                 } label: {
