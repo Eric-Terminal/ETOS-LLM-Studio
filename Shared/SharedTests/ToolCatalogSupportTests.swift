@@ -155,4 +155,41 @@ struct ToolCatalogSupportTests {
         #expect(catalog.count == 3)
         #expect(catalog.map(\.tool.toolId) == ["alpha", "beta", "gamma"])
     }
+
+    @Test("MCP 工具目录排序会先按服务器再按工具名")
+    func testSortedMCPCatalogToolsSortsByServerThenTool() {
+        let alphaServer = MCPServerConfiguration(
+            displayName: "Alpha Server",
+            transport: .http(endpoint: URL(string: "https://example.com/alpha")!, apiKey: nil, additionalHeaders: [:]),
+            isSelectedForChat: true
+        )
+        let betaServer = MCPServerConfiguration(
+            displayName: "Beta Server",
+            transport: .http(endpoint: URL(string: "https://example.com/beta")!, apiKey: nil, additionalHeaders: [:]),
+            isSelectedForChat: true
+        )
+
+        let tools = [
+            MCPAvailableTool(
+                server: betaServer,
+                tool: MCPToolDescription(toolId: "zeta", description: nil, inputSchema: nil, examples: nil),
+                internalName: "mcp://beta/zeta"
+            ),
+            MCPAvailableTool(
+                server: alphaServer,
+                tool: MCPToolDescription(toolId: "gamma", description: nil, inputSchema: nil, examples: nil),
+                internalName: "mcp://alpha/gamma"
+            ),
+            MCPAvailableTool(
+                server: alphaServer,
+                tool: MCPToolDescription(toolId: "beta", description: nil, inputSchema: nil, examples: nil),
+                internalName: "mcp://alpha/beta"
+            )
+        ]
+
+        let sortedTools = ToolCatalogSupport.sortedMCPCatalogTools(tools)
+
+        #expect(sortedTools.map(\.server.displayName) == ["Alpha Server", "Alpha Server", "Beta Server"])
+        #expect(sortedTools.map(\.tool.toolId) == ["beta", "gamma", "zeta"])
+    }
 }

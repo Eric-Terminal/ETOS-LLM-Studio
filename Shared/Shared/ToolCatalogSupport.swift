@@ -4,6 +4,7 @@
 // 统一工具中心所需的共享辅助逻辑。
 // - 汇总内置工具状态
 // - 生成工具参数 Schema 摘要
+// - 统一 MCP 工具目录排序
 // ============================================================================
 
 import Foundation
@@ -147,6 +148,15 @@ public enum ToolCatalogSupport {
                     )
                 }
             }
+    }
+
+    public static func sortedMCPCatalogTools(_ tools: [MCPAvailableTool]) -> [MCPAvailableTool] {
+        tools.sorted {
+            if $0.server.displayName == $1.server.displayName {
+                return $0.tool.toolId.localizedCaseInsensitiveCompare($1.tool.toolId) == .orderedAscending
+            }
+            return $0.server.displayName.localizedCaseInsensitiveCompare($1.server.displayName) == .orderedAscending
+        }
     }
 
     public static func schemaSummary(for schema: JSONValue?, fieldLimit: Int = 4) -> String? {
