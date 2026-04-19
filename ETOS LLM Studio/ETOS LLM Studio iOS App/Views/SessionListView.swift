@@ -21,7 +21,6 @@ private struct SessionFolderBrowserView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @EnvironmentObject private var syncManager: WatchSyncManager
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var progressStore = OnboardingProgressStore.shared
 
     let folderID: UUID?
     let isRoot: Bool
@@ -52,7 +51,6 @@ private struct SessionFolderBrowserView: View {
     @State private var latestSearchToken: Int = 0
     @State private var pendingSearchWorkItem: DispatchWorkItem?
     @State private var sessionPageIndex: Int = 0
-    @State private var isShowingOnboardingHub = false
 
     private let maxSessionsPerPage = 100
     private let paginationButtonColor = Color(red: 0.33, green: 0.47, blue: 0.65)
@@ -202,22 +200,6 @@ private struct SessionFolderBrowserView: View {
     private var listScaffold: some View {
         let entries = mergedEntries
         let baseList = List {
-            if isRoot && !isSearchActive && !progressStore.isHintDismissed(.sessionList) && !progressStore.isGuideCompleted(.sessionManagement) {
-                Section {
-                    IOSOnboardingHintCard(
-                        title: "新手提示",
-                        message: "iOS 端会话管理很多动作都藏在“长按会话项”里，比如重命名、分支、移动文件夹、删除最后一条消息。",
-                        actionTitle: "查看新手教程",
-                        onAction: {
-                            isShowingOnboardingHub = true
-                        },
-                        onDismiss: {
-                            progressStore.dismissHint(.sessionList)
-                        }
-                    )
-                }
-            }
-
             if isSearchActive {
                 searchResultSection
             } else {
@@ -279,7 +261,6 @@ private struct SessionFolderBrowserView: View {
             .onAppear {
                 normalizeSessionPageIndex()
                 guard isRoot else { return }
-                progressStore.markVisited(.sessionManagement)
                 scheduleSearch(for: searchText)
             }
             .onChange(of: searchText) { _, newValue in
@@ -419,17 +400,6 @@ private struct SessionFolderBrowserView: View {
         content
             .sheet(item: $sessionInfo) { info in
                 SessionInfoSheet(payload: info)
-            }
-            .sheet(isPresented: $isShowingOnboardingHub) {
-                NavigationStack {
-                    OnboardingHubView(
-                        openChat: {
-                            isShowingOnboardingHub = false
-                            NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-                        }
-                    )
-                    .environmentObject(viewModel)
-                }
             }
             .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
                 Button("删除幽灵", role: .destructive) {

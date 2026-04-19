@@ -100,38 +100,17 @@ struct ProviderListView: View {
                 .environmentObject(viewModel)
             }
         }
-        .onAppear {
-            OnboardingProgressStore.shared.markVisited(.providerManagement)
-        }
     }
 }
 
 private struct ProviderManagementContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @ObservedObject private var progressStore = OnboardingProgressStore.shared
     @State private var providerToEdit: Provider?
     @State private var providerToDelete: Provider?
     @State private var showDeleteAlert = false
-    @State private var isShowingOnboardingHub = false
 
     var body: some View {
         List {
-            if !progressStore.isHintDismissed(.providerList) && !progressStore.isGuideCompleted(.firstProvider) {
-                Section {
-                    IOSOnboardingHintCard(
-                        title: "新手提示",
-                        message: "这里很多动作藏在列表长按里。想编辑或删除提供商时，先长按这一行再看菜单。",
-                        actionTitle: "查看新手教程",
-                        onAction: {
-                            isShowingOnboardingHub = true
-                        },
-                        onDismiss: {
-                            progressStore.dismissHint(.providerList)
-                        }
-                    )
-                }
-            }
-
             Section {
                 ForEach(viewModel.providers) { provider in
                     NavigationLink {
@@ -183,17 +162,6 @@ private struct ProviderManagementContentView: View {
                 Text(String(format: NSLocalizedString("删除“%@”后无法恢复。", comment: ""), target.name))
             } else {
                 Text("此操作无法撤销。")
-            }
-        }
-        .sheet(isPresented: $isShowingOnboardingHub) {
-            NavigationStack {
-                OnboardingHubView(
-                    openChat: {
-                        isShowingOnboardingHub = false
-                        NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-                    }
-                )
-                .environmentObject(viewModel)
             }
         }
     }

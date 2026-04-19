@@ -31,12 +31,10 @@ struct ContentView: View {
     @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
-    @ObservedObject private var progressStore = OnboardingProgressStore.shared
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
     @State private var isSettingsPresented = false
-    @State private var isShowingOnboardingHub = false
     @State private var settingsDestination: WatchSettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var shouldForceScrollToBottom = false
@@ -100,11 +98,6 @@ struct ContentView: View {
                 .sheet(isPresented: $isSettingsPresented) {
                     SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
                 }
-                .sheet(isPresented: $isShowingOnboardingHub) {
-                    NavigationStack {
-                        OnboardingHubView(viewModel: viewModel)
-                    }
-                }
                 .sheet(item: $viewModel.activeSheet) { item in
                     sheetView(for: item)
                 }
@@ -157,27 +150,6 @@ struct ContentView: View {
                 .zIndex(20)
             }
 
-            if !progressStore.isHintDismissed(.chatMessages) && !progressStore.isGuideCompleted(.firstChat) {
-                VStack {
-                    WatchOnboardingHintCard(
-                        title: "新手提示",
-                        message: "手表端聊天页先试左滑消息看更多，再回设置页进入历史会话练右滑删除。",
-                        actionTitle: "查看新手教程",
-                        onAction: {
-                            isShowingOnboardingHub = true
-                        },
-                        onDismiss: {
-                            progressStore.dismissHint(.chatMessages)
-                        }
-                    )
-                    .padding(.top, 8)
-                    .padding(.horizontal, 8)
-                    Spacer()
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(19)
-            }
-
             VStack {
                 Spacer()
                 TTSFloatingController()
@@ -186,7 +158,6 @@ struct ContentView: View {
         .environment(\.font, rootBodyFont)
         .onAppear {
             refreshRootBodyFont()
-            progressStore.markVisited(.chat)
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             refreshRootBodyFont()
