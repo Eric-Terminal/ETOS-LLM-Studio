@@ -374,7 +374,7 @@ private struct IOSInteractionPrimerGuideView: View {
                 }
             }
 
-            Section("试一试：左右滑这条示例项") {
+            Section {
                 IOSSwipePracticeRow(
                     title: "样例：左右滑我",
                     subtitle: swipePracticeSubtitle,
@@ -385,6 +385,8 @@ private struct IOSInteractionPrimerGuideView: View {
                         didUseTrailingSwipe = true
                     }
                 )
+            } header: {
+                Text("试一试：左右滑这条示例项")
             } footer: {
                 Text("左滑和右滑往往代表不同操作，不要只试一个方向。")
             }
@@ -509,7 +511,7 @@ private struct IOSFirstChatGuideView: View {
                 }
             }
 
-            Section("别漏掉这个隐藏动作") {
+            Section {
                 HStack {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .foregroundStyle(.accent)
@@ -533,6 +535,8 @@ private struct IOSFirstChatGuideView: View {
                         practicedMessageLongPress = true
                     }
                 }
+            } header: {
+                Text("别漏掉这个隐藏动作")
             } footer: {
                 Text("真实聊天里，很多消息操作都在长按菜单里。")
             }
@@ -596,7 +600,7 @@ private struct IOSSessionManagementGuideView: View {
                 checklistRow("想彻底删除：长按会话项 → 删除会话", completed: practicedDelete)
             }
 
-            Section("试一试：长按这条示例会话") {
+            Section {
                 HStack(spacing: 12) {
                     Image(systemName: "text.bubble")
                         .foregroundStyle(.accent)
@@ -637,6 +641,8 @@ private struct IOSSessionManagementGuideView: View {
                         Label("删除会话", systemImage: "trash")
                     }
                 }
+            } header: {
+                Text("试一试：长按这条示例会话")
             } footer: {
                 Text("真实会话列表里，先长按，再找动作。不要只盯着可见按钮。")
             }
