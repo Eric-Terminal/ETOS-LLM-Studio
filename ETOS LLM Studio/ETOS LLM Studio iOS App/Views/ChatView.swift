@@ -1466,13 +1466,13 @@ struct ChatView: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(TelegramColors.scrollButtonBackground)
+                    .fill(TelegramColors.sendButtonColor)
                     .frame(width: 40, height: 40)
-                    .shadow(color: TelegramColors.scrollButtonShadow, radius: 4, x: 0, y: 2)
+                    .shadow(color: TelegramColors.scrollButtonShadow, radius: 6, x: 0, y: 2)
                 
                 Image(systemName: "chevron.down")
                     .etFont(.system(size: 16, weight: .semibold))
-                    .foregroundColor(TelegramColors.attachButtonColor)
+                    .foregroundColor(.white)
             }
         }
         .accessibilityLabel("滚动到底部")
