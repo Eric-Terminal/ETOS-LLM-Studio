@@ -102,6 +102,8 @@ struct ChatView: View {
     @State private var chatInputBarHeight: CGFloat = 0
     @State private var scrollDistanceToBottom: CGFloat = 0
     @State private var pendingHistoryResetWorkItem: DispatchWorkItem?
+    @State private var pendingBottomSnapTask: Task<Void, Never>?
+    @State private var needsImmediateBottomSnap: Bool = true
     @State private var pendingJumpRequest: MessageJumpRequest?
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
@@ -269,6 +271,10 @@ struct ChatView: View {
                             showScrollToBottom = false
                             return
                         }
+                        if needsImmediateBottomSnap {
+                            scheduleImmediateBottomSnap(proxy: proxy)
+                            return
+                        }
                         if suppressAutoScrollOnce {
                             suppressAutoScrollOnce = false
                             return
@@ -284,6 +290,21 @@ struct ChatView: View {
                         withAnimation(.easeInOut(duration: 0.25)) {
                             proxy.scrollTo(request.messageID, anchor: .center)
                         }
+                    }
+                    .onChange(of: viewModel.currentSession?.id) { _, _ in
+                        pendingHistoryResetWorkItem?.cancel()
+                        pendingHistoryResetWorkItem = nil
+                        showScrollToBottom = false
+                        needsImmediateBottomSnap = true
+                        scheduleImmediateBottomSnap(proxy: proxy)
+                    }
+                    .onChange(of: viewModel.displayMessages.map(\.id)) { _, ids in
+                        guard needsImmediateBottomSnap, !ids.isEmpty else { return }
+                        scheduleImmediateBottomSnap(proxy: proxy)
+                    }
+                    .onAppear {
+                        needsImmediateBottomSnap = true
+                        scheduleImmediateBottomSnap(proxy: proxy)
                     }
                     // Telegram 风格：顶部导航栏
                     .safeAreaInset(edge: .top) {
@@ -365,6 +386,8 @@ struct ChatView: View {
             .onDisappear {
                 pendingHistoryResetWorkItem?.cancel()
                 pendingHistoryResetWorkItem = nil
+                pendingBottomSnapTask?.cancel()
+                pendingBottomSnapTask = nil
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
@@ -2053,6 +2076,20 @@ private extension ChatView {
 
         let delay = shouldAnimate ? 0.56 : 0.08
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    func scheduleImmediateBottomSnap(proxy: ScrollViewProxy) {
+        pendingBottomSnapTask?.cancel()
+        pendingBottomSnapTask = Task { @MainActor in
+            for _ in 0..<3 {
+                guard !Task.isCancelled else { return }
+                scrollToBottom(proxy: proxy, animated: false)
+                await Task.yield()
+            }
+            guard !Task.isCancelled else { return }
+            needsImmediateBottomSnap = false
+            pendingBottomSnapTask = nil
+        }
     }
 
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat) {
