@@ -100,8 +100,6 @@ struct ChatView: View {
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatInputBarHeight: CGFloat = 0
-    @State private var chatScrollViewportHeight: CGFloat = 0
-    @State private var chatBottomAnchorMaxY: CGFloat = .greatestFiniteMagnitude
     @State private var pendingJumpRequest: MessageJumpRequest?
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
@@ -110,7 +108,6 @@ struct ChatView: View {
     @Namespace private var sessionPickerNamespace
     
     private let scrollBottomAnchorID = "chat-scroll-bottom"
-    private let chatScrollCoordinateSpace = "chat-scroll-coordinate-space"
     private let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
     private let navBarSubtitleFont = UIFont.systemFont(ofSize: 12)
     private let navBarVerticalPadding: CGFloat = 8
@@ -237,35 +234,26 @@ struct ChatView: View {
                             Color.clear
                                 .frame(height: 8)
                                 .id(scrollBottomAnchorID)
-                                .background(
-                                    GeometryReader { proxy in
-                                        Color.clear.preference(
-                                            key: ChatBottomAnchorMaxYPreferenceKey.self,
-                                            value: proxy.frame(in: .named(chatScrollCoordinateSpace)).maxY
-                                        )
-                                    }
-                                )
                         }
                         .padding(.horizontal, 8)
                     }
-                    .coordinateSpace(name: chatScrollCoordinateSpace)
-                    .background(
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: ChatScrollViewportHeightPreferenceKey.self,
-                                value: proxy.size.height
-                            )
-                        }
-                    )
                     .scrollDismissesKeyboard(.interactively)
                     .scrollIndicators(.hidden)
+                    .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                        max(geometry.contentSize.height - geometry.visibleRect.maxY, 0)
+                    } action: { _, distanceToBottom in
+                        updateScrollToBottomVisibility(distanceToBottom: distanceToBottom)
+                    }
                     .simultaneousGesture(
                         TapGesture().onEnded {
                             composerFocused = false
                         }
                     )
                     .onChange(of: viewModel.messages.count) { _, _ in
-                        guard !viewModel.messages.isEmpty else { return }
+                        guard !viewModel.messages.isEmpty else {
+                            showScrollToBottom = false
+                            return
+                        }
                         if suppressAutoScrollOnce {
                             suppressAutoScrollOnce = false
                             return
@@ -281,14 +269,6 @@ struct ChatView: View {
                         withAnimation(.easeInOut(duration: 0.25)) {
                             proxy.scrollTo(request.messageID, anchor: .center)
                         }
-                    }
-                    .onPreferenceChange(ChatScrollViewportHeightPreferenceKey.self) { newHeight in
-                        chatScrollViewportHeight = newHeight
-                        updateScrollToBottomVisibility()
-                    }
-                    .onPreferenceChange(ChatBottomAnchorMaxYPreferenceKey.self) { newMaxY in
-                        chatBottomAnchorMaxY = newMaxY
-                        updateScrollToBottomVisibility()
                     }
                     // Telegram 风格：顶部导航栏
                     .safeAreaInset(edge: .top) {
@@ -1868,22 +1848,6 @@ private struct SafeAreaBottomKey: PreferenceKey {
     }
 }
 
-private struct ChatScrollViewportHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct ChatBottomAnchorMaxYPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = .greatestFiniteMagnitude
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 private struct ChatInputBarHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 
@@ -1946,17 +1910,20 @@ private extension ChatView {
         }
     }
 
-    func updateScrollToBottomVisibility() {
+    func updateScrollToBottomVisibility(distanceToBottom: CGFloat) {
         guard !viewModel.displayMessages.isEmpty else {
-            showScrollToBottom = false
+            if showScrollToBottom {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    showScrollToBottom = false
+                }
+            }
             return
         }
-        guard chatScrollViewportHeight > 0 else { return }
-
-        let distanceToBottom = chatBottomAnchorMaxY - chatScrollViewportHeight
-        let shouldShow = distanceToBottom > 24
+        let shouldShow = distanceToBottom > 48
         if showScrollToBottom != shouldShow {
-            showScrollToBottom = shouldShow
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showScrollToBottom = shouldShow
+            }
         }
     }
 
