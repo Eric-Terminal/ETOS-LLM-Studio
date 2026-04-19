@@ -27,9 +27,9 @@ enum ETNativeMathMarkdownCodec {
         let renderKind: RenderKind
     }
 
-    private static let scheme = "etmath"
+    nonisolated private static let scheme = "etmath"
 
-    static var isAvailable: Bool {
+    nonisolated static var isAvailable: Bool {
 #if canImport(SwiftMath)
         true
 #else
@@ -37,7 +37,7 @@ enum ETNativeMathMarkdownCodec {
 #endif
     }
 
-    static func transformedMarkdown(from segments: [ETMathContentSegment]) -> String {
+    nonisolated static func transformedMarkdown(from segments: [ETMathContentSegment]) -> String {
         var result = ""
         result.reserveCapacity(segments.reduce(into: 0) { partialResult, segment in
             switch segment {
@@ -66,7 +66,7 @@ enum ETNativeMathMarkdownCodec {
         return result
     }
 
-    static func request(from url: URL?) -> Request? {
+    nonisolated static func request(from url: URL?) -> Request? {
         guard let url, url.scheme == scheme else { return nil }
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         guard let renderKindValue = components.queryItems?.first(where: { $0.name == "mode" })?.value,
@@ -78,12 +78,12 @@ enum ETNativeMathMarkdownCodec {
         return Request(latex: latex, renderKind: renderKind)
     }
 
-    private static func imageMarkdown(for request: Request) -> String {
+    nonisolated private static func imageMarkdown(for request: Request) -> String {
         guard let url = url(for: request) else { return request.latex }
         return "![数学公式](\(url.absoluteString))"
     }
 
-    private static func url(for request: Request) -> URL? {
+    nonisolated private static func url(for request: Request) -> URL? {
         var components = URLComponents()
         components.scheme = scheme
         components.host = "render"
@@ -94,7 +94,7 @@ enum ETNativeMathMarkdownCodec {
         return components.url
     }
 
-    private static func encodeBase64URL(_ value: String) -> String {
+    nonisolated private static func encodeBase64URL(_ value: String) -> String {
         Data(value.utf8)
             .base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
@@ -102,7 +102,7 @@ enum ETNativeMathMarkdownCodec {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    private static func decodeBase64URL(_ value: String) -> String? {
+    nonisolated private static func decodeBase64URL(_ value: String) -> String? {
         var base64 = value
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
