@@ -169,4 +169,36 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(abs(offset.height + 16) < 0.001)
     }
 
+    @Test("手表聊天输入主按钮会在停用、发送和语音输入之间切换")
+    func testWatchChatInputActionStateResolution() {
+        #expect(
+            WatchChatInputActionState.resolve(
+                isSending: true,
+                hasSendableContent: true,
+                isSpeechInputEnabled: true
+            ) == .stop
+        )
+        #expect(
+            WatchChatInputActionState.resolve(
+                isSending: false,
+                hasSendableContent: true,
+                isSpeechInputEnabled: true
+            ) == .send
+        )
+        #expect(
+            WatchChatInputActionState.resolve(
+                isSending: false,
+                hasSendableContent: false,
+                isSpeechInputEnabled: true
+            ) == .speechInput
+        )
+        #expect(
+            WatchChatInputActionState.resolve(
+                isSending: false,
+                hasSendableContent: false,
+                isSpeechInputEnabled: false
+            ) == .inactive
+        )
+    }
+
 }

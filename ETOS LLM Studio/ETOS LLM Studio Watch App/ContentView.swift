@@ -20,6 +20,41 @@ import UIKit
 import CoreText
 #endif
 
+enum WatchChatInputActionState: Equatable {
+    case stop
+    case send
+    case speechInput
+    case inactive
+
+    static func resolve(isSending: Bool, hasSendableContent: Bool, isSpeechInputEnabled: Bool) -> Self {
+        if isSending {
+            return .stop
+        }
+        if hasSendableContent {
+            return .send
+        }
+        if isSpeechInputEnabled {
+            return .speechInput
+        }
+        return .inactive
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .stop:
+            return "stop.circle.fill"
+        case .send, .inactive:
+            return "arrow.up"
+        case .speechInput:
+            return "mic.fill"
+        }
+    }
+
+    var isDisabled: Bool {
+        self == .inactive
+    }
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     
@@ -36,6 +71,7 @@ struct ContentView: View {
     @State private var fullErrorContent: String?
     @State private var isSettingsPresented = false
     @State private var settingsDestination: WatchSettingsNavigationDestination?
+    @State private var isSessionListPresented = false
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var shouldForceScrollToBottom = false
     @State private var shouldKeepBottomPinned = true
@@ -121,6 +157,9 @@ struct ContentView: View {
                             viewModel.cancelAskUserInputRequest(using: request)
                         }
                     )
+                }
+                .navigationDestination(isPresented: $isSessionListPresented) {
+                    sessionListView
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
@@ -415,6 +454,46 @@ struct ContentView: View {
         )
     }
 
+    private var sessionListView: some View {
+        SessionListView(
+            sessions: $viewModel.chatSessions,
+            folders: $viewModel.sessionFolders,
+            currentSession: $viewModel.currentSession,
+            runningSessionIDs: viewModel.runningSessionIDs,
+            deleteSessionAction: { session in
+                viewModel.deleteSessions([session])
+            },
+            branchAction: { session, copyMessages in
+                viewModel.branchSession(from: session, copyMessages: copyMessages)
+            },
+            deleteLastMessageAction: { session in
+                viewModel.deleteLastMessage(for: session)
+            },
+            sendSessionToCompanionAction: { session in
+                WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
+            },
+            onSessionSelected: { selectedSession in
+                ChatService.shared.setCurrentSession(selectedSession)
+                isSessionListPresented = false
+            },
+            updateSessionAction: { session in
+                viewModel.updateSession(session)
+            },
+            createFolderAction: { name, parentID in
+                viewModel.createSessionFolder(name: name, parentID: parentID)
+            },
+            renameFolderAction: { folder, newName in
+                viewModel.renameSessionFolder(folder, newName: newName)
+            },
+            deleteFolderAction: { folder in
+                viewModel.deleteSessionFolder(folder)
+            },
+            moveSessionToFolderAction: { session, folderID in
+                viewModel.moveSession(session, toFolderID: folderID)
+            }
+        )
+    }
+
     private var legacyJSONMigrationPromptSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("检测到旧版 JSON 数据")
@@ -677,11 +756,23 @@ struct ContentView: View {
         viewModel.sendMessage()
     }
 
-    private func sendOrStopMessage() {
-        if viewModel.isSendingMessage {
+    private func openSessionHistory() {
+        viewModel.activeSheet = nil
+        isSettingsPresented = false
+        settingsDestination = nil
+        isSessionListPresented = true
+    }
+
+    private func handleInputAction(_ state: WatchChatInputActionState) {
+        switch state {
+        case .stop:
             viewModel.cancelSending()
-        } else {
+        case .send:
             sendMessage()
+        case .speechInput:
+            viewModel.beginSpeechInputFlow()
+        case .inactive:
+            break
         }
     }
 
@@ -728,6 +819,11 @@ struct ContentView: View {
     private var inputBubble: some View {
         let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let canSend = hasTrimmedText || viewModel.pendingAudioAttachment != nil
+        let inputActionState = WatchChatInputActionState.resolve(
+            isSending: viewModel.isSendingMessage,
+            hasSendableContent: canSend,
+            isSpeechInputEnabled: viewModel.enableSpeechInput
+        )
         
         let coreBubble = Group {
             VStack(spacing: 6) {
@@ -766,14 +862,16 @@ struct ContentView: View {
                             transparentInputField
                                 .glassEffect(.clear, in: Capsule())
 
-                            Button(action: sendOrStopMessage) {
-                                Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
+                            Button {
+                                handleInputAction(inputActionState)
+                            } label: {
+                                Image(systemName: inputActionState.systemImageName)
                                     .etFont(.system(size: 18, weight: .medium))
                                     .frame(width: inputControlHeight, height: inputControlHeight)
                             }
                             .buttonStyle(.plain)
                             .glassEffect(.clear, in: Circle())
-                            .disabled(!viewModel.isSendingMessage && !canSend)
+                            .disabled(inputActionState.isDisabled)
                         } else {
                             ZStack {
                                 Capsule()
@@ -785,8 +883,10 @@ struct ContentView: View {
                                 transparentInputField
                             }
 
-                            Button(action: sendOrStopMessage) {
-                                Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
+                            Button {
+                                handleInputAction(inputActionState)
+                            } label: {
+                                Image(systemName: inputActionState.systemImageName)
                                     .etFont(.system(size: 18, weight: .medium))
                             }
                             .buttonStyle(.plain)
@@ -795,7 +895,7 @@ struct ContentView: View {
                                 Circle()
                                     .stroke(inputStrokeColor, lineWidth: 0.8)
                             )
-                            .disabled(!viewModel.isSendingMessage && !canSend)
+                            .disabled(inputActionState.isDisabled)
                         }
                     }
                     .frame(height: inputControlHeight)
@@ -811,8 +911,10 @@ struct ContentView: View {
                             transparentInputField
                         }
 
-                        Button(action: sendOrStopMessage) {
-                            Image(systemName: viewModel.isSendingMessage ? "stop.circle.fill" : "arrow.up")
+                        Button {
+                            handleInputAction(inputActionState)
+                        } label: {
+                            Image(systemName: inputActionState.systemImageName)
                                 .etFont(.system(size: 18, weight: .medium))
                         }
                         .buttonStyle(.plain)
@@ -824,7 +926,7 @@ struct ContentView: View {
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
                         )
-                        .disabled(!viewModel.isSendingMessage && !canSend)
+                        .disabled(inputActionState.isDisabled)
                     }
                     .frame(height: inputControlHeight)
                     .padding(.horizontal, 10)
@@ -862,20 +964,17 @@ struct ContentView: View {
                 }
             }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                if viewModel.enableSpeechInput {
-                    Button {
-                        viewModel.beginSpeechInputFlow()
-                    } label: {
-                        Image(systemName: viewModel.isRecordingSpeech ? "waveform.circle.fill" : "mic.fill")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel("语言输入")
-                    .tint(.blue)
-                    .disabled(viewModel.speechModels.isEmpty)
+                Button {
+                    openSessionHistory()
+                } label: {
+                    Image(systemName: "list.bullet.rectangle")
+                        .etFont(.system(size: 16, weight: .semibold))
+                        .frame(width: inputControlHeight, height: inputControlHeight)
+                        .contentShape(Circle())
                 }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel("历史会话")
+                .tint(.blue)
             }
             .sheet(isPresented: speechSheetBinding) {
                 SpeechRecorderView(viewModel: viewModel)
