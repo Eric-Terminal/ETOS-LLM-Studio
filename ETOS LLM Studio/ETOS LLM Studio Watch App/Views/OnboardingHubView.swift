@@ -20,6 +20,11 @@ struct OnboardingHubView: View {
 
     @State private var snapshot: OnboardingChecklistSnapshot = .empty
 
+    init(viewModel: ChatViewModel, openChat: (() -> Void)? = nil) {
+        self.viewModel = viewModel
+        self.openChat = openChat
+    }
+
     private var snapshotRefreshKey: String {
         let providerCount = viewModel.providers.count
         let sessionCount = viewModel.chatSessions.count
