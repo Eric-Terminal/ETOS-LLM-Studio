@@ -120,7 +120,7 @@ struct ChatView: View {
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     private let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
-    private let longDistanceScrollAnimationThresholdScreens: CGFloat = 12
+    private let longDistanceScrollAnimationThresholdScreens: CGFloat = 25
     private let modelPickerMorphID = "modelPickerMorph"
     private let sessionPickerMorphID = "sessionPickerMorph"
     private let sessionPickerHeightRatio: CGFloat = 0.6
