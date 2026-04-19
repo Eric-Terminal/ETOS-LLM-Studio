@@ -1222,7 +1222,7 @@ public struct SessionHistorySearchHit: Hashable, Sendable {
 /// 历史会话检索工具
 public enum SessionHistorySearchSupport {
     private enum SearchMatcher {
-        case plain(normalizedQuery: String)
+        case plain(query: String, normalizedQuery: String)
         case regex(NSRegularExpression)
     }
 
@@ -1289,7 +1289,7 @@ public enum SessionHistorySearchSupport {
             collectedMatches.append(
                 SessionHistorySearchMatch(
                     source: .sessionName,
-                    preview: previewText(session.name)
+                    preview: previewText(session.name, matcher: matcher)
                 )
             )
         }
@@ -1299,7 +1299,7 @@ public enum SessionHistorySearchSupport {
             collectedMatches.append(
                 SessionHistorySearchMatch(
                     source: .topicPrompt,
-                    preview: previewText(topicPrompt)
+                    preview: previewText(topicPrompt, matcher: matcher)
                 )
             )
         }
@@ -1309,7 +1309,7 @@ public enum SessionHistorySearchSupport {
             collectedMatches.append(
                 SessionHistorySearchMatch(
                     source: .enhancedPrompt,
-                    preview: previewText(enhancedPrompt)
+                    preview: previewText(enhancedPrompt, matcher: matcher)
                 )
             )
         }
@@ -1322,7 +1322,7 @@ public enum SessionHistorySearchSupport {
                 collectedMatches.append(
                     SessionHistorySearchMatch(
                         source: source(for: message.role),
-                        preview: previewText(content),
+                        preview: previewText(content, matcher: matcher),
                         messageOrdinal: messageIndex + 1
                     )
                 )
@@ -1360,12 +1360,12 @@ public enum SessionHistorySearchSupport {
         if let regex = try? NSRegularExpression(pattern: trimmed, options: [.caseInsensitive]) {
             return .regex(regex)
         }
-        return .plain(normalizedQuery: normalized(trimmed))
+        return .plain(query: collapsedPreviewText(trimmed), normalizedQuery: normalized(trimmed))
     }
 
     private static func matches(_ text: String, with matcher: SearchMatcher) -> Bool {
         switch matcher {
-        case .plain(let normalizedQuery):
+        case .plain(_, let normalizedQuery):
             return normalized(text).contains(normalizedQuery)
         case .regex(let regex):
             let range = NSRange(text.startIndex..<text.endIndex, in: text)
@@ -1379,14 +1379,78 @@ public enum SessionHistorySearchSupport {
             .lowercased()
     }
 
-    private static func previewText(_ text: String, prefixLength: Int = 20, suffixLength: Int = 20) -> String {
-        let collapsed = text
+    private static func previewText(
+        _ text: String,
+        matcher: SearchMatcher,
+        prefixLength: Int = 20,
+        suffixLength: Int = 20
+    ) -> String {
+        let collapsed = collapsedPreviewText(text)
+        guard let matchRange = firstMatchRange(in: collapsed, matcher: matcher) else {
+            return compactPreviewText(
+                collapsed,
+                prefixLength: prefixLength,
+                suffixLength: suffixLength
+            )
+        }
+
+        let prefixStart = collapsed.index(
+            matchRange.lowerBound,
+            offsetBy: -prefixLength,
+            limitedBy: collapsed.startIndex
+        ) ?? collapsed.startIndex
+        let suffixEnd = collapsed.index(
+            matchRange.upperBound,
+            offsetBy: suffixLength,
+            limitedBy: collapsed.endIndex
+        ) ?? collapsed.endIndex
+
+        let visiblePrefix = String(collapsed[prefixStart..<matchRange.lowerBound])
+        let visibleMatch = String(collapsed[matchRange])
+        let visibleSuffix = String(collapsed[matchRange.upperBound..<suffixEnd])
+        let leadingEllipsis = prefixStart > collapsed.startIndex ? "…" : ""
+        let trailingEllipsis = suffixEnd < collapsed.endIndex ? "…" : ""
+
+        return leadingEllipsis + visiblePrefix + visibleMatch + visibleSuffix + trailingEllipsis
+    }
+
+    private static func compactPreviewText(
+        _ text: String,
+        prefixLength: Int,
+        suffixLength: Int
+    ) -> String {
+        let compactLimit = prefixLength + suffixLength
+        guard text.count > compactLimit else { return text }
+        return String(text.prefix(prefixLength)) + "…" + String(text.suffix(suffixLength))
+    }
+
+    private static func firstMatchRange(
+        in text: String,
+        matcher: SearchMatcher
+    ) -> Range<String.Index>? {
+        switch matcher {
+        case .plain(let query, _):
+            guard !query.isEmpty else { return nil }
+            return text.range(
+                of: query,
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            )
+        case .regex(let regex):
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            guard let match = regex.firstMatch(in: text, options: [], range: range),
+                  let swiftRange = Range(match.range, in: text) else {
+                return nil
+            }
+            return swiftRange
+        }
+    }
+
+    private static func collapsedPreviewText(_ text: String) -> String {
+        text
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        let compactLimit = prefixLength + suffixLength
-        guard collapsed.count > compactLimit else { return collapsed }
-        return String(collapsed.prefix(prefixLength)) + "…" + String(collapsed.suffix(suffixLength))
     }
 }
 

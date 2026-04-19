@@ -5474,23 +5474,43 @@ fileprivate struct SessionHistorySearchSupportTests {
         #expect(results.map(\.matchIndexInSession) == [0, 1, 2])
     }
 
-    @Test("长命中预览会保留前后二十字")
-    func testSearchHitPreviewUsesHeadAndTail() {
+    @Test("长命中预览会围绕首次命中保留前后二十字")
+    func testSearchHitPreviewUsesContextAroundMatch() {
         let session = ChatSession(id: UUID(), name: "长文本预览")
         let message = ChatMessage(
             role: .assistant,
-            content: "12345678901234567890中间用于截断abcdefghijABCDEFGHIJ"
+            content: "12345678901234567890你好abcdefghijABCDEFGHIJ额外补充内容"
         )
 
         let hits = SessionHistorySearchSupport.searchHits(
             sessions: [session],
-            query: "截断",
+            query: "你好",
             messageLoader: { _ in [message] }
         )
 
         #expect(
             hits[session.id]?.matches.first?.preview
-            == "12345678901234567890…abcdefghijABCDEFGHIJ"
+            == "12345678901234567890你好abcdefghijABCDEFGHIJ…"
+        )
+    }
+
+    @Test("命中靠近开头时会保留可用前缀并截断后文")
+    func testSearchHitPreviewKeepsAvailablePrefixWhenMatchNearStart() {
+        let session = ChatSession(id: UUID(), name: "前缀预览")
+        let message = ChatMessage(
+            role: .assistant,
+            content: "你好这里是比较长的补充说明，用来验证后面还能继续截取二十个字"
+        )
+
+        let hits = SessionHistorySearchSupport.searchHits(
+            sessions: [session],
+            query: "你好",
+            messageLoader: { _ in [message] }
+        )
+
+        #expect(
+            hits[session.id]?.matches.first?.preview
+            == "你好这里是比较长的补充说明，用来验证后面还能…"
         )
     }
 }
