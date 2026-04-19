@@ -174,6 +174,11 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 0) {
+                            ScrollDistanceToBottomObserver { distanceToBottom in
+                                updateScrollToBottomVisibility(distanceToBottom: distanceToBottom)
+                            }
+                            .frame(width: 0, height: 0)
+
                             LazyVStack(spacing: 0, pinnedViews: []) {
                                 // 顶部留白（为导航栏留出空间）
                                 Color.clear.frame(height: 8)
@@ -239,11 +244,6 @@ struct ChatView: View {
                     }
                     .scrollDismissesKeyboard(.interactively)
                     .scrollIndicators(.hidden)
-                    .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                        max(geometry.contentSize.height - geometry.visibleRect.maxY, 0)
-                    } action: { _, distanceToBottom in
-                        updateScrollToBottomVisibility(distanceToBottom: distanceToBottom)
-                    }
                     .simultaneousGesture(
                         TapGesture().onEnded {
                             composerFocused = false
@@ -1853,6 +1853,97 @@ private struct ChatInputBarHeightPreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+private struct ScrollDistanceToBottomObserver: UIViewRepresentable {
+    let onDistanceChange: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDistanceChange: onDistanceChange)
+    }
+
+    func makeUIView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ uiView: ObserverView, context: Context) {
+        context.coordinator.onDistanceChange = onDistanceChange
+        uiView.coordinator = context.coordinator
+        DispatchQueue.main.async {
+            uiView.attachToScrollViewIfNeeded()
+        }
+    }
+
+    final class Coordinator {
+        var onDistanceChange: (CGFloat) -> Void
+        weak var scrollView: UIScrollView?
+        private var contentOffsetObservation: NSKeyValueObservation?
+        private var contentSizeObservation: NSKeyValueObservation?
+        private var boundsObservation: NSKeyValueObservation?
+
+        init(onDistanceChange: @escaping (CGFloat) -> Void) {
+            self.onDistanceChange = onDistanceChange
+        }
+
+        func attach(to scrollView: UIScrollView) {
+            guard self.scrollView !== scrollView else {
+                notifyDistanceChange()
+                return
+            }
+
+            self.scrollView = scrollView
+            contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
+                self?.notifyDistanceChange()
+            }
+            contentSizeObservation = scrollView.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, _ in
+                self?.notifyDistanceChange()
+            }
+            boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] _, _ in
+                self?.notifyDistanceChange()
+            }
+        }
+
+        private func notifyDistanceChange() {
+            guard let scrollView else { return }
+            let visibleMaxY = scrollView.contentOffset.y + scrollView.bounds.height - scrollView.adjustedContentInset.bottom
+            let distanceToBottom = max(scrollView.contentSize.height - visibleMaxY, 0)
+            onDistanceChange(distanceToBottom)
+        }
+    }
+
+    final class ObserverView: UIView {
+        weak var coordinator: Coordinator?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            attachToScrollViewIfNeeded()
+        }
+
+        override func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            attachToScrollViewIfNeeded()
+        }
+
+        func attachToScrollViewIfNeeded() {
+            guard let coordinator, let scrollView = enclosingScrollView() else { return }
+            coordinator.attach(to: scrollView)
+        }
+
+        private func enclosingScrollView() -> UIScrollView? {
+            var currentSuperview = superview
+            while let view = currentSuperview {
+                if let scrollView = view as? UIScrollView {
+                    return scrollView
+                }
+                currentSuperview = view.superview
+            }
+            return nil
+        }
     }
 }
 
