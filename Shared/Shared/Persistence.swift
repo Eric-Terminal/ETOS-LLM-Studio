@@ -1360,6 +1360,45 @@ public enum Persistence {
         return summary
     }
 
+    // MARK: - 用量统计
+
+    /// 追加一条新的用量事件。
+    public static func appendUsageAnalyticsEvent(_ event: UsageAnalyticsEvent) {
+        activeGRDBStore()?.appendUsageAnalyticsEvent(event)
+    }
+
+    /// 清空新的用量统计数据。
+    public static func clearUsageAnalyticsData() {
+        activeGRDBStore()?.clearUsageAnalyticsData()
+    }
+
+    /// 删除指定日期的用量事件包。
+    @discardableResult
+    public static func deleteUsageStatsDayBundles(dayKeys: [String]) -> Int {
+        activeGRDBStore()?.deleteUsageStatsDayBundles(dayKeys: dayKeys) ?? 0
+    }
+
+    /// 读取按天聚合后的用量总览。
+    public static func loadUsageDailyTotals(fromDayKey: String? = nil, toDayKey: String? = nil) -> [UsageDailyTotal] {
+        activeGRDBStore()?.loadUsageDailyTotals(fromDayKey: fromDayKey, toDayKey: toDayKey) ?? []
+    }
+
+    /// 读取按天、模型和来源聚合后的细分统计。
+    public static func loadUsageDailyModelTotals(fromDayKey: String? = nil, toDayKey: String? = nil) -> [UsageDailyModelTotal] {
+        activeGRDBStore()?.loadUsageDailyModelTotals(fromDayKey: fromDayKey, toDayKey: toDayKey) ?? []
+    }
+
+    /// 读取用于同步的按天事件包。
+    public static func loadUsageStatsDayBundles(dayKeys: [String]? = nil) -> [UsageStatsDayBundle] {
+        activeGRDBStore()?.loadUsageStatsDayBundles(dayKeys: dayKeys) ?? []
+    }
+
+    /// 合并来自其他设备的用量统计事件包。
+    @discardableResult
+    public static func mergeUsageStatsDayBundles(_ bundles: [UsageStatsDayBundle]) -> UsageStatsMergeResult {
+        activeGRDBStore()?.mergeUsageStatsDayBundles(bundles) ?? .init()
+    }
+
     /// 保存每日脉冲运行记录。
     public static func saveDailyPulseRuns(_ runs: [DailyPulseRun]) {
         if let store = activeGRDBStore() {
