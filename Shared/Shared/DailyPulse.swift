@@ -1180,7 +1180,8 @@ public final class DailyPulseManager: ObservableObject {
                 systemPrompt: Self.systemPrompt,
                 userPrompt: userPrompt,
                 temperature: 0.45,
-                runnableModel: generationModel
+                runnableModel: generationModel,
+                requestSource: .dailyPulse
             )
             let parsed = try Self.parseModelResponse(from: raw)
             let cards = Self.makeCards(

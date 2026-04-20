@@ -228,6 +228,7 @@ public class ChatService {
         let providerID: UUID?
         let providerName: String
         let modelID: String
+        let requestSource: UsageRequestSource
         let isStreaming: Bool
         let requestedAt: Date
     }
@@ -3010,6 +3011,7 @@ public class ChatService {
             providerID: runnableModel.provider.id,
             providerName: runnableModel.provider.name,
             modelID: runnableModel.model.modelName,
+            requestSource: .chat,
             isStreaming: enableStreaming,
             requestedAt: requestStartedAt
         )
@@ -3024,7 +3026,8 @@ public class ChatService {
                 context: requestLogContext,
                 status: .failed,
                 tokenUsage: nil,
-                finishedAt: Date()
+                finishedAt: Date(),
+                recordUsageEvent: false
             )
             return
         }
@@ -3160,7 +3163,8 @@ public class ChatService {
                 context: requestLogContext,
                 status: .failed,
                 tokenUsage: nil,
-                finishedAt: Date()
+                finishedAt: Date(),
+                recordUsageEvent: false
             )
             return
         }
@@ -4096,11 +4100,33 @@ public class ChatService {
         context: RequestLogContext,
         status: RequestLogStatus,
         tokenUsage: MessageTokenUsage?,
-        finishedAt: Date
+        finishedAt: Date,
+        recordUsageEvent: Bool = true,
+        httpStatusCode: Int? = nil,
+        errorKind: String? = nil
     ) {
         let normalizedUsage = tokenUsage?.hasAnyData == true ? tokenUsage : nil
-        let logEntry = RequestLogEntry(
-            requestID: context.requestID,
+        if context.requestSource == .chat {
+            let logEntry = RequestLogEntry(
+                requestID: context.requestID,
+                sessionID: context.sessionID,
+                providerID: context.providerID,
+                providerName: context.providerName,
+                modelID: context.modelID,
+                requestedAt: context.requestedAt,
+                finishedAt: finishedAt,
+                isStreaming: context.isStreaming,
+                status: status,
+                tokenUsage: normalizedUsage
+            )
+            Persistence.appendRequestLog(logEntry)
+        }
+
+        guard recordUsageEvent else { return }
+
+        let usageEvent = UsageAnalyticsEvent(
+            eventID: context.requestID,
+            requestSource: context.requestSource,
             sessionID: context.sessionID,
             providerID: context.providerID,
             providerName: context.providerName,
@@ -4109,9 +4135,11 @@ public class ChatService {
             finishedAt: finishedAt,
             isStreaming: context.isStreaming,
             status: status,
+            httpStatusCode: httpStatusCode,
+            errorKind: errorKind,
             tokenUsage: normalizedUsage
         )
-        Persistence.appendRequestLog(logEntry)
+        Persistence.appendUsageAnalyticsEvent(usageEvent)
     }
 
     private func makeProxySessionIfNeeded(for provider: Provider?) -> (session: URLSession, proxy: NetworkProxyConfiguration?) {
@@ -4354,7 +4382,8 @@ public class ChatService {
                     context: requestLogContext,
                     status: .cancelled,
                     tokenUsage: nil,
-                    finishedAt: Date()
+                    finishedAt: Date(),
+                    errorKind: "cancelled"
                 )
             } catch {
                 logger.error("解析响应失败: \(error.localizedDescription)")
@@ -4367,7 +4396,8 @@ public class ChatService {
                     context: requestLogContext,
                     status: .failed,
                     tokenUsage: nil,
-                    finishedAt: Date()
+                    finishedAt: Date(),
+                    errorKind: "parse_response_failed"
                 )
             }
         } catch is CancellationError {
@@ -4376,7 +4406,8 @@ public class ChatService {
                 context: requestLogContext,
                 status: .cancelled,
                 tokenUsage: nil,
-                finishedAt: Date()
+                finishedAt: Date(),
+                errorKind: "cancelled"
             )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodyString: String
@@ -4396,7 +4427,9 @@ public class ChatService {
                 context: requestLogContext,
                 status: .failed,
                 tokenUsage: nil,
-                finishedAt: Date()
+                finishedAt: Date(),
+                httpStatusCode: code,
+                errorKind: "bad_status_code"
             )
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
@@ -4406,7 +4439,8 @@ public class ChatService {
                     context: requestLogContext,
                     status: .cancelled,
                     tokenUsage: nil,
-                    finishedAt: Date()
+                    finishedAt: Date(),
+                    errorKind: "cancelled"
                 )
             } else {
                 addErrorMessage(String(
@@ -4418,7 +4452,8 @@ public class ChatService {
                     context: requestLogContext,
                     status: .failed,
                     tokenUsage: nil,
-                    finishedAt: Date()
+                    finishedAt: Date(),
+                    errorKind: "network_error"
                 )
             }
         }
@@ -4874,7 +4909,8 @@ public class ChatService {
                 context: requestLogContext,
                 status: .cancelled,
                 tokenUsage: latestTokenUsage,
-                finishedAt: Date()
+                finishedAt: Date(),
+                errorKind: "cancelled"
             )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let bodySnippet: String
@@ -4894,7 +4930,9 @@ public class ChatService {
                 context: requestLogContext,
                 status: .failed,
                 tokenUsage: latestTokenUsage,
-                finishedAt: Date()
+                finishedAt: Date(),
+                httpStatusCode: code,
+                errorKind: "bad_status_code"
             )
         } catch {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
@@ -4904,7 +4942,8 @@ public class ChatService {
                     context: requestLogContext,
                     status: .cancelled,
                     tokenUsage: latestTokenUsage,
-                    finishedAt: Date()
+                    finishedAt: Date(),
+                    errorKind: "cancelled"
                 )
             } else {
                 addErrorMessage(String(
@@ -4916,7 +4955,8 @@ public class ChatService {
                     context: requestLogContext,
                     status: .failed,
                     tokenUsage: latestTokenUsage,
-                    finishedAt: Date()
+                    finishedAt: Date(),
+                    errorKind: "streaming_error"
                 )
             }
         }
@@ -5759,7 +5799,9 @@ public class ChatService {
                 systemPrompt: summarySystemPrompt,
                 userPrompt: summaryUserPrompt,
                 temperature: 0.2,
-                runnableModel: runnableModel
+                runnableModel: runnableModel,
+                requestSource: .reasoningSummary,
+                sessionID: sessionID
             )
             let summary = sanitizeReasoningSummaryText(rawSummary)
             guard !summary.isEmpty else { return }
@@ -5866,7 +5908,9 @@ public class ChatService {
                 systemPrompt: summarySystemPrompt,
                 userPrompt: summaryUserPrompt,
                 temperature: 0.2,
-                runnableModel: resolvedConversationSummaryModel()
+                runnableModel: resolvedConversationSummaryModel(),
+                requestSource: .conversationSummary,
+                sessionID: sessionID
             )
             let summary = sanitizeConversationMemoryText(rawSummary, maxLength: 240)
             guard !summary.isEmpty else { return }
@@ -5911,7 +5955,9 @@ public class ChatService {
                 systemPrompt: profileSystemPrompt,
                 userPrompt: profileUserPrompt,
                 temperature: 0.2,
-                runnableModel: resolvedConversationSummaryModel()
+                runnableModel: resolvedConversationSummaryModel(),
+                requestSource: .conversationProfile,
+                sessionID: sessionID
             )
             let profileContent = sanitizeConversationMemoryText(rawProfile, maxLength: 500)
             guard !profileContent.isEmpty else { return }
@@ -6011,8 +6057,7 @@ public class ChatService {
         metadata: [String: JSONValue],
         source: String?
     ) async -> String? {
-        guard let runnableModel = selectedModelSubject.value,
-              let adapter = adapters[runnableModel.provider.apiFormat] else {
+        guard let runnableModel = selectedModelSubject.value else {
             return nil
         }
 
@@ -6040,24 +6085,14 @@ public class ChatService {
         """, comment: "Prompt for generating shortcut tool description.")
         let prompt = String(format: promptTemplate, toolName, metadataText, sourceText)
 
-        let requestMessages = [ChatMessage(role: .user, content: prompt)]
-        let payload: [String: Any] = ["temperature": 0.2, "stream": false]
-        guard let request = adapter.buildChatRequest(
-            for: runnableModel,
-            commonPayload: payload,
-            messages: requestMessages,
-            tools: nil,
-            audioAttachments: [:],
-            imageAttachments: [:],
-            fileAttachments: [:]
-        ) else {
-            return nil
-        }
-
         do {
-            let data = try await fetchData(for: request, provider: runnableModel.provider)
-            let response = try adapter.parseResponse(data: data)
-            let text = response.content
+            let rawDescription = try await generateDetachedChatCompletion(
+                userPrompt: prompt,
+                temperature: 0.2,
+                runnableModel: runnableModel,
+                requestSource: .shortcutDescription
+            )
+            let text = rawDescription
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\"'”’"))
             return text.isEmpty ? nil : text
@@ -6072,7 +6107,9 @@ public class ChatService {
         systemPrompt: String? = nil,
         userPrompt: String,
         temperature: Double = 0.4,
-        runnableModel: RunnableModel? = nil
+        runnableModel: RunnableModel? = nil,
+        requestSource: UsageRequestSource,
+        sessionID: UUID? = nil
     ) async throws -> String {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
@@ -6109,9 +6146,69 @@ public class ChatService {
             throw DetachedCompletionError.buildRequestFailed
         }
 
-        let data = try await fetchData(for: request, provider: targetModel.provider)
-        let responseMessage = try adapter.parseResponse(data: data)
-        return responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestContext = RequestLogContext(
+            requestID: UUID(),
+            sessionID: sessionID,
+            providerID: targetModel.provider.id,
+            providerName: targetModel.provider.name,
+            modelID: targetModel.model.modelName,
+            requestSource: requestSource,
+            isStreaming: false,
+            requestedAt: Date()
+        )
+
+        do {
+            let data = try await fetchData(for: request, provider: targetModel.provider)
+            do {
+                let responseMessage = try adapter.parseResponse(data: data)
+                persistRequestLog(
+                    context: requestContext,
+                    status: .success,
+                    tokenUsage: responseMessage.tokenUsage,
+                    finishedAt: Date()
+                )
+                return responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                persistRequestLog(
+                    context: requestContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "parse_response_failed"
+                )
+                throw error
+            }
+        } catch is CancellationError {
+            persistRequestLog(
+                context: requestContext,
+                status: .cancelled,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "cancelled"
+            )
+            throw CancellationError()
+        } catch NetworkError.badStatusCode(let code, let bodyData) {
+            persistRequestLog(
+                context: requestContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                httpStatusCode: code,
+                errorKind: "bad_status_code"
+            )
+            throw NetworkError.badStatusCode(code, bodyData: bodyData)
+        } catch {
+            let errorKind = isCancellationError(error) ? "cancelled" : "network_error"
+            let status: RequestLogStatus = isCancellationError(error) ? .cancelled : .failed
+            persistRequestLog(
+                context: requestContext,
+                status: status,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: errorKind
+            )
+            throw error
+        }
     }
     
     private func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage) async {
@@ -6124,9 +6221,8 @@ public class ChatService {
         
         // 2. 获取标题模型和适配器（优先独立标题模型，未配置时回退到当前对话模型）
         let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
-        guard let runnableModel = resolveTitleGenerationModel(),
-              let adapter = adapters[runnableModel.provider.apiFormat] else {
-            logger.error("无法获取标题模型或适配器，无法生成标题。")
+        guard let runnableModel = resolveTitleGenerationModel() else {
+            logger.error("无法获取标题模型，无法生成标题。")
             return
         }
         let usingDedicatedTitleModel = !dedicatedModelIdentifier.isEmpty && dedicatedModelIdentifier == runnableModel.id
@@ -6149,22 +6245,17 @@ public class ChatService {
         """, comment: "Prompt to generate a concise session title from user message.")
         let titlePrompt = String(format: titlePromptTemplate, firstUserMessage.content)
         
-        let titleRequestMessages = [ChatMessage(role: .user, content: titlePrompt)]
-        
-        // 5. 构建并发送API请求 (非流式)
-        let payload: [String: Any] = ["temperature": 0.5, "stream": false]
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: payload, messages: titleRequestMessages, tools: nil, audioAttachments: [:], imageAttachments: [:], fileAttachments: [:]) else {
-            logger.error("构建标题生成请求失败。")
-            return
-        }
-
         do {
-            let data = try await fetchData(for: request, provider: runnableModel.provider)
-            logger.log("[Log] 收到 AI 原始响应体:\n---\n\(String(data: data, encoding: .utf8) ?? "无法以 UTF-8 解码")\n---")
-            let responseMessage = try adapter.parseResponse(data: data)
-            
+            let rawTitle = try await generateDetachedChatCompletion(
+                userPrompt: titlePrompt,
+                temperature: 0.5,
+                runnableModel: runnableModel,
+                requestSource: .sessionTitle,
+                sessionID: sessionID
+            )
+
             // 6. 清理和应用标题
-            let newTitle = responseMessage.content
+            let newTitle = rawTitle
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\"'”’"))
 
