@@ -157,6 +157,10 @@ public struct UsageAnalyticsDashboardState: Sendable {
     public var monthDays: [UsageAnalyticsCalendarDay?]
     public var detail: UsageAnalyticsDetailSnapshot
 
+    public var activeOverviewCard: UsageAnalyticsOverviewCard? {
+        overviewCards.first(where: { $0.scope == selectedScope }) ?? overviewCards.first
+    }
+
     public init(
         isLoading: Bool,
         isEmpty: Bool,
@@ -232,6 +236,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let trimmedDayKey = dayKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDayKey.isEmpty else { return }
         selectedDayKey = trimmedDayKey
+        state.selectedDayKey = trimmedDayKey
         if let date = UsageAnalyticsRuntimeContext.date(for: trimmedDayKey, calendar: calendar) {
             displayedMonthAnchor = calendar.dateInterval(of: .month, for: date)?.start ?? date
         }
@@ -241,6 +246,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     public func selectScope(_ scope: UsageAnalyticsDetailScope) {
         guard selectedScope != scope else { return }
         selectedScope = scope
+        state.selectedScope = scope
         recomputeState()
     }
 

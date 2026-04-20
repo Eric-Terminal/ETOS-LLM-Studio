@@ -16,29 +16,25 @@ struct UsageAnalyticsView: View {
             }
 
             Section("概览") {
-                ForEach(viewModel.state.overviewCards) { card in
-                    Button {
-                        viewModel.selectScope(card.scope)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(card.title)
-                                    .etFont(.headline)
-                                Spacer()
-                                Text("\(card.requestCount)")
-                                    .etFont(.headline.monospaced())
-                            }
-                            Text("Token \(card.totalTokens) · 错误 \(card.errorCount)")
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                            Text("常用模型：\(card.topModelName)")
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                scopeSwitcher
+
+                if let card = viewModel.state.activeOverviewCard {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(card.title)
+                                .etFont(.headline)
+                            Spacer()
+                            Text("\(card.requestCount)")
+                                .etFont(.headline.monospaced())
                         }
+                        Text("Token \(card.totalTokens) · 错误 \(card.errorCount)")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("常用模型：\(card.topModelName)")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .buttonStyle(.plain)
-                    .listRowBackground(viewModel.state.selectedScope == card.scope ? Color.accentColor.opacity(0.12) : Color.clear)
                 }
             }
 
@@ -110,14 +106,7 @@ struct UsageAnalyticsView: View {
             }
 
             Section("详情") {
-                Picker("统计范围", selection: Binding(
-                    get: { viewModel.state.selectedScope },
-                    set: { viewModel.selectScope($0) }
-                )) {
-                    ForEach(UsageAnalyticsDetailScope.allCases, id: \.self) { scope in
-                        Text(scope.title).tag(scope)
-                    }
-                }
+                scopeSwitcher
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(viewModel.state.detail.title)
@@ -163,8 +152,26 @@ struct UsageAnalyticsView: View {
             }
         }
         .navigationTitle("用量统计")
-        .task {
-            viewModel.refresh()
+    }
+
+    private var scopeSwitcher: some View {
+        HStack(spacing: 6) {
+            ForEach(UsageAnalyticsDetailScope.allCases, id: \.self) { scope in
+                Button {
+                    viewModel.selectScope(scope)
+                } label: {
+                    Text(scopeButtonTitle(scope))
+                        .etFont(.caption2.weight(.semibold))
+                        .foregroundStyle(viewModel.state.selectedScope == scope ? Color.white : Color.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.state.selectedScope == scope ? Color.accentColor : Color.gray.opacity(0.18))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -195,6 +202,17 @@ struct UsageAnalyticsView: View {
             return Color(red: 0.11, green: 0.47, blue: 0.20)
         default:
             return Color.gray.opacity(0.25)
+        }
+    }
+
+    private func scopeButtonTitle(_ scope: UsageAnalyticsDetailScope) -> String {
+        switch scope {
+        case .day:
+            return "今日"
+        case .week:
+            return "本周"
+        case .month:
+            return "本月"
         }
     }
 }

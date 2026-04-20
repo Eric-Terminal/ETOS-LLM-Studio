@@ -3,12 +3,6 @@ import Shared
 
 struct UsageAnalyticsView: View {
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()
-
-    private let overviewColumns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
-    ]
     private let calendarColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
 
     var body: some View {
@@ -35,34 +29,25 @@ struct UsageAnalyticsView: View {
         .background(Color(.secondarySystemGroupedBackground))
         .navigationTitle("用量统计")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            viewModel.refresh()
-        }
     }
 
     private var overviewSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader("概览")
-            LazyVGrid(columns: overviewColumns, spacing: 12) {
-                ForEach(viewModel.state.overviewCards) { card in
-                    Button {
-                        viewModel.selectScope(card.scope)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(card.title)
-                                .etFont(.headline)
-                                .foregroundStyle(.primary)
-                            metricLine("请求", value: "\(card.requestCount)")
-                            metricLine("Token", value: "\(card.totalTokens)")
-                            metricLine("错误", value: "\(card.errorCount)")
-                            metricLine("常用模型", value: card.topModelName)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(cardBackground(isActive: viewModel.state.selectedScope == card.scope))
-                    }
-                    .buttonStyle(.plain)
+            scopeSwitcher
+            if let card = viewModel.state.activeOverviewCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(card.title)
+                        .etFont(.headline)
+                        .foregroundStyle(.primary)
+                    metricLine("请求", value: "\(card.requestCount)")
+                    metricLine("Token", value: "\(card.totalTokens)")
+                    metricLine("错误", value: "\(card.errorCount)")
+                    metricLine("常用模型", value: card.topModelName)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(cardBackground(isActive: true))
             }
         }
     }
@@ -178,15 +163,7 @@ struct UsageAnalyticsView: View {
                 Spacer()
             }
 
-            Picker("统计范围", selection: Binding(
-                get: { viewModel.state.selectedScope },
-                set: { viewModel.selectScope($0) }
-            )) {
-                ForEach(UsageAnalyticsDetailScope.allCases, id: \.self) { scope in
-                    Text(scope.title).tag(scope)
-                }
-            }
-            .pickerStyle(.segmented)
+            scopeSwitcher
 
             VStack(alignment: .leading, spacing: 12) {
                 Text(viewModel.state.detail.title)
@@ -292,6 +269,27 @@ struct UsageAnalyticsView: View {
         }
     }
 
+    private var scopeSwitcher: some View {
+        HStack(spacing: 10) {
+            ForEach(UsageAnalyticsDetailScope.allCases, id: \.self) { scope in
+                Button {
+                    viewModel.selectScope(scope)
+                } label: {
+                    Text(scopeButtonTitle(scope))
+                        .etFont(.subheadline.weight(.semibold))
+                        .foregroundStyle(viewModel.state.selectedScope == scope ? Color.white : Color.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.state.selectedScope == scope ? Color.accentColor : Color(.systemBackground))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     private func heatCell(day: UsageAnalyticsCalendarDay, side: CGFloat) -> some View {
         Button {
             viewModel.selectDay(dayKey: day.dayKey)
@@ -311,6 +309,17 @@ struct UsageAnalyticsView: View {
     private func cardBackground(isActive: Bool) -> some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(isActive ? Color.accentColor.opacity(0.14) : Color(.systemBackground))
+    }
+
+    private func scopeButtonTitle(_ scope: UsageAnalyticsDetailScope) -> String {
+        switch scope {
+        case .day:
+            return "今日"
+        case .week:
+            return "本周"
+        case .month:
+            return "本月"
+        }
     }
 
     private func dayBackground(_ day: UsageAnalyticsCalendarDay) -> Color {
