@@ -45,6 +45,7 @@ public enum SyncEngine {
         var dailyPulsePendingCuration: DailyPulseCurationNote?
         var dailyPulseExternalSignals: [DailyPulseExternalSignal] = []
         var dailyPulseTasks: [DailyPulseTask] = []
+        var usageStatsDayBundles: [UsageStatsDayBundle] = []
         var fontFiles: [SyncedFontFile] = []
         var fontRouteConfigurationData: Data?
         var appStorageSnapshot: Data?
@@ -120,6 +121,10 @@ public enum SyncEngine {
             dailyPulsePendingCuration = Persistence.loadDailyPulsePendingCuration()
             dailyPulseExternalSignals = Persistence.loadDailyPulseExternalSignals()
             dailyPulseTasks = Persistence.loadDailyPulseTasks()
+        }
+
+        if options.contains(.usageStats) {
+            usageStatsDayBundles = Persistence.loadUsageStatsDayBundles()
         }
 
         if options.contains(.fontFiles) {
@@ -198,6 +203,7 @@ public enum SyncEngine {
             dailyPulsePendingCuration: dailyPulsePendingCuration,
             dailyPulseExternalSignals: dailyPulseExternalSignals,
             dailyPulseTasks: dailyPulseTasks,
+            usageStatsDayBundles: usageStatsDayBundles,
             fontFiles: fontFiles,
             fontRouteConfigurationData: fontRouteConfigurationData,
             appStorageSnapshot: appStorageSnapshot,
@@ -290,6 +296,15 @@ public enum SyncEngine {
             summary.skippedDailyPulseRuns = result.skipped
             if result.imported > 0 {
                 NotificationCenter.default.post(name: .syncDailyPulseUpdated, object: nil)
+            }
+        }
+
+        if package.options.contains(.usageStats) {
+            let result = Persistence.mergeUsageStatsDayBundles(package.usageStatsDayBundles)
+            summary.importedUsageEvents = result.importedEvents
+            summary.skippedUsageEvents = result.skippedEvents
+            if result.importedEvents > 0 {
+                NotificationCenter.default.post(name: .syncUsageStatsUpdated, object: nil)
             }
         }
         

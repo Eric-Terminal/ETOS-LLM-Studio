@@ -40,6 +40,7 @@ struct DeviceSyncSettingsView: View {
     @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
     @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
     @AppStorage("sync.options.dailyPulse") private var syncDailyPulse = true
+    @AppStorage("sync.options.usageStats") private var syncUsageStats = true
     @AppStorage("sync.options.fontFiles") private var syncFontFiles = true
     @AppStorage("sync.options.appStorage") private var syncAppStorage = true
     @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
@@ -70,6 +71,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle("世界书", isOn: $syncWorldbooks)
                 Toggle("反馈工单", isOn: $syncFeedbackTickets)
                 Toggle("每日脉冲", isOn: $syncDailyPulse)
+                Toggle("用量统计", isOn: $syncUsageStats)
                 Toggle("字体文件与字体规则", isOn: $syncFontFiles)
                 Toggle("软件设置（AppStorage）", isOn: $syncAppStorage)
             }
@@ -241,6 +243,7 @@ struct DeviceSyncSettingsView: View {
         if syncWorldbooks { option.insert(.worldbooks) }
         if syncFeedbackTickets { option.insert(.feedbackTickets) }
         if syncDailyPulse { option.insert(.dailyPulse) }
+        if syncUsageStats { option.insert(.usageStats) }
         if syncFontFiles { option.insert(.fontFiles) }
         if syncAppStorage { option.insert(.appStorage) }
         return option
@@ -376,6 +379,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedDailyPulseRuns > 0 {
             parts.append(String(format: NSLocalizedString("每日脉冲 +%d", comment: ""), summary.importedDailyPulseRuns))
+        }
+        if summary.importedUsageEvents > 0 {
+            parts.append(String(format: NSLocalizedString("用量事件 +%d", comment: ""), summary.importedUsageEvents))
         }
         if summary.importedFontFiles > 0 {
             parts.append(String(format: NSLocalizedString("字体文件 +%d", comment: ""), summary.importedFontFiles))

@@ -271,6 +271,19 @@ public enum SyncPackageTransferService {
             })
         }
 
+        if package.options.contains(.usageStats) {
+            descriptors.append(contentsOf: package.usageStatsDayBundles.map {
+                SyncRecordDescriptor(
+                    type: .usageStatsDay,
+                    recordID: $0.dayKey,
+                    checksum: $0.checksum,
+                    updatedAt: $0.events.map(\.finishedAt).max()
+                        ?? $0.events.map(\.requestedAt).max()
+                        ?? generatedAt
+                )
+            })
+        }
+
         if package.options.contains(.fontFiles) {
             descriptors.append(contentsOf: package.fontFiles.map {
                 SyncRecordDescriptor(

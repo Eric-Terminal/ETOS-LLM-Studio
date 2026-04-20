@@ -381,6 +381,7 @@ public final class CloudSyncManager: ObservableObject {
         if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
         if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
         if isSyncOptionEnabled(key: "sync.options.dailyPulse", defaultValue: true) { options.insert(.dailyPulse) }
+        if isSyncOptionEnabled(key: "sync.options.usageStats", defaultValue: true) { options.insert(.usageStats) }
         if isSyncOptionEnabled(key: "sync.options.fontFiles", defaultValue: true) { options.insert(.fontFiles) }
         let legacyAppStorageDefault = isSyncOptionEnabled(key: "sync.options.globalPrompt", defaultValue: true)
         if isSyncOptionEnabled(key: "sync.options.appStorage", defaultValue: legacyAppStorageDefault) { options.insert(.appStorage) }
@@ -636,6 +637,7 @@ private extension SyncMergeSummary {
             || importedWorldbooks > 0
             || importedFeedbackTickets > 0
             || importedDailyPulseRuns > 0
+            || importedUsageEvents > 0
             || importedFontFiles > 0
             || importedFontRouteConfigurations > 0
             || importedAppStorageValues > 0
@@ -666,6 +668,8 @@ private extension SyncMergeSummary {
         skippedFeedbackTickets += other.skippedFeedbackTickets
         importedDailyPulseRuns += other.importedDailyPulseRuns
         skippedDailyPulseRuns += other.skippedDailyPulseRuns
+        importedUsageEvents += other.importedUsageEvents
+        skippedUsageEvents += other.skippedUsageEvents
         importedFontFiles += other.importedFontFiles
         skippedFontFiles += other.skippedFontFiles
         importedFontRouteConfigurations += other.importedFontRouteConfigurations

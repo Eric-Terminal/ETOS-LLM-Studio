@@ -492,6 +492,7 @@ struct ThirdPartyImportWatchHintView: View {
         if options.contains(.worldbooks) { items.append("世界书") }
         if options.contains(.feedbackTickets) { items.append("反馈工单") }
         if options.contains(.dailyPulse) { items.append("每日脉冲") }
+        if options.contains(.usageStats) { items.append("用量统计") }
         if options.contains(.fontFiles) { items.append("字体文件与规则") }
         if options.contains(.appStorage) { items.append("软件设置") }
         return items.isEmpty ? "无" : items.joined(separator: "、")

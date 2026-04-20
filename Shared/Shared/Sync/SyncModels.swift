@@ -35,6 +35,7 @@ public struct SyncOptions: OptionSet, Codable {
     public static let dailyPulse = SyncOptions(rawValue: 1 << 11) // 每日脉冲同步选项
     public static let fontFiles = SyncOptions(rawValue: 1 << 12) // 字体文件与字体路由同步选项
     public static let skills = SyncOptions(rawValue: 1 << 13) // Agent Skills 同步选项
+    public static let usageStats = SyncOptions(rawValue: 1 << 14) // 用量统计同步选项
     @available(*, deprecated, message: "请改用 appStorage 选项。")
     public static let globalSystemPrompt = appStorage
     
@@ -228,6 +229,7 @@ public struct SyncPackage: Codable {
     public var dailyPulsePendingCuration: DailyPulseCurationNote?
     public var dailyPulseExternalSignals: [DailyPulseExternalSignal]
     public var dailyPulseTasks: [DailyPulseTask]
+    public var usageStatsDayBundles: [UsageStatsDayBundle]
     public var fontFiles: [SyncedFontFile]
     public var fontRouteConfigurationData: Data?
     /// 完整 AppStorage 快照（二进制 Plist），用于同步软件设置
@@ -236,7 +238,7 @@ public struct SyncPackage: Codable {
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
@@ -257,6 +259,7 @@ public struct SyncPackage: Codable {
         dailyPulsePendingCuration: DailyPulseCurationNote? = nil,
         dailyPulseExternalSignals: [DailyPulseExternalSignal] = [],
         dailyPulseTasks: [DailyPulseTask] = [],
+        usageStatsDayBundles: [UsageStatsDayBundle] = [],
         fontFiles: [SyncedFontFile] = [],
         fontRouteConfigurationData: Data? = nil,
         appStorageSnapshot: Data? = nil,
@@ -279,6 +282,7 @@ public struct SyncPackage: Codable {
         self.dailyPulsePendingCuration = dailyPulsePendingCuration
         self.dailyPulseExternalSignals = dailyPulseExternalSignals
         self.dailyPulseTasks = dailyPulseTasks
+        self.usageStatsDayBundles = usageStatsDayBundles
         self.fontFiles = fontFiles
         self.fontRouteConfigurationData = fontRouteConfigurationData
         self.appStorageSnapshot = appStorageSnapshot
@@ -304,6 +308,7 @@ public struct SyncPackage: Codable {
         dailyPulsePendingCuration = try container.decodeIfPresent(DailyPulseCurationNote.self, forKey: .dailyPulsePendingCuration)
         dailyPulseExternalSignals = try container.decodeIfPresent([DailyPulseExternalSignal].self, forKey: .dailyPulseExternalSignals) ?? []
         dailyPulseTasks = try container.decodeIfPresent([DailyPulseTask].self, forKey: .dailyPulseTasks) ?? []
+        usageStatsDayBundles = try container.decodeIfPresent([UsageStatsDayBundle].self, forKey: .usageStatsDayBundles) ?? []
         fontFiles = try container.decodeIfPresent([SyncedFontFile].self, forKey: .fontFiles) ?? []
         fontRouteConfigurationData = try container.decodeIfPresent(Data.self, forKey: .fontRouteConfigurationData)
         appStorageSnapshot = try container.decodeIfPresent(Data.self, forKey: .appStorageSnapshot)
@@ -327,6 +332,7 @@ public enum SyncRecordType: String, Codable, CaseIterable, Sendable {
     case worldbook
     case feedbackTicket
     case dailyPulseRun
+    case usageStatsDay
     case fontFile
     case fontRouteConfiguration
     case appStorage
@@ -465,6 +471,8 @@ public struct SyncMergeSummary: Equatable {
     public var skippedFeedbackTickets: Int
     public var importedDailyPulseRuns: Int
     public var skippedDailyPulseRuns: Int
+    public var importedUsageEvents: Int
+    public var skippedUsageEvents: Int
     public var importedFontFiles: Int
     public var skippedFontFiles: Int
     public var importedFontRouteConfigurations: Int
@@ -497,6 +505,8 @@ public struct SyncMergeSummary: Equatable {
         skippedFeedbackTickets: Int = 0,
         importedDailyPulseRuns: Int = 0,
         skippedDailyPulseRuns: Int = 0,
+        importedUsageEvents: Int = 0,
+        skippedUsageEvents: Int = 0,
         importedFontFiles: Int = 0,
         skippedFontFiles: Int = 0,
         importedFontRouteConfigurations: Int = 0,
@@ -528,6 +538,8 @@ public struct SyncMergeSummary: Equatable {
         self.skippedFeedbackTickets = skippedFeedbackTickets
         self.importedDailyPulseRuns = importedDailyPulseRuns
         self.skippedDailyPulseRuns = skippedDailyPulseRuns
+        self.importedUsageEvents = importedUsageEvents
+        self.skippedUsageEvents = skippedUsageEvents
         self.importedFontFiles = importedFontFiles
         self.skippedFontFiles = skippedFontFiles
         self.importedFontRouteConfigurations = importedFontRouteConfigurations
@@ -561,6 +573,8 @@ public struct SyncMergeSummary: Equatable {
         skippedFeedbackTickets: 0,
         importedDailyPulseRuns: 0,
         skippedDailyPulseRuns: 0,
+        importedUsageEvents: 0,
+        skippedUsageEvents: 0,
         importedFontFiles: 0,
         skippedFontFiles: 0,
         importedFontRouteConfigurations: 0,
@@ -591,6 +605,8 @@ public extension Notification.Name {
     static let syncFontsUpdated = Notification.Name("com.ETOS.sync.fonts.updated")
     /// 每日脉冲发生变化时广播，便于当前设备刷新卡片列表
     static let syncDailyPulseUpdated = Notification.Name("com.ETOS.sync.dailyPulse.updated")
+    /// 用量统计发生变化时广播，便于当前设备刷新统计页面
+    static let syncUsageStatsUpdated = Notification.Name("com.ETOS.sync.usageStats.updated")
 }
 
 // MARK: - 模型等价辅助

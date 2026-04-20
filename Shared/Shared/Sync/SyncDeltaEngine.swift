@@ -227,6 +227,7 @@ public enum SyncDeltaEngine {
         var providerDeleted = false
         var backgroundDeleted = false
         var dailyPulseDeleted = false
+        var usageStatsDeleted = false
         var fontDeleted = false
         var memoryIDsToDelete = Set<UUID>()
 
@@ -327,6 +328,12 @@ public enum SyncDeltaEngine {
                     summary.importedDailyPulseRuns += 1
                     dailyPulseDeleted = true
                 }
+            case .usageStatsDay:
+                let removed = Persistence.deleteUsageStatsDayBundles(dayKeys: [deletion.recordID])
+                if removed > 0 {
+                    summary.importedUsageEvents += removed
+                    usageStatsDeleted = true
+                }
             case .fontFile:
                 guard let id = UUID(uuidString: deletion.recordID) else { continue }
                 if FontLibrary.loadAssets().contains(where: { $0.id == id }) {
@@ -362,6 +369,9 @@ public enum SyncDeltaEngine {
         }
         if dailyPulseDeleted {
             NotificationCenter.default.post(name: .syncDailyPulseUpdated, object: nil)
+        }
+        if usageStatsDeleted {
+            NotificationCenter.default.post(name: .syncUsageStatsUpdated, object: nil)
         }
         if fontDeleted {
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
@@ -526,6 +536,20 @@ private extension SyncDeltaEngine {
             )
         }
 
+        if package.options.contains(.usageStats) {
+            records.append(contentsOf: package.usageStatsDayBundles.map { bundle in
+                SyncRecordDescriptor(
+                    type: .usageStatsDay,
+                    recordID: bundle.dayKey,
+                    checksum: bundle.checksum,
+                    updatedAt: bundle.events.map(\.finishedAt).max()
+                        ?? bundle.events.map(\.requestedAt).max()
+                        ?? UsageAnalyticsRuntimeContext.date(for: bundle.dayKey)
+                        ?? .distantPast
+                )
+            })
+        }
+
         if package.options.contains(.fontFiles) {
             records.append(contentsOf: package.fontFiles.map {
                 SyncRecordDescriptor(
@@ -583,6 +607,7 @@ private extension SyncDeltaEngine {
         var dailyPulsePendingCuration: DailyPulseCurationNote?
         var dailyPulseExternalSignals: [DailyPulseExternalSignal] = []
         var dailyPulseTasks: [DailyPulseTask] = []
+        var usageStatsDayBundles: [UsageStatsDayBundle] = []
         var fontFiles: [SyncedFontFile] = []
         var fontRouteConfigurationData: Data?
         var appStorageSnapshot: Data?
@@ -609,6 +634,10 @@ private extension SyncDeltaEngine {
             dailyPulseTasks = full.dailyPulseTasks
         }
 
+        usageStatsDayBundles = full.usageStatsDayBundles.filter {
+            keys.contains(SyncRecordDescriptor.key(type: .usageStatsDay, recordID: $0.dayKey))
+        }
+
         if keys.contains(SyncRecordDescriptor.key(type: .fontRouteConfiguration, recordID: "global.font.route")) {
             fontRouteConfigurationData = full.fontRouteConfigurationData
         }
@@ -632,6 +661,9 @@ private extension SyncDeltaEngine {
         if !feedbackTickets.isEmpty { options.insert(.feedbackTickets) }
         if !dailyPulseRuns.isEmpty || !dailyPulseFeedbackHistory.isEmpty || dailyPulsePendingCuration != nil || !dailyPulseExternalSignals.isEmpty || !dailyPulseTasks.isEmpty {
             options.insert(.dailyPulse)
+        }
+        if !usageStatsDayBundles.isEmpty {
+            options.insert(.usageStats)
         }
         if !fontFiles.isEmpty || fontRouteConfigurationData != nil {
             options.insert(.fontFiles)
@@ -658,6 +690,7 @@ private extension SyncDeltaEngine {
             dailyPulsePendingCuration: dailyPulsePendingCuration,
             dailyPulseExternalSignals: dailyPulseExternalSignals,
             dailyPulseTasks: dailyPulseTasks,
+            usageStatsDayBundles: usageStatsDayBundles,
             fontFiles: fontFiles,
             fontRouteConfigurationData: fontRouteConfigurationData,
             appStorageSnapshot: appStorageSnapshot,
@@ -743,6 +776,8 @@ private extension SyncDeltaEngine {
             return .feedbackTickets
         case .dailyPulseRun:
             return .dailyPulse
+        case .usageStatsDay:
+            return .usageStats
         case .fontFile, .fontRouteConfiguration:
             return .fontFiles
         case .appStorage:
