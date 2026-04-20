@@ -57,6 +57,7 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedTitleGenerationModel: RunnableModel?
     @Published var selectedDailyPulseModel: RunnableModel?
     @Published var selectedConversationSummaryModel: RunnableModel?
+    @Published var selectedReasoningSummaryModel: RunnableModel?
     @Published var selectedTTSModel: RunnableModel?
     @Published var ttsModels: [RunnableModel] = []
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
@@ -133,6 +134,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("conversationMemoryRoundThreshold") var conversationMemoryRoundThreshold: Int = 6
     @AppStorage("conversationMemorySummaryMinIntervalMinutes") var conversationMemorySummaryMinIntervalMinutes: Int = 120
     @AppStorage("enableConversationProfileDailyUpdate") var enableConversationProfileDailyUpdate: Bool = true
+    @AppStorage("enableReasoningSummary") var enableReasoningSummary: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     @AppStorage("enableNoBubbleUI") var enableNoBubbleUI: Bool = false
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
@@ -143,6 +145,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
     @AppStorage("dailyPulseModelIdentifier") var dailyPulseModelIdentifier: String = ""
     @AppStorage("conversationSummaryModelIdentifier") var conversationSummaryModelIdentifier: String = ""
+    @AppStorage("reasoningSummaryModelIdentifier") var reasoningSummaryModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
     @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
@@ -206,6 +209,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     var conversationSummaryModelOptions: [RunnableModel] {
+        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+    }
+
+    var reasoningSummaryModelOptions: [RunnableModel] {
         activatedModels.filter { $0.model.capabilities.contains(.chat) }
     }
     
@@ -465,6 +472,7 @@ final class ChatViewModel: ObservableObject {
                 self.syncTitleGenerationModelSelection()
                 self.syncDailyPulseModelSelection()
                 self.syncConversationSummaryModelSelection()
+                self.syncReasoningSummaryModelSelection()
             }
             .store(in: &cancellables)
         
@@ -613,6 +621,7 @@ final class ChatViewModel: ObservableObject {
         syncTitleGenerationModelSelection()
         syncDailyPulseModelSelection()
         syncConversationSummaryModelSelection()
+        syncReasoningSummaryModelSelection()
         reloadConversationMemoryState()
     }
     
@@ -851,6 +860,14 @@ final class ChatViewModel: ObservableObject {
         let newIdentifier = model?.id ?? ""
         if conversationSummaryModelIdentifier != newIdentifier {
             conversationSummaryModelIdentifier = newIdentifier
+        }
+    }
+
+    func setSelectedReasoningSummaryModel(_ model: RunnableModel?) {
+        selectedReasoningSummaryModel = model
+        let newIdentifier = model?.id ?? ""
+        if reasoningSummaryModelIdentifier != newIdentifier {
+            reasoningSummaryModelIdentifier = newIdentifier
         }
     }
 
@@ -1121,6 +1138,25 @@ final class ChatViewModel: ObservableObject {
 
         selectedConversationSummaryModel = nil
         conversationSummaryModelIdentifier = ""
+    }
+
+    private func syncReasoningSummaryModelSelection() {
+        if let match = reasoningSummaryModelOptions.first(where: { $0.id == reasoningSummaryModelIdentifier }) {
+            if selectedReasoningSummaryModel?.id != match.id {
+                selectedReasoningSummaryModel = match
+            }
+            return
+        }
+
+        guard !reasoningSummaryModelIdentifier.isEmpty else {
+            selectedReasoningSummaryModel = nil
+            return
+        }
+
+        guard !reasoningSummaryModelOptions.isEmpty else { return }
+
+        selectedReasoningSummaryModel = nil
+        reasoningSummaryModelIdentifier = ""
     }
 
     func requestBackgroundReplyNotificationPermission() {

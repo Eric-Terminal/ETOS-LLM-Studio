@@ -51,6 +51,13 @@ struct SpecializedModelSelectorView: View {
             )
 
             modelPickerSection(
+                title: "思考摘要模型",
+                options: viewModel.reasoningSummaryModelOptions,
+                selectionID: reasoningSummaryModelIdentifierBinding,
+                footer: "用于为思考内容生成摘要；留空时跟随当前对话模型。"
+            )
+
+            modelPickerSection(
                 title: "生图模型",
                 options: viewModel.imageGenerationModelOptions,
                 selectionID: imageGenerationModelIdentifierBinding,
@@ -139,6 +146,20 @@ struct SpecializedModelSelectorView: View {
         Binding(
             get: { imageGenerationModelIdentifier },
             set: { imageGenerationModelIdentifier = $0 }
+        )
+    }
+
+    private var reasoningSummaryModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedReasoningSummaryModel?.id ?? "" },
+            set: { newIdentifier in
+                guard !newIdentifier.isEmpty else {
+                    viewModel.setSelectedReasoningSummaryModel(nil)
+                    return
+                }
+                let selected = viewModel.reasoningSummaryModelOptions.first(where: { $0.id == newIdentifier })
+                viewModel.setSelectedReasoningSummaryModel(selected)
+            }
         )
     }
 

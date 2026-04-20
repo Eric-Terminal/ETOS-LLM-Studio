@@ -160,6 +160,7 @@ struct SettingsView: View {
                         enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
                         enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
                         enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
+                        enableReasoningSummary: $viewModel.enableReasoningSummary,
                         currentSession: $viewModel.currentSession,
                         includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
                         enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,

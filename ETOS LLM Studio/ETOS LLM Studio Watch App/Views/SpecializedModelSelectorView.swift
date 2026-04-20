@@ -48,6 +48,13 @@ struct SpecializedModelSelectorView: View {
         )
     }
 
+    private var reasoningSummaryModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedReasoningSummaryModel },
+            set: { viewModel.setSelectedReasoningSummaryModel($0) }
+        )
+    }
+
     private var imageGenerationModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) },
@@ -90,6 +97,13 @@ struct SpecializedModelSelectorView: View {
                 options: viewModel.dailyPulseModelOptions,
                 selection: dailyPulseModelBinding,
                 footer: "用于每日脉冲生成；留空时跟随当前对话模型。"
+            )
+
+            modelSelectionSection(
+                title: "思考摘要模型",
+                options: viewModel.reasoningSummaryModelOptions,
+                selection: reasoningSummaryModelBinding,
+                footer: "用于为思考内容生成摘要；留空时跟随当前对话模型。"
             )
 
             modelSelectionSection(

@@ -28,6 +28,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var enableResponseSpeedMetrics: Bool
     @Binding var enableOpenAIStreamIncludeUsage: Bool
     @Binding var enableAutoSessionNaming: Bool
+    @Binding var enableReasoningSummary: Bool
     @Binding var currentSession: ChatSession?
     @Binding var includeSystemTimeInPrompt: Bool
     @Binding var enablePeriodicTimeLandmark: Bool
@@ -154,6 +155,15 @@ struct ModelAdvancedSettingsView: View {
             Section(header: Text("会话设置")) {
                 Toggle("启动时打开历史会话", isOn: $restoreLastSessionOnLaunch)
                 Toggle("自动生成话题标题", isOn: $enableAutoSessionNaming)
+            }
+
+            Section(
+                header: Text("思考内容"),
+                footer: Text("开启后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。")
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            ) {
+                Toggle("启用思考摘要", isOn: $enableReasoningSummary)
             }
 
             Section(header: Text("输出设置")) {
