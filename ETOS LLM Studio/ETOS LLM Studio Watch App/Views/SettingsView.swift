@@ -186,6 +186,10 @@ struct SettingsView: View {
                         }
                     }
 
+                    NavigationLink(destination: UsageAnalyticsView()) {
+                        Label("用量统计", systemImage: "calendar.badge.clock")
+                    }
+
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
                         Label("拓展功能", systemImage: "puzzlepiece.extension")
                     }
