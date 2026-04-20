@@ -1688,6 +1688,7 @@ public class ChatService {
                     id: messages[loadingIndex].id,
                     role: .error,
                     content: formattedContent,
+                    requestedAt: messages[loadingIndex].requestedAt,
                     fullErrorContent: fullContent
                 )
                 logger.error("错误消息已添加: \(content)")
@@ -2138,7 +2139,11 @@ public class ChatService {
         } else {
             primaryUserMessage = userMessages.first
         }
-        let loadingMessage = ChatMessage(role: .assistant, content: "") // 内容为空的助手消息作为加载占位符
+        let loadingMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            requestedAt: requestTimestamp
+        ) // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
         
         var messages = messagesSnapshot(for: currentSession.id)
@@ -2364,7 +2369,11 @@ public class ChatService {
             requestedAt: Date(),
             imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
         )
-        let loadingMessage = ChatMessage(role: .assistant, content: "")
+        let loadingMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            requestedAt: Date()
+        )
 
         var messages = messagesSnapshot(for: currentSession.id)
         messages.append(userMessage)
@@ -3316,7 +3325,12 @@ public class ChatService {
         // 构造新的消息列表：
         // - requestMessages: 发送给模型的历史（不包含保留尾部）
         // - persistedMessages: UI/持久化显示的历史（包含尾部，防止崩溃丢失）
-        let loadingMessage = ChatMessage(role: .assistant, content: "")
+        let retryRequestedAt = Date()
+        let loadingMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            requestedAt: retryRequestedAt
+        )
         var requestMessages = leadingMessages
         requestMessages.append(messageToSend)
         
@@ -3348,6 +3362,7 @@ public class ChatService {
             // 【重要】添加一个空版本作为 loading 状态，而不是直接设置 content = ""
             // 直接设置 content 会覆盖当前版本的内容，导致切换回旧版本时看不到内容
             loadingAssistant.addVersion("")
+            loadingAssistant.requestedAt = retryRequestedAt
             // 清除推理内容、工具调用和 token 统计（这些是上次请求的）
             loadingAssistant.reasoningContent = nil
             loadingAssistant.toolCalls = nil
@@ -4559,7 +4574,11 @@ public class ChatService {
             updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
 
             // 新增一个独立的 loading assistant 气泡，用于最终回复
-            let followUpLoadingMessage = ChatMessage(role: .assistant, content: "")
+            let followUpLoadingMessage = ChatMessage(
+                role: .assistant,
+                content: "",
+                requestedAt: Date()
+            )
             updatedMessages.append(followUpLoadingMessage)
             self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             updateRequestLoadingMessageID(followUpLoadingMessage.id, for: currentSessionID)
@@ -4985,6 +5004,7 @@ public class ChatService {
                 id: loadingMessageID, // 保持ID不变
                 role: newMessage.role,
                 content: newMessage.content,
+                requestedAt: messages[index].requestedAt ?? newMessage.requestedAt,
                 reasoningContent: newMessage.reasoningContent,
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
                 toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,

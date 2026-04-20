@@ -255,6 +255,14 @@ struct ChatBubble: View {
         return true
     }
 
+    private var reasoningRequestStartedAt: Date? {
+        message.requestedAt ?? message.responseMetrics?.requestStartedAt
+    }
+
+    private var reasoningCompletedAt: Date? {
+        message.responseMetrics?.responseCompletedAt
+    }
+
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
         if let placement = message.toolCallsPlacement {
             return placement
@@ -1121,18 +1129,15 @@ struct ChatBubble: View {
             }) {
                 HStack {
                     if shouldShimmerReasoningHeader {
-                        ShimmeringText(
-                            text: "思考过程",
-                            font: .footnote,
+                        reasoningHeaderTitleView(
                             baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75),
                             highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
                         )
-                        .lineLimit(1)
                     } else {
-                        Text("思考过程")
-                            .etFont(.footnote)
-                            .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
-                            .lineLimit(1)
+                        reasoningHeaderTitleView(
+                            baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8),
+                            highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
+                        )
                     }
                     Spacer()
                     Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
@@ -1149,6 +1154,60 @@ struct ChatBubble: View {
             }
         }
         .padding(.bottom, isReasoningExpanded ? 5 : 0)
+    }
+
+    @ViewBuilder
+    private func reasoningHeaderTitleView(baseColor: Color, highlightColor: Color) -> some View {
+        if let requestStartedAt = reasoningRequestStartedAt, reasoningCompletedAt == nil {
+            TimelineView(.periodic(from: requestStartedAt, by: 1)) { context in
+                reasoningHeaderTitleLabel(
+                    title: reasoningHeaderTitle(referenceDate: context.date),
+                    baseColor: baseColor,
+                    highlightColor: highlightColor
+                )
+            }
+        } else {
+            reasoningHeaderTitleLabel(
+                title: reasoningHeaderTitle(referenceDate: reasoningCompletedAt ?? Date()),
+                baseColor: baseColor,
+                highlightColor: highlightColor
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func reasoningHeaderTitleLabel(title: String, baseColor: Color, highlightColor: Color) -> some View {
+        if shouldShimmerReasoningHeader {
+            ShimmeringText(
+                text: title,
+                font: .footnote,
+                baseColor: baseColor,
+                highlightColor: highlightColor
+            )
+            .lineLimit(1)
+        } else {
+            Text(title)
+                .etFont(.footnote)
+                .foregroundColor(baseColor)
+                .lineLimit(1)
+        }
+    }
+
+    private func reasoningHeaderTitle(referenceDate: Date) -> String {
+        guard let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) else {
+            return "思考过程"
+        }
+        return "已经思考\(elapsedSeconds)秒"
+    }
+
+    private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
+        guard let requestStartedAt = reasoningRequestStartedAt else { return nil }
+        let finishedAt = reasoningCompletedAt ?? referenceDate
+        let elapsed = max(0, finishedAt.timeIntervalSince(requestStartedAt))
+        if elapsed == 0 {
+            return 0
+        }
+        return max(1, Int(elapsed.rounded(.down)))
     }
 
     private func toolDisplayLabel(for toolName: String) -> String {

@@ -366,6 +366,14 @@ struct ChatBubble: View {
         return true
     }
 
+    private var reasoningRequestStartedAt: Date? {
+        message.requestedAt ?? message.responseMetrics?.requestStartedAt
+    }
+
+    private var reasoningCompletedAt: Date? {
+        message.responseMetrics?.responseCompletedAt
+    }
+
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
         if let placement = message.toolCallsPlacement {
             return placement
@@ -836,7 +844,9 @@ struct ChatBubble: View {
                 isOutgoing: isOutgoing,
                 usesNoBubbleStyle: usesNoBubbleStyle,
                 isShimmering: shouldShimmerReasoningHeader,
-                customTextColor: customTextColorOverride
+                customTextColor: customTextColorOverride,
+                requestStartedAt: reasoningRequestStartedAt,
+                responseCompletedAt: reasoningCompletedAt
             )
         }
 
@@ -1578,6 +1588,8 @@ struct ReasoningDisclosureView: View, Equatable {
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
     let customTextColor: Color?
+    let requestStartedAt: Date?
+    let responseCompletedAt: Date?
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
@@ -1586,6 +1598,8 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
             && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
+            && lhs.requestStartedAt == rhs.requestStartedAt
+            && lhs.responseCompletedAt == rhs.responseCompletedAt
     }
     
     var body: some View {
@@ -1612,20 +1626,7 @@ struct ReasoningDisclosureView: View, Equatable {
                     Image(systemName: "brain.head.profile")
                         .etFont(.system(size: 12))
                         .foregroundStyle(baseColor)
-                    if isShimmering {
-                        ShimmeringText(
-                            text: "思考过程",
-                            font: .subheadline.weight(.medium),
-                            baseColor: baseColor,
-                            highlightColor: highlightColor
-                        )
-                        .lineLimit(1)
-                    } else {
-                        Text("思考过程")
-                            .etFont(.subheadline.weight(.medium))
-                            .foregroundStyle(baseColor)
-                            .lineLimit(1)
-                    }
+                    headerTitleView(baseColor: baseColor, highlightColor: highlightColor)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .etFont(.system(size: 12, weight: .semibold))
@@ -1667,6 +1668,60 @@ struct ReasoningDisclosureView: View, Equatable {
 
     private func resolvedSecondaryTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
         resolvedTextColor(default: defaultColor, customTextColor: customTextColor, customOpacity: customOpacity)
+    }
+
+    @ViewBuilder
+    private func headerTitleView(baseColor: Color, highlightColor: Color) -> some View {
+        if let requestStartedAt, responseCompletedAt == nil {
+            TimelineView(.periodic(from: requestStartedAt, by: 1)) { context in
+                headerTitleLabel(
+                    title: reasoningHeaderTitle(referenceDate: context.date),
+                    baseColor: baseColor,
+                    highlightColor: highlightColor
+                )
+            }
+        } else {
+            headerTitleLabel(
+                title: reasoningHeaderTitle(referenceDate: responseCompletedAt ?? Date()),
+                baseColor: baseColor,
+                highlightColor: highlightColor
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func headerTitleLabel(title: String, baseColor: Color, highlightColor: Color) -> some View {
+        if isShimmering {
+            ShimmeringText(
+                text: title,
+                font: .subheadline.weight(.medium),
+                baseColor: baseColor,
+                highlightColor: highlightColor
+            )
+            .lineLimit(1)
+        } else {
+            Text(title)
+                .etFont(.subheadline.weight(.medium))
+                .foregroundStyle(baseColor)
+                .lineLimit(1)
+        }
+    }
+
+    private func reasoningHeaderTitle(referenceDate: Date) -> String {
+        guard let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) else {
+            return "思考过程"
+        }
+        return "已经思考\(elapsedSeconds)秒"
+    }
+
+    private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
+        guard let requestStartedAt else { return nil }
+        let finishedAt = responseCompletedAt ?? referenceDate
+        let elapsed = max(0, finishedAt.timeIntervalSince(requestStartedAt))
+        if elapsed == 0 {
+            return 0
+        }
+        return max(1, Int(elapsed.rounded(.down)))
     }
 
     private static func colorSignature(_ color: Color?) -> String? {
