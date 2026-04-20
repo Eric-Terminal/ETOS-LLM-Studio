@@ -2116,14 +2116,20 @@ struct AnthropicAdapterTests {
 fileprivate class MockAPIAdapter: APIAdapter {
     var receivedMessages: [ChatMessage]?
     var receivedTitleMessages: [ChatMessage]?
+    var receivedReasoningSummaryMessages: [ChatMessage]?
     var receivedTools: [InternalToolDefinition]?
     var responseToReturn: ChatMessage?
     var receivedChatModel: RunnableModel?
     var receivedTitleModel: RunnableModel?
+    var receivedReasoningSummaryModel: RunnableModel?
     
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         // 根据请求内容返回不同 URL，以便 MockURLProtocol 能够区分它们
-        if messages.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {
+        if messages.first?.content.contains("思考摘要助手") == true {
+            self.receivedReasoningSummaryMessages = messages
+            self.receivedReasoningSummaryModel = model
+            return URLRequest(url: URL(string: "https://fake.url/reasoning-summary")!)
+        } else if messages.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {
             self.receivedTitleMessages = messages
             self.receivedTitleModel = model
             return URLRequest(url: URL(string: "https://fake.url/title-gen")!)
@@ -2238,14 +2244,18 @@ fileprivate struct ChatServiceTests {
         }
         Persistence.clearRequestLogs()
         UserDefaults.standard.removeObject(forKey: "titleGenerationModelIdentifier")
+        UserDefaults.standard.removeObject(forKey: "reasoningSummaryModelIdentifier")
+        UserDefaults.standard.removeObject(forKey: "enableReasoningSummary")
         // 清理模拟响应，避免测试间互相影响
         MockURLProtocol.mockResponses = [:]
         mockAdapter.receivedMessages = nil
         mockAdapter.receivedTitleMessages = nil
+        mockAdapter.receivedReasoningSummaryMessages = nil
         mockAdapter.receivedTools = nil
         mockAdapter.responseToReturn = nil
         mockAdapter.receivedChatModel = nil
         mockAdapter.receivedTitleModel = nil
+        mockAdapter.receivedReasoningSummaryModel = nil
         ShortcutToolStore.saveTools([])
         await MainActor.run {
             ShortcutToolManager.shared.reloadFromDisk()
@@ -2264,6 +2274,13 @@ fileprivate struct ChatServiceTests {
         MockURLProtocol.mockResponses[chatURL] = .success((chatHTTPResponse, Data()))
         MockURLProtocol.mockResponses[titleURL] = .success((titleHTTPResponse, titleJSON))
         mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "聊天回复")
+    }
+
+    private func setupMockReasoningSummaryResponse(summary: String) {
+        let summaryURL = URL(string: "https://fake.url/reasoning-summary")!
+        let summaryHTTPResponse = HTTPURLResponse(url: summaryURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let summaryJSON = #"{"choices":[{"message":{"content":"\#(summary)"}}]}"#.data(using: .utf8) ?? Data()
+        MockURLProtocol.mockResponses[summaryURL] = .success((summaryHTTPResponse, summaryJSON))
     }
 
     private func activatedChatModels() -> [RunnableModel] {
@@ -2513,6 +2530,93 @@ fileprivate struct ChatServiceTests {
         try await Task.sleep(for: .milliseconds(200))
 
         #expect(mockAdapter.receivedTitleModel?.id == selectedChatModel.id, "独立标题模型失效时，应自动回退到当前对话模型。")
+
+        await cleanup()
+    }
+
+    @Test("Reasoning summary uses dedicated model and writes back to message")
+    func testReasoningSummary_UsesDedicatedModelAndPersists() async throws {
+        await cleanup()
+
+        let chatModels = activatedChatModels()
+        guard chatModels.count >= 2 else {
+            Issue.record("测试环境至少需要 2 个已激活聊天模型。")
+            return
+        }
+
+        let conversationModel = chatModels[0]
+        let dedicatedSummaryModel = chatModels[1]
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+
+        chatService.setSelectedModel(conversationModel)
+        chatService.updateMessages([loadingMessage], for: sessionID)
+        UserDefaults.standard.set(true, forKey: "enableReasoningSummary")
+        UserDefaults.standard.set(dedicatedSummaryModel.id, forKey: "reasoningSummaryModelIdentifier")
+        setupMockReasoningSummaryResponse(summary: "先比较方案成本，再选择更稳妥的实现路径。")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(
+                role: .assistant,
+                content: "最终答案",
+                reasoningContent: "先比较各个方案的成本，再收敛到风险最低、维护成本更低的实现路径。"
+            ),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(200))
+
+        let storedMessage = chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id }
+        #expect(mockAdapter.receivedReasoningSummaryModel?.id == dedicatedSummaryModel.id, "思考摘要应优先使用专用模型。")
+        #expect(storedMessage?.responseMetrics?.reasoningSummary == "先比较方案成本，再选择更稳妥的实现路径。")
+
+        await cleanup()
+    }
+
+    @Test("Reasoning summary respects disabled preference")
+    func testReasoningSummary_DisabledPreferenceSkipsRequest() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+
+        chatService.updateMessages([loadingMessage], for: sessionID)
+        UserDefaults.standard.set(false, forKey: "enableReasoningSummary")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(
+                role: .assistant,
+                content: "最终答案",
+                reasoningContent: "先判断边界条件，再补齐实现细节。"
+            ),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(120))
+
+        let storedMessage = chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id }
+        #expect(mockAdapter.receivedReasoningSummaryModel == nil, "关闭开关后不应再发起思考摘要请求。")
+        #expect(storedMessage?.responseMetrics?.reasoningSummary == nil)
 
         await cleanup()
     }

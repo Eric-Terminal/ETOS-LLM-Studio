@@ -310,6 +310,7 @@ final class MessageVersionTests: XCTestCase {
             completionTokensForSpeed: 120,
             tokenPerSecond: 60.0,
             isTokenPerSecondEstimated: false,
+            reasoningSummary: "先确认约束，再落实现细节。",
             speedSamples: [
                 .init(elapsedSecond: 0, tokenPerSecond: 35.0),
                 .init(elapsedSecond: 1, tokenPerSecond: 52.0),
@@ -335,6 +336,7 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decodedMetrics.completionTokensForSpeed, 120)
         XCTAssertEqual(try XCTUnwrap(decodedMetrics.tokenPerSecond), 60.0, accuracy: 0.0001)
         XCTAssertEqual(decodedMetrics.isTokenPerSecondEstimated, false)
+        XCTAssertEqual(decodedMetrics.reasoningSummary, "先确认约束，再落实现细节。")
         XCTAssertNil(decodedMetrics.speedSamples)
     }
     

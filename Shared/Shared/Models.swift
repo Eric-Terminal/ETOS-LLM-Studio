@@ -567,7 +567,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         }
     }
 
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var requestStartedAt: Date?
@@ -577,6 +577,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
     public var completionTokensForSpeed: Int?
     public var tokenPerSecond: Double?
     public var isTokenPerSecondEstimated: Bool
+    public var reasoningSummary: String?
     public var speedSamples: [SpeedSample]?
 
     public init(
@@ -588,6 +589,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         completionTokensForSpeed: Int? = nil,
         tokenPerSecond: Double? = nil,
         isTokenPerSecondEstimated: Bool = false,
+        reasoningSummary: String? = nil,
         speedSamples: [SpeedSample]? = nil
     ) {
         self.schemaVersion = schemaVersion
@@ -598,6 +600,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         self.completionTokensForSpeed = completionTokensForSpeed
         self.tokenPerSecond = tokenPerSecond
         self.isTokenPerSecondEstimated = isTokenPerSecondEstimated
+        self.reasoningSummary = reasoningSummary
         self.speedSamples = speedSamples
     }
 
@@ -610,6 +613,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         case completionTokensForSpeed
         case tokenPerSecond
         case isTokenPerSecondEstimated
+        case reasoningSummary
         case speedSamples
     }
 
@@ -623,6 +627,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         self.completionTokensForSpeed = try container.decodeIfPresent(Int.self, forKey: .completionTokensForSpeed)
         self.tokenPerSecond = try container.decodeIfPresent(Double.self, forKey: .tokenPerSecond)
         self.isTokenPerSecondEstimated = try container.decodeIfPresent(Bool.self, forKey: .isTokenPerSecondEstimated) ?? false
+        self.reasoningSummary = try container.decodeIfPresent(String.self, forKey: .reasoningSummary)
         // 流式曲线采样属于临时内存数据，解码时主动丢弃，避免历史会话回放占用内存。
         self.speedSamples = nil
     }
@@ -637,6 +642,7 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         try container.encodeIfPresent(completionTokensForSpeed, forKey: .completionTokensForSpeed)
         try container.encodeIfPresent(tokenPerSecond, forKey: .tokenPerSecond)
         try container.encode(isTokenPerSecondEstimated, forKey: .isTokenPerSecondEstimated)
+        try container.encodeIfPresent(reasoningSummary, forKey: .reasoningSummary)
         // 不编码 speedSamples，保证该数据只驻留内存。
     }
 }

@@ -846,7 +846,8 @@ struct ChatBubble: View {
                 isShimmering: shouldShimmerReasoningHeader,
                 customTextColor: customTextColorOverride,
                 requestStartedAt: reasoningRequestStartedAt,
-                responseCompletedAt: reasoningCompletedAt
+                responseCompletedAt: reasoningCompletedAt,
+                reasoningSummary: message.responseMetrics?.reasoningSummary
             )
         }
 
@@ -1590,6 +1591,7 @@ struct ReasoningDisclosureView: View, Equatable {
     let customTextColor: Color?
     let requestStartedAt: Date?
     let responseCompletedAt: Date?
+    let reasoningSummary: String?
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
@@ -1600,6 +1602,7 @@ struct ReasoningDisclosureView: View, Equatable {
             && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
             && lhs.requestStartedAt == rhs.requestStartedAt
             && lhs.responseCompletedAt == rhs.responseCompletedAt
+            && lhs.reasoningSummary == rhs.reasoningSummary
     }
     
     var body: some View {
@@ -1708,10 +1711,18 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        guard let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) else {
-            return "思考过程"
+        let baseTitle: String
+        if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
+            baseTitle = "已经思考\(elapsedSeconds)秒"
+        } else {
+            baseTitle = "思考过程"
         }
-        return "已经思考\(elapsedSeconds)秒"
+
+        guard let summary = reasoningSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !summary.isEmpty else {
+            return baseTitle
+        }
+        return "\(baseTitle)：\(summary)"
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {

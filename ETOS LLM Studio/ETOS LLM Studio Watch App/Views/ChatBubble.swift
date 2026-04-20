@@ -263,6 +263,11 @@ struct ChatBubble: View {
         message.responseMetrics?.responseCompletedAt
     }
 
+    private var reasoningSummaryText: String? {
+        let trimmed = message.responseMetrics?.reasoningSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
         if let placement = message.toolCallsPlacement {
             return placement
@@ -1194,10 +1199,15 @@ struct ChatBubble: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        guard let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) else {
-            return "思考过程"
+        let baseTitle: String
+        if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
+            baseTitle = "已经思考\(elapsedSeconds)秒"
+        } else {
+            baseTitle = "思考过程"
         }
-        return "已经思考\(elapsedSeconds)秒"
+
+        guard let reasoningSummaryText else { return baseTitle }
+        return "\(baseTitle)：\(reasoningSummaryText)"
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {

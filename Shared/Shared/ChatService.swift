@@ -60,6 +60,7 @@ public class ChatService {
     private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
     private static let ttsModelStorageKey = "ttsModelIdentifier"
     private static let conversationSummaryModelStorageKey = "conversationSummaryModelIdentifier"
+    private static let reasoningSummaryModelStorageKey = "reasoningSummaryModelIdentifier"
     private static let lastActiveSessionIDStorageKey = "launch.lastActiveSessionID"
     public static let restoreLastSessionOnLaunchEnabledStorageKey = "launch.restoreLastSessionOnLaunchEnabled"
     private static let conversationMemoryEnabledKey = "enableConversationMemoryAsync"
@@ -67,6 +68,7 @@ public class ChatService {
     private static let conversationMemoryRoundThresholdKey = "conversationMemoryRoundThreshold"
     private static let conversationMemorySummaryMinIntervalMinutesKey = "conversationMemorySummaryMinIntervalMinutes"
     private static let conversationProfileDailyUpdateEnabledKey = "enableConversationProfileDailyUpdate"
+    private static let reasoningSummaryEnabledKey = "enableReasoningSummary"
     public static let systemSpeechRecognizerProviderID = UUID(uuidString: "2FB43D6B-8E40-4D65-9EA6-C13AB41D8A2E")!
     public static let systemSpeechRecognizerModelID = UUID(uuidString: "EE2F84DF-F640-47B8-9A83-BE438905C4F3")!
     public static let systemSpeechRecognizerRunnableModel: RunnableModel = {
@@ -4467,6 +4469,7 @@ public class ChatService {
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
             // --- 无工具调用，标准流程 ---
             updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+            scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             // 标题已在用户发送消息时异步生成，无需等待AI响应
@@ -4477,6 +4480,7 @@ public class ChatService {
 
         // 1. 将当前 assistant 消息更新为“工具调用”气泡
         updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+        scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
         let toolCallMessageID = loadingMessageID
         ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
 
@@ -5668,14 +5672,140 @@ public class ChatService {
         return defaults.bool(forKey: Self.conversationProfileDailyUpdateEnabledKey)
     }
 
+    private func resolvedChatCapableModel(storedIdentifier: String? = nil) -> RunnableModel? {
+        let candidates = activatedRunnableModels.filter { $0.model.capabilities.contains(.chat) }
+        guard !candidates.isEmpty else { return nil }
+
+        if let storedIdentifier, !storedIdentifier.isEmpty,
+           let matched = candidates.first(where: { $0.id == storedIdentifier }) {
+            return matched
+        }
+
+        if let selected = selectedModelSubject.value,
+           selected.model.capabilities.contains(.chat) {
+            return selected
+        }
+
+        return candidates.first
+    }
+
     private func resolvedConversationSummaryModel() -> RunnableModel? {
         let defaults = UserDefaults.standard
         let storedIdentifier = defaults.string(forKey: Self.conversationSummaryModelStorageKey) ?? ""
-        if !storedIdentifier.isEmpty,
-           let matched = activatedRunnableModels.first(where: { $0.id == storedIdentifier }) {
-            return matched
+        return resolvedChatCapableModel(storedIdentifier: storedIdentifier)
+    }
+
+    private func isReasoningSummaryEnabled() -> Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: Self.reasoningSummaryEnabledKey) == nil {
+            defaults.set(true, forKey: Self.reasoningSummaryEnabledKey)
+            return true
         }
-        return selectedModelSubject.value ?? activatedRunnableModels.first
+        return defaults.bool(forKey: Self.reasoningSummaryEnabledKey)
+    }
+
+    private func resolvedReasoningSummaryModel() -> RunnableModel? {
+        let defaults = UserDefaults.standard
+        let storedIdentifier = defaults.string(forKey: Self.reasoningSummaryModelStorageKey) ?? ""
+        return resolvedChatCapableModel(storedIdentifier: storedIdentifier)
+    }
+
+    private func scheduleReasoningSummaryIfNeeded(for messageID: UUID, in sessionID: UUID) {
+        guard isReasoningSummaryEnabled() else { return }
+
+        let messages = messagesSnapshot(for: sessionID)
+        guard let message = messages.first(where: { $0.id == messageID }),
+              message.role == .assistant else {
+            return
+        }
+
+        let reasoning = (message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !reasoning.isEmpty else { return }
+
+        let existingSummary = message.responseMetrics?.reasoningSummary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard existingSummary.isEmpty else { return }
+
+        Task { [weak self] in
+            await self?.performReasoningSummaryIfNeeded(
+                for: messageID,
+                in: sessionID,
+                reasoning: reasoning
+            )
+        }
+    }
+
+    private func performReasoningSummaryIfNeeded(for messageID: UUID, in sessionID: UUID, reasoning: String) async {
+        guard let runnableModel = resolvedReasoningSummaryModel() else { return }
+
+        let summarySystemPrompt = NSLocalizedString("""
+        你是思考摘要助手。请基于给定思考内容生成一句简洁中文摘要。
+        约束：
+        - 输出 18~48 字；
+        - 只保留思路主线与结论方向；
+        - 不要复述细节，不要添加免责声明；
+        - 不要出现“思考内容摘要”“总结：”等前缀；
+        - 仅输出摘要正文。
+        """, comment: "Reasoning summary system prompt")
+        let summaryUserPrompt = String(
+            format: NSLocalizedString("""
+            请为以下思考内容生成一句摘要：
+            %@
+            """, comment: "Reasoning summary user prompt"),
+            reasoning
+        )
+
+        do {
+            let rawSummary = try await generateDetachedChatCompletion(
+                systemPrompt: summarySystemPrompt,
+                userPrompt: summaryUserPrompt,
+                temperature: 0.2,
+                runnableModel: runnableModel
+            )
+            let summary = sanitizeReasoningSummaryText(rawSummary)
+            guard !summary.isEmpty else { return }
+            applyReasoningSummary(summary, for: messageID, in: sessionID, expectedReasoning: reasoning)
+        } catch {
+            logger.warning("异步思考摘要生成失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func sanitizeReasoningSummaryText(_ rawSummary: String, maxLength: Int = 72) -> String {
+        let normalized = normalizeEscapedNewlinesIfNeeded(rawSummary)
+        let singleLine = normalized
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .joined(separator: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !singleLine.isEmpty else { return "" }
+
+        let prefixes = ["思考摘要：", "思考摘要:", "摘要：", "摘要:", "总结：", "总结:"]
+        let trimmedPrefix = prefixes.first(where: { singleLine.hasPrefix($0) }).map {
+            String(singleLine.dropFirst($0.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        } ?? singleLine
+
+        guard !trimmedPrefix.isEmpty else { return "" }
+        if trimmedPrefix.count <= maxLength {
+            return trimmedPrefix
+        }
+        return String(trimmedPrefix.prefix(maxLength)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func applyReasoningSummary(_ summary: String, for messageID: UUID, in sessionID: UUID, expectedReasoning: String) {
+        var messages = messagesSnapshot(for: sessionID)
+        guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+
+        let currentReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard currentReasoning == expectedReasoning else { return }
+
+        var metrics = messages[index].responseMetrics ?? MessageResponseMetrics()
+        guard metrics.reasoningSummary != summary else { return }
+
+        metrics.reasoningSummary = summary
+        messages[index].responseMetrics = metrics
+        persistAndPublishMessages(messages, for: sessionID)
     }
 
     private func scheduleConversationMemoryUpdateIfNeeded(for sessionID: UUID) {

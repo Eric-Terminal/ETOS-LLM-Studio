@@ -2369,6 +2369,11 @@ public enum SyncEngine {
             return rhs
         case let (lhs?, rhs?):
             let speedSamples = lhs.speedSamples ?? rhs.speedSamples
+            let mergedReasoningSummary = mergeOptionalStringField(
+                lhs.reasoningSummary,
+                rhs.reasoningSummary,
+                allowPrefixExtension: true
+            )?.value
             return MessageResponseMetrics(
                 schemaVersion: max(lhs.schemaVersion, rhs.schemaVersion),
                 requestStartedAt: minOptional(lhs.requestStartedAt, rhs.requestStartedAt),
@@ -2378,6 +2383,7 @@ public enum SyncEngine {
                 completionTokensForSpeed: maxOptional(lhs.completionTokensForSpeed, rhs.completionTokensForSpeed),
                 tokenPerSecond: maxOptional(lhs.tokenPerSecond, rhs.tokenPerSecond),
                 isTokenPerSecondEstimated: lhs.isTokenPerSecondEstimated && rhs.isTokenPerSecondEstimated,
+                reasoningSummary: mergedReasoningSummary,
                 speedSamples: speedSamples
             )
         }
@@ -2520,6 +2526,7 @@ public enum SyncEngine {
         hasher.combine(message.responseMetrics?.completionTokensForSpeed ?? -1)
         hasher.combine(message.responseMetrics?.tokenPerSecond ?? -1)
         hasher.combine(message.responseMetrics?.isTokenPerSecondEstimated ?? false)
+        hasher.combine(message.responseMetrics?.reasoningSummary ?? "")
         return String(hasher.finalize())
     }
     
