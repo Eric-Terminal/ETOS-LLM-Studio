@@ -6196,7 +6196,7 @@ public class ChatService {
                 httpStatusCode: code,
                 errorKind: "bad_status_code"
             )
-            throw NetworkError.badStatusCode(code, bodyData: bodyData)
+            throw NetworkError.badStatusCode(code: code, responseBody: bodyData)
         } catch {
             let errorKind = isCancellationError(error) ? "cancelled" : "network_error"
             let status: RequestLogStatus = isCancellationError(error) ? .cancelled : .failed

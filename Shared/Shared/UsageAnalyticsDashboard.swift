@@ -309,7 +309,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         }.value
     }
 
-    private static func buildState(
+    private nonisolated static func buildState(
         dailyTotals: [UsageDailyTotal],
         dailyModelTotals: [UsageDailyModelTotal],
         selectedScope: UsageAnalyticsDetailScope,
@@ -365,7 +365,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         )
     }
 
-    private static func makeOverviewCards(
+    private nonisolated static func makeOverviewCards(
         referenceDate: Date,
         dailyTotals: [UsageDailyTotal],
         dailyModelTotals: [UsageDailyModelTotal],
@@ -378,7 +378,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         ]
     }
 
-    private static func makeOverviewCard(
+    private nonisolated static func makeOverviewCard(
         scope: UsageAnalyticsDetailScope,
         title: String,
         interval: DateInterval,
@@ -404,7 +404,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         )
     }
 
-    private static func makeHeatmapWeeks(
+    private nonisolated static func makeHeatmapWeeks(
         referenceDate: Date,
         totalsByDayKey: [String: UsageDailyTotal],
         maxRequestCount: Int,
@@ -436,7 +436,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         }
     }
 
-    private static func makeMonthDays(
+    private nonisolated static func makeMonthDays(
         monthAnchor: Date,
         totalsByDayKey: [String: UsageDailyTotal],
         maxRequestCount: Int,
@@ -469,7 +469,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         return items
     }
 
-    private static func makeCalendarDay(
+    private nonisolated static func makeCalendarDay(
         date: Date,
         totalsByDayKey: [String: UsageDailyTotal],
         maxRequestCount: Int,
@@ -493,7 +493,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         )
     }
 
-    private static func makeDetail(
+    private nonisolated static func makeDetail(
         selectedScope: UsageAnalyticsDetailScope,
         selectedDayKey: String,
         dailyTotals: [UsageDailyTotal],
@@ -552,7 +552,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         )
     }
 
-    private static func aggregateModels(_ items: [UsageDailyModelTotal]) -> [UsageAnalyticsRankItem] {
+    private nonisolated static func aggregateModels(_ items: [UsageDailyModelTotal]) -> [UsageAnalyticsRankItem] {
         struct Bucket {
             var providerName: String
             var modelID: String
@@ -591,7 +591,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             .sorted(by: rankComparator)
     }
 
-    private static func aggregateSources(_ items: [UsageDailyModelTotal]) -> [UsageAnalyticsRankItem] {
+    private nonisolated static func aggregateSources(_ items: [UsageDailyModelTotal]) -> [UsageAnalyticsRankItem] {
         struct Bucket {
             var source: UsageRequestSource
             var requestCount: Int
@@ -627,14 +627,14 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             .sorted(by: rankComparator)
     }
 
-    private static func rankComparator(_ lhs: UsageAnalyticsRankItem, _ rhs: UsageAnalyticsRankItem) -> Bool {
+    private nonisolated static func rankComparator(_ lhs: UsageAnalyticsRankItem, _ rhs: UsageAnalyticsRankItem) -> Bool {
         if lhs.requestCount == rhs.requestCount {
             return lhs.title < rhs.title
         }
         return lhs.requestCount > rhs.requestCount
     }
 
-    private static func intensityLevel(for requestCount: Int, maxRequestCount: Int) -> Int {
+    private nonisolated static func intensityLevel(for requestCount: Int, maxRequestCount: Int) -> Int {
         guard requestCount > 0, maxRequestCount > 0 else { return 0 }
         let ratio = Double(requestCount) / Double(maxRequestCount)
         switch ratio {
@@ -649,7 +649,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         }
     }
 
-    private static func monthTitle(for date: Date, calendar: Calendar) -> String {
+    private nonisolated static func monthTitle(for date: Date, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "zh_Hans_CN")
@@ -658,7 +658,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         return formatter.string(from: date)
     }
 
-    private static func dayTitle(for date: Date, calendar: Calendar) -> String {
+    private nonisolated static func dayTitle(for date: Date, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "zh_Hans_CN")
@@ -667,7 +667,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         return formatter.string(from: date)
     }
 
-    private static func weekdaySymbols(calendar: Calendar) -> [String] {
+    private nonisolated static func weekdaySymbols(calendar: Calendar) -> [String] {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "zh_Hans_CN")
