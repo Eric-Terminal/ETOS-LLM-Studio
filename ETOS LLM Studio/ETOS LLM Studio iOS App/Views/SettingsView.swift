@@ -151,6 +151,12 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    UsageAnalyticsView()
+                } label: {
+                    Label("用量统计", systemImage: "calendar.badge.clock")
+                }
+
+                NavigationLink {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
