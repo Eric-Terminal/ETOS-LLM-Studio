@@ -201,4 +201,31 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         )
     }
 
+    @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")
+    func testMarkdownFenceNormalizationForRepeatedLanguageClosing() async {
+        let source = """
+```markdown
+# 标题
+```markdown
+"""
+        let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
+        let expected = """
+```markdown
+# 标题
+```
+"""
+        #expect(prepared.normalizedText == expected)
+    }
+
+    @Test("Markdown 围栏闭合容错不影响标准写法")
+    func testMarkdownFenceNormalizationKeepsValidFence() async {
+        let source = """
+```swift
+let value = 42
+```
+"""
+        let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
+        #expect(prepared.normalizedText == source)
+    }
+
 }

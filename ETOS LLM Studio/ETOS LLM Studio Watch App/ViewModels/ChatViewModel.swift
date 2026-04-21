@@ -2783,29 +2783,46 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
 
     nonisolated private static func normalizedMarkdownForStreaming(_ text: String) -> String {
         let lines = text.components(separatedBy: "\n")
-        var openedFence: (marker: Character, count: Int)?
+        var normalizedLines: [String] = []
+        normalizedLines.reserveCapacity(lines.count)
+        var openedFence: (marker: Character, count: Int, infoToken: String?)?
 
         for line in lines {
-            guard let fence = parseFenceLine(line) else { continue }
+            guard let fence = parseFenceLine(line) else {
+                normalizedLines.append(line)
+                continue
+            }
             if let currentFence = openedFence {
-                let isClosingFence = currentFence.marker == fence.marker
+                let isSameFenceFamily = currentFence.marker == fence.marker
                     && fence.count >= currentFence.count
-                    && fence.tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                if isClosingFence {
+                let trimmedTail = fence.tail.trimmingCharacters(in: .whitespacesAndNewlines)
+                let isStrictClosingFence = trimmedTail.isEmpty
+                let isRepeatedInfoClosingFence = !trimmedTail.isEmpty
+                    && fence.infoToken == currentFence.infoToken
+
+                if isSameFenceFamily && (isStrictClosingFence || isRepeatedInfoClosingFence) {
+                    let closingFence = String(repeating: String(currentFence.marker), count: max(3, currentFence.count))
+                    normalizedLines.append(closingFence)
                     openedFence = nil
+                } else {
+                    normalizedLines.append(line)
                 }
             } else {
-                openedFence = (marker: fence.marker, count: fence.count)
+                openedFence = (marker: fence.marker, count: fence.count, infoToken: fence.infoToken)
+                normalizedLines.append(line)
             }
         }
 
-        guard let openedFence else { return text }
+        var normalizedText = normalizedLines.joined(separator: "\n")
+        guard let openedFence else { return normalizedText }
 
         let closingFence = String(repeating: String(openedFence.marker), count: max(3, openedFence.count))
-        if text.hasSuffix("\n") {
-            return text + closingFence
+        if normalizedText.hasSuffix("\n") {
+            normalizedText += closingFence
+        } else {
+            normalizedText += "\n" + closingFence
         }
-        return text + "\n" + closingFence
+        return normalizedText
     }
 
     nonisolated private static func containsMermaidFence(in text: String) -> Bool {
@@ -2824,7 +2841,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         return false
     }
 
-    nonisolated private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String)? {
+    nonisolated private static func parseFenceLine(_ line: String) -> (marker: Character, count: Int, tail: String, infoToken: String?)? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard let marker = trimmed.first, marker == "`" || marker == "~" else {
             return nil
@@ -2839,7 +2856,12 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
 
         let startIndex = trimmed.index(trimmed.startIndex, offsetBy: count)
         let tail = String(trimmed[startIndex...])
-        return (marker: marker, count: count, tail: tail)
+        let infoToken = tail
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace)
+            .first
+            .map { String($0).lowercased() }
+        return (marker: marker, count: count, tail: tail, infoToken: infoToken)
     }
 }
 
