@@ -23,7 +23,7 @@ struct DisplaySettingsView: View {
     @Binding var enableAdvancedRenderer: Bool
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.legacyOverlay.rawValue
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
 
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
     @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
@@ -202,7 +202,7 @@ struct DisplaySettingsView: View {
 
     private var chatNavigationModeBinding: Binding<ChatNavigationMode> {
         Binding(
-            get: { ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .legacyOverlay },
+            get: { ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode },
             set: { chatNavigationModeRawValue = $0.rawValue }
         )
     }

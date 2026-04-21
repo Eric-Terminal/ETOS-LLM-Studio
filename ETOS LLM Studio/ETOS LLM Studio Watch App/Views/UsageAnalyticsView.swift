@@ -4,6 +4,8 @@ import Shared
 struct UsageAnalyticsView: View {
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()
     private let calendarColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+    private let heatmapCellSide: CGFloat = 10
+    private let heatmapCellSpacing: CGFloat = 3
 
     var body: some View {
         List {
@@ -15,18 +17,82 @@ struct UsageAnalyticsView: View {
                 }
             }
 
+            Section("绿墙") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("请求热力图")
+                        .etFont(.footnote.weight(.semibold))
+                    Text("最近 12 周")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    HStack(alignment: .top, spacing: 6) {
+                        VStack(spacing: heatmapCellSpacing) {
+                            Color.clear
+                                .frame(width: 10, height: 12)
+
+                            ForEach(Array(heatmapWeekdayMarkers.enumerated()), id: \.offset) { _, marker in
+                                Text(marker)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 10, height: heatmapCellSide)
+                            }
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            VStack(alignment: .leading, spacing: heatmapCellSpacing) {
+                                HStack(spacing: heatmapCellSpacing) {
+                                    ForEach(visibleHeatmapWeeks) { week in
+                                        heatmapMonthCell(for: week)
+                                    }
+                                }
+
+                                HStack(spacing: heatmapCellSpacing) {
+                                    ForEach(visibleHeatmapWeeks) { week in
+                                        VStack(spacing: heatmapCellSpacing) {
+                                            ForEach(week.days) { day in
+                                                heatCell(day: day, side: heatmapCellSide)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HStack(spacing: 4) {
+                        Text("少")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                        ForEach(0..<5, id: \.self) { level in
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(legendHeatColor(level: level))
+                                .frame(width: heatmapCellSide, height: heatmapCellSide)
+                        }
+                        Text("多")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+
             Section("概览") {
                 scopeSwitcher
 
                 if let card = viewModel.state.activeOverviewCard {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(card.title)
-                                .etFont(.headline)
-                            Spacer()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(card.title)
+                            .etFont(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        HStack(alignment: .lastTextBaseline, spacing: 6) {
                             Text("\(card.requestCount)")
-                                .etFont(.headline.monospaced())
+                                .etFont(.title2.monospaced().weight(.bold))
+                            Text("次请求")
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
                         }
+
                         Text("Token \(card.totalTokens) · 错误 \(card.errorCount)")
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
@@ -35,21 +101,6 @@ struct UsageAnalyticsView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                }
-            }
-
-            Section("最近 12 周") {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 3) {
-                        ForEach(Array(viewModel.state.heatmapWeeks.suffix(12))) { week in
-                            VStack(spacing: 3) {
-                                ForEach(week.days) { day in
-                                    heatCell(day: day, side: 10)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
                 }
             }
 
@@ -108,7 +159,7 @@ struct UsageAnalyticsView: View {
             Section("详情") {
                 scopeSwitcher
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(viewModel.state.detail.title)
                         .etFont(.headline)
                     Text(viewModel.state.detail.subtitle)
@@ -116,7 +167,7 @@ struct UsageAnalyticsView: View {
                         .foregroundStyle(.secondary)
                     Text("请求 \(viewModel.state.detail.requestCount) · 成功 \(viewModel.state.detail.successCount) · 错误 \(viewModel.state.detail.failedCount)")
                         .etFont(.caption2)
-                    Text("Token \(viewModel.state.detail.tokenTotals.totalTokens)")
+                    Text("Token \(viewModel.state.detail.tokenTotals.totalTokens) · 取消 \(viewModel.state.detail.cancelledCount)")
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -152,6 +203,10 @@ struct UsageAnalyticsView: View {
             }
         }
         .navigationTitle("用量统计")
+    }
+
+    private var visibleHeatmapWeeks: [UsageAnalyticsHeatmapWeek] {
+        Array(viewModel.state.heatmapWeeks.suffix(12))
     }
 
     private var scopeSwitcher: some View {
@@ -194,6 +249,45 @@ struct UsageAnalyticsView: View {
                 .frame(width: side, height: side)
         }
         .buttonStyle(.plain)
+    }
+
+    private var heatmapWeekdayMarkers: [String] {
+        ["", "一", "", "三", "", "五", ""]
+    }
+
+    private func heatmapMonthCell(for week: UsageAnalyticsHeatmapWeek) -> some View {
+        let label = heatmapMonthLabel(for: week)
+
+        return ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: heatmapCellSide, height: 12)
+
+            if !label.isEmpty {
+                Text(label)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private func heatmapMonthLabel(for week: UsageAnalyticsHeatmapWeek) -> String {
+        guard let firstOfMonth = week.days.first(where: {
+            Calendar.autoupdatingCurrent.component(.day, from: $0.date) == 1
+        }) else {
+            return ""
+        }
+
+        let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month], from: firstOfMonth.date)
+        guard let month = components.month else { return "" }
+        if month == 1, let year = components.year {
+            return String(String(year).suffix(2))
+        }
+        return "\(month)月"
+    }
+
+    private func legendHeatColor(level: Int) -> Color {
+        heatColor(level: level)
     }
 
     private func heatColor(level: Int) -> Color {

@@ -30,7 +30,7 @@ struct ContentView: View {
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.legacyOverlay.rawValue
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @State private var nativeNavigationPath: [NativeRootNavigationDestination] = []
     
     enum Tab: Hashable {
@@ -45,7 +45,7 @@ struct ContentView: View {
     }
 
     private var isNativeNavigationEnabled: Bool {
-        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .legacyOverlay) == .nativeNavigation
+        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode) == .nativeNavigation
     }
     
     var body: some View {

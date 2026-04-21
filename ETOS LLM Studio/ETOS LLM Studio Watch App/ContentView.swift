@@ -86,7 +86,7 @@ struct ContentView: View {
     @State private var nativeNavigationPath: [WatchNativeNavigationDestination] = []
     @State private var isQuickModelSelectorPresented = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.legacyOverlay.rawValue
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
@@ -106,7 +106,7 @@ struct ContentView: View {
     }
 
     private var isNativeNavigationEnabled: Bool {
-        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .legacyOverlay) == .nativeNavigation
+        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode) == .nativeNavigation
     }
     
     // MARK: - 视图主体

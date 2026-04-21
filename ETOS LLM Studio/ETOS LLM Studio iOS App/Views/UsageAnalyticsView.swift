@@ -4,6 +4,9 @@ import Shared
 struct UsageAnalyticsView: View {
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()
     private let calendarColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
+    private let detailMetricColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
+    private let heatmapCellSide: CGFloat = 11
+    private let heatmapCellSpacing: CGFloat = 4
 
     var body: some View {
         ScrollView {
@@ -19,8 +22,8 @@ struct UsageAnalyticsView: View {
                                 .fill(Color(.systemBackground))
                         )
                 }
-                overviewSection
                 heatmapSection
+                overviewSection
                 calendarSection
                 detailSection
             }
@@ -33,47 +36,131 @@ struct UsageAnalyticsView: View {
 
     private var overviewSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("概览")
+            HStack {
+                sectionHeader("概览")
+                Spacer()
+                Text("核心数字")
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
             scopeSwitcher
             if let card = viewModel.state.activeOverviewCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(card.title)
-                        .etFont(.headline)
-                        .foregroundStyle(.primary)
-                    metricLine("请求", value: "\(card.requestCount)")
-                    metricLine("Token", value: "\(card.totalTokens)")
-                    metricLine("错误", value: "\(card.errorCount)")
-                    metricLine("常用模型", value: card.topModelName)
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(card.title)
+                                .etFont(.headline)
+                                .foregroundStyle(.primary)
+                            Text(overviewSubtitle(for: card.scope))
+                                .etFont(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("请求")
+                            .etFont(.caption.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule()
+                                    .fill(Color.accentColor.opacity(0.12))
+                            )
+                    }
+
+                    HStack(alignment: .lastTextBaseline, spacing: 8) {
+                        Text("\(card.requestCount)")
+                            .etFont(.system(size: 34, weight: .bold, design: .rounded))
+                            .foregroundStyle(.primary)
+                        Text("次")
+                            .etFont(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 5)
+                    }
+
+                    HStack(spacing: 10) {
+                        overviewMetricCapsule("总 Token", value: "\(card.totalTokens)")
+                        overviewMetricCapsule("错误", value: "\(card.errorCount)")
+                        overviewMetricCapsule("常用模型", value: card.topModelName)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(cardBackground(isActive: true))
+                .padding(16)
+                .background(overviewCardBackground)
             }
         }
     }
 
     private var heatmapSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("绿墙")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 4) {
-                    ForEach(viewModel.state.heatmapWeeks) { week in
-                        VStack(spacing: 4) {
-                            ForEach(week.days) { day in
-                                heatCell(day: day, side: 11)
+            HStack {
+                sectionHeader("绿墙")
+                Spacer()
+                Text("最近 52 周")
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("请求热力图")
+                    .etFont(.headline)
+
+                Text("按请求次数着色，点按任意日期会联动下方详情。")
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(spacing: heatmapCellSpacing) {
+                        Color.clear
+                            .frame(width: 16, height: 16)
+
+                        ForEach(Array(heatmapWeekdayMarkers.enumerated()), id: \.offset) { _, marker in
+                            Text(marker)
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16, height: heatmapCellSide)
+                        }
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: heatmapCellSpacing) {
+                            HStack(spacing: heatmapCellSpacing) {
+                                ForEach(viewModel.state.heatmapWeeks) { week in
+                                    heatmapMonthCell(for: week)
+                                }
+                            }
+
+                            HStack(alignment: .top, spacing: heatmapCellSpacing) {
+                                ForEach(viewModel.state.heatmapWeeks) { week in
+                                    VStack(spacing: heatmapCellSpacing) {
+                                        ForEach(week.days) { day in
+                                            heatCell(day: day, side: heatmapCellSide)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color(.systemBackground))
-                )
+
+                HStack(spacing: 6) {
+                    Text("少")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    ForEach(0..<5, id: \.self) { level in
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(legendHeatColor(level: level))
+                            .frame(width: heatmapCellSide, height: heatmapCellSide)
+                    }
+
+                    Text("多")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            Text("按请求次数着色，点按任意日期会联动下方详情。")
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
+            .padding(14)
+            .background(surfaceCardBackground)
         }
     }
 
@@ -82,6 +169,9 @@ struct UsageAnalyticsView: View {
             HStack {
                 sectionHeader("日历面板")
                 Spacer()
+                Text("按月查看")
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
                     Button {
                         viewModel.showPreviousMonth()
@@ -172,18 +262,16 @@ struct UsageAnalyticsView: View {
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 12) {
+                LazyVGrid(columns: detailMetricColumns, spacing: 10) {
                     detailMetric("请求", value: "\(viewModel.state.detail.requestCount)")
                     detailMetric("成功", value: "\(viewModel.state.detail.successCount)")
                     detailMetric("错误", value: "\(viewModel.state.detail.failedCount)")
                     detailMetric("取消", value: "\(viewModel.state.detail.cancelledCount)")
-                }
-
-                HStack(spacing: 12) {
                     detailMetric("总 Token", value: "\(viewModel.state.detail.tokenTotals.totalTokens)")
                     detailMetric("输入", value: "\(viewModel.state.detail.tokenTotals.sentTokens)")
                     detailMetric("输出", value: "\(viewModel.state.detail.tokenTotals.receivedTokens)")
                 }
+                .padding(.top, 2)
 
                 rankedSection(
                     title: "模型榜单",
@@ -210,34 +298,32 @@ struct UsageAnalyticsView: View {
             .etFont(.title3.weight(.semibold))
     }
 
-    private func metricLine(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .etFont(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     private func detailMetric(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
             Text(value)
                 .etFont(.headline.monospaced())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
     }
 
     private func rankedSection(title: String, emptyText: String, items: [UsageAnalyticsRankItem]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .etFont(.headline)
+            HStack {
+                Text(title)
+                    .etFont(.headline)
+                Spacer()
+                Text("Top \(min(items.count, 6))")
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
             if items.isEmpty {
                 Text(emptyText)
                     .etFont(.caption)
@@ -298,9 +384,36 @@ struct UsageAnalyticsView: View {
         .buttonStyle(.plain)
     }
 
-    private func cardBackground(isActive: Bool) -> some View {
+    private func overviewMetricCapsule(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .etFont(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .etFont(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.62))
+        )
+    }
+
+    private var overviewCardBackground: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(isActive ? Color.accentColor.opacity(0.14) : Color(.systemBackground))
+            .fill(Color.accentColor.opacity(0.12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.accentColor.opacity(0.08), lineWidth: 1)
+            )
+    }
+
+    private var surfaceCardBackground: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Color(.systemBackground))
     }
 
     private func scopeButtonTitle(_ scope: UsageAnalyticsDetailScope) -> String {
@@ -319,6 +432,59 @@ struct UsageAnalyticsView: View {
             return Color.accentColor.opacity(0.12)
         }
         return Color(.secondarySystemBackground)
+    }
+
+    private func overviewSubtitle(for scope: UsageAnalyticsDetailScope) -> String {
+        switch scope {
+        case .day:
+            return "聚焦今天的模型请求情况"
+        case .week:
+            return "查看本周整体用量趋势"
+        case .month:
+            return "从月度角度回看使用密度"
+        }
+    }
+
+    private var heatmapWeekdayMarkers: [String] {
+        ["", "一", "", "三", "", "五", ""]
+    }
+
+    private func heatmapMonthCell(for week: UsageAnalyticsHeatmapWeek) -> some View {
+        let label = heatmapMonthLabel(for: week)
+
+        return ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: heatmapCellSide, height: 16)
+
+            if !label.isEmpty {
+                Text(label)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private func heatmapMonthLabel(for week: UsageAnalyticsHeatmapWeek) -> String {
+        guard let firstOfMonth = week.days.first(where: {
+            Calendar.autoupdatingCurrent.component(.day, from: $0.date) == 1
+        }) else {
+            return ""
+        }
+
+        let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month], from: firstOfMonth.date)
+        guard let month = components.month else { return "" }
+        if month == 1, let year = components.year {
+            return "\(year)"
+        }
+        return "\(month)月"
+    }
+
+    private func legendHeatColor(level: Int) -> Color {
+        if level == 0 {
+            return heatColor(level: 0)
+        }
+        return heatColor(level: level)
     }
 
     private func heatColor(level: Int) -> Color {

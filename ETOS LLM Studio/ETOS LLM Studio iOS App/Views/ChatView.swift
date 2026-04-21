@@ -111,7 +111,7 @@ struct ChatView: View {
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.legacyOverlay.rawValue
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @Namespace private var modelPickerNamespace
     @Namespace private var sessionPickerNamespace
     
@@ -161,7 +161,7 @@ struct ChatView: View {
         showModelPickerPanel || showSessionPickerPanel
     }
     private var isNativeNavigationEnabled: Bool {
-        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .legacyOverlay) == .nativeNavigation
+        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode) == .nativeNavigation
     }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
